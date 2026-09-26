@@ -71,38 +71,54 @@ export default function Login() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b141a", padding: 16 }}>
-      <form onSubmit={submit} style={{ width: "100%", maxWidth: 380, background: "#111b21", borderRadius: 12, padding: 28, color: "#e9edef" }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Whatsapp_CRM</h1>
-        <p style={{ fontSize: 13, color: "#8696a0", marginBottom: 20 }}>Sign in with your CRM account</p>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(circle at 50% 20%, rgba(252, 189, 22, 0.08), transparent 45%), #202C52", padding: 16 }}>
+      <form onSubmit={submit} className="card shadow-lg animate-reveal" style={{ width: "100%", maxWidth: 400, background: "#FFFFFF", borderRadius: 14, padding: "36px 32px", border: "1px solid #E8E8E8" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#FCBD16" }}></div>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#FCBD16" }}>MADHURA CRM</span>
+        </div>
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: "#202C52", marginBottom: 4 }}>Achme Communication</h1>
+        <p style={{ fontSize: 13, color: "#667085", marginBottom: 24 }}>Sign in to your WhatsApp Corporate CRM workspace</p>
+
         {error && (
-          <div style={{ background: "#3b1414", color: "#f5a3a3", fontSize: 13, borderRadius: 8, padding: "8px 12px", marginBottom: 12 }}>{error}</div>
+          <div style={{ background: "#FEE4E2", color: "#D92D20", fontSize: 13, borderRadius: 8, padding: "10px 14px", marginBottom: 16, border: "1px solid #FECDCA" }}>{error}</div>
         )}
-        <label style={{ fontSize: 12, color: "#8696a0" }}>Email</label>
+
+        <label style={{ fontSize: 12, fontWeight: 600, color: "#202C52", display: "block", marginBottom: 6 }}>Email Address</label>
         <input
           type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username"
-          style={{ width: "100%", margin: "4px 0 12px", padding: "10px 12px", borderRadius: 8, border: "1px solid #2a3942", background: "#202c33", color: "#e9edef" }}
+          className="input"
+          style={{ width: "100%", marginBottom: 16 }}
+          placeholder="name@company.com"
         />
-        <label style={{ fontSize: 12, color: "#8696a0" }}>Password</label>
+
+        <label style={{ fontSize: 12, fontWeight: 600, color: "#202C52", display: "block", marginBottom: 6 }}>Password</label>
         <input
           type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
-          style={{ width: "100%", margin: "4px 0 16px", padding: "10px 12px", borderRadius: 8, border: "1px solid #2a3942", background: "#202c33", color: "#e9edef" }}
+          className="input"
+          style={{ width: "100%", marginBottom: 22 }}
+          placeholder="••••••••"
         />
+
         <button
           type="submit" disabled={loading}
-          style={{ width: "100%", padding: 11, borderRadius: 8, border: 0, background: "#00a884", color: "#fff", fontWeight: 700, cursor: "pointer", opacity: loading ? 0.6 : 1 }}
+          className="btn-primary"
+          style={{ width: "100%", minHeight: 44, borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: loading ? 0.7 : 1 }}
         >
-          {loading ? "Signing in…" : "Sign in"}
+          {loading ? "Signing in…" : "Sign in to Dashboard"}
         </button>
+
         <button
           type="button" disabled={loading}
           onClick={demoLogin}
-          style={{ width: "100%", padding: 11, borderRadius: 8, border: "1px solid #53bdeb", background: "transparent", color: "#53bdeb", fontWeight: 700, cursor: "pointer", marginTop: 8 }}
+          className="btn-outline"
+          style={{ width: "100%", minHeight: 42, borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 10, border: "1px solid #202C52", color: "#202C52" }}
         >
           🔑 Demo Login (Admin)
         </button>
-        <p style={{ fontSize: 12, color: "#8696a0", marginTop: 14 }}>
-          No account? <Link to="/register" style={{ color: "#53bdeb" }}>Register</Link>
+
+        <p style={{ fontSize: 12, color: "#98A2B3", marginTop: 20, textAlign: "center" }}>
+          Protected by enterprise-grade security & encryption
         </p>
       </form>
     </div>

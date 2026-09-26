@@ -13,3 +13,5 @@ build/
 npm-debug.log*
 whatsapp-sessions/
 backend/patches/
+logs
+

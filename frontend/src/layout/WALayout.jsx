@@ -1,8 +1,7 @@
 import { Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
-// Minimal shell for Whatsapp_CRM: top bar + outlet. Route guards live in App.js.
-// (Replaces the CRM DashboardLayout, which is not part of this project.)
+// Corporate Shell for Whatsapp_CRM: Yellow × Navy SaaS Theme
 export default function WALayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -13,17 +12,24 @@ export default function WALayout() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0b141a" }}>
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "#111b21", color: "#e9edef", borderBottom: "1px solid #222d34" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontWeight: 800, fontSize: 16 }}>Whatsapp_CRM</span>
-          {user && <span style={{ fontSize: 12, color: "#8696a0" }}>{user.name || user.email} · {user.role}</span>}
+    <div className="crm-layout-shell">
+      <header className="crm-header flex items-center justify-between px-4 sm:px-6">
+        <div className="flex items-center gap-3">
+          <div className="w-2.5 h-2.5 rounded-full bg-[#FCBD16] shadow-sm"></div>
+          <span className="font-bold text-base sm:text-lg tracking-tight text-white flex items-center gap-1.5">
+            Madhura <span className="text-[#FCBD16]">WhatsApp CRM</span>
+          </span>
+          {user && (
+            <span className="hidden sm:inline-flex items-center text-xs px-2.5 py-0.5 rounded-full bg-white/10 text-white/90 font-medium">
+              {user.name || user.email} <span className="mx-1 text-[#FCBD16]">·</span> {user.role}
+            </span>
+          )}
         </div>
-        <button onClick={onLogout} style={{ background: "transparent", border: "1px solid #2a3942", color: "#e9edef", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
+        <button onClick={onLogout} className="crm-logout-btn" title="Sign out of CRM">
           Logout
         </button>
       </header>
-      <main>
+      <main className="p-3 sm:p-5">
         <Outlet />
       </main>
     </div>

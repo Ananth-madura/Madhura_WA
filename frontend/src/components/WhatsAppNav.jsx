@@ -224,13 +224,13 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
   };
 
   return (
-    <div className="mb-3 bg-white rounded-xl border border-gray-200 p-2 shadow-sm">
+    <div className="mb-3 bg-white rounded-xl border border-[#E8E8E8] p-2 shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-2">
         {/* Top Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto py-1 px-1 scrollbar-none w-full sm:w-auto">
           <button
             onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-900 rounded-lg font-bold text-xs transition mr-1 shrink-0"
+            className="flex items-center gap-1 px-3 py-2 bg-[#F5F5F5] text-[#202C52] hover:bg-[#E8E8E8] rounded-lg font-bold text-xs transition mr-1 shrink-0"
             title="Return to CRM Dashboard"
           >
             <ChevronLeft size={16} />
@@ -243,17 +243,17 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
               <button
                 key={tab.id}
                 onClick={() => navigate(tab.path)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-medium text-xs sm:text-sm transition-all whitespace-nowrap ${
                   active
-                    ? "bg-[#25D366] text-white shadow-md shadow-[#25D366]/20 font-semibold"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                    ? "bg-[#202C52] text-white shadow-sm font-semibold border-b-2 border-[#FCBD16]"
+                    : "text-[#667085] hover:text-[#202C52] hover:bg-[#F5F5F5]"
                 }`}
               >
-                <Icon size={18} className={active ? "text-white" : "text-gray-500"} />
+                <Icon size={16} className={active ? "text-[#FCBD16]" : "text-[#98A2B3]"} />
                 <span>{tab.label}</span>
                 {tab.id === "chats" && totalUnread > 0 && (
-                  <span className={`ml-1.5 px-2 py-0.5 text-xs font-extrabold rounded-full animate-pulse shadow-sm ${
-                    active ? "bg-white text-[#25D366]" : "bg-rose-500 text-white"
+                  <span className={`ml-1 px-1.5 py-0.5 text-xs font-bold rounded-full shadow-sm ${
+                    active ? "bg-[#FCBD16] text-[#202C52]" : "bg-[#D92D20] text-white animate-pulse"
                   }`}>
                     {totalUnread > 99 ? "99+" : totalUnread}
                   </span>
