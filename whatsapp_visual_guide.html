@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WhatsApp CRM Studio — Visual Mastery Guide (Automations, Flows & Campaigns)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            wa: {
+              DEFAULT: '#00a884',
+              dark: '#005c4b',
+              light: '#25D366',
+              bg: '#0b141a',
+              card: '#111b21',
+              sidebar: '#202c33',
+              border: '#222d34',
+              accent: '#53bdeb'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0b141a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #222d34;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #00a884;
+    }
+
+    .glass {
+      background: rgba(17, 27, 33, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .glow-wa {
+      box-shadow: 0 0 25px -5px rgba(0, 168, 132, 0.4);
+    }
+    .glow-amber {
+      box-shadow: 0 0 25px -5px rgba(245, 158, 11, 0.35);
+    }
+    .glow-indigo {
+      box-shadow: 0 0 25px -5px rgba(99, 102, 241, 0.35);
+    }
+
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+    .animate-pulse-dot {
+      animation: pulseDot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    /* Node Connecting Lines */
+    .flow-line {
+      position: relative;
+    }
+    .flow-line::after {
+      content: '';
+      position: absolute;
+      bottom: -20px;
+      left: 50%;
+      width: 2px;
+      height: 20px;
+      background: #00a884;
+      transform: translateX(-50%);
+    }
+  </style>
+</head>
+<body class="bg-[#0b141a] text-slate-100 font-sans min-h-screen flex flex-col antialiased selection:bg-[#00a884] selection:text-white">
+
+  <!-- Top Sticky Navigation Bar -->
+  <header class="sticky top-0 z-50 glass border-b border-[#222d34] px-4 lg:px-8 py-3.5 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#005c4b] to-[#00a884] flex items-center justify-center text-white font-extrabold shadow-lg glow-wa">
+        💬
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-base font-extrabold text-white tracking-tight">WhatsApp CRM Masterclass</h1>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#00a884]/20 text-[#00a884] border border-[#00a884]/30">
+            Interactive Visual Guide
+          </span>
+        </div>
+        <p class="text-xs text-slate-400">Automations • Chatbot Flows • Bulk Campaigns & Anti-Ban Simulator</p>
+      </div>
+    </div>
+
+    <!-- Mode Badges -->
+    <div class="flex items-center gap-2">
+      <div class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#111b21] border border-[#222d34] text-xs font-semibold">
+        <span class="w-2 h-2 rounded-full bg-[#25D366] animate-pulse-dot"></span>
+        <span class="text-slate-300">Live Simulator Active</span>
+      </div>
+      <a href="#simulator" class="px-3.5 py-1.5 rounded-xl bg-[#00a884] hover:bg-[#008f70] text-white text-xs font-bold transition shadow-md flex items-center gap-1.5">
+        <span>Try Interactive Simulator</span> ➔
+      </a>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <div class="border-b border-[#222d34] bg-[#111b21] px-4 lg:px-8 py-2 sticky top-[65px] z-40">
+    <nav class="flex items-center gap-2 overflow-x-auto no-scrollbar">
+      <button onclick="switchTab('automations')" id="tab-btn-automations" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap bg-[#00a884] text-white shadow-md">
+        ⚡ 1. Automations & 7s Pacing
+      </button>
+      <button onclick="switchTab('flows')" id="tab-btn-flows" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap bg-[#202c33] text-slate-300 hover:bg-[#2a3942]">
+        🔀 2. Multi-Dynamic Chatbot Flows
+      </button>
+      <button onclick="switchTab('campaigns')" id="tab-btn-campaigns" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap bg-[#202c33] text-slate-300 hover:bg-[#2a3942]">
+        📢 3. Bulk Campaigns (600-800 Safe Daily)
+      </button>
+      <button onclick="switchTab('simulator')" id="tab-btn-simulator" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap bg-[#202c33] text-slate-300 hover:bg-[#2a3942]">
+        📱 4. Interactive Phone Simulator
+      </button>
+      <button onclick="switchTab('cheatsheet')" id="tab-btn-cheatsheet" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap bg-[#202c33] text-slate-300 hover:bg-[#2a3942]">
+        💎 5. Dynamic Placeholders & Spintax
+      </button>
+    </nav>
+  </div>
+
+  <!-- Main Content Wrapper -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-8 space-y-12">
+
+    <!-- ========================================================================================= -->
+    <!-- SECTION 1: AUTOMATIONS -->
+    <!-- ========================================================================================= -->
+    <section id="section-automations" class="tab-content space-y-8 block">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#222d34] pb-6">
+        <div>
+          <div class="flex items-center gap-2 mb-2">
+            <span class="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold">MODULE 01</span>
+            <h2 class="text-2xl font-black text-white">Event-Driven Automations & 7s Pacing Guard</h2>
+          </div>
+          <p class="text-sm text-slate-400 max-w-2xl">
+            Automations trigger automatically based on real-time CRM events: new leads, pending invoice reminders, AMC renewals, or first-time WhatsApp messages. Every automated message is paced with <strong>7-second gaps</strong> to keep your WhatsApp account 100% safe.
+          </p>
+        </div>
+        <div class="px-4 py-3 rounded-2xl bg-[#111b21] border border-emerald-500/30 glow-wa flex items-center gap-3 shrink-0">
+          <div class="text-2xl">🛡️</div>
+          <div>
+            <p class="text-xs font-extrabold text-emerald-400 uppercase tracking-wider">Anti-Ban Pacing Active</p>
+            <p class="text-[11px] text-slate-300">7s - 15s Human-like Dispatch Interval</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Automations Visual Architecture Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+
+        <!-- Automation Card 1 -->
+        <div class="bg-[#111b21] border border-[#222d34] hover:border-[#00a884]/60 rounded-2xl p-5 transition group relative overflow-hidden flex flex-col justify-between">
+          <div class="absolute -right-8 -top-8 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition"></div>
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <span class="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-lg">
+                👋
+              </span>
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-950/80 text-emerald-300 border border-emerald-800/40">
+                Trigger: First Inbound
+              </span>
+            </div>
+            <h3 class="text-base font-extrabold text-white mb-2">Welcome Greeting & Business Intro</h3>
+            <p class="text-xs text-slate-400 mb-4 leading-relaxed">
+              When a new customer messages your WhatsApp for the first time, the CRM instantly greets them, injects their name, and presents your primary service menu.
+            </p>
+            <div class="bg-[#0b141a] rounded-xl p-3 border border-[#222d34] font-mono text-[11px] text-slate-300 mb-4 space-y-1">
+              <span class="text-emerald-400 font-bold">Template Payload:</span>
+              <p>Hello <span class="text-amber-400">{name}</span>! Welcome to <span class="text-amber-400">{company}</span>. How can we assist you with <span class="text-amber-400">{service}</span> today?</p>
+            </div>
+          </div>
+          <div class="pt-3 border-t border-[#222d34] flex items-center justify-between text-[11px] text-slate-400">
+            <span>⏱️ Delay: <strong>7s Pacing</strong></span>
+            <span class="text-emerald-400 font-bold">🟢 Active</span>
+          </div>
+        </div>
+
+        <!-- Automation Card 2 -->
+        <div class="bg-[#111b21] border border-[#222d34] hover:border-amber-500/60 rounded-2xl p-5 transition group relative overflow-hidden flex flex-col justify-between">
+          <div class="absolute -right-8 -top-8 w-24 h-24 bg-amber-500/10 rounded-full blur-xl group-hover:bg-amber-500/20 transition"></div>
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <span class="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 text-lg">
+                🧾
+              </span>
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-950/80 text-amber-300 border border-amber-800/40">
+                Trigger: Due Date - 2 Days
+              </span>
+            </div>
+            <h3 class="text-base font-extrabold text-white mb-2">Automated Payment & Invoice Reminder</h3>
+            <p class="text-xs text-slate-400 mb-4 leading-relaxed">
+              Auto-scans client invoices in the database. When an invoice is nearing its due date, sends a polite reminder with exact amount and PDF download link.
+            </p>
+            <div class="bg-[#0b141a] rounded-xl p-3 border border-[#222d34] font-mono text-[11px] text-slate-300 mb-4 space-y-1">
+              <span class="text-amber-400 font-bold">Template Payload:</span>
+              <p>Dear <span class="text-amber-400">{name}</span>, invoice <span class="text-amber-400">{invoice_no}</span> for <span class="text-amber-400">₹{amount}</span> is due on <span class="text-amber-400">{due_date}</span>.</p>
+            </div>
+          </div>
+          <div class="pt-3 border-t border-[#222d34] flex items-center justify-between text-[11px] text-slate-400">
+            <span>⏱️ Delay: <strong>7s Pacing</strong></span>
+            <span class="text-amber-400 font-bold">🟢 Active</span>
+          </div>
+        </div>
+
+        <!-- Automation Card 3 -->
+        <div class="bg-[#111b21] border border-[#222d34] hover:border-blue-500/60 rounded-2xl p-5 transition group relative overflow-hidden flex flex-col justify-between">
+          <div class="absolute -right-8 -top-8 w-24 h-24 bg-blue-500/10 rounded-full blur-xl group-hover:bg-blue-500/20 transition"></div>
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <span class="p-2.5 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 text-lg">
+                🛠️
+              </span>
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-blue-950/80 text-blue-300 border border-blue-800/40">
+                Trigger: Contract Expiry
+              </span>
+            </div>
+            <h3 class="text-base font-extrabold text-white mb-2">AMC Contract & Service Renewal</h3>
+            <p class="text-xs text-slate-400 mb-4 leading-relaxed">
+              Maintains customer retention by automatically reminding existing clients 15 days before their Annual Maintenance Contract expires.
+            </p>
+            <div class="bg-[#0b141a] rounded-xl p-3 border border-[#222d34] font-mono text-[11px] text-slate-300 mb-4 space-y-1">
+              <span class="text-blue-400 font-bold">Template Payload:</span>
+              <p>Hi <span class="text-amber-400">{name}</span>, your AMC for <span class="text-amber-400">{company}</span> is due for renewal on <span class="text-amber-400">{end_date}</span>.</p>
+            </div>
+          </div>
+          <div class="pt-3 border-t border-[#222d34] flex items-center justify-between text-[11px] text-slate-400">
+            <span>⏱️ Delay: <strong>7s Pacing</strong></span>
+            <span class="text-blue-400 font-bold">🟢 Active</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Why 7-Second Pacing Section -->
+      <div class="bg-gradient-to-r from-[#111b21] to-[#182229] border border-emerald-500/30 rounded-3xl p-6 lg:p-8 flex flex-col md:flex-row items-center gap-6 shadow-xl">
+        <div class="w-16 h-16 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-3xl shrink-0 border border-emerald-500/40">
+          ⏳
+        </div>
+        <div class="space-y-2">
+          <h3 class="text-lg font-black text-white">Why is the 7-Second Gap Essential for Your Business?</h3>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            Meta's anti-spam algorithms detect and flag accounts that send instant burst messages in under 1 second. Our engine enforces an automatic <strong>7-second human pacing gap</strong> between automated sequence dispatches and simulates natural typing presence (<code class="text-emerald-400 font-mono">composing...</code>). This ensures your WhatsApp number retains a <strong>🟢 High Quality Green Rating</strong> permanently.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================================= -->
+    <!-- SECTION 2: CHATBOT FLOWS -->
+    <!-- ========================================================================================= -->
+    <section id="section-flows" class="tab-content space-y-8 hidden">
+      <div class="border-b border-[#222d34] pb-6">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="p-2 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-mono font-bold">MODULE 02</span>
+          <h2 class="text-2xl font-black text-white">Multi-Tier Interactive Chatbot Flows</h2>
+        </div>
+        <p class="text-sm text-slate-400 max-w-2xl">
+          Visual state-machine bots that engage inbound customers 24/7, ask qualifying questions, branch based on user choices (1, 2, 3 or button taps), auto-populate CRM leads, and hand off to human agents.
+        </p>
+      </div>
+
+      <!-- Visual Node Diagram Architecture -->
+      <div class="bg-[#111b21] border border-[#222d34] rounded-3xl p-6 lg:p-8">
+        <h3 class="text-sm font-extrabold text-slate-300 uppercase tracking-wider mb-6 flex items-center gap-2">
+          <span>Visual Flow Diagram & Decision Tree</span>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono">Live Interactive Hierarchy</span>
+        </h3>
+
+        <div class="flex flex-col items-center space-y-6 max-w-3xl mx-auto">
+
+          <!-- Root Node: Trigger -->
+          <div class="w-full max-w-md bg-gradient-to-r from-emerald-950 to-[#111b21] border-2 border-emerald-500/80 rounded-2xl p-4 shadow-lg text-center relative flow-line">
+            <div class="flex items-center justify-center gap-2 mb-1">
+              <span class="text-lg">⚡</span>
+              <span class="text-xs font-extrabold text-emerald-400 uppercase tracking-wider">Flow Trigger Node</span>
+            </div>
+            <p class="text-xs font-bold text-white">Inbound Keyword: "Hi", "Hello", "Inquire", or First Message</p>
+          </div>
+
+          <!-- Node 2: Main Menu Message -->
+          <div class="w-full max-w-md bg-[#202c33] border border-slate-600 rounded-2xl p-4 shadow-lg relative flow-line">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-extrabold text-slate-300 uppercase tracking-wider">Node: send_buttons / menu</span>
+              <span class="text-[10px] text-emerald-400 font-mono font-bold">CRM Context Auto-Injected</span>
+            </div>
+            <div class="bg-[#0b141a] rounded-xl p-3 text-xs font-mono text-slate-200 border border-[#222d34]">
+              "Hello <span class="text-amber-400">{name}</span>! Welcome to <span class="text-amber-400">{company}</span>.<br><br>
+              1️⃣ 💼 Explore Services<br>
+              2️⃣ 🧾 Check Invoice & Balance<br>
+              3️⃣ 🛠️ Request AMC Maintenance<br>
+              4️⃣ 👤 Talk to Human Support"
+            </div>
+          </div>
+
+          <!-- Multi-Branching Nodes Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 w-full pt-4">
+
+            <!-- Branch 1 -->
+            <div class="bg-[#182229] border border-blue-500/40 rounded-2xl p-4 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-[10px] font-extrabold text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded-full">Option 1: Services</span>
+                </div>
+                <h4 class="text-xs font-extrabold text-white mb-2">Catalog & Solutions</h4>
+                <p class="text-[11px] text-slate-300">Sends PDF brochure link and asks customer what service they need in <span class="text-amber-400">{city}</span>.</p>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-700/60 text-[10px] text-emerald-400 font-mono">
+                ➔ Action: Create Telecall Lead
+              </div>
+            </div>
+
+            <!-- Branch 2 -->
+            <div class="bg-[#182229] border border-amber-500/40 rounded-2xl p-4 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-[10px] font-extrabold text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded-full">Option 2: Invoice</span>
+                </div>
+                <h4 class="text-xs font-extrabold text-white mb-2">Live Ledger Lookup</h4>
+                <p class="text-[11px] text-slate-300">Queries database by phone number and returns total pending balance & due dates.</p>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-700/60 text-[10px] text-amber-400 font-mono">
+                ➔ Action: Query Invoices DB
+              </div>
+            </div>
+
+            <!-- Branch 3 -->
+            <div class="bg-[#182229] border border-purple-500/40 rounded-2xl p-4 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-[10px] font-extrabold text-purple-400 bg-purple-950/80 px-2 py-0.5 rounded-full">Option 4: Support</span>
+                </div>
+                <h4 class="text-xs font-extrabold text-white mb-2">Live Human Handoff</h4>
+                <p class="text-[11px] text-slate-300">Mutes AI bot for 120 mins and emits real-time sound alert to CRM agent inbox.</p>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-700/60 text-[10px] text-purple-400 font-mono">
+                ➔ Action: wa_agent_handoff
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Node Types Reference Table -->
+      <div class="bg-[#111b21] border border-[#222d34] rounded-2xl p-6 overflow-x-auto">
+        <h3 class="text-sm font-extrabold text-white mb-4">Supported Visual Flow Node Types</h3>
+        <table class="w-full text-left text-xs">
+          <thead>
+            <tr class="border-b border-[#222d34] text-slate-400 uppercase text-[10px] font-mono">
+              <th class="pb-3">Node Type</th>
+              <th class="pb-3">What it Does</th>
+              <th class="pb-3">Configuration Options</th>
+              <th class="pb-3">Example Output</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#222d34] text-slate-200">
+            <tr>
+              <td class="py-3 font-mono font-bold text-emerald-400">send_message</td>
+              <td class="py-3">Sends regular text message with dynamic placeholders.</td>
+              <td class="py-3 font-mono text-slate-400">text, delay_seconds</td>
+              <td class="py-3">"Hi {name}, how can we help today?"</td>
+            </tr>
+            <tr>
+              <td class="py-3 font-mono font-bold text-blue-400">send_buttons</td>
+              <td class="py-3">Presents 2–3 quick clickable reply buttons or numbered list.</td>
+              <td class="py-3 font-mono text-slate-400">header, buttons[], fallback_text</td>
+              <td class="py-3">[💼 Services] [🧾 Invoices] [📞 Call]</td>
+            </tr>
+            <tr>
+              <td class="py-3 font-mono font-bold text-amber-400">collect_input</td>
+              <td class="py-3">Waits for customer reply and stores in variable.</td>
+              <td class="py-3 font-mono text-slate-400">variable_name, validation_type</td>
+              <td class="py-3">Saves client's requirement to {req}</td>
+            </tr>
+            <tr>
+              <td class="py-3 font-mono font-bold text-purple-400">create_lead</td>
+              <td class="py-3">Automatically creates CRM Telecall/Walkin entry.</td>
+              <td class="py-3 font-mono text-slate-400">table: 'telecalls', status: 'new'</td>
+              <td class="py-3">Lead created in CRM dashboard</td>
+            </tr>
+            <tr>
+              <td class="py-3 font-mono font-bold text-rose-400">handoff</td>
+              <td class="py-3">Transfers conversation to live human agent.</td>
+              <td class="py-3 font-mono text-slate-400">mute_bot_mins: 120</td>
+              <td class="py-3">"An executive is joining now..."</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ========================================================================================= -->
+    <!-- SECTION 3: BULK CAMPAIGNS -->
+    <!-- ========================================================================================= -->
+    <section id="section-campaigns" class="tab-content space-y-8 hidden">
+      <div class="border-b border-[#222d34] pb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2 mb-2">
+            <span class="p-2 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold">MODULE 03</span>
+            <h2 class="text-2xl font-black text-white">Dynamic Bulk Campaigns & 600–800 Safe Pacing</h2>
+          </div>
+          <p class="text-sm text-slate-400 max-w-2xl">
+            Broadcast promotional offers, product catalogs, festival wishes, and event reminders to hundreds of targeted customers with zero ban risk.
+          </p>
+        </div>
+        <div class="px-4 py-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 flex items-center gap-3">
+          <span class="text-2xl">🛡️</span>
+          <div>
+            <p class="text-xs font-bold text-emerald-300">Daily Safe Limit: 600 - 800 Recipients</p>
+            <p class="text-[11px] text-slate-400">Anti-Ban Pacing & Spintax Active</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5-Step Campaign Workflow -->
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+
+        <div class="bg-[#111b21] border border-[#222d34] rounded-2xl p-4 flex flex-col justify-between">
+          <div>
+            <span class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 font-extrabold flex items-center justify-center text-xs mb-3">1</span>
+            <h4 class="text-xs font-extrabold text-white mb-1">Target Group</h4>
+            <p class="text-[11px] text-slate-400">Select audience group (e.g. VIP Clients, Inactive Leads, Shop Customers).</p>
+          </div>
+          <span class="mt-3 text-[10px] text-emerald-400 font-mono font-bold">wa_contact_groups</span>
+        </div>
+
+        <div class="bg-[#111b21] border border-[#222d34] rounded-2xl p-4 flex flex-col justify-between">
+          <div>
+            <span class="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-400 font-extrabold flex items-center justify-center text-xs mb-3">2</span>
+            <h4 class="text-xs font-extrabold text-white mb-1">Dynamic Copy</h4>
+            <p class="text-[11px] text-slate-400">Include {name}, {company}, {city} & Spintax {Hi|Hello|Dear}.</p>
+          </div>
+          <span class="mt-3 text-[10px] text-blue-400 font-mono font-bold">Spintax Hash Variation</span>
+        </div>
+
+        <div class="bg-[#111b21] border border-[#222d34] rounded-2xl p-4 flex flex-col justify-between">
+          <div>
+            <span class="w-7 h-7 rounded-lg bg-purple-500/20 text-purple-400 font-extrabold flex items-center justify-center text-xs mb-3">3</span>
+            <h4 class="text-xs font-extrabold text-white mb-1">Media Attachment</h4>
+            <p class="text-[11px] text-slate-400">Attach promo image, product video demo, or pricing PDF.</p>
+          </div>
+          <span class="mt-3 text-[10px] text-purple-400 font-mono font-bold">Image / Video / PDF</span>
+        </div>
+
+        <div class="bg-[#111b21] border border-[#222d34] rounded-2xl p-4 flex flex-col justify-between">
+          <div>
+            <span class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 font-extrabold flex items-center justify-center text-xs mb-3">4</span>
+            <h4 class="text-xs font-extrabold text-white mb-1">Safe Pacing</h4>
+            <p class="text-[11px] text-slate-400">Set 7s to 25s delay between messages with natural randomized intervals.</p>
+          </div>
+          <span class="mt-3 text-[10px] text-amber-400 font-mono font-bold">Anti-Ban Pacer</span>
+        </div>
+
+        <div class="bg-[#111b21] border border-[#222d34] rounded-2xl p-4 flex flex-col justify-between">
+          <div>
+            <span class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 font-extrabold flex items-center justify-center text-xs mb-3">5</span>
+            <h4 class="text-xs font-extrabold text-white mb-1">Live Progress</h4>
+            <p class="text-[11px] text-slate-400">Track delivery rates (Sent ➔ Delivered ➔ Read ➔ Replied).</p>
+          </div>
+          <span class="mt-3 text-[10px] text-emerald-400 font-mono font-bold">Realtime Analytics</span>
+        </div>
+
+      </div>
+
+      <!-- Spintax Demonstration -->
+      <div class="bg-[#111b21] border border-[#222d34] rounded-3xl p-6 lg:p-8 space-y-4">
+        <h3 class="text-base font-extrabold text-white">How Spintax Protects Your Account</h3>
+        <p class="text-xs text-slate-300 leading-relaxed">
+          If you send 600 identical messages to 600 people, Meta's automated security monitors mark your phone as an automated broadcast bot. With Spintax, every single message has unique text phrasing:
+        </p>
+
+        <div class="bg-[#0b141a] rounded-2xl p-4 border border-slate-700/60 font-mono text-xs text-slate-300 space-y-2">
+          <p class="text-amber-400 font-bold">// You write this in the campaign composer:</p>
+          <p class="text-white">"{Hello|Hi|Greetings} {name}, we have {an exclusive|a special|a limited} offer on {service} in {city}!"</p>
+          
+          <div class="pt-3 border-t border-[#222d34] space-y-1 text-slate-400">
+            <p class="text-emerald-400 font-bold">// The CRM sends different variations automatically:</p>
+            <p>• Contact 1 receives: "Hello Rahul, we have an exclusive offer on AC Repair in Chennai!"</p>
+            <p>• Contact 2 receives: "Hi Priya, we have a special offer on AC Repair in Bangalore!"</p>
+            <p>• Contact 3 receives: "Greetings Amit, we have a limited offer on AC Repair in Mumbai!"</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================================= -->
+    <!-- SECTION 4: INTERACTIVE SMARTPHONE SIMULATOR -->
+    <!-- ========================================================================================= -->
+    <section id="section-simulator" class="tab-content space-y-8 hidden">
+      <div class="border-b border-[#222d34] pb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2 mb-2">
+            <span class="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold">LIVE LAB</span>
+            <h2 class="text-2xl font-black text-white">Interactive WhatsApp Phone Simulator</h2>
+          </div>
+          <p class="text-sm text-slate-400 max-w-2xl">
+            Test and experience your Automations, Chatbot Flows, and Placeholders directly in this interactive smartphone preview. Click any trigger button below or type a message!
+          </p>
+        </div>
+        <button onclick="resetSimulator()" class="px-3.5 py-1.5 rounded-xl bg-[#202c33] hover:bg-[#2a3942] text-xs font-bold text-slate-300 transition">
+          🔄 Reset Simulator
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+        <!-- Controls Column (Left) -->
+        <div class="lg:col-span-5 space-y-4">
+          <div class="bg-[#111b21] border border-[#222d34] rounded-3xl p-6 space-y-4">
+            <h3 class="text-sm font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+              <span>Quick Trigger Test Chips</span>
+              <span class="text-[10px] text-emerald-400 font-mono">1-Click Test</span>
+            </h3>
+
+            <p class="text-xs text-slate-400">Click any trigger below to see how the bot and automations respond in real-time:</p>
+
+            <div class="grid grid-cols-2 gap-2.5">
+              <button onclick="sendSimMessage('Hi')" class="p-3 bg-[#202c33] hover:bg-[#2a3942] rounded-xl text-left border border-slate-700/60 transition group">
+                <span class="text-xs font-bold text-white block group-hover:text-emerald-400">👋 Send "Hi"</span>
+                <span class="text-[10px] text-slate-400">Triggers Main Menu Flow</span>
+              </button>
+
+              <button onclick="sendSimMessage('1')" class="p-3 bg-[#202c33] hover:bg-[#2a3942] rounded-xl text-left border border-slate-700/60 transition group">
+                <span class="text-xs font-bold text-white block group-hover:text-blue-400">💼 Reply "1"</span>
+                <span class="text-[10px] text-slate-400">Explore Services Menu</span>
+              </button>
+
+              <button onclick="sendSimMessage('2')" class="p-3 bg-[#202c33] hover:bg-[#2a3942] rounded-xl text-left border border-slate-700/60 transition group">
+                <span class="text-xs font-bold text-white block group-hover:text-amber-400">🧾 Reply "2"</span>
+                <span class="text-[10px] text-slate-400">Check Invoice Ledger</span>
+              </button>
+
+              <button onclick="sendSimMessage('agent')" class="p-3 bg-[#202c33] hover:bg-[#2a3942] rounded-xl text-left border border-slate-700/60 transition group">
+                <span class="text-xs font-bold text-white block group-hover:text-purple-400">👤 Reply "agent"</span>
+                <span class="text-[10px] text-slate-400">Live Human Handoff</span>
+              </button>
+
+              <button onclick="sendSimMessage('STOP')" class="p-3 bg-[#202c33] hover:bg-[#2a3942] rounded-xl text-left border border-slate-700/60 transition group">
+                <span class="text-xs font-bold text-white block group-hover:text-rose-400">🛑 Reply "STOP"</span>
+                <span class="text-[10px] text-slate-400">Opt-Out & Unsubscribe</span>
+              </button>
+
+              <button onclick="sendSimMessage('promo')" class="p-3 bg-[#202c33] hover:bg-[#2a3942] rounded-xl text-left border border-slate-700/60 transition group">
+                <span class="text-xs font-bold text-white block group-hover:text-emerald-400">📢 Bulk Promo</span>
+                <span class="text-[10px] text-slate-400">Simulate Spintax Campaign</span>
+              </button>
+            </div>
+
+            <!-- CRM Context Inspector -->
+            <div class="pt-4 border-t border-[#222d34] space-y-2">
+              <span class="text-[11px] font-extrabold text-slate-300 uppercase tracking-wider">Simulated CRM Contact Profile:</span>
+              <div class="bg-[#0b141a] rounded-xl p-3 text-xs font-mono space-y-1 border border-[#222d34]">
+                <p><span class="text-slate-400">Name:</span> <span class="text-emerald-400">Vikram Sharma</span></p>
+                <p><span class="text-slate-400">Company:</span> <span class="text-blue-400">Sharma Electronics</span></p>
+                <p><span class="text-slate-400">Service:</span> <span class="text-amber-400">Solar Panel Installation</span></p>
+                <p><span class="text-slate-400">City:</span> <span class="text-purple-400">Bangalore</span></p>
+                <p><span class="text-slate-400">Pending Amount:</span> <span class="text-rose-400">₹14,500</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Smartphone Mockup (Right) -->
+        <div class="lg:col-span-7 flex justify-center">
+          <div class="w-full max-w-sm rounded-[40px] bg-[#111b21] p-3 border-4 border-slate-700 shadow-2xl glow-wa relative overflow-hidden">
+            
+            <!-- Phone Notch / Header Bar -->
+            <div class="bg-[#202c33] rounded-t-[30px] p-3 border-b border-[#222d34] flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-full bg-[#00a884] text-white font-extrabold flex items-center justify-center text-sm shadow">
+                  M
+                </div>
+                <div>
+                  <h4 class="text-xs font-bold text-white leading-tight">Madhura Solutions (Bot)</h4>
+                  <div class="flex items-center gap-1 text-[10px] text-emerald-400">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="sim-status">online</span>
+                  </div>
+                </div>
+              </div>
+              <span class="text-slate-400 text-xs font-mono">🔒 Verified</span>
+            </div>
+
+            <!-- Phone Chat Messages Area -->
+            <div id="sim-chat-area" class="h-[420px] overflow-y-auto p-3 space-y-3 bg-[#0b141a] bg-opacity-95 text-xs">
+              <!-- Welcome initial system bubble -->
+              <div class="flex justify-center">
+                <span class="bg-[#182229] border border-slate-700/60 text-slate-400 text-[10px] px-3 py-1 rounded-full text-center">
+                  Messages are end-to-end encrypted with CRM state machine.
+                </span>
+              </div>
+
+              <!-- Message 1 from Bot -->
+              <div class="flex justify-start">
+                <div class="bg-[#202c33] text-white p-3 rounded-2xl rounded-tl-none max-w-[85%] shadow space-y-1 border border-slate-700/40">
+                  <p>👋 Hello <strong>Vikram Sharma</strong>! Welcome to <strong>Madhura Solutions</strong>.</p>
+                  <p class="text-slate-300">How can we assist you with <strong>Solar Panel Installation</strong> today?</p>
+                  <p class="pt-1.5 text-emerald-300 font-mono text-[11px]">
+                    1️⃣ Explore Solutions & Catalog<br>
+                    2️⃣ Check Pending Invoice<br>
+                    3️⃣ Request AMC Support<br>
+                    4️⃣ Connect with Human Agent
+                  </p>
+                  <div class="text-[9px] text-slate-400 text-right">10:30 AM ✓✓</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Phone Message Input Footer -->
+            <form onsubmit="handleSimSubmit(event)" class="bg-[#202c33] p-2 rounded-b-[30px] flex items-center gap-2 border-t border-[#222d34]">
+              <input
+                id="sim-input"
+                type="text"
+                placeholder="Type '1', '2', 'agent' or a message..."
+                class="flex-1 bg-[#111b21] text-white text-xs px-3 py-2 rounded-full border border-slate-700 outline-none focus:border-[#00a884]"
+              />
+              <button type="submit" class="w-8 h-8 rounded-full bg-[#00a884] text-white flex items-center justify-center hover:bg-[#008f70] transition shadow">
+                ➤
+              </button>
+            </form>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ========================================================================================= -->
+    <!-- SECTION 5: PLACEHOLDERS & SPINTAX CHEATSHEET -->
+    <!-- ========================================================================================= -->
+    <section id="section-cheatsheet" class="tab-content space-y-8 hidden">
+      <div class="border-b border-[#222d34] pb-6">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="p-2 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30 text-xs font-mono font-bold">MODULE 05</span>
+          <h2 class="text-2xl font-black text-white">Dynamic Placeholders & Spintax Cheatsheet</h2>
+        </div>
+        <p class="text-sm text-slate-400 max-w-2xl">
+          Use these dynamic tags across Templates, Automations, Chatbot Flows, and Bulk Campaigns. The engine resolves real customer data automatically before sending.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+        <div class="bg-[#111b21] border border-[#222d34] rounded-2xl p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-mono text-xs font-bold text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800/40">{name}</span>
+            <span class="text-[10px] text-slate-400">Customer Name</span>
+          </div>
+          <p class="text-xs text-slate-300">Replaced with contact's full name from WhatsApp or CRM clients/leads.</p>
+          <div class="text-[11px] font-mono text-emerald-400">Output: "Vikram Sharma"</div>
+        </div>
+
+        <div class="bg-[#111b21] border border-[#222d34] rounded-2xl p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-mono text-xs font-bold text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800/40">{company}</span>
+            <span class="text-[10px] text-slate-400">Company Name</span>
+          </div>
+          <p class="text-xs text-slate-300">Replaced with business/shop name associated with this phone number.</p>
+          <div class="text-[11px] font-mono text-emerald-400">Output: "Sharma Electronics"</div>
+        </div>
+
+        <div class="bg-[#111b21] border border-[#222d34] rounded-2xl p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-mono text-xs font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/40">{service}</span>
+            <span class="text-[10px] text-slate-400">Inquired Service</span>
+          </div>
+          <p class="text-xs text-slate-300">Auto-extracted from Telecall inquiries or walk-in service category.</p>
+          <div class="text-[11px] font-mono text-emerald-400">Output: "Solar Panel Installation"</div>
+        </div>
+
+        <div class="bg-[#111b21] border border-[#222d34] rounded-2xl p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-mono text-xs font-bold text-purple-400 bg-purple-950/80 px-2 py-0.5 rounded border border-purple-800/40">{city}</span>
+            <span class="text-[10px] text-slate-400">Customer City</span>
+          </div>
+          <p class="text-xs text-slate-300">Customer location extracted from client database or regional lookup.</p>
+          <div class="text-[11px] font-mono text-emerald-400">Output: "Bangalore"</div>
+        </div>
+
+        <div class="bg-[#111b21] border border-[#222d34] rounded-2xl p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-mono text-xs font-bold text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800/40">{amount}</span>
+            <span class="text-[10px] text-slate-400">Invoice Amount</span>
+          </div>
+          <p class="text-xs text-slate-300">Formatted pending invoice or payment link amount in Rupees.</p>
+          <div class="text-[11px] font-mono text-emerald-400">Output: "14,500.00"</div>
+        </div>
+
+        <div class="bg-[#111b21] border border-[#222d34] rounded-2xl p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-mono text-xs font-bold text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800/40">{date}</span>
+            <span class="text-[10px] text-slate-400">Current / Target Date</span>
+          </div>
+          <p class="text-xs text-slate-300">Current calendar date or appointment booking target date.</p>
+          <div class="text-[11px] font-mono text-emerald-400">Output: "19 Aug 2026"</div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="glass border-t border-[#222d34] py-6 px-4 text-center text-xs text-slate-400 mt-auto">
+    <p>Madhura Tech CRM WhatsApp Suite • Complete Interactive Visual Guide</p>
+    <p class="text-[11px] text-slate-500 mt-1">Dual Engine (WhatsApp Web Baileys & Meta Cloud API v21.0) • Anti-Ban Pacing Protected</p>
+  </footer>
+
+  <!-- Interactive JavaScript Engine for Tabs & Phone Simulator -->
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-[#00a884]', 'text-white', 'shadow-md');
+        btn.classList.add('bg-[#202c33]', 'text-slate-300');
+      });
+
+      const selectedSection = document.getElementById(`section-${tabId}`);
+      const selectedBtn = document.getElementById(`tab-btn-${tabId}`);
+
+      if (selectedSection) selectedSection.classList.remove('hidden');
+      if (selectedBtn) {
+        selectedBtn.classList.remove('bg-[#202c33]', 'text-slate-300');
+        selectedBtn.classList.add('bg-[#00a884]', 'text-white', 'shadow-md');
+      }
+    }
+
+    // Phone Simulator State Engine
+    function sendSimMessage(text) {
+      const chatArea = document.getElementById('sim-chat-area');
+      const statusEl = document.getElementById('sim-status');
+
+      // 1. Append User Inbound Message Bubble
+      const userBubble = document.createElement('div');
+      userBubble.className = 'flex justify-end';
+      userBubble.innerHTML = `
+        <div class="bg-[#005c4b] text-white p-3 rounded-2xl rounded-tr-none max-w-[85%] shadow border border-emerald-600/40">
+          <p>${escapeHtml(text)}</p>
+          <div class="text-[9px] text-emerald-300/80 text-right mt-1">Just now ✓✓</div>
+        </div>
+      `;
+      chatArea.appendChild(userBubble);
+      chatArea.scrollTop = chatArea.scrollHeight;
+
+      // 2. Show Typing Indicator
+      statusEl.textContent = 'typing...';
+
+      setTimeout(() => {
+        statusEl.textContent = 'online';
+        generateBotResponse(text);
+      }, 700);
+    }
+
+    function generateBotResponse(input) {
+      const chatArea = document.getElementById('sim-chat-area');
+      const trimmed = input.trim().toLowerCase();
+      let responseHtml = "";
+
+      if (trimmed === 'hi' || trimmed === 'hello' || trimmed === 'menu' || trimmed === 'restart') {
+        responseHtml = `
+          <p>👋 Hello <strong>Vikram Sharma</strong>! Welcome back to <strong>Madhura Solutions</strong>.</p>
+          <p class="text-slate-300">How can we assist you today?</p>
+          <p class="pt-1.5 text-emerald-300 font-mono text-[11px]">
+            1️⃣ Explore Solutions & Catalog<br>
+            2️⃣ Check Pending Invoice<br>
+            3️⃣ Request AMC Support<br>
+            4️⃣ Connect with Human Agent
+          </p>
+        `;
+      } else if (trimmed === '1' || trimmed.includes('service') || trimmed.includes('catalog')) {
+        responseHtml = `
+          <p>💼 <strong>Solar Panel Installation & Energy Solutions</strong></p>
+          <p class="text-slate-300 mt-1">We provide commercial & rooftop solar setups across <strong>Bangalore</strong> with 5-year warranty.</p>
+          <div class="p-2 bg-[#0b141a] rounded-xl border border-slate-700/60 mt-1.5 flex items-center justify-between">
+            <span>📄 Solar_Brochure_2026.pdf</span>
+            <span class="text-emerald-400 font-bold">⬇️ Download</span>
+          </div>
+          <p class="text-slate-400 text-[10px] mt-1">Reply <strong>BOOK</strong> to schedule a site inspection.</p>
+        `;
+      } else if (trimmed === '2' || trimmed.includes('invoice') || trimmed.includes('balance')) {
+        responseHtml = `
+          <p>🧾 <strong>Invoice & Ledger Summary for Sharma Electronics</strong></p>
+          <div class="p-2.5 bg-[#0b141a] rounded-xl border border-amber-500/40 mt-1.5 space-y-1 font-mono text-[11px]">
+            <p>• Invoice No: <span class="text-amber-400">INV-2026-088</span></p>
+            <p>• Total Due: <span class="text-rose-400 font-bold">₹14,500.00</span></p>
+            <p>• Due Date: <span class="text-white">25 Aug 2026</span></p>
+          </div>
+          <p class="text-emerald-400 mt-1.5 font-bold">💳 UPI Link: pay.achmecrm.com/inv088</p>
+        `;
+      } else if (trimmed === '3' || trimmed.includes('amc')) {
+        responseHtml = `
+          <p>🛠️ <strong>AMC Maintenance Request Logged</strong></p>
+          <p class="text-slate-300 mt-1">Your annual maintenance coverage for <strong>Solar Inverters</strong> is active until <strong>30 Nov 2026</strong>.</p>
+          <p class="text-emerald-400 mt-1">Ticket #SR-4920 has been assigned to our field engineer.</p>
+        `;
+      } else if (trimmed === '4' || trimmed.includes('agent') || trimmed.includes('human') || trimmed.includes('support')) {
+        responseHtml = `
+          <div class="p-2 bg-purple-950/80 rounded-xl border border-purple-500/40 text-purple-200">
+            🔔 <strong>Human Handoff Triggered</strong><br>
+            A senior support executive has been assigned. Bot auto-reply is muted for 120 minutes.
+          </div>
+          <p class="text-slate-300 mt-1.5">Executive <strong>Priya S.</strong> is reviewing your inquiry.</p>
+        `;
+      } else if (trimmed === 'stop' || trimmed === 'unsubscribe') {
+        responseHtml = `
+          <div class="p-2 bg-rose-950/80 rounded-xl border border-rose-500/40 text-rose-200">
+            🛑 <strong>Unsubscribed Successfully</strong><br>
+            You will no longer receive promotional campaigns. Reply START anytime to re-subscribe.
+          </div>
+        `;
+      } else if (trimmed === 'promo') {
+        responseHtml = `
+          <p>🎉 <strong>Festival Special Offer for Sharma Electronics!</strong></p>
+          <p class="text-slate-300 mt-1">Get 15% OFF on all commercial solar maintenance contracts in <strong>Bangalore</strong> this month.</p>
+          <p class="text-amber-400 font-mono mt-1">Coupon Code: <strong>FESTIVE15</strong></p>
+        `;
+      } else {
+        responseHtml = `
+          <p>Thank you for your message! Our team at <strong>Madhura Solutions</strong> has received your inquiry regarding <em>"${escapeHtml(input)}"</em>.</p>
+          <p class="text-slate-400 text-[10px] mt-1">Reply <strong>MENU</strong> anytime to see available options.</p>
+        `;
+      }
+
+      const botBubble = document.createElement('div');
+      botBubble.className = 'flex justify-start';
+      botBubble.innerHTML = `
+        <div class="bg-[#202c33] text-white p-3 rounded-2xl rounded-tl-none max-w-[85%] shadow space-y-1 border border-slate-700/40">
+          ${responseHtml}
+          <div class="text-[9px] text-slate-400 text-right mt-1">Just now ✓✓</div>
+        </div>
+      `;
+      chatArea.appendChild(botBubble);
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function handleSimSubmit(e) {
+      e.preventDefault();
+      const inputEl = document.getElementById('sim-input');
+      const val = inputEl.value.trim();
+      if (!val) return;
+      inputEl.value = '';
+      sendSimMessage(val);
+    }
+
+    function resetSimulator() {
+      const chatArea = document.getElementById('sim-chat-area');
+      chatArea.innerHTML = `
+        <div class="flex justify-center">
+          <span class="bg-[#182229] border border-slate-700/60 text-slate-400 text-[10px] px-3 py-1 rounded-full text-center">
+            Messages are end-to-end encrypted with CRM state machine.
+          </span>
+        </div>
+        <div class="flex justify-start">
+          <div class="bg-[#202c33] text-white p-3 rounded-2xl rounded-tl-none max-w-[85%] shadow space-y-1 border border-slate-700/40">
+            <p>👋 Hello <strong>Vikram Sharma</strong>! Welcome to <strong>Madhura Solutions</strong>.</p>
+            <p class="text-slate-300">How can we assist you with <strong>Solar Panel Installation</strong> today?</p>
+            <p class="pt-1.5 text-emerald-300 font-mono text-[11px]">
+              1️⃣ Explore Solutions & Catalog<br>
+              2️⃣ Check Pending Invoice<br>
+              3️⃣ Request AMC Support<br>
+              4️⃣ Connect with Human Agent
+            </p>
+            <div class="text-[9px] text-slate-400 text-right">10:30 AM ✓✓</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function escapeHtml(text) {
+      const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+      return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+  </script>
+</body>
+</html>
