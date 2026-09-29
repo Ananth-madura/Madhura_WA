@@ -82,25 +82,74 @@ if not exist "%ROOT%\backend\.env" (
     if exist "%ROOT%\backend\.env.example" (
         copy "%ROOT%\backend\.env.example" "%ROOT%\backend\.env" >nul
         echo [OK]   Backend .env created from .env.example.
-        echo [WARN] Edit backend\.env now: set DB_* ^(achme_wa^),
-        echo        JWT_SECRET ^(must match the CRM secret initially^), and WA_* keys.
     ) else (
-        echo [FAIL] backend\.env.example is missing. Cannot continue.
+        echo [FAIL] backend\.env.example is missing. Re-clone the repo (git pull) and retry.
         pause
         exit /b 1
     )
 ) else (
-    echo [OK]   Backend .env verified.
+    echo [OK]   Backend .env found.
 )
 
-if not exist "%ROOT%\frontend\.env" (
-    (
-    echo REACT_APP_API_URL=http://127.0.0.1:5001
-    ) > "%ROOT%\frontend\.env"
-    echo [OK]   Frontend .env created ^(REACT_APP_API_URL=http://127.0.0.1:5001^).
-) else (
-    echo [OK]   Frontend .env verified.
+:: ---- Step 3b: Detect LAN IP early (frontend API URL + final summary need it) ----
+set "LAN_IP=127.0.0.1"
+for /f "tokens=2 delims=:" %%i in ('ipconfig ^| findstr /R /C:"IPv4 Address" ^| findstr /V "127\.0\." ^| findstr /V "169\.254\."') do (
+    set "CANDIDATE=%%i"
+    set "CANDIDATE=!CANDIDATE: =!"
+    if not "!CANDIDATE!"=="" (
+        if "!LAN_IP!"=="127.0.0.1" set "LAN_IP=!CANDIDATE!"
+    )
 )
+
+:: ---- Step 3c: MySQL password discovery + database auto-setup ----
+:: Tries the .env password first, then common defaults. Saves the working
+:: password back to backend\.env and creates the achme_wa database, so a
+:: fresh clone logs in with admin@madhuratech.com / admin@123 on first boot.
+echo [3b/7] Configuring MySQL access...
+where mysql >nul 2>&1
+if errorlevel 1 (
+    echo [WARN] 'mysql' CLI not in PATH - skipping auto-setup.
+    echo        Make sure DB_USER / DB_PASS in backend\.env match your MySQL root password,
+    echo        and create the database: CREATE DATABASE achme_wa CHARACTER SET utf8mb4 ...
+) else (
+    set "ENV_PASS="
+    for /f "tokens=2 delims==" %%v in ('findstr /R "^DB_PASS=" "%ROOT%\backend\.env"') do set "ENV_PASS=%%v"
+    set "WORKING_PASS="
+    set "MYSQL_OK=0"
+    for %%P in ("!ENV_PASS!" "root" "admin@123" "") do (
+        if "!MYSQL_OK!"=="0" (
+            mysql -u root --password=%%~P -e "SELECT 1" >nul 2>&1
+            if not errorlevel 1 (
+                set "WORKING_PASS=%%~P"
+                set "MYSQL_OK=1"
+            )
+        )
+    )
+    if "!MYSQL_OK!"=="0" (
+        echo        None of the known passwords worked.
+        set /p "WORKING_PASS=        Enter your MySQL root password (it will show as you type): "
+        mysql -u root --password="!WORKING_PASS!" -e "SELECT 1" >nul 2>&1
+        if errorlevel 1 (
+            echo [WARN] That password also failed. Edit backend\.env DB_PASS manually and re-run.
+        ) else (
+            set "MYSQL_OK=1"
+        )
+    )
+    if "!MYSQL_OK!"=="1" (
+        powershell -NoProfile -Command "(Get-Content '%ROOT%\backend\.env') -replace '^DB_PASS=.*','DB_PASS=!WORKING_PASS!' | Set-Content '%ROOT%\backend\.env'"
+        mysql -u root --password="!WORKING_PASS!" -e "CREATE DATABASE IF NOT EXISTS achme_wa CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" >nul 2>&1
+        if not errorlevel 1 (
+            echo [OK]   MySQL connected. Database "achme_wa" ready.
+        ) else (
+            echo [WARN] Connected, but CREATE DATABASE failed (permissions?). Create "achme_wa" manually.
+        )
+    )
+)
+
+(
+echo REACT_APP_API_URL=http://!LAN_IP!:5001
+) > "%ROOT%\frontend\.env"
+echo [OK]   Frontend .env set to backend http://!LAN_IP!:5001.
 echo.
 
 :: ---- Step 4: Check and Install Dependencies ----
@@ -120,6 +169,18 @@ if not exist "%ROOT%\backend\node_modules" (
         call npx.cmd patch-package >nul 2>&1
     )
 )
+cd /d "%ROOT%"
+
+:: ---- Step 4b: First-boot DB auto-setup (no mysql CLI needed) ----
+:: Finds the working MySQL password via Node, saves it to backend\.env and
+:: creates the database, so login works on any fresh clone.
+echo [4b/7] Auto-configuring database...
+cd /d "%ROOT%\backend"
+call node.cmd scripts\first-boot-db.js
+if errorlevel 1 (
+    echo [WARN] DB auto-setup needs attention (see above). The backend will show the exact error.
+)
+cd /d "%ROOT%"
 
 if not exist "%ROOT%\frontend\node_modules" (
     echo [INFO] Installing frontend dependencies - please wait...
@@ -178,6 +239,22 @@ echo Starting FRONTEND on port 3001...
 start "Whatsapp_CRM Frontend" /D "%ROOT%\frontend" cmd /k "set PORT=3001 && npm start"
 
 echo.
+echo Waiting for backend to become healthy ^(up to ~90s, first boot seeds the DB^)...
+set "BACKEND_OK=0"
+for /l %%i in (1,1,45) do (
+    if "!BACKEND_OK!"=="0" (
+        curl -s -o nul --max-time 3 http://127.0.0.1:5001/health >nul 2>&1
+        if not errorlevel 1 set "BACKEND_OK=1"
+        if "!BACKEND_OK!"=="0" ping -n 3 127.0.0.1 >nul
+    )
+)
+if "!BACKEND_OK!"=="1" (
+    echo [OK]   Backend is healthy.
+) else (
+    echo [WARN] Backend did not answer /health yet. It may still be seeding -
+    echo        watch the "Whatsapp_CRM Backend" window, then retry login.
+)
+echo.
 echo =====================================================
 echo              WHATSAPP_CRM ONLINE
 echo =====================================================
@@ -189,6 +266,9 @@ echo   Local UI       : http://localhost:3001
 if not "%LAN_IP%"=="127.0.0.1" (
     echo   LAN Network UI : http://%LAN_IP%:3001
 )
+echo.
+echo   Login: admin@madhuratech.com  /  admin@123
+echo   ^(works on any fresh clone - the backend auto-creates the DB, tables and admin^)
 echo.
 echo   Login with your CRM account, then open /whatsapp.
 echo   First boot: scan the QR at WhatsApp -^> Accounts if the

@@ -3,7 +3,9 @@ uploads/*
 !.gitkeep
 *.log
 .env
-.env.example
+# NOTE: .env.example files ARE tracked on purpose — a fresh clone needs them
+# for first-boot setup (the launcher copies them to .env automatically).
+!.env.example
 .DS_Store
 Thumbs.db
 .vscode/

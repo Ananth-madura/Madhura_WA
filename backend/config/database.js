@@ -82,6 +82,16 @@ function ensureColumnAsync(table, column, definition, expectedType) {
 async function ensureTablesAndColumns() {
   const tableStatements = [
     {
+      // Login plane — MUST exist before seedDefaultEmployees() runs. On a fresh
+      // clone the database is empty, so create the auth tables here (idempotent).
+      name: "users",
+      sql: `CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, first_name VARCHAR(100) DEFAULT NULL, last_name VARCHAR(100) DEFAULT NULL, emp_id VARCHAR(50) DEFAULT NULL, email VARCHAR(150) NOT NULL, user_password VARCHAR(255) DEFAULT NULL, role VARCHAR(50) DEFAULT 'employee', status VARCHAR(20) DEFAULT 'active', two_factor_enabled TINYINT(1) DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uq_users_email (email)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+    },
+    {
+      name: "teammember",
+      sql: `CREATE TABLE IF NOT EXISTS teammember (id INT AUTO_INCREMENT PRIMARY KEY, first_name VARCHAR(100) DEFAULT NULL, last_name VARCHAR(100) DEFAULT NULL, emp_id VARCHAR(50) DEFAULT NULL, emp_email VARCHAR(150) DEFAULT NULL, mobile VARCHAR(20) DEFAULT NULL, mobile_number VARCHAR(20) DEFAULT NULL, emp_address TEXT DEFAULT NULL, job_title VARCHAR(150) DEFAULT NULL, emp_role VARCHAR(150) DEFAULT 'Sales', quotation_count INT DEFAULT 0, user_id INT DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+    },
+    {
       name: "pi_from_addresses",
       sql: `CREATE TABLE IF NOT EXISTS pi_from_addresses (id INT AUTO_INCREMENT PRIMARY KEY, label VARCHAR(100) NOT NULL, address TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
     },

@@ -6,7 +6,25 @@ in the parent repo).
 
 ## Quick start
 
-### 1. Database — clone the CRM database once
+### 0. New device / fresh clone (recommended)
+```bat
+git clone <repo-url>
+cd Whatsapp_CRM
+start_normal.bat
+```
+That's it. The launcher automatically: finds your MySQL root password
+(asks once if needed), writes `backend/.env`, creates the `achme_wa`
+database, installs dependencies, seeds all tables + the admin account, and
+waits for the backend to turn healthy. Then log in with:
+
+| | |
+|---|---|
+| Email | `admin@madhuratech.com` |
+| Password | `admin@123` |
+
+Works on any Windows PC with Node.js LTS + MySQL running — no manual DB work.
+
+### 1. Database — clone the CRM database once (alternative, keeps old CRM data)
 ```sql
 -- full clone (keeps users table for login + CRM tables the WA schedulers read)
 mysqldump -u root -p achme > achme_full.sql
