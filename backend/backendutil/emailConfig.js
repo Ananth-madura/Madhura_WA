@@ -26,7 +26,7 @@ async function getTransporterForUser(userId) {
       });
       return resolve({
         transporter: defaultTransporter,
-        fromAddress: `"Achme Communication" <${process.env.EMAIL_USER}>`,
+        fromAddress: `"Madhura Tech" <${process.env.EMAIL_USER}>`,
       });
     }
 
@@ -48,7 +48,7 @@ async function getTransporterForUser(userId) {
           });
           return resolve({
             transporter: defaultTransporter,
-            fromAddress: `"Achme Communication" <${process.env.EMAIL_USER}>`,
+            fromAddress: `"Madhura Tech" <${process.env.EMAIL_USER}>`,
           });
         }
 
@@ -68,13 +68,13 @@ async function getTransporterForUser(userId) {
           });
           return resolve({
             transporter: defaultTransporter,
-            fromAddress: `"Achme Communication" <${process.env.EMAIL_USER}>`,
+            fromAddress: `"Madhura Tech" <${process.env.EMAIL_USER}>`,
           });
         }
 
         const secureMode = config.smtp_secure === "SSL/TLS" || Number(config.smtp_port) === 465 || config.smtp_secure === "true";
         const fromAddress = config.from_email_address || config.email_user;
-        const senderName = config.sender_name || "Achme Communication";
+        const senderName = config.sender_name || "Madhura Tech";
 
         const decryptedPass = decrypt(config.email_pass);
 

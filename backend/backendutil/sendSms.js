@@ -34,11 +34,11 @@ if (transporter) {
 }
 
 const sendEmailOtp = async (email, otp, customSubject, is2fa = false) => {
-  const subject = customSubject || (is2fa ? "Your ACHME CRM 2FA Login Verification Code" : "Your Registration OTP");
+  const subject = customSubject || (is2fa ? "Your Madhura Tech CRM 2FA Login Verification Code" : "Your Registration OTP");
   const htmlContent = is2fa ? `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; border: 1px solid #e5e3df; border-radius: 12px; max-width: 500px; margin: 0 auto; background-color: #ffffff; color: #1a1a1a; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
       <div style="text-align: center; margin-bottom: 20px;">
-        <span style="font-size: 24px; font-weight: 800; color: #5645d4; tracking-tight">ACHME CRM</span>
+        <span style="font-size: 24px; font-weight: 800; color: #5645d4; tracking-tight">Madhura Tech CRM</span>
       </div>
       <h2 style="color: #1a1a1a; font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 20px; margin-top: 0;">Two-Factor Verification Code</h2>
       <p style="font-size: 15px; color: #4a4a4a; line-height: 1.6; text-align: center;">Please enter the following 6-digit verification code to complete your secure sign-in:</p>
@@ -50,7 +50,7 @@ const sendEmailOtp = async (email, otp, customSubject, is2fa = false) => {
   ` : `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; border: 1px solid #e5e3df; border-radius: 12px; max-width: 500px; margin: 0 auto; background-color: #ffffff; color: #1a1a1a; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
       <div style="text-align: center; margin-bottom: 20px;">
-        <span style="font-size: 24px; font-weight: 800; color: #5645d4; tracking-tight">ACHME CRM</span>
+        <span style="font-size: 24px; font-weight: 800; color: #5645d4; tracking-tight">Madhura Tech CRM</span>
       </div>
       <h2 style="color: #1a1a1a; font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 20px; margin-top: 0;">Registration Verification Code</h2>
       <p style="font-size: 15px; color: #4a4a4a; line-height: 1.6; text-align: center;">Use this verification code to complete your registration request:</p>
@@ -62,7 +62,7 @@ const sendEmailOtp = async (email, otp, customSubject, is2fa = false) => {
   `;
 
   let activeTransporter = transporter;
-  let activeFrom = `"ACHME CRM Security" <${process.env.EMAIL_USER}>`;
+  let activeFrom = `"Madhura Tech CRM Security" <${process.env.EMAIL_USER}>`;
 
   try {
     const user = await new Promise((resolve) => {

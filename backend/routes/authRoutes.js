@@ -173,7 +173,7 @@ router.post("/admin-login", (req, res) => {
               }
 
               try {
-                await sendEmailOtp(user.email, otp, "Your ACHME CRM 2FA Login Verification Code", true);
+                await sendEmailOtp(user.email, otp, "Your Madhura Tech CRM 2FA Login Verification Code", true);
                 return res.json({ requires2FA: true, email: user.email, message: "2FA verification code sent to your email" });
               } catch (mailErr) {
                 console.error("2FA OTP mail send error:", mailErr.message);
@@ -229,7 +229,7 @@ router.post("/login", (req, res) => {
                 }
 
                 try {
-                  await sendEmailOtp(user.email, otp, "Your ACHME CRM 2FA Login Verification Code", true);
+                  await sendEmailOtp(user.email, otp, "Your Madhura Tech CRM 2FA Login Verification Code", true);
                   return res.json({ requires2FA: true, email: user.email, message: "2FA verification code sent to your email" });
                 } catch (mailErr) {
                   console.error("2FA OTP mail send error:", mailErr.message);
@@ -297,7 +297,7 @@ router.put("/update-user/:id", verifyToken, isAdmin, (req, res) => {
     if (err || !rows.length) return res.status(404).json({ message: "User not found" });
     const oldEmail = rows[0].email;
     // Protect: cannot edit the primary admin user's record
-    if (rows[0].email && rows[0].email.toLowerCase() === "kk@achmecommunication.com") {
+    if (rows[0].email && rows[0].email.toLowerCase() === "admin@madhuratech.com") {
       return res.status(403).json({ message: "Cannot modify the primary admin account" });
     }
 
@@ -322,7 +322,7 @@ router.put("/change-role/:id", verifyToken, isAdminOnly, (req, res) => {
   db.query(`SELECT email, role FROM users WHERE id = ?`, [req.params.id], (err, rows) => {
     if (err || !rows || (Array.isArray(rows) && !rows.length)) return res.status(404).json({ message: "User not found" });
     const user = (rows && Array.isArray(rows) && rows[0]) ? rows[0] : {};
-    if (user.email && user.email.toLowerCase() === "kk@achmecommunication.com") {
+    if (user.email && user.email.toLowerCase() === "admin@madhuratech.com") {
       return res.status(403).json({ message: "Cannot change the role of the primary admin account" });
     }
     db.query(`UPDATE users SET role = ? WHERE id = ?`, [role, req.params.id], (err2) => {
@@ -341,7 +341,7 @@ router.put("/ban-user/:id", verifyToken, isAdminOnly, (req, res) => {
   db.query(`SELECT email, role FROM users WHERE id = ?`, [req.params.id], (err0, rows0) => {
     if (err0 || !rows0 || (Array.isArray(rows0) && !rows0.length)) return res.status(404).json({ message: "User not found" });
     const user0 = (rows0 && Array.isArray(rows0) && rows0[0]) ? rows0[0] : {};
-    if (user0.email && user0.email.toLowerCase() === "kk@achmecommunication.com") return res.status(403).json({ message: "Cannot ban the primary admin account" });
+    if (user0.email && user0.email.toLowerCase() === "admin@madhuratech.com") return res.status(403).json({ message: "Cannot ban the primary admin account" });
 
     db.query(`UPDATE users SET status = ? WHERE id = ?`, [status, req.params.id], (err) => {
       if (err) {
@@ -358,7 +358,7 @@ router.delete("/delete-user/:id", verifyToken, isAdminOnly, (req, res) => {
   db.query(`SELECT email, role FROM users WHERE id = ?`, [req.params.id], (err, rows) => {
     if (err || !rows.length) return res.status(404).json({ message: "User not found" });
     // Protect primary admin account from being deleted
-    if (rows[0].email && rows[0].email.toLowerCase() === "kk@achmecommunication.com") return res.status(403).json({ message: "Cannot delete the primary admin account" });
+    if (rows[0].email && rows[0].email.toLowerCase() === "admin@madhuratech.com") return res.status(403).json({ message: "Cannot delete the primary admin account" });
 
 
     db.query(`DELETE FROM users WHERE id = ?`, [req.params.id], (err2) => {
@@ -377,7 +377,7 @@ router.post("/reset-password/:id", verifyToken, isAdmin, (req, res) => {
   db.query(`SELECT email, role FROM users WHERE id = ?`, [req.params.id], (err, rows) => {
     if (err || !rows || !rows.length) return res.status(404).json({ message: "User not found" });
     // If resetting the primary admin's password, allow it ONLY if they are doing it themselves
-    if (rows[0].email && rows[0].email.toLowerCase() === "kk@achmecommunication.com") {
+    if (rows[0].email && rows[0].email.toLowerCase() === "admin@madhuratech.com") {
       if (req.user.id !== parseInt(req.params.id)) {
         return res.status(403).json({ message: "Cannot reset the password of the primary admin account" });
       }
@@ -862,7 +862,7 @@ router.post("/send-test-email", verifyToken, async (req, res) => {
 
   const secureMode = secure === "SSL/TLS" || Number(port) === 465 || secure === "true" || secure === true;
   const fromEmail = from_email_address || email_user;
-  const sName = sender_name || "Achme SMTP Test";
+  const sName = sender_name || "Madhura Tech SMTP Test";
 
   try {
     const transporter = nodemailer.createTransport({
@@ -879,13 +879,13 @@ router.post("/send-test-email", verifyToken, async (req, res) => {
     const mailOptions = {
       from: `"${sName}" <${fromEmail}>`,
       to: toEmail,
-      subject: "Achme SMTP Configuration - Test Email",
-      text: `Hello,\n\nThis is a test email from Achme Communication to verify your SMTP settings. If you received this, your SMTP configuration is fully working!\n\nDetails:\nProvider: ${provider || "Custom"}\nSMTP Server: ${host}\nPort: ${port}\nSecure SSL: ${secureMode}\n\nRegards,\nAchme Communication System`,
+      subject: "Madhura Tech SMTP Configuration - Test Email",
+      text: `Hello,\n\nThis is a test email from Madhura Tech to verify your SMTP settings. If you received this, your SMTP configuration is fully working!\n\nDetails:\nProvider: ${provider || "Custom"}\nSMTP Server: ${host}\nPort: ${port}\nSecure SSL: ${secureMode}\n\nRegards,\nMadhura Tech System`,
       html: `
         <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #e5e3df; border-radius: 8px; max-width: 600px; margin: 0 auto; background-color: #fcfcfc;">
-          <h2 style="color: #5645d4; border-bottom: 2px solid #5645d4; padding-bottom: 10px;">Achme SMTP Settings Verification</h2>
+          <h2 style="color: #5645d4; border-bottom: 2px solid #5645d4; padding-bottom: 10px;">Madhura Tech SMTP Settings Verification</h2>
           <p>Hello,</p>
-          <p>This is a test email sent from your <strong>Achme SMTP settings dashboard</strong>.</p>
+          <p>This is a test email sent from your <strong>Madhura Tech SMTP settings dashboard</strong>.</p>
           <p style="background-color: #eafbf0; border-left: 4px solid #2bc460; padding: 12px; font-weight: bold; color: #1e7039;">
             ✓ Congratulations! Your SMTP Configuration is working flawlessly.
           </p>
@@ -942,7 +942,7 @@ router.post("/save-email-config", verifyToken, async (req, res) => {
     }
 
     const finalFromEmail = from_email_address ? from_email_address.trim() : finalEmailUser;
-    const finalSenderName = sender_name ? sender_name.trim() : "Achme Communication";
+    const finalSenderName = sender_name ? sender_name.trim() : "Madhura Tech";
     const finalProvider = provider || "custom";
     const finalEnabled = is_enabled !== undefined ? (is_enabled ? 1 : 0) : 1;
 
@@ -1159,7 +1159,7 @@ router.post("/resend-2fa", (req, res) => {
           }
 
           try {
-            await sendEmailOtp(emailLower, otp, "Your ACHME CRM 2FA Login Verification Code", true);
+            await sendEmailOtp(emailLower, otp, "Your Madhura Tech CRM 2FA Login Verification Code", true);
             res.json({ success: true, message: "A new 2FA verification code has been sent to your email!" });
           } catch (mailErr) {
             console.error("resend-2fa mail error:", mailErr.message);

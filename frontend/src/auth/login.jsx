@@ -7,7 +7,7 @@ import { API } from "../config/api";
 // Slim login for Whatsapp_CRM — email + password only (no OTP/2FA UI).
 // Contract: POST {API}/api/auth/login {email, password} ->
 //   {token, user:{id,name,email,role}}  OR  {requires2FA:true,...}
-const DEMO_ADMIN = { email: "kk@achmecommunication.com", password: "Test@12345" };
+const DEMO_ADMIN = { email: "admin@madhuratech.com", password: "admin@123" };
 
 export default function Login() {
   const { login } = useAuth();
@@ -77,7 +77,7 @@ export default function Login() {
           <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#FCBD16" }}></div>
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#FCBD16" }}>MADHURA CRM</span>
         </div>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: "#202C52", marginBottom: 4 }}>Achme Communication</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: "#202C52", marginBottom: 4 }}>Madhura Tech</h1>
         <p style={{ fontSize: 13, color: "#667085", marginBottom: 24 }}>Sign in to your WhatsApp Corporate CRM workspace</p>
 
         {error && (

@@ -868,7 +868,7 @@ async function seedDefaultEmployees() {
     });
   } catch (e) { console.log("Seed alter skip:", e.message); }
 
-  const adminUser = { first_name: "Admin", last_name: "", emp_id: "ADMIN001", email: "Kk@achmecommunication.com", mobile: "", job_title: "Administrator", emp_role: "Manager", role: "admin", password: "kk@admin@123" };
+  const adminUser = { first_name: "Admin", last_name: "", emp_id: "ADMIN001", email: "admin@madhuratech.com", mobile: "", job_title: "Administrator", emp_role: "Manager", role: "admin", password: "admin@123" };
   const adminHash = await bcrypt.hash(adminUser.password, 10);
   try {
     const existingAdmin = await queryAsync(`SELECT id FROM users WHERE email = ?`, [adminUser.email]);
@@ -898,20 +898,20 @@ async function seedDefaultEmployees() {
   } catch (e) { console.log("Admin teammember seed:", e.message); }
 
   const employees = [
-    { first_name: "Princee", last_name: "SD", emp_id: "AC055", email: "info@achmecommunication.com", mobile: "", job_title: "Sales", emp_role: "Sales" },
-    { first_name: "Vimal", last_name: "", emp_id: "AC051", email: "sales1@technostore.co.in", mobile: "", job_title: "Sales", emp_role: "Sales" },
-    { first_name: "Moorthi", last_name: "", emp_id: "AC015", email: "sales5@technostore.co.in", mobile: "", job_title: "Sales", emp_role: "Sales" },
-    { first_name: "Uma", last_name: "Kalyani", emp_id: "AC010", email: "uma@achmecommunication.com", mobile: "", job_title: "Sales", emp_role: "Sales" },
-    { first_name: "Nagaraj", last_name: "", emp_id: "AC014", email: "nagaraj@technostore.co.in", mobile: "", job_title: "Sales", emp_role: "Sales" },
-    { first_name: "Priyanka", last_name: "", emp_id: "AC099", email: "service@achmecommunication.com", mobile: "", job_title: "Sales", emp_role: "Sales" },
-    { first_name: "Malarvannan", last_name: "", emp_id: "AC016", email: "malarvannan@technostore.co.in", mobile: "", job_title: "Service", emp_role: "Sales", role: "subadmin" },
-    { first_name: "Jai", last_name: "sir", emp_id: "AC002", email: "jai@technostore.co.in", mobile: "", job_title: "Admin dept", emp_role: "Manager", role: "subadmin" },
-    { first_name: "Manikandan", last_name: "", emp_id: "AC061", email: "mani@technostore.co.in", mobile: "", job_title: "sales dept", emp_role: "Sales", role: "employee" },
-    { first_name: "Anand", last_name: "", emp_id: "AC012", email: "sales3@technostore.co.in", mobile: "", job_title: "sales dept", emp_role: "Sales", role: "employee" }
+    { first_name: "Princee", last_name: "SD", emp_id: "MT055", email: "info@madhuratech.com", mobile: "", job_title: "Sales", emp_role: "Sales" },
+    { first_name: "Vimal", last_name: "", emp_id: "MT051", email: "sales1@technostore.co.in", mobile: "", job_title: "Sales", emp_role: "Sales" },
+    { first_name: "Moorthi", last_name: "", emp_id: "MT015", email: "sales5@technostore.co.in", mobile: "", job_title: "Sales", emp_role: "Sales" },
+    { first_name: "Uma", last_name: "Kalyani", emp_id: "MT010", email: "uma@madhuratech.com", mobile: "", job_title: "Sales", emp_role: "Sales" },
+    { first_name: "Nagaraj", last_name: "", emp_id: "MT014", email: "nagaraj@technostore.co.in", mobile: "", job_title: "Sales", emp_role: "Sales" },
+    { first_name: "Priyanka", last_name: "", emp_id: "MT099", email: "service@madhuratech.com", mobile: "", job_title: "Sales", emp_role: "Sales" },
+    { first_name: "Malarvannan", last_name: "", emp_id: "MT016", email: "malarvannan@technostore.co.in", mobile: "", job_title: "Service", emp_role: "Sales", role: "subadmin" },
+    { first_name: "Jai", last_name: "sir", emp_id: "MT002", email: "jai@technostore.co.in", mobile: "", job_title: "Admin dept", emp_role: "Manager", role: "subadmin" },
+    { first_name: "Manikandan", last_name: "", emp_id: "MT061", email: "mani@technostore.co.in", mobile: "", job_title: "sales dept", emp_role: "Sales", role: "employee" },
+    { first_name: "Anand", last_name: "", emp_id: "MT012", email: "sales3@technostore.co.in", mobile: "", job_title: "sales dept", emp_role: "Sales", role: "employee" }
   ];
 
   for (const employee of employees) {
-    const hash = await bcrypt.hash(`Achme@${employee.first_name}`, 10);
+    const hash = await bcrypt.hash(`Madhura@${employee.first_name}`, 10);
     try {
       const existing = await queryAsync(`SELECT id FROM users WHERE email = ?`, [employee.email]);
       if (existing.length > 0) {

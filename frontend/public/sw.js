@@ -119,12 +119,12 @@ registerRoute(
 
 // Push event listener for desktop alerts
 self.addEventListener("push", (event) => {
-  let data = { title: "ACHME CRM Notification", body: "You have a new update!" };
+  let data = { title: "Madhura Tech CRM Notification", body: "You have a new update!" };
   if (event.data) {
     try {
       data = event.data.json();
     } catch (e) {
-      data = { title: "ACHME CRM Notification", body: event.data.text() };
+      data = { title: "Madhura Tech CRM Notification", body: event.data.text() };
     }
   }
 
