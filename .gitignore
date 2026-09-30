@@ -3,6 +3,7 @@ uploads/*
 !.gitkeep
 *.log
 .env
+backend/.wwebjs_cache/
 # NOTE: .env.example files ARE tracked on purpose — a fresh clone needs them
 # for first-boot setup (the launcher copies them to .env automatically).
 !.env.example
