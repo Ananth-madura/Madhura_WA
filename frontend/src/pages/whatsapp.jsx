@@ -148,7 +148,7 @@ function MessageTicks({ status, className = "" }) {
   if (!status) return null;
 
   if (status === "failed" || status === "error") {
-    return <span className={`text-red-400 font-bold ${className}`} title="Failed to send">!</span>;
+    return <span className={`hl-badge hl-badge-error font-bold ${className}`} title="Failed to send">!</span>;
   }
   if (status === "pending" || status === "queued" || status === "sending") {
     return (
@@ -161,7 +161,7 @@ function MessageTicks({ status, className = "" }) {
 
   const isRead = status === "read" || status === "played";
   const isSingle = status === "sent";
-  const color = isRead ? "text-[#53bdeb]" : "text-slate-300/70";
+  const color = isRead ? "text-[var(--color-info)]" : "text-[var(--color-ink-2)]";
 
   return (
     <span className="wa-tick-transition inline-flex">
@@ -186,7 +186,7 @@ function MessageTicks({ status, className = "" }) {
 function TypingIndicator() {
   return (
     <div className="flex justify-start mb-2 wa-bubble-enter">
-      <div className="bg-[#202c33] rounded-lg rounded-tl-none px-3 py-2.5 flex items-center gap-0.5 shadow-sm">
+      <div className="hl-card rounded-lg rounded-tl-none px-3 py-2.5 flex items-center gap-0.5">
         <span className="wa-typing-dot" />
         <span className="wa-typing-dot" />
         <span className="wa-typing-dot" />
@@ -251,25 +251,25 @@ function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimety
 
   const getBadgeStyle = (ext) => {
     switch (ext) {
-      case "pdf": return "bg-red-500/20 text-red-400 border-red-500/40";
+      case "pdf": return "hl-badge hl-badge-error";
       case "doc":
-      case "docx": return "bg-blue-500/20 text-blue-400 border-blue-500/40";
+      case "docx": return "hl-badge hl-badge-info";
       case "xls":
       case "xlsx":
-      case "csv": return "bg-emerald-500/20 text-emerald-400 border-emerald-500/40";
+      case "csv": return "hl-badge hl-badge-success";
       case "ppt":
-      case "pptx": return "bg-orange-500/20 text-orange-400 border-orange-500/40";
+      case "pptx": return "hl-badge hl-badge-warn";
       case "md":
       case "txt":
-      case "json": return "bg-indigo-500/20 text-indigo-300 border-indigo-500/40";
+      case "json": return "hl-badge hl-badge-info";
       case "zip":
       case "rar":
-      case "7z": return "bg-amber-500/20 text-amber-400 border-amber-500/40";
+      case "7z": return "hl-badge hl-badge-warn";
       case "png":
       case "jpg":
       case "jpeg":
-      case "webp": return "bg-purple-500/20 text-purple-300 border-purple-500/40";
-      default: return "bg-[#00a884]/20 text-[#00a884] border-[#00a884]/40";
+      case "webp": return "hl-badge";
+      default: return "hl-badge";
     }
   };
 
@@ -282,8 +282,8 @@ function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimety
       return (
         <div className="py-1 space-y-1">
           <audio src={src} controls className="max-w-[270px] h-9 rounded-lg" />
-          <div className="flex items-center justify-between text-[11px] font-bold text-[#00a884] px-1">
-            <span className="text-slate-300 text-[10px] font-mono truncate max-w-[160px]">{rawFilename}</span>
+          <div className="hl-section-label flex items-center justify-between text-[11px] font-bold text-[var(--color-ink)] px-1">
+            <span className="hl-id text-[var(--color-ink-2)] text-[10px] truncate max-w-[160px]">{rawFilename}</span>
             <a href={src} download={rawFilename} target="_blank" rel="noreferrer" className="hover:underline">
               Download ⬇️
             </a>
@@ -294,9 +294,9 @@ function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimety
     if (media.mimetype?.startsWith("video/") || ["mp4", "mov", "webm", "3gp", "mkv"].includes(fileExt)) {
       return (
         <div className="space-y-1.5">
-          <video src={src} controls className="max-w-[290px] max-h-[340px] rounded-xl shadow-md border border-white/10" />
-          <div className="flex items-center justify-between text-[11px] font-bold text-[#00a884] px-1">
-            <span className="text-slate-300 text-[10px] font-mono truncate max-w-[180px]">{rawFilename}</span>
+          <video src={src} controls className="max-w-[290px] max-h-[340px] rounded-xl shadow-md border border-[var(--color-rule)]" />
+          <div className="hl-section-label flex items-center justify-between text-[11px] font-bold text-[var(--color-ink)] px-1">
+            <span className="hl-id text-[var(--color-ink-2)] text-[10px] truncate max-w-[180px]">{rawFilename}</span>
             <a href={src} download={rawFilename} target="_blank" rel="noreferrer" className="hover:underline">
               Download ⬇️
             </a>
@@ -311,10 +311,10 @@ function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimety
           <img
             src={src}
             alt={rawFilename}
-            className="max-w-[320px] max-h-[360px] object-cover rounded-xl shadow-md cursor-pointer hover:opacity-95 transition border border-white/10"
+            className="max-w-[320px] max-h-[360px] object-cover rounded-xl shadow-md cursor-pointer hover:opacity-95 transition border border-[var(--color-rule)]"
             onClick={handleView}
           />
-          <div className="flex items-center justify-between text-xs font-bold text-[#00a884] pt-1 px-1">
+          <div className="hl-section-label flex items-center justify-between text-xs font-bold text-[var(--color-ink)] pt-1 px-1">
             <button onClick={handleView} className="hover:underline flex items-center gap-1">
               🔍 Preview
             </button>
@@ -329,17 +329,17 @@ function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimety
 
   // Document attachment card (PDF, Excel .xlsx/.csv, Word doc, PowerPoint, Zip, etc.)
   return (
-    <div className={`rounded-xl p-3 border space-y-2.5 min-w-[240px] max-w-[330px] ${isMe ? "bg-[#025142] border-emerald-800/40 text-white" : "bg-[#111b21] border-slate-700/50 text-white"}`}>
+    <div className={`hl-card rounded-xl p-3 space-y-2.5 min-w-[240px] max-w-[330px] ${isMe ? "bg-[var(--color-accent-soft)] text-[var(--color-ink)]" : "bg-[var(--color-paper-2)] text-[var(--color-ink)]"}`}>
       <div className="flex items-center gap-3">
         <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-black text-xs uppercase shrink-0 border ${getBadgeStyle(fileExt)}`}>
           {fileExt.slice(0, 4)}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold text-white truncate" title={rawFilename}>{rawFilename}</p>
-          <p className="text-[10px] text-slate-300 font-mono mt-0.5 uppercase">{fileExt} Attachment</p>
+          <p className="text-xs font-bold text-[var(--color-paper-2)] truncate" title={rawFilename}>{rawFilename}</p>
+          <p className="hl-id text-[10px] text-[var(--color-ink-2)] mt-0.5 uppercase">{fileExt} Attachment</p>
         </div>
       </div>
-      <div className="flex items-center justify-between border-t border-white/10 pt-2 text-xs font-bold text-[#00a884]">
+      <div className="flex items-center justify-between border-t border-[var(--color-rule)] pt-2 text-xs font-bold text-[var(--color-ink)]">
         {src ? (
           <>
             <button onClick={() => window.open(src, "_blank")} className="hover:underline flex items-center gap-1">
@@ -350,7 +350,7 @@ function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimety
             </a>
           </>
         ) : error ? (
-          <button onClick={load} className="text-amber-400 hover:underline flex items-center gap-1">
+          <button onClick={load} className="text-[var(--color-ink)] hover:underline flex items-center gap-1">
             ⚠️ Retry Loading
           </button>
         ) : (
@@ -1344,23 +1344,26 @@ export default function WhatsAppPage() {
 
   const handleTriggerFlowForChat = async (flowId) => {
     if (!selectedChat || !flowId) return;
-    let cleanPhone = selectedChat.id.replace(/\D/g, "");
+    const rawTarget = selectedChat.phoneNumber || selectedChat.phone || selectedChat.id?.replace(/@.*$/, "") || "";
+    let cleanPhone = rawTarget.replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
     setTriggeringFlow(true);
     try {
       const token = localStorage.getItem("token");
       const res = await axios.post(`${API}/api/wa/flows/${flowId}/trigger-phone`, {
-        phone: cleanPhone
+        phone: cleanPhone || selectedChat.id,
+        chatId: selectedChat.id,
       }, { headers: { Authorization: `Bearer ${token}` } });
       const selFlow = flows.find((f) => String(f.id) === String(flowId));
       setActiveFlowRun({
         flowId,
         flowName: selFlow?.name || "Automated Bot Flow",
         currentNode: "Starting...",
-        phone: cleanPhone,
+        phone: res.data?.phone || cleanPhone,
+        chatId: selectedChat.id,
       });
       setShowFlowModal(false);
-      await fetchMessages(selectedChat.id, 15);
+      await fetchMessages(selectedChat.id, 25);
     } catch (err) {
       alert("Failed to start flow: " + (err.response?.data?.error || err.message));
     }
@@ -1977,20 +1980,22 @@ export default function WhatsAppPage() {
     setRunningAutomation(true);
     try {
       const token = localStorage.getItem("token");
-      let phone = selectedChat.id.replace(/\D/g, "");
+      const rawTarget = selectedChat.phoneNumber || selectedChat.phone || selectedChat.id?.replace(/@.*$/, "") || "";
+      let phone = rawTarget.replace(/\D/g, "");
       if (phone.length === 10) phone = "91" + phone;
 
       await axios.post(
         `${API}/api/wa/automations/${automationId}/trigger`,
         {
-          phone,
+          phone: phone || selectedChat.id,
+          chatId: selectedChat.id,
           contact_name: selectedChat.name,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setShowAutomationModal(false);
-      await fetchMessages(selectedChat.id, 15);
-      alert(`⚡ Automation triggered successfully for ${selectedChat.name}!`);
+      await fetchMessages(selectedChat.id, 25);
+      alert(`⚡ Automation triggered successfully for ${selectedChat.name || phone}!`);
     } catch (err) {
       alert("Failed to trigger automation: " + (err.response?.data?.error || err.message));
     } finally {
@@ -2211,11 +2216,14 @@ export default function WhatsAppPage() {
 
       const activeSelected = selectedChatRef.current;
       const targetChatId = chatId || (phone ? `${phone}@c.us` : "");
-      const selClean = (activeSelected?.id || activeSelected?.phone || "").replace(/\D/g, "");
+      const selClean = (activeSelected?.phoneNumber || activeSelected?.phone || activeSelected?.id || "").replace(/\D/g, "");
       const msgClean = (targetChatId || phone || "").replace(/\D/g, "");
       const sel10 = selClean.slice(-10);
       const msg10 = msgClean.slice(-10);
-      const isCurrentChat = Boolean(sel10 && msg10 && sel10 === msg10);
+      const isCurrentChat = Boolean(
+        (activeSelected?.id && (activeSelected.id === targetChatId || activeSelected.id === chatId)) ||
+        (sel10 && msg10 && sel10 === msg10)
+      );
 
       const msgObj = message || {
         id: data?.id || `ws_${Date.now()}`,
@@ -2402,6 +2410,8 @@ export default function WhatsAppPage() {
     };
 
     socket.on("wa_qr", handleWaQr);
+    socket.on("wa_authenticated", handleWaReady);
+    socket.on("wa_connected", handleWaReady);
     socket.on("wa_ready", handleWaReady);
     socket.on("wa_disconnected", handleWaDisconnected);
     socket.on("wa_contacts_synced", handleWaSynced);
@@ -2518,6 +2528,8 @@ export default function WhatsAppPage() {
       socket.off("wa_chat_history_updated", handleChatHistoryUpdated);
       socket.off("wa_agent_handoff", handleHandoffAlert);
       socket.off("wa_qr", handleWaQr);
+      socket.off("wa_authenticated", handleWaReady);
+      socket.off("wa_connected", handleWaReady);
       socket.off("wa_ready", handleWaReady);
       socket.off("wa_disconnected", handleWaDisconnected);
       socket.off("wa_contacts_synced", handleWaSynced);
@@ -2711,16 +2723,19 @@ export default function WhatsAppPage() {
     });
   }, [chats]);
 
-  const contactChatsList = deduplicatedChats.filter((c) => !isGroupChat(c));
+  const allChatsList = deduplicatedChats;
+  const directChatsList = deduplicatedChats.filter((c) => !isGroupChat(c));
   const groupChatsList = deduplicatedChats.filter((c) => isGroupChat(c));
   const unreadChatsList = deduplicatedChats.filter((c) => (c.unreadCount || 0) > 0);
   const favChatsList = deduplicatedChats.filter((c) => c.isPinned);
 
   let displayChats = [];
   const searchLower = (searchTerm || "").toLowerCase().trim();
-  let baseList = contactChatsList;
+  let baseList = allChatsList;
   if (sidebarTab === "all") {
-    baseList = contactChatsList;
+    baseList = allChatsList;
+  } else if (sidebarTab === "direct") {
+    baseList = directChatsList;
   } else if (sidebarTab === "unread") {
     baseList = unreadChatsList;
   } else if (sidebarTab === "favourites") {
@@ -2744,13 +2759,13 @@ export default function WhatsAppPage() {
 
   if (initialChecking) {
     return (
-      <div className="w-full flex-1 flex flex-col min-h-screen items-center justify-center bg-[#0b141a] text-slate-300">
+      <div className="w-full flex-1 flex flex-col min-h-screen items-center justify-center bg-[var(--color-paper-2)] text-[var(--color-ink-2)]">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-[#00a884]/20 border border-[#00a884]/40 flex items-center justify-center animate-pulse">
-            <MessageCircle size={36} className="text-[#00a884]" />
+          <div className="w-16 h-16 rounded-2xl bg-[var(--color-paper)] border border-[var(--color-rule)] flex items-center justify-center text-[var(--color-ink)] animate-pulse">
+            <MessageCircle size={36} className="text-[var(--color-ink)]" />
           </div>
-          <div className="flex items-center gap-2 text-sm text-slate-300 font-medium">
-            <Loader2 size={18} className="animate-spin text-[#00a884]" />
+          <div className="flex items-center gap-2 text-sm text-[var(--color-ink-2)] font-medium">
+            <Loader2 size={18} className="animate-spin text-[var(--color-ink)]" />
             Loading WhatsApp Workspace...
           </div>
         </div>
@@ -2760,7 +2775,7 @@ export default function WhatsAppPage() {
 
   if (!status.connected) {
     return (
-      <div className="w-full flex-1 flex flex-col min-h-screen p-3 md:p-5 bg-[#0b141a] text-slate-100 pb-16">
+      <div className="w-full flex-1 flex flex-col min-h-screen p-3 md:p-5 bg-[var(--color-paper)] text-[var(--color-ink)] pb-16">
         <WhatsAppNav />
         {showConfigModal && (
           <WAConfigPrompt
@@ -2771,20 +2786,20 @@ export default function WhatsAppPage() {
           />
         )}
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 bg-[#111b21] p-4 rounded-2xl border border-[#222d34] shadow-sm">
+        <div className="hl-commandbar hl-card flex-col sm:flex-row sm:items-center gap-3 mb-6 p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#25D366] to-emerald-700 text-white flex items-center justify-center shadow-md">
+            <div className="w-10 h-10 rounded-xl bg-[var(--color-ink)] text-[var(--color-paper-2)] flex items-center justify-center">
               <MessageCircle size={22} />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-[#e9edef]">WhatsApp Connection Center</h1>
-              <p className="text-xs text-[#8696a0]">Connect via Official Meta Cloud API (No QR needed) or Scan QR Code</p>
+              <h1 className="hl-title">WhatsApp Connection Center</h1>
+              <p className="hl-subtitle">Connect via Official Meta Cloud API (No QR needed) or Scan QR Code</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowConfigModal(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#00a884] hover:bg-[#02906f] text-white rounded-xl text-xs font-bold transition shadow-sm"
+              className="hl-btn-primary flex items-center gap-1.5"
             >
               <Key size={14} />
               <span>Configure Meta API</span>
@@ -2792,7 +2807,7 @@ export default function WhatsAppPage() {
             <button
               onClick={() => fetchQr(true)}
               disabled={qrLoading}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#202c33] hover:bg-[#2a3942] text-[#e9edef] rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50 border border-[#2a3942]"
+              className="hl-btn-secondary flex items-center gap-1.5"
             >
               <RefreshCw size={14} className={qrLoading ? "animate-spin" : ""} />
               <span>{qrLoading ? "Generating..." : "Fresh QR / Reset"}</span>
@@ -2801,48 +2816,48 @@ export default function WhatsAppPage() {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-950/80 border border-red-800 rounded-xl text-red-200 text-xs font-semibold">
+          <div className="hl-card mb-4 p-3 text-xs font-semibold border-[var(--color-error)] text-[var(--color-error)]">
             {error}
           </div>
         )}
 
         {/* Quick Meta API Callout Banner */}
-        <div className="mb-6 p-4 bg-[#111b21] border border-[#222d34] rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+        <div className="hl-card mb-6 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600/30 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0 shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center shrink-0">
               <Key size={20} />
             </div>
             <div>
-              <p className="text-xs font-bold text-[#e9edef]">Using Official Meta WhatsApp Cloud API?</p>
-              <p className="text-[11px] text-[#8696a0]">You don't need to scan a QR code! Connect your Phone Number ID and Access Token to open immediately.</p>
+              <p className="text-xs font-bold text-[var(--color-ink)]">Using Official Meta WhatsApp Cloud API?</p>
+              <p className="hl-subtitle">You don't need to scan a QR code! Connect your Phone Number ID and Access Token to open immediately.</p>
             </div>
           </div>
           <button
             onClick={() => setShowConfigModal(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition shrink-0 shadow-md shadow-blue-500/20"
+            className="hl-btn-secondary shrink-0"
           >
             Enter Meta API Keys ⚡
           </button>
         </div>
 
         {/* Connection Options Sub-Tabs */}
-        <div className="bg-[#111b21] rounded-2xl border border-[#222d34] p-6 shadow-sm max-w-2xl mx-auto w-full">
-          <div className="flex items-center justify-center gap-2 mb-6 border-b border-[#222d34] pb-4">
+        <div className="hl-card p-6 max-w-2xl mx-auto w-full">
+          <div className="hl-tabs flex items-center justify-center gap-2 mb-6 pb-4">
             <button
               onClick={() => { setConnectMode("qr"); if (!qrCode) fetchQr(); }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition ${connectMode === "qr" ? "bg-[#00a884] text-white shadow" : "bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942] hover:text-[#e9edef]"}`}
+              className={`hl-tab px-4 py-2 text-xs font-bold transition ${connectMode === "qr" ? "is-active" : ""}`}
             >
               📱 Scan QR Code
             </button>
             <button
               onClick={() => setConnectMode("pairing")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition ${connectMode === "pairing" ? "bg-[#00a884] text-white shadow" : "bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942] hover:text-[#e9edef]"}`}
+              className={`hl-tab px-4 py-2 text-xs font-bold transition ${connectMode === "pairing" ? "is-active" : ""}`}
             >
               🔢 Phone Pairing Code
             </button>
             <button
               onClick={() => setShowConfigModal(true)}
-              className="px-4 py-2 rounded-xl text-xs font-bold transition bg-blue-900/30 text-blue-300 hover:bg-blue-900/50 border border-blue-700/50"
+              className="hl-btn-secondary text-xs font-bold transition"
             >
               ☁️ Meta Cloud API
             </button>
@@ -2853,38 +2868,38 @@ export default function WhatsAppPage() {
             <div className="flex flex-col items-center justify-center text-center py-4">
               {qrLoading ? (
                 <div className="py-10 text-center">
-                  <Loader2 size={44} className="animate-spin text-[#00a884] mx-auto mb-4" />
-                  <p className="text-[#e9edef] font-bold text-sm">Generating WhatsApp QR Code...</p>
-                  <p className="text-[#8696a0] text-xs mt-1">Please wait a few seconds</p>
+                  <Loader2 size={44} className="animate-spin text-[var(--color-ink)] mx-auto mb-4" />
+                  <p className="hl-empty-title">Generating WhatsApp QR Code...</p>
+                  <p className="hl-subtitle mt-1">Please wait a few seconds</p>
                 </div>
               ) : qrCode ? (
                 <div>
-                  <div className="bg-white p-4 rounded-2xl shadow-xl border border-gray-100 inline-block mb-4">
+                  <div className="hl-card p-4 inline-block mb-4">
                     {qrDataUrl ? (
                       <img src={qrDataUrl} alt="WhatsApp Web QR Code" className="w-[240px] h-[240px] object-contain" />
                     ) : (
                       <QRCodeSVG value={qrCode} size={240} level="M" />
                     )}
                   </div>
-                  <h3 className="text-base font-bold text-[#e9edef] mb-1">Scan with your WhatsApp App</h3>
-                  <p className="text-[#8696a0] text-xs max-w-md mx-auto mb-4">
+                  <h3 className="hl-empty-title mb-1">Scan with your WhatsApp App</h3>
+                  <p className="hl-subtitle max-w-md mx-auto mb-4">
                     Open WhatsApp on your phone → Settings / Menu → <strong>Linked Devices</strong> → <strong>Link a Device</strong> and scan this code.
                   </p>
                   <button
                     onClick={() => fetchQr(true)}
-                    className="px-4 py-2 border border-[#2a3942] rounded-xl text-xs font-semibold text-[#e9edef] bg-[#202c33] hover:bg-[#2a3942] transition"
+                    className="hl-btn-secondary px-4 py-2 text-xs font-semibold transition"
                   >
                     Refresh QR Code
                   </button>
                 </div>
               ) : (
                 <div className="py-6 text-center">
-                  <Smartphone size={52} className="text-[#8696a0] mx-auto mb-3" />
-                  <h3 className="text-base font-bold text-[#e9edef] mb-1">Ready to Link WhatsApp Phone</h3>
-                  <p className="text-[#8696a0] text-xs max-w-sm mx-auto mb-4">Click below to generate a QR code to scan with your phone.</p>
+                  <Smartphone size={52} className="text-[var(--color-ink)] mx-auto mb-3" />
+                  <h3 className="hl-empty-title mb-1">Ready to Link WhatsApp Phone</h3>
+                  <p className="hl-subtitle max-w-sm mx-auto mb-4">Click below to generate a QR code to scan with your phone.</p>
                   <button
                     onClick={() => fetchQr()}
-                    className="px-6 py-2.5 bg-[#00a884] text-white rounded-xl hover:bg-[#02906f] transition font-bold text-xs shadow-md"
+                    className="hl-btn-primary font-bold text-xs"
                   >
                     Display QR Code Now
                   </button>
@@ -2896,44 +2911,44 @@ export default function WhatsAppPage() {
           {/* Mode 2: Phone Pairing Code */}
           {connectMode === "pairing" && (
             <div className="py-4">
-              <h3 className="text-base font-bold text-[#e9edef] mb-1 text-center">Link via Mobile Number</h3>
-              <p className="text-[#8696a0] text-xs text-center mb-6 max-w-md mx-auto">
+              <h3 className="hl-empty-title mb-1 text-center">Link via Mobile Number</h3>
+              <p className="hl-subtitle text-center mb-6 max-w-md mx-auto">
                 Enter your mobile number with country code (e.g. 919876543210) to receive an 8-character WhatsApp pairing code.
               </p>
 
               {pairingError && (
-                <div className="mb-4 p-3 bg-red-950/80 border border-red-800 text-red-200 text-xs rounded-xl text-center font-semibold">
+                <div className="hl-card mb-4 p-3 text-xs text-center font-semibold border-[var(--color-error)] text-[var(--color-error)]">
                   {pairingError}
                 </div>
               )}
 
               {pairingCode ? (
-                <div className="text-center py-4 bg-emerald-950/40 border border-emerald-800 rounded-2xl p-6">
-                  <p className="text-xs text-emerald-400 font-semibold mb-2">YOUR WHATSAPP PAIRING CODE</p>
-                  <div className="text-3xl font-mono font-black text-emerald-300 tracking-widest bg-[#111b21] py-3 px-6 rounded-xl border border-emerald-700/60 inline-block mb-3 shadow-inner">
+                <div className="hl-card text-center py-4 p-6">
+                  <p className="hl-section-label mb-2">YOUR WHATSAPP PAIRING CODE</p>
+                  <div className="hl-kpi-num tracking-widest py-3 px-6 rounded-xl border border-[var(--color-rule)] bg-[var(--color-paper)] inline-block mb-3">
                     {pairingCode}
                   </div>
-                  <p className="text-xs text-emerald-300/80 max-w-sm mx-auto">
+                  <p className="hl-subtitle max-w-sm mx-auto">
                     Open WhatsApp on phone → Linked Devices → <strong>Link with phone number instead</strong> → Enter this code.
                   </p>
                 </div>
               ) : (
                 <form onSubmit={handleRequestPairingCode} className="space-y-4 max-w-md mx-auto">
                   <div>
-                    <label className="block text-xs font-bold text-[#8696a0] uppercase mb-1">Mobile Number (with Country Code)</label>
+                    <label className="hl-section-label block mb-1">Mobile Number (with Country Code)</label>
                     <input
                       type="text"
                       placeholder="e.g. 919876543210"
                       value={pairingPhone}
                       onChange={(e) => setPairingPhone(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-[#202c33] border border-[#2a3942] text-[#e9edef] rounded-xl text-xs outline-none focus:ring-2 focus:ring-[#00a884]"
+                      className="hl-input w-full px-4 py-2.5 text-xs"
                       required
                     />
                   </div>
                   <button
                     type="submit"
                     disabled={pairingLoading || !pairingPhone}
-                    className="w-full py-3 bg-[#00a884] text-white rounded-xl font-bold text-xs hover:bg-[#02906f] transition flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
+                    className="hl-btn-primary w-full py-3 font-bold text-xs flex items-center justify-center gap-2"
                   >
                     {pairingLoading ? (
                       <>
@@ -2953,30 +2968,504 @@ export default function WhatsAppPage() {
     );
   }
 
+  // ── Render Helpers for Contact CRM Intelligence & Team Notes ──────────────
+  const renderContactInfoContent = (isDocked = false) => {
+    if (!selectedChat) return null;
+    return (
+      <div className={`flex flex-col h-full min-h-0 bg-[var(--color-paper-2)] ${isDocked ? "w-full" : ""}`}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-rule)] bg-[var(--color-paper-2)] shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-1.5 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] shrink-0">
+              <Info size={16} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-bold text-xs sm:text-sm text-[var(--color-ink)] truncate">Contact Profile & CRM</h3>
+              <p className="text-[10px] text-[var(--color-ink-2)] truncate">Live CRM Intelligence & Fast Tools</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowContactInfoDrawer(false)}
+            className="p-1.5 rounded-lg text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper)] transition"
+            title="Close CRM details"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Scrollable Body - Parallel Independent Scroll */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 wa-parallel-scroll wa-custom-scrollbar overscroll-contain">
+          {/* Avatar and basic info */}
+          <div className="text-center pb-4 border-b border-[var(--color-rule)]">
+            <div className="flex flex-col items-center justify-center mx-auto mb-2">
+              <WAContactAvatar
+                src={selectedChat.profilePicUrl}
+                name={selectedChat.name}
+                phone={selectedChat.id}
+                isGroup={selectedChat.isGroup}
+                size="2xl"
+                clickable={true}
+                className="shadow-lg shadow-black/10"
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const res = await axios.get(`${API}/api/whatsapp/chat/${encodeURIComponent(selectedChat.id)}/profile-pic`, {
+                      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+                    });
+                    if (res.data?.profilePicUrl) {
+                      setSelectedChat(prev => ({ ...prev, profilePicUrl: res.data.profilePicUrl }));
+                      setChats(prev => prev.map(c => c.id === selectedChat.id ? { ...c, profilePicUrl: res.data.profilePicUrl } : c));
+                    }
+                  } catch (_) {}
+                }}
+                className="mt-2 text-[10px] text-[var(--color-ink)] font-bold hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw size={11} />
+                <span>Refresh WhatsApp Photo</span>
+              </button>
+            </div>
+            <h3 className="hl-title truncate">{selectedChat.name}</h3>
+            <p className="hl-id text-xs text-[var(--color-ink-2)] mt-0.5">+{selectedChat.id?.replace(/\D/g, "")}</p>
+
+            {selectedChat.source && (
+              <span className="hl-badge hl-badge-info inline-block mt-2 text-xs font-bold px-3 py-1 rounded-full">
+                {selectedChat.source}
+              </span>
+            )}
+          </div>
+
+          {/* CRM Invoices, Quotations, and AMC History */}
+          <div className="py-2 border-b border-[var(--color-rule)] space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="hl-section-label text-xs font-bold text-[var(--color-ink-2)] uppercase tracking-wider">Linked CRM Records</h4>
+              <button
+                onClick={() => fetchContactCrmDetails(selectedChat.id)}
+                className="text-[10px] text-[var(--color-ink)] font-bold hover:underline"
+              >
+                Refresh
+              </button>
+            </div>
+
+            {crmDetailsLoading ? (
+              <div className="py-3 text-center">
+                <Loader2 size={18} className="animate-spin text-[var(--color-ink)] mx-auto" />
+              </div>
+            ) : crmDetails ? (
+              <div className="space-y-3 text-xs">
+                {/* Invoices list */}
+                {crmDetails.invoices && crmDetails.invoices.length > 0 && (
+                  <div className="hl-card bg-[var(--color-paper-2)] p-2.5 rounded-xl border border-[var(--color-rule)]">
+                    <p className="hl-section-label font-bold text-[var(--color-ink-2)] mb-1.5 text-[11px]">Recent Invoices ({crmDetails.invoices.length})</p>
+                    <div className="space-y-1">
+                      {crmDetails.invoices.slice(0, 3).map((inv) => (
+                        <div key={inv.id} className="hl-id flex justify-between text-[11px]">
+                          <span className="text-[var(--color-ink-2)] truncate">{inv.invoice_number || `INV-#${inv.id}`}</span>
+                          <span className="hl-section-label font-bold">₹{parseFloat(inv.grand_total || inv.total_amount || 0).toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Quotations list */}
+                {crmDetails.quotations && crmDetails.quotations.length > 0 && (
+                  <div className="hl-card bg-[var(--color-paper-2)] p-2.5 rounded-xl border border-[var(--color-rule)]">
+                    <p className="hl-section-label font-bold text-[var(--color-ink-2)] mb-1.5 text-[11px]">Quotations ({crmDetails.quotations.length})</p>
+                    <div className="space-y-1">
+                      {crmDetails.quotations.slice(0, 3).map((q) => (
+                        <div key={q.id} className="hl-id flex justify-between text-[11px]">
+                          <span className="text-[var(--color-ink-2)] truncate">{q.quotation_number || `QTN-#${q.id}`}</span>
+                          <span className="hl-section-label font-bold text-[var(--color-ink)]">₹{parseFloat(q.grand_total || q.total_amount || 0).toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* AMC Contracts */}
+                {crmDetails.amc && crmDetails.amc.length > 0 && (
+                  <div className="hl-card bg-[var(--color-paper)] p-2.5 rounded-xl border border-[var(--color-rule)]">
+                    <p className="hl-section-label font-bold text-[var(--color-ink)] mb-1 text-[11px]">Active AMC Contract</p>
+                    <p className="hl-kpi-label">{crmDetails.amc[0].contract_title || "Annual Maintenance"}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => fetchContactCrmDetails(selectedChat.id)}
+                className="hl-btn-secondary w-full py-2 bg-[var(--color-paper-2)] text-[var(--color-ink-2)] rounded-lg text-xs font-semibold hover:bg-[var(--color-paper-2)] transition border border-[var(--color-rule)]"
+              >
+                Load CRM Invoices & Quotes
+              </button>
+            )}
+          </div>
+
+          {/* Add as CRM Client */}
+          <div className="py-2 border-b border-[var(--color-rule)] space-y-2.5">
+            <h4 className="hl-section-label text-xs font-bold text-[var(--color-ink-2)] uppercase tracking-wider">CRM Client Status</h4>
+
+            {crmDetails?.client ? (
+              <div className="hl-card bg-[var(--color-paper)] p-3 rounded-xl border border-[var(--color-rule)] space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={16} className="text-[var(--color-ink)] shrink-0" />
+                  <span className="text-xs font-bold text-[var(--color-ink)]">Linked CRM Client</span>
+                  {crmDetails.client.source && (
+                    <span className="hl-badge hl-badge-success ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      {crmDetails.client.source}
+                    </span>
+                  )}
+                </div>
+                <p className="hl-kpi-label font-semibold">{crmDetails.client.name || crmDetails.client.company_name}</p>
+                {crmDetails.client.company_name && crmDetails.client.name !== crmDetails.client.company_name && (
+                  <p className="text-[10px] text-[var(--color-ink)]">{crmDetails.client.company_name}</p>
+                )}
+                {crmDetails.client.email && (
+                  <p className="text-[10px] text-[var(--color-ink)]">{crmDetails.client.email}</p>
+                )}
+                <button
+                  onClick={() => navigate(`/whatsapp/contacts`)}
+                  className="mt-1 text-[10px] text-[var(--color-ink)] font-bold hover:underline flex items-center gap-1"
+                >
+                  <ExternalLink size={10} /> View in CRM Clients
+                </button>
+              </div>
+            ) : addClientResult?.success ? (
+              <div className={`hl-card p-3 space-y-1.5 ${addClientResult.isExisting ? "border-[var(--color-info)]" : "border-[var(--color-success)]"}`}>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={16} className={addClientResult.isExisting ? "text-[var(--color-info)]" : "text-[var(--color-success)]"} />
+                  <span className={`text-xs font-bold ${addClientResult.isExisting ? "text-[var(--color-info)]" : "text-[var(--color-success)]"}`}>
+                    {addClientResult.isExisting ? "Already in CRM" : "✅ Added to CRM!"}
+                  </span>
+                  <span className="hl-badge hl-badge-success ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    WhatsApp
+                  </span>
+                </div>
+                <p className="hl-id font-semibold">{addClientResult.client?.name}</p>
+                {addClientResult.client?.company_name && (
+                  <p className="hl-id text-[10px] text-[var(--color-ink-2)]">{addClientResult.client.company_name}</p>
+                )}
+                <button
+                  onClick={() => navigate(`/whatsapp/contacts`)}
+                  className="mt-1 text-[10px] text-[var(--color-ink)] font-bold hover:underline flex items-center gap-1"
+                >
+                  <ExternalLink size={10} /> View in CRM Clients
+                </button>
+              </div>
+            ) : showAddClientForm ? (
+              <div className="hl-card bg-[var(--color-paper-2)] p-3 rounded-xl border border-[var(--color-rule)] space-y-2">
+                <div className="space-y-1.5">
+                  <input
+                    type="text"
+                    placeholder="Customer Name *"
+                    value={addClientData.name}
+                    onChange={(e) => setAddClientData(prev => ({ ...prev, name: e.target.value }))}
+                    className="hl-input w-full px-2.5 py-1.5 text-xs"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Company Name"
+                    value={addClientData.company_name}
+                    onChange={(e) => setAddClientData(prev => ({ ...prev, company_name: e.target.value }))}
+                    className="hl-input w-full px-2.5 py-1.5 text-xs"
+                  />
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input
+                      type="email"
+                      placeholder="Email"
+                      value={addClientData.email}
+                      onChange={(e) => setAddClientData(prev => ({ ...prev, email: e.target.value }))}
+                      className="hl-input px-2.5 py-1.5 text-xs"
+                    />
+                    <input
+                      type="text"
+                      placeholder="City"
+                      value={addClientData.city}
+                      onChange={(e) => setAddClientData(prev => ({ ...prev, city: e.target.value }))}
+                      className="hl-input px-2.5 py-1.5 text-xs"
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Service / Product Interest"
+                    value={addClientData.service}
+                    onChange={(e) => setAddClientData(prev => ({ ...prev, service: e.target.value }))}
+                    className="hl-input w-full px-2.5 py-1.5 text-xs"
+                  />
+                  <textarea
+                    placeholder="Notes (optional)"
+                    value={addClientData.notes}
+                    onChange={(e) => setAddClientData(prev => ({ ...prev, notes: e.target.value }))}
+                    rows={2}
+                    className="hl-input w-full px-2.5 py-1.5 text-xs resize-none"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    disabled={addClientLoading || !addClientData.name.trim()}
+                    onClick={async () => {
+                      setAddClientLoading(true);
+                      try {
+                        const token = localStorage.getItem("token");
+                        const cleanPhone = selectedChat.id?.replace(/\D/g, "").slice(-10);
+                        const res = await axios.post(`${API}/api/whatsapp/add-to-crm-client`, {
+                          phone: cleanPhone,
+                          ...addClientData,
+                        }, { headers: { Authorization: `Bearer ${token}` } });
+                        setAddClientResult(res.data);
+                        setShowAddClientForm(false);
+                        fetchContactCrmDetails(selectedChat.id);
+                      } catch (err) {
+                        alert(err.response?.data?.error || "Failed to add client");
+                      }
+                      setAddClientLoading(false);
+                    }}
+                    className="hl-btn-primary flex-1 py-2 bg-[var(--color-paper)] hover:bg-[var(--color-paper)] text-[var(--color-paper-2)] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                  >
+                    {addClientLoading ? (
+                      <><Loader2 size={13} className="animate-spin" /> Saving...</>
+                    ) : (
+                      <><UserPlus size={13} /> Save as Client</>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => { setShowAddClientForm(false); setAddClientData({ name: "", company_name: "", email: "", city: "", service: "", notes: "" }); }}
+                    className="hl-btn-secondary px-3 py-2 bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] text-[var(--color-ink-2)] rounded-lg text-xs font-semibold transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setAddClientData({
+                    name: selectedChat.name || "",
+                    company_name: "",
+                    email: "",
+                    city: "",
+                    service: "",
+                    notes: "",
+                  });
+                  setAddClientResult(null);
+                  setShowAddClientForm(true);
+                }}
+                className="hl-btn-secondary w-full py-2 px-3 bg-[var(--color-paper)] hover:bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-rule)] rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition"
+              >
+                <UserPlus size={14} className="text-[var(--color-ink)]" />
+                <span>Add as CRM Client (Source: WhatsApp)</span>
+              </button>
+            )}
+          </div>
+
+          {/* Unified WhatsApp Hub Navigation Bar */}
+          <div className="py-2 border-b border-[var(--color-rule)] space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="hl-section-label text-xs font-bold text-[var(--color-ink-2)] uppercase tracking-wider">⚡ Unified WhatsApp Hub</h4>
+              <span className="hl-badge hl-badge-success text-[10px] font-bold px-2 py-0.5 rounded-full">All Linked</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => navigate("/whatsapp/campaigns")}
+                className="hl-btn-secondary flex items-center gap-2 p-2 bg-[var(--color-paper)] hover:bg-[var(--color-paper)] text-[var(--color-ink)] rounded-xl transition text-xs font-semibold text-left border border-[var(--color-rule)]"
+              >
+                <SendHorizontal size={14} className="text-[var(--color-ink)] shrink-0" />
+                <span className="truncate">Bulk Campaigns</span>
+              </button>
+
+              <button
+                onClick={() => navigate("/whatsapp/automations")}
+                className="hl-btn-secondary flex items-center gap-2 p-2 bg-[var(--color-paper)] hover:bg-[var(--color-paper)] text-[var(--color-ink)] rounded-xl transition text-xs font-semibold text-left border border-[var(--color-rule)]"
+              >
+                <Sparkles size={14} className="text-[var(--color-ink)] shrink-0" />
+                <span className="truncate">Automations</span>
+              </button>
+
+              <button
+                onClick={() => navigate("/whatsapp/flows")}
+                className="hl-btn-secondary flex items-center gap-2 p-2 bg-[var(--color-paper)] hover:bg-[var(--color-paper)] text-[var(--color-ink)] rounded-xl transition text-xs font-semibold text-left border border-[var(--color-rule)]"
+              >
+                <Zap size={14} className="text-[var(--color-ink)] shrink-0" />
+                <span className="truncate">Chatbot Flows</span>
+              </button>
+
+              <button
+                onClick={() => navigate("/whatsapp/reminders")}
+                className="hl-btn-secondary flex items-center gap-2 p-2 bg-[var(--color-paper)] hover:bg-[var(--color-paper)] text-[var(--color-ink)] rounded-xl transition text-xs font-semibold text-left border border-[var(--color-rule)]"
+              >
+                <Bell size={14} className="text-[var(--color-ink)] shrink-0" />
+                <span className="truncate">Reminders</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Actions & Instant Bot Tools */}
+          <div className="py-2 space-y-2">
+            <h4 className="hl-section-label text-xs font-bold text-[var(--color-ink-2)] uppercase tracking-wider">Execute for this Contact</h4>
+            
+            <button
+              onClick={() => {
+                setShowContactInfoDrawer(false);
+                fetchCampaignGroups();
+                setShowAddToGroupModal(true);
+              }}
+              className="hl-btn-secondary w-full py-2 px-3 bg-[var(--color-paper)] hover:bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-rule)] rounded-xl text-xs font-bold flex items-center justify-between transition"
+            >
+              <div className="flex items-center gap-2">
+                <Users size={14} className="text-[var(--color-ink)]" />
+                <span>Enroll in Campaign Group</span>
+              </div>
+              <span className="hl-badge hl-badge-info text-[10px] px-2 py-0.5 rounded-full">Bulk</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setShowContactInfoDrawer(false);
+                fetchDripSequences();
+                setShowDripModal(true);
+              }}
+              className="hl-btn-secondary w-full py-2 px-3 bg-[var(--color-paper)] hover:bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-rule)] rounded-xl text-xs font-bold flex items-center justify-between transition"
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles size={14} className="text-[var(--color-ink)]" />
+                <span>Enroll in Drip Sequence</span>
+              </div>
+              <span className="hl-badge hl-badge-info text-[10px] px-2 py-0.5 rounded-full">Nurture</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setShowContactInfoDrawer(false);
+                setShowOptionsModal(true);
+              }}
+              className="hl-btn-secondary w-full py-2 px-3 bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] text-[var(--color-ink)] border border-[var(--color-rule)] rounded-xl text-xs font-bold flex items-center justify-between transition"
+            >
+              <div className="flex items-center gap-2">
+                <ListOrdered size={14} className="text-[var(--color-ink-2)]" />
+                <span>Send Inquiry Options Menu</span>
+              </div>
+              <span className="hl-badge text-[10px] px-2 py-0.5 rounded-full">Quick</span>
+            </button>
+
+            <a
+              href={`tel:+${selectedChat.id?.replace(/\D/g, "")}`}
+              className="hl-btn-secondary w-full py-2 px-3 bg-[var(--color-paper)] hover:bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-rule)] rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition"
+            >
+              <PhoneCall size={14} className="text-[var(--color-ink)]" />
+              <span>Direct Call +{selectedChat.id?.replace(/\D/g, "")}</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderNotesContent = (isDocked = false) => {
+    return (
+      <div className={`flex flex-col h-full min-h-0 bg-[var(--color-paper-2)] ${isDocked ? "w-full" : ""}`}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-rule)] bg-[var(--color-paper-2)] shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-1.5 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] shrink-0">
+              <FileText size={16} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-bold text-xs sm:text-sm text-[var(--color-ink)] truncate">Internal Team Notes</h3>
+              <p className="text-[10px] text-[var(--color-ink-2)] truncate">Private CRM notes (hidden from customer)</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowNotesDrawer(false)}
+            className="p-1.5 rounded-lg text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper)] transition"
+            title="Close team notes"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Scrollable Notes List - Parallel Scroll */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 wa-parallel-scroll wa-custom-scrollbar overscroll-contain">
+          {notesLoading ? (
+            <div className="py-10 text-center">
+              <Loader2 size={24} className="animate-spin text-[var(--color-ink)] mx-auto" />
+            </div>
+          ) : internalNotes.length === 0 ? (
+            <div className="hl-empty py-12 text-center text-xs text-[var(--color-ink-2)] space-y-1">
+              <p className="font-bold text-[var(--color-ink-2)]">No internal notes yet</p>
+              <p>Add private notes below to collaborate with colleagues.</p>
+            </div>
+          ) : (
+            internalNotes.map((note) => (
+              <div key={note.id} className="hl-card p-3 bg-[var(--color-paper-2)] border border-[var(--color-rule)] rounded-xl space-y-1.5 shadow-xs">
+                <div className="hl-id flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-[var(--color-ink)] flex items-center gap-1">
+                    👤 {note.author_name}
+                  </span>
+                  <span className="text-[10px] text-[var(--color-ink-2)]">
+                    {new Date(note.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--color-ink)] whitespace-pre-wrap">{note.note_text}</p>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Add Note Input */}
+        <form onSubmit={handleCreateInternalNote} className="p-3 border-t border-[var(--color-rule)] bg-[var(--color-paper-2)] shrink-0 space-y-2">
+          <textarea
+            rows={3}
+            value={newNoteText}
+            onChange={(e) => setNewNoteText(e.target.value)}
+            placeholder="Type private note or @colleague mention..."
+            className="hl-input w-full px-3 py-2 text-xs resize-none"
+            required
+          />
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-[var(--color-ink-2)]">🔒 Only visible to team members</span>
+            <button
+              type="submit"
+              disabled={submittingNote || !newNoteText.trim()}
+              className="hl-btn-primary px-3.5 py-1.5 font-bold text-xs rounded-lg transition flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {submittingNote ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+              <span>Save Note</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  };
+
   return (
-    <div className="w-full flex-1 flex flex-col wa-h-screen wa-max-h-screen min-h-0 bg-[#0b141a] text-slate-100 overflow-hidden shadow-2xl">
-      <WhatsAppNav
-        onAccountBalance={fetchAccountBalance}
-        onSyncWhatsApp={handleSyncWhatsApp}
-        onLogout={handleLogout}
-        isSyncing={syncing}
-        statusPhone={status.phone}
-      />
+    <div className="w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-[var(--color-paper-2)] text-[var(--color-ink)] rounded-xl border border-[var(--color-rule)] shadow-sm overflow-hidden select-text wa-parallel-container">
+      <div className="shrink-0 px-2 pt-2">
+        <WhatsAppNav
+          onAccountBalance={fetchAccountBalance}
+          onSyncWhatsApp={handleSyncWhatsApp}
+          onLogout={handleLogout}
+          isSyncing={syncing}
+          statusPhone={status.phone}
+        />
+      </div>
 
       {error && (
-        <div className="p-3 bg-red-950/80 border-b border-red-800 text-red-200 text-xs font-semibold flex items-center justify-between shrink-0">
+        <div className="p-2.5 text-xs font-semibold flex items-center justify-between shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-error)] text-[var(--color-error)]">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-200">
+          <button onClick={() => setError(null)} className="text-[var(--color-error)] hover:opacity-80">
             <X size={14} />
           </button>
         </div>
       )}
 
       {/* Sound & Notification Toggles Bar */}
-      <div className="flex items-center justify-end gap-1.5 px-3 py-1 bg-[#111b21] border-b border-[#222d34] shrink-0">
+      <div className="flex items-center justify-end gap-1.5 px-3 py-1 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] shrink-0">
         <button
           onClick={() => setSoundEnabled((v) => !v)}
-          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition ${soundEnabled ? "bg-[#00a884]/20 text-[#00a884] border border-[#00a884]/30" : "bg-[#202c33] text-slate-400 border border-transparent hover:text-slate-200"}`}
+          className={`hl-badge flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold transition ${soundEnabled ? "hl-badge-accent" : ""}`}
           title={soundEnabled ? "Mute notification sounds" : "Unmute notification sounds"}
         >
           {soundEnabled ? <Volume2 size={12} /> : <VolumeX size={12} />}
@@ -2990,7 +3479,7 @@ export default function WhatsAppPage() {
               requestNotifPermission();
             }
           }}
-          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition ${desktopNotifs ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" : "bg-[#202c33] text-slate-400 border border-transparent hover:text-slate-200"}`}
+          className={`hl-badge flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold transition ${desktopNotifs ? "hl-badge-info" : ""}`}
           title={desktopNotifs ? "Disable desktop notifications" : "Enable desktop notifications"}
         >
           <Bell size={12} />
@@ -2999,117 +3488,130 @@ export default function WhatsAppPage() {
       </div>
 
       {/* Main WhatsApp App Canvas */}
-      <div className="flex-1 min-h-0 flex overflow-hidden w-full relative">
+      <div className="flex-1 min-h-0 flex overflow-hidden w-full relative bg-[var(--color-paper)]">
 
         {/* Chats Sidebar Column (Independent Parallel Scrolling) */}
-        <div className={`w-full md:w-96 lg:w-[420px] bg-[#111b21] border-r border-[#222d34] flex flex-col h-full min-h-0 shrink-0 ${showMobileChat ? "hidden md:flex" : "flex"}`}>
+        <div className={`w-full md:w-80 lg:w-88 xl:w-[360px] bg-[var(--color-paper-2)] border-r border-[var(--color-rule)] flex flex-col h-full min-h-0 shrink-0 select-none ${showMobileChat ? "hidden md:flex" : "flex"}`}>
           {/* Search Bar & Action Buttons */}
-          <div className="p-3 border-b border-[#222d34] flex items-center gap-2 shrink-0">
+          <div className="p-2.5 border-b border-[var(--color-rule)] flex items-center gap-2 shrink-0 bg-[var(--color-paper-2)]">
             <div className="relative flex-1">
-              <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
+              <Search size={14} className="absolute left-3 top-2.5 text-[var(--color-ink-2)]" />
               <input
                 type="text"
-                placeholder="Search or start a new chat"
+                placeholder="Search or start a new chat..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-[#202c33] text-slate-100 placeholder-slate-400 rounded-xl text-xs outline-none focus:ring-1 focus:ring-[#00a884] border border-transparent"
+                className="hl-input w-full pl-9 pr-7 py-1.5 text-xs rounded-lg"
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2 top-2 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] p-0.5 rounded-full"
+                  title="Clear search"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </div>
             <button
               onClick={() => setShowNewChatModal(true)}
-              className="p-2 bg-[#202c33] text-slate-300 hover:text-white hover:bg-[#2a3942] rounded-xl transition shrink-0"
+              className="hl-btn-secondary p-1.5 rounded-lg shrink-0"
               title="Start new chat"
             >
               <Plus size={16} />
             </button>
             <button
               onClick={() => fetchChats(true)}
-              className="p-2 bg-[#202c33] text-slate-300 hover:text-white hover:bg-[#2a3942] rounded-xl transition shrink-0"
+              className="hl-btn-secondary p-1.5 rounded-lg shrink-0"
               title="Refresh chat list"
             >
-              <RefreshCw size={15} className={chatsLoading ? "animate-spin text-[#00a884]" : ""} />
+              <RefreshCw size={14} className={chatsLoading ? "animate-spin text-[var(--color-ink)]" : ""} />
             </button>
           </div>
 
-          {/* Filter Capsules / Pills (All, Unread, Favourites, Groups) */}
-          <div className="px-3 py-2 border-b border-[#222d34] flex items-center gap-1.5 shrink-0 overflow-x-auto no-scrollbar">
+          {/* Filter Capsules / Pills (All, Direct, Unread, Groups, Favourites) */}
+          <div className="hl-tabs px-3 py-1.5 flex items-center gap-1.5 shrink-0 overflow-x-auto wa-no-scrollbar border-b border-[var(--color-rule)] bg-[var(--color-paper-2)]">
             <button
               onClick={() => setSidebarTab("all")}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition whitespace-nowrap ${sidebarTab === "all"
-                  ? "bg-[#00a884] text-white shadow-sm"
-                  : "bg-[#202c33] text-slate-300 hover:bg-[#2a3942]"
-                }`}
+              className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "all" ? "is-active" : ""}`}
             >
-              All
+              <span>All</span>
+              <span className="hl-badge text-[10px] px-1.5 py-0.2 font-semibold">
+                {allChatsList.length}
+              </span>
             </button>
             <button
               onClick={() => setSidebarTab("unread")}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition whitespace-nowrap flex items-center gap-1 ${sidebarTab === "unread"
-                  ? "bg-[#00a884] text-white shadow-sm"
-                  : "bg-[#202c33] text-slate-300 hover:bg-[#2a3942]"
-                }`}
+              className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "unread" ? "is-active" : ""}`}
             >
               <span>Unread</span>
               {unreadChatsList.length > 0 && (
-                <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                <span className="hl-badge hl-badge-error text-[10px] px-1.5 py-0.2 font-black animate-pulse">
                   {unreadChatsList.length}
                 </span>
               )}
             </button>
             <button
-              onClick={() => setSidebarTab("favourites")}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition whitespace-nowrap ${sidebarTab === "favourites"
-                  ? "bg-[#00a884] text-white shadow-sm"
-                  : "bg-[#202c33] text-slate-300 hover:bg-[#2a3942]"
-                }`}
+              onClick={() => setSidebarTab("direct")}
+              className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "direct" ? "is-active" : ""}`}
             >
-              Favourites
+              <span>Direct</span>
+              <span className="hl-badge text-[10px] px-1.5 py-0.2 font-semibold">
+                {directChatsList.length}
+              </span>
             </button>
             <button
               onClick={() => setSidebarTab("groups")}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition whitespace-nowrap flex items-center gap-1 ${sidebarTab === "groups"
-                  ? "bg-[#00a884] text-white shadow-sm"
-                  : "bg-[#202c33] text-slate-300 hover:bg-[#2a3942]"
-                }`}
+              className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "groups" ? "is-active" : ""}`}
             >
               <span>Groups</span>
               {groupChatsList.length > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${sidebarTab === "groups" ? "bg-white/20 text-white" : "bg-[#111b21] text-slate-300"}`}>
+                <span className={`hl-badge text-[10px] px-1.5 py-0.2 font-bold ${sidebarTab === "groups" ? "hl-badge-accent" : ""}`}>
                   {groupChatsList.length}
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setSidebarTab("favourites")}
+              className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "favourites" ? "is-active" : ""}`}
+            >
+              <Star size={11} className={sidebarTab === "favourites" ? "text-[var(--color-focus)] fill-[var(--color-focus)]" : ""} />
+              <span>Favourites</span>
+            </button>
           </div>
 
-          {/* Chat List Items (Parallel Independent Column Scroll) */}
-          <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-[#222d34]/60 overscroll-contain wa-custom-scrollbar scroll-smooth">
+          {/* Chat List Items (Parallel Independent Column Scroll #1) */}
+          <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-[var(--color-rule)] overscroll-contain wa-custom-scrollbar wa-parallel-scroll scroll-smooth">
             {chatsLoading && chats.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 space-y-2 text-slate-400">
-                <Loader2 size={28} className="animate-spin text-[#00a884]" />
+              <div className="hl-empty flex flex-col items-center justify-center h-48 space-y-2">
+                <Loader2 size={28} className="animate-spin text-[var(--color-ink)]" />
                 <p className="text-xs font-medium">Loading conversations...</p>
               </div>
             ) : displayChats.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-8 text-slate-400 text-center">
-                <MessageSquare size={36} className="mb-2 text-[#00a884] opacity-80" />
-                <p className="font-semibold text-slate-200 text-sm mb-1">
+              <div className="hl-empty flex flex-col items-center justify-center p-8 text-center">
+                <MessageSquare size={36} className="mb-2 text-[var(--color-ink)] opacity-80" />
+                <p className="hl-empty-title mb-1">
                   {searchTerm
                     ? "No chats match your search"
                     : sidebarTab === "unread"
                     ? "No unread messages"
+                    : sidebarTab === "direct"
+                    ? "No 1-on-1 direct conversations"
                     : sidebarTab === "favourites"
                     ? "No starred or pinned chats"
                     : sidebarTab === "groups"
                     ? "No group chats found"
                     : "No WhatsApp chats yet"}
                 </p>
-                <p className="text-xs text-slate-400 mb-4 max-w-xs">
+                <p className="hl-subtitle mb-4 max-w-xs">
                   {searchTerm
                     ? "Try searching with a different name, phone number, or message"
                     : "Start a conversation directly with any contact or phone number"}
                 </p>
                 <button
                   onClick={() => setShowNewChatModal(true)}
-                  className="px-4 py-2 bg-[#00a884] text-white rounded-xl text-xs font-bold hover:bg-[#008f70] transition shadow-md flex items-center gap-1.5"
+                  className="hl-btn-primary text-xs flex items-center gap-1.5"
                 >
                   <UserPlus size={14} />
                   <span>Start New Chat</span>
@@ -3125,7 +3627,7 @@ export default function WhatsAppPage() {
                   <div
                     key={chat.id}
                     onClick={() => handleSelectChat(chat)}
-                    className={`w-full flex items-center gap-3 px-3.5 py-3 hover:bg-[#202c33] transition text-left cursor-pointer border-l-4 ${isActive ? "bg-[#2a3942] border-[#00a884]" : "border-transparent"
+                    className={`w-full flex items-center gap-3 px-3.5 py-3 hover:bg-[var(--color-paper)] transition text-left cursor-pointer border-l-4 ${isActive ? "bg-[var(--color-paper)] border-[var(--color-accent)]" : "border-transparent"
                       }`}
                   >
                     {/* Contact Profile Picture / Avatar with Online Status */}
@@ -3144,7 +3646,7 @@ export default function WhatsAppPage() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <span className={`font-bold text-sm truncate ${isActive ? "text-white" : "text-slate-100"}`}>
+                        <span className="font-bold text-sm truncate text-[var(--color-ink)]">
                           {(() => {
                             const n = chat.name || "";
                             if (n.replace(/\D/g, "").length >= 13 || n.includes("@lid")) {
@@ -3156,13 +3658,13 @@ export default function WhatsAppPage() {
                             return n || chat.formattedPhone || "WhatsApp Contact";
                           })()}
                         </span>
-                        <span className={`text-[11px] font-semibold shrink-0 ${hasUnread ? "text-[#00a884]" : "text-slate-400"}`}>
+                        <span className="hl-id font-semibold shrink-0">
                           {timeStr}
                         </span>
                       </div>
 
                       <div className="flex items-center justify-between gap-1">
-                        <div className="flex items-center gap-1 min-w-0 text-xs text-slate-400 truncate">
+                        <div className="flex items-center gap-1 min-w-0 text-xs text-[var(--color-ink-2)] truncate">
                           {chat.lastMessage?.fromMe && (
                             <MessageTicks status={chat.lastMessage.status || "sent"} className="shrink-0" />
                           )}
@@ -3180,7 +3682,7 @@ export default function WhatsAppPage() {
                           })()}
                           <span className="truncate">
                             {selectedChat?.id === chat.id && contactTyping ? (
-                              <span className="text-[#25D366] font-semibold italic animate-pulse">typing...</span>
+                              <span className="hl-badge hl-badge-accent font-semibold italic animate-pulse">typing...</span>
                             ) : (
                               chat.lastMessage?.body || "Tap to open conversation"
                             )}
@@ -3188,10 +3690,10 @@ export default function WhatsAppPage() {
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0">
-                          {chat.isMuted && <VolumeX size={13} className="text-slate-400" />}
-                          {chat.isPinned && <Pin size={13} className="text-slate-400 rotate-45" />}
+                          {chat.isMuted && <VolumeX size={13} className="text-[var(--color-ink-2)]" />}
+                          {chat.isPinned && <Pin size={13} className="text-[var(--color-ink-2)] rotate-45" />}
                           {hasUnread && (
-                            <span className="bg-[#00a884] text-[#111b21] text-[10px] px-1.5 py-0.5 rounded-full font-extrabold min-w-[18px] text-center shadow">
+                            <span className="hl-badge hl-badge-accent text-[10px] px-1.5 py-0.5 font-extrabold min-w-[18px] text-center">
                               {chat.unreadCount}
                             </span>
                           )}
@@ -3206,16 +3708,16 @@ export default function WhatsAppPage() {
         </div>
 
         {/* Main Conversation Window / Empty State */}
-        <div className={`flex-1 flex flex-col h-full min-h-0 min-w-0 bg-[#0b141a] relative ${!showMobileChat ? "hidden md:flex" : "flex"}`}>
+        <div className={`flex-1 flex flex-col h-full min-h-0 min-w-0 bg-[var(--color-paper)] relative ${!showMobileChat ? "hidden md:flex" : "flex"}`}>
           {!selectedChat ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#111b21] text-slate-400 select-none">
+            <div className="hl-empty flex-1 flex flex-col items-center justify-center p-8 select-none">
               <div className="max-w-md w-full text-center space-y-6">
-                <div className="w-20 h-20 mx-auto rounded-full bg-[#202c33] flex items-center justify-center text-[#00a884] shadow-inner">
+                <div className="w-20 h-20 mx-auto rounded-full bg-[var(--color-paper)] border border-[var(--color-rule)] flex items-center justify-center text-[var(--color-ink)]">
                   <MessageCircle size={44} />
                 </div>
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-100 tracking-wide">WhatsApp Desktop & CRM Live</h2>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <h2 className="hl-title tracking-wide">WhatsApp Desktop & CRM Live</h2>
+                  <p className="hl-subtitle mt-1">
                     Send and receive live messages without keeping your phone online. Connected with Madhura Tech CRM.
                   </p>
                 </div>
@@ -3224,32 +3726,32 @@ export default function WhatsAppPage() {
                 <div className="flex items-center justify-center gap-4 pt-2">
                   <button
                     onClick={() => setShowNewChatModal(true)}
-                    className="flex flex-col items-center gap-2 p-3.5 bg-[#202c33] hover:bg-[#2a3942] rounded-2xl transition w-28 border border-white/5 group shadow-md"
+                    className="hl-card flex flex-col items-center gap-2 p-3.5 transition w-28 group"
                   >
-                    <div className="p-2.5 bg-[#111b21] rounded-xl text-[#00a884] group-hover:scale-110 transition">
+                    <div className="p-2.5 rounded-xl bg-[var(--color-paper)] text-[var(--color-ink)] group-hover:scale-110 transition">
                       <FileText size={20} />
                     </div>
-                    <span className="text-[11px] font-bold text-slate-200">Send document</span>
+                    <span className="hl-kpi-label">Send document</span>
                   </button>
 
                   <button
                     onClick={() => setShowNewChatModal(true)}
-                    className="flex flex-col items-center gap-2 p-3.5 bg-[#202c33] hover:bg-[#2a3942] rounded-2xl transition w-28 border border-white/5 group shadow-md"
+                    className="hl-card flex flex-col items-center gap-2 p-3.5 transition w-28 group"
                   >
-                    <div className="p-2.5 bg-[#111b21] rounded-xl text-[#00a884] group-hover:scale-110 transition">
+                    <div className="p-2.5 rounded-xl bg-[var(--color-paper)] text-[var(--color-ink)] group-hover:scale-110 transition">
                       <UserPlus size={20} />
                     </div>
-                    <span className="text-[11px] font-bold text-slate-200">Add contact</span>
+                    <span className="hl-kpi-label">Add contact</span>
                   </button>
 
                   <button
                     onClick={() => setShowNewChatModal(true)}
-                    className="flex flex-col items-center gap-2 p-3.5 bg-[#202c33] hover:bg-[#2a3942] rounded-2xl transition w-28 border border-white/5 group shadow-md"
+                    className="hl-card flex flex-col items-center gap-2 p-3.5 transition w-28 group"
                   >
-                    <div className="p-2.5 bg-[#111b21] rounded-xl text-purple-400 group-hover:scale-110 transition">
+                    <div className="p-2.5 rounded-xl bg-[var(--color-paper)] text-[var(--color-ink)] group-hover:scale-110 transition">
                       <Sparkles size={20} />
                     </div>
-                    <span className="text-[11px] font-bold text-slate-200">Ask Meta AI</span>
+                    <span className="hl-kpi-label">Ask Meta AI</span>
                   </button>
                 </div>
               </div>
@@ -3257,9 +3759,9 @@ export default function WhatsAppPage() {
           ) : (
             <>
               {/* Active Chat Header */}
-              <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[#222d34] bg-[#202c33] shrink-0">
+              <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[var(--color-rule)] bg-[var(--color-paper-2)] shrink-0">
                 <div className="flex items-center gap-3 min-w-0">
-                  <button onClick={() => setShowMobileChat(false)} className="md:hidden p-1 text-slate-300 hover:text-white rounded">
+                  <button onClick={() => setShowMobileChat(false)} className="md:hidden p-1 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] rounded">
                     <ChevronLeft size={20} />
                   </button>
                   <div
@@ -3286,7 +3788,7 @@ export default function WhatsAppPage() {
                     className="cursor-pointer group min-w-0"
                   >
                     <div className="flex items-center gap-2">
-                      <p className="font-bold text-white text-sm group-hover:text-[#00a884] transition truncate">
+                      <p className="font-bold text-[var(--color-ink)] text-sm transition truncate">
                         {(() => {
                           const n = selectedChat.name || "";
                           if (n.replace(/\D/g, "").length >= 13 || n.includes("@lid")) {
@@ -3296,21 +3798,21 @@ export default function WhatsAppPage() {
                         })()}
                       </p>
                       {selectedChat.source && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-800/40 shrink-0">
+                        <span className="hl-badge hl-badge-success text-[10px] font-bold px-2 py-0.5 shrink-0">
                           {selectedChat.source}
                         </span>
                       )}
                     </div>
                     {selectedChat.isGroup ? (
-                      <p className="text-xs text-slate-400">Group Chat</p>
+                      <p className="text-xs text-[var(--color-ink-2)]">Group Chat</p>
                     ) : contactTyping ? (
-                      <p className="text-xs text-[#25D366] font-semibold animate-pulse">typing...</p>
+                      <p className="hl-badge hl-badge-success text-xs font-semibold animate-pulse">typing...</p>
                     ) : isContactOnline(selectedChat.id) ? (
-                      <p className="text-xs text-[#25D366] font-medium flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#25D366] inline-block"></span> online
+                      <p className="hl-badge hl-badge-success text-xs font-medium flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] inline-block"></span> online
                       </p>
                     ) : (
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-[var(--color-ink-2)]">
                         {selectedChat.formattedPhone ||
                           formatPhoneNumber(selectedChat.phoneNumber || selectedChat.id) ||
                           (selectedChat.id?.includes("@lid") ? "WhatsApp Contact" : `+${selectedChat.id?.replace(/\D/g, "")}`)}
@@ -3324,15 +3826,15 @@ export default function WhatsAppPage() {
                       agent replies by hand, so make that visible and undoable. */}
                   {botStatus?.paused && !selectedChat.isGroup && (
                     <div
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/80 border border-slate-600/50 shadow-sm"
+                      className="hl-badge flex items-center gap-1.5 px-2.5 py-1.5"
                       title={
                         botStatus.pausedUntil
                           ? `Bot is quiet until ${new Date(botStatus.pausedUntil).toLocaleString()}`
                           : "Bot is switched off for this contact"
                       }
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block shrink-0" />
-                      <span className="text-[11px] font-bold text-slate-300 whitespace-nowrap">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-ink-2)] inline-block shrink-0" />
+                      <span className="text-[11px] font-bold text-[var(--color-ink-2)] whitespace-nowrap">
                         {botStatus.assignedAgentName
                           ? `You have this chat (${botStatus.assignedAgentName})`
                           : "Bot paused"}
@@ -3340,7 +3842,7 @@ export default function WhatsAppPage() {
                       <button
                         onClick={handleResumeBot}
                         disabled={botResuming}
-                        className="text-[11px] font-bold text-[#00a884] hover:text-[#25D366] disabled:opacity-50 whitespace-nowrap"
+                        className="text-[11px] font-bold text-[var(--color-ink)] disabled:opacity-50 whitespace-nowrap"
                         title="Let the bot answer this contact again"
                       >
                         {botResuming ? "..." : "Let bot reply"}
@@ -3351,7 +3853,7 @@ export default function WhatsAppPage() {
                   {/* Trigger Chatbot Flow Button */}
                   <button
                     onClick={() => setShowFlowModal(true)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-950/60 text-amber-300 hover:bg-amber-900/50 rounded-lg transition text-xs font-semibold border border-amber-800/40 shadow-sm"
+                    className="hl-badge hl-badge-warn flex items-center gap-1.5 px-2.5 py-1.5 transition text-xs font-semibold"
                     title="Launch an interactive Chatbot Flow for this contact"
                   >
                     <Zap size={14} />
@@ -3364,7 +3866,7 @@ export default function WhatsAppPage() {
                       fetchAutomations();
                       setShowAutomationModal(true);
                     }}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-950/60 text-purple-300 hover:bg-purple-900/50 rounded-lg transition text-xs font-semibold border border-purple-800/40 shadow-sm"
+                    className="hl-badge hl-badge-info flex items-center gap-1.5 px-2.5 py-1.5 transition text-xs font-semibold"
                     title="Execute CRM Workflow Automation Rule"
                   >
                     <Sparkles size={14} />
@@ -3374,7 +3876,7 @@ export default function WhatsAppPage() {
                   {/* Send Interactive Reminder Button */}
                   <button
                     onClick={() => setShowReminderModal(true)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-orange-950/60 text-orange-300 hover:bg-orange-900/50 rounded-lg transition text-xs font-semibold border border-orange-800/40 shadow-sm"
+                    className="hl-badge hl-badge-warn flex items-center gap-1.5 px-2.5 py-1.5 transition text-xs font-semibold"
                     title="Send 2-Way Interactive Confirmation Notice"
                   >
                     <Bell size={14} />
@@ -3387,7 +3889,7 @@ export default function WhatsAppPage() {
                       fetchCampaignGroups();
                       setShowAddToGroupModal(true);
                     }}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-950/60 text-blue-300 hover:bg-blue-900/50 rounded-lg transition text-xs font-semibold border border-blue-800/40 shadow-sm"
+                    className="hl-badge hl-badge-info flex items-center gap-1.5 px-2.5 py-1.5 transition text-xs font-semibold"
                     title="Enroll contact into Bulk Campaign Target Groups"
                   >
                     <Users size={14} />
@@ -3397,47 +3899,57 @@ export default function WhatsAppPage() {
                   {/* Template Picker Button */}
                   <button
                     onClick={() => setShowTemplatePicker((v) => !v)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/50 rounded-lg transition text-xs font-semibold border border-emerald-800/40 shadow-sm"
+                    className="hl-badge hl-badge-success flex items-center gap-1.5 px-2.5 py-1.5 transition text-xs font-semibold"
                     title="Insert WhatsApp message template"
                   >
                     <FileText size={14} />
                     <span className="hidden sm:inline">Templates</span>
                   </button>
 
-                  {/* CRM Info & Hub Drawer */}
+                  {/* CRM Info & Hub Drawer Toggle */}
                   <button
                     onClick={() => {
-                      fetchContactCrmDetails(selectedChat.id);
-                      setShowContactInfoDrawer(true);
+                      if (showContactInfoDrawer) {
+                        setShowContactInfoDrawer(false);
+                      } else {
+                        setShowNotesDrawer(false);
+                        fetchContactCrmDetails(selectedChat.id);
+                        setShowContactInfoDrawer(true);
+                      }
                     }}
-                    className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition"
-                    title="View Contact Profile, CRM Inquiries & Quick Links"
+                    className={`p-2 rounded-lg transition flex items-center gap-1.5 text-xs font-semibold ${
+                      showContactInfoDrawer
+                        ? "bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-rule)] shadow-xs"
+                        : "text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper)]"
+                    }`}
+                    title="Toggle Contact Profile, CRM Inquiries & Quick Links"
                   >
-                    <Info size={18} />
+                    <Info size={17} />
+                    <span className="hidden xl:inline">Contact CRM</span>
                   </button>
                 </div>
               </div>
 
               {/* Shared Team Inbox Collaboration & Ticket Status Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#182229] border-b border-[#222d34] text-xs shrink-0">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] text-xs shrink-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Ticket Status Selector */}
                   <div className="flex items-center gap-1">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status:</span>
+                    <span className="hl-section-label text-[11px] font-bold text-[var(--color-ink-2)] uppercase tracking-wider">Status:</span>
                     {["open", "pending", "resolved", "spam"].map((st) => (
                       <button
                         key={st}
                         onClick={() => handleUpdateTicketStatus(st)}
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase transition ${
+                        className={`hl-badge px-2.5 py-0.5 text-[10px] font-extrabold uppercase transition ${
                           ticketStatus === st
                             ? st === "open"
-                              ? "bg-emerald-500/30 text-emerald-300 border border-emerald-400"
+                              ? "hl-badge-success"
                               : st === "pending"
-                              ? "bg-amber-500/30 text-amber-300 border border-amber-400"
+                              ? "hl-badge-warn"
                               : st === "resolved"
-                              ? "bg-blue-500/30 text-blue-300 border border-blue-400"
-                              : "bg-red-500/30 text-red-300 border border-red-400"
-                            : "bg-[#202c33] text-slate-400 hover:text-slate-200 border border-transparent"
+                              ? "hl-badge-info"
+                              : "hl-badge-error"
+                            : ""
                         }`}
                       >
                         {st}
@@ -3446,15 +3958,15 @@ export default function WhatsAppPage() {
                   </div>
 
                   {/* Agent Assignment Selector */}
-                  <div className="flex items-center gap-1.5 ml-2 border-l border-slate-700/60 pl-2">
-                    <span className="text-[11px] font-bold text-slate-400">Agent:</span>
+                  <div className="flex items-center gap-1.5 ml-2 border-l border-[var(--color-rule)] pl-2">
+                    <span className="text-[11px] font-bold text-[var(--color-ink-2)]">Agent:</span>
                     <select
                       value={assignedAgentName}
                       onChange={(e) => {
                         const sel = teamMembers.find((m) => `${m.first_name} ${m.last_name || ""}`.trim() === e.target.value);
                         handleAssignAgent(sel?.id || null, e.target.value);
                       }}
-                      className="bg-[#202c33] text-slate-200 border border-[#2a3942] rounded-lg px-2 py-1 text-xs outline-none cursor-pointer focus:border-[#00a884]"
+                      className="hl-select px-2 py-1 text-xs cursor-pointer"
                     >
                       <option value="">👤 Unassigned</option>
                       {teamMembers.map((m) => {
@@ -3476,7 +3988,7 @@ export default function WhatsAppPage() {
                       fetchFlows();
                       setShowFlowModal(true);
                     }}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-lg font-bold text-[11px] transition shadow-sm"
+                    className="hl-badge hl-badge-success flex items-center gap-1.5 px-2.5 py-1 font-bold text-[11px] transition"
                     title="Launch a smart chatbot flow for this customer"
                   >
                     <span>🤖 Launch Flow</span>
@@ -3485,14 +3997,22 @@ export default function WhatsAppPage() {
                   {/* Internal Team Notes Drawer Toggle */}
                   <button
                     onClick={() => {
-                      fetchInternalNotes(selectedChat.id);
-                      setShowNotesDrawer(true);
+                      if (showNotesDrawer) {
+                        setShowNotesDrawer(false);
+                      } else {
+                        setShowContactInfoDrawer(false);
+                        fetchInternalNotes(selectedChat.id);
+                        setShowNotesDrawer(true);
+                      }
                     }}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg font-bold text-[11px] transition shadow-sm"
+                    className={`hl-badge flex items-center gap-1.5 px-2.5 py-1 font-bold text-[11px] transition ${
+                      showNotesDrawer ? "hl-badge-accent shadow-xs ring-1 ring-[var(--color-accent)]" : "hl-badge-warn"
+                    }`}
+                    title="Toggle Team Internal Collaboration Notes"
                   >
                     <span>📝 Team Notes</span>
                     {internalNotes.length > 0 && (
-                      <span className="px-1.5 py-0.2 bg-amber-400 text-black font-extrabold text-[10px] rounded-full">
+                      <span className="hl-badge hl-badge-accent px-1.5 py-0.2 font-extrabold text-[10px]">
                         {internalNotes.length}
                       </span>
                     )}
@@ -3500,13 +4020,13 @@ export default function WhatsAppPage() {
 
                   {/* Engine Badge */}
                   {status.isCloud ? (
-                    <span className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-950/80 text-blue-300 border border-blue-500/40 rounded-lg text-[10px] font-bold shadow-sm">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                    <span className="hl-badge hl-badge-info hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-paper)] animate-pulse"></span>
                       <span>☁️ Meta Official API • {status.phone ? `+${status.phone}` : "Active"}</span>
                     </span>
                   ) : (
-                    <span className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1 bg-[#202c33] text-emerald-400 border border-emerald-500/30 rounded-lg text-[10px] font-bold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span className="hl-badge hl-badge-success hidden lg:inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-paper)] animate-pulse"></span>
                       <span>📱 Web Linked • {status.phone ? `+${status.phone}` : "Active"}</span>
                     </span>
                   )}
@@ -3515,16 +4035,16 @@ export default function WhatsAppPage() {
 
               {/* Active Bot Flow Banner */}
               {activeFlowRun && (
-                <div className="bg-[#182229] border-b border-emerald-500/40 px-4 py-2 flex items-center justify-between z-20 shadow-md animate-fadeIn shrink-0">
+                <div className="px-4 py-2 flex items-center justify-between z-20 shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] animate-fadeIn">
                   <div className="flex items-center gap-2.5 text-xs min-w-0">
                     <span className="relative flex h-2.5 w-2.5 shrink-0">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--color-paper)] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[var(--color-paper)]"></span>
                     </span>
-                    <span className="font-bold text-emerald-400 shrink-0">🤖 Bot Flow Active:</span>
-                    <span className="text-white font-medium truncate">{activeFlowRun.flowName || "Automated Flow"}</span>
+                    <span className="font-bold text-[var(--color-ink)] shrink-0">🤖 Bot Flow Active:</span>
+                    <span className="text-[var(--color-paper-2)] font-medium truncate">{activeFlowRun.flowName || "Automated Flow"}</span>
                     {activeFlowRun.currentNode && (
-                      <span className="text-slate-300 text-[11px] bg-white/10 px-2 py-0.5 rounded border border-white/10 shrink-0 hidden sm:inline">
+                      <span className="hl-badge shrink-0 hidden sm:inline">
                         Step: {activeFlowRun.currentNode}
                       </span>
                     )}
@@ -3532,7 +4052,7 @@ export default function WhatsAppPage() {
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => setActiveFlowRun(null)}
-                      className="px-2.5 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 rounded-lg text-[11px] font-bold transition flex items-center gap-1 shadow-sm"
+                      className="hl-btn-danger-ghost px-2.5 py-1 text-[11px] font-bold transition flex items-center gap-1"
                       title="Stop this automated bot flow"
                     >
                       <Square size={11} fill="currentColor" /> Stop Bot
@@ -3542,7 +4062,7 @@ export default function WhatsAppPage() {
               )}
 
               {/* Chat Thread Canvas with Parallax Doodle Background */}
-              <div className="flex-1 min-h-0 relative flex flex-col overflow-hidden bg-[#0b141a]">
+              <div className="flex-1 min-h-0 relative flex flex-col overflow-hidden bg-[var(--color-paper-2)]">
                 {/* Parallax WhatsApp Doodle Wallpaper Layer */}
                 <div
                   ref={wallpaperRef}
@@ -3559,29 +4079,29 @@ export default function WhatsAppPage() {
                 <div
                   ref={threadRef}
                   onScroll={handleThreadScroll}
-                  className="relative z-10 flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-4 overscroll-contain wa-custom-scrollbar scroll-smooth"
+                  className="relative z-10 flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-4 overscroll-contain wa-parallel-scroll wa-custom-scrollbar scroll-smooth"
                 >
                 {messages.length >= msgLimit && (
                   <div className="flex justify-center mb-3">
                     <button
                       onClick={handleLoadMoreMessages}
                       disabled={loadingMore}
-                      className="px-4 py-1.5 bg-[#202c33] border border-white/10 text-xs font-semibold text-slate-300 rounded-full hover:bg-[#2a3942] transition shadow flex items-center gap-1.5 disabled:opacity-50"
+                      className="hl-btn-secondary px-4 py-1.5 bg-[var(--color-paper-2)] border border-[var(--color-rule)] text-xs font-semibold text-[var(--color-ink-2)] rounded-full hover:bg-[var(--color-paper-2)] transition shadow flex items-center gap-1.5 disabled:opacity-50"
                     >
-                      {loadingMore ? <Loader2 size={13} className="animate-spin text-[#00a884]" /> : <RefreshCw size={13} />}
+                      {loadingMore ? <Loader2 size={13} className="animate-spin text-[var(--color-ink)]" /> : <RefreshCw size={13} />}
                       <span>Load older messages</span>
                     </button>
                   </div>
                 )}
                 {messagesLoading ? (
                   <div className="flex items-center justify-center h-full">
-                    <Loader2 size={28} className="animate-spin text-[#00a884]" />
+                    <Loader2 size={28} className="animate-spin text-[var(--color-ink)]" />
                   </div>
                 ) : messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-slate-400 text-sm">
-                    <MessageSquare size={44} className="mb-2 text-[#00a884] opacity-80" />
-                    <p className="font-bold text-slate-200 text-base">No message history yet</p>
-                    <p className="text-xs text-slate-400">Send a message below to start chatting with {selectedChat.name}</p>
+                  <div className="flex flex-col items-center justify-center h-full text-[var(--color-ink-2)] text-sm">
+                    <MessageSquare size={44} className="mb-2 text-[var(--color-ink)] opacity-80" />
+                    <p className="font-bold text-[var(--color-ink)] text-base">No message history yet</p>
+                    <p className="text-xs text-[var(--color-ink-2)]">Send a message below to start chatting with {selectedChat.name}</p>
                   </div>
                 ) : (
                   [...messages].reverse().map((msg, mIdx, ordered) => {
@@ -3597,7 +4117,7 @@ export default function WhatsAppPage() {
                     <React.Fragment key={msg.id || msg.timestamp}>
                     {showDayDivider && (
                       <div className="sticky top-2 z-20 flex justify-center my-3 pointer-events-none select-none">
-                        <span className="px-3.5 py-1 bg-[#182229]/90 backdrop-blur-md text-[11px] font-bold tracking-wide text-slate-300 rounded-lg shadow-md uppercase border border-white/10">
+                        <span className="hl-badge px-3.5 py-1 text-[11px] font-bold tracking-wide uppercase">
                           {formatDayDivider(msg.timestamp)}
                         </span>
                       </div>
@@ -3614,7 +4134,7 @@ export default function WhatsAppPage() {
                       className={`flex ${msg.isMe ? "justify-end" : "justify-start"} group relative wa-bubble-enter ${endsRun ? "mb-2.5" : "mb-0.5"}`}
                     >
                       {/* Hover action toolbar for reactions & quote reply */}
-                      <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-1 bg-[#111b21] px-2 py-0.5 rounded-full shadow border border-slate-700/60 absolute -top-3 z-10 select-none">
+                      <div className="hl-badge opacity-0 group-hover:opacity-100 transition flex items-center gap-1 px-2 py-0.5 absolute -top-3 z-10 select-none">
                         {["👍", "❤️", "😂", "😮", "🙏"].map((emoji) => (
                           <button
                             key={emoji}
@@ -3627,7 +4147,7 @@ export default function WhatsAppPage() {
                         ))}
                         <button
                           onClick={() => setReplyingTo(msg)}
-                          className="text-slate-400 hover:text-white ml-1 text-xs px-1 hover:bg-white/10 rounded"
+                          className="text-[var(--color-ink-2)] hover:text-[var(--color-ink)] ml-1 text-xs px-1 hover:bg-[var(--color-paper-2)] rounded"
                           title="Quote reply"
                         >
                           ↩️
@@ -3642,7 +4162,7 @@ export default function WhatsAppPage() {
                               message: msg,
                             });
                           }}
-                          className="text-slate-400 hover:text-white ml-0.5 text-xs px-1 hover:bg-white/10 rounded"
+                          className="text-[var(--color-ink-2)] hover:text-[var(--color-ink)] ml-0.5 text-xs px-1 hover:bg-[var(--color-paper-2)] rounded"
                           title="More options"
                         >
                           <MoreVertical size={12} />
@@ -3651,8 +4171,8 @@ export default function WhatsAppPage() {
 
                       <div
                         className={`max-w-[75%] md:max-w-[65%] px-2.5 py-1.5 rounded-lg text-sm shadow-sm relative ${msg.isMe
-                            ? `bg-[#005c4b] text-white ${startsRun ? "rounded-tr-none" : ""}`
-                            : `bg-[#202c33] text-white ${startsRun ? "rounded-tl-none" : ""}`
+                            ? `bg-[var(--color-accent-soft)] text-[var(--color-ink)] ${startsRun ? "rounded-tr-none" : ""}`
+                            : `bg-[var(--color-paper-2)] text-[var(--color-ink)] border border-[var(--color-rule)] ${startsRun ? "rounded-tl-none" : ""}`
                           }`}
                       >
                         {/* Bubble tail — only on the first message of a run */}
@@ -3661,16 +4181,16 @@ export default function WhatsAppPage() {
                             aria-hidden="true"
                             className={`absolute top-0 w-2 h-3 ${msg.isMe ? "-right-2" : "-left-2"}`}
                             style={{
-                              backgroundColor: msg.isMe ? "#005c4b" : "#202c33",
+                              backgroundColor: msg.isMe ? "var(--color-accent-soft)" : "var(--color-paper-2)",
                               clipPath: msg.isMe ? "polygon(0 0, 100% 0, 0 100%)" : "polygon(0 0, 100% 0, 100% 100%)",
                             }}
                           />
                         )}
                         {/* Quoted Message Preview in bubble */}
                         {msg.quotedMsg && (
-                          <div className="mb-2 p-1.5 bg-black/25 rounded-lg border-l-2 border-[#00a884] text-xs text-slate-300">
-                            <p className="font-bold text-[10px] text-[#00a884]">Quoted Message</p>
-                            <p className="truncate text-slate-200">{msg.quotedMsg.body || "Attachment"}</p>
+                          <div className="mb-2 p-1.5 rounded-lg border-l-2 border-[var(--color-accent)] bg-[var(--color-paper)] text-xs text-[var(--color-ink-2)]">
+                            <p className="hl-section-label">Quoted Message</p>
+                            <p className="truncate text-[var(--color-ink)]">{msg.quotedMsg.body || "Attachment"}</p>
                           </div>
                         )}
 
@@ -3684,7 +4204,7 @@ export default function WhatsAppPage() {
                                   href={`https://www.google.com/maps?q=${msg.location.lat},${msg.location.lng}`}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="flex items-center gap-2 underline font-semibold text-emerald-300"
+                                  className="flex items-center gap-2 underline font-semibold text-[var(--color-ink)]"
                                 >
                                   <MapPin size={14} /> {msg.location.name || "Shared location"}
                                 </a>
@@ -3712,14 +4232,14 @@ export default function WhatsAppPage() {
                               {Array.isArray(msg.reactions) && msg.reactions.length > 0 && (
                                 <div className="flex gap-1 mt-1 -mb-1">
                                   {msg.reactions.map((r, rIdx) => (
-                                    <span key={rIdx} className="bg-[#111b21]/90 border border-slate-700/80 px-1.5 py-0.2 rounded-full text-[11px] shadow">
+                                    <span key={rIdx} className="hl-badge px-1.5 py-0.2 text-[11px]">
                                       {r.emoji}
                                     </span>
                                   ))}
                                 </div>
                               )}
 
-                              <div className="flex items-center justify-end gap-1 text-[11px] -mt-0.5 -mb-0.5 text-slate-300/60 font-normal leading-none pt-1">
+                              <div className="hl-id flex items-center justify-end gap-1 -mt-0.5 -mb-0.5 font-normal leading-none pt-1">
                                 <span>
                                   {msg.timestamp
                                     ? new Date(msg.timestamp * 1000).toLocaleTimeString([], {
@@ -3729,14 +4249,14 @@ export default function WhatsAppPage() {
                                     : ""}
                                 </span>
                                 {starredMsgIds.has(msg.id) && (
-                                  <Star size={10} className="text-amber-400 fill-amber-400 inline" />
+                                  <Star size={10} className="text-[var(--color-focus)] fill-[var(--color-focus)] inline" />
                                 )}
                                 {msg.isMe && <MessageTicks status={msg.status || "sent"} />}
                               </div>
 
                               {/* WhatsApp Authentic Full-Width Action Buttons (Call Now / Apply Now / Quick Replies) */}
                               {msgButtons && msgButtons.length > 0 && (
-                                <div className="mt-2 -mx-2.5 -mb-1.5 border-t border-white/10 divide-y divide-white/10 overflow-hidden rounded-b-lg select-none bg-black/10">
+                                <div className="mt-2 -mx-2.5 -mb-1.5 border-t border-[var(--color-rule)] divide-y divide-[var(--color-rule)] overflow-hidden rounded-b-lg select-none bg-[var(--color-paper)]">
                                   {msgButtons.map((btn, bIdx) => (
                                     <button
                                       key={bIdx}
@@ -3750,15 +4270,15 @@ export default function WhatsAppPage() {
                                           handleSendDirect(btn.title || btn.text || btn);
                                         }
                                       }}
-                                      className="w-full py-2.5 px-3 flex items-center justify-center gap-2 text-xs font-semibold text-[#00a884] hover:bg-white/5 active:bg-white/10 transition-colors text-center group/btn"
+                                      className="w-full py-2.5 px-3 flex items-center justify-center gap-2 text-xs font-semibold text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] active:bg-[var(--color-paper-2)] transition-colors text-center group/btn"
                                       title={btn.type === "call" ? `Call ${btn.phone || ""}` : btn.type === "url" ? `Open link ${btn.url || ""}` : `Send "${btn.title || btn.text || btn}"`}
                                     >
                                       {btn.type === "call" ? (
-                                        <Phone size={14} className="text-[#00a884] shrink-0" />
+                                        <Phone size={14} className="text-[var(--color-ink)] shrink-0" />
                                       ) : btn.type === "url" ? (
-                                        <ExternalLink size={14} className="text-[#00a884] shrink-0" />
+                                        <ExternalLink size={14} className="text-[var(--color-ink)] shrink-0" />
                                       ) : (
-                                        <CornerDownLeft size={14} className="text-[#00a884] shrink-0" />
+                                        <CornerDownLeft size={14} className="text-[var(--color-ink)] shrink-0" />
                                       )}
                                       <span className="truncate group-hover/btn:underline">{btn.title || btn.text || btn}</span>
                                     </button>
@@ -3790,12 +4310,12 @@ export default function WhatsAppPage() {
                     scrollToBottom(true);
                     setUnreadWhileScrolled(0);
                   }}
-                  className="relative w-10 h-10 rounded-full bg-[#202c33] hover:bg-[#2a3942] border border-slate-700/80 text-slate-200 shadow-2xl hover:scale-105 active:scale-95 transition flex items-center justify-center group"
+                  className="hl-btn-secondary relative w-10 h-10 rounded-full hover:scale-105 active:scale-95 transition flex items-center justify-center group"
                   title="Jump to latest messages"
                 >
-                  <ChevronDown size={20} className="group-hover:translate-y-0.5 transition-transform text-slate-300" />
+                  <ChevronDown size={20} className="group-hover:translate-y-0.5 transition-transform text-[var(--color-ink-2)]" />
                   {unreadWhileScrolled > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 bg-[#00a884] text-[#111b21] text-[10px] font-extrabold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shadow animate-pulse">
+                    <span className="hl-badge hl-badge-accent absolute -top-1.5 -right-1.5 text-[10px] font-extrabold px-1.5 py-0.5 min-w-[18px] text-center animate-pulse">
                       {unreadWhileScrolled}
                     </span>
                   )}
@@ -3805,19 +4325,19 @@ export default function WhatsAppPage() {
 
               {/* Quote Reply Banner above composer */}
               {replyingTo && (
-                <div className="px-4 py-2 bg-[#182229] border-t border-[#222d34] flex items-center justify-between text-xs text-slate-300 shrink-0">
-                  <div className="border-l-2 border-[#00a884] pl-2 truncate">
-                    <span className="font-bold text-[#00a884]">Replying to {replyingTo.isMe ? "You" : selectedChat.name}:</span>{" "}
-                    <span className="text-slate-300">{replyingTo.body?.slice(0, 80) || "Attachment"}</span>
+                <div className="px-4 py-2 bg-[var(--color-paper-2)] border-t border-[var(--color-rule)] flex items-center justify-between text-xs text-[var(--color-ink-2)] shrink-0">
+                  <div className="border-l-2 border-[var(--color-accent)] pl-2 truncate">
+                    <span className="font-bold text-[var(--color-ink)]">Replying to {replyingTo.isMe ? "You" : selectedChat.name}:</span>{" "}
+                    <span className="text-[var(--color-ink-2)]">{replyingTo.body?.slice(0, 80) || "Attachment"}</span>
                   </div>
-                  <button onClick={() => setReplyingTo(null)} className="text-slate-400 hover:text-white p-1">
+                  <button onClick={() => setReplyingTo(null)} className="text-[var(--color-ink-2)] hover:text-[var(--color-ink)] p-1">
                     <X size={14} />
                   </button>
                 </div>
               )}
 
               {/* Input Area & Tool Suite */}
-              <div className="relative flex items-center gap-2 p-3 border-t border-[#222d34] bg-[#202c33] shrink-0">
+              <div className="relative flex items-center gap-2 p-3 border-t border-[var(--color-rule)] bg-[var(--color-paper-2)] shrink-0">
                 {/* Hidden File Inputs for Different Media Types */}
                 <input
                   id="wa-doc-upload-input"
@@ -3859,11 +4379,11 @@ export default function WhatsAppPage() {
                       className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-xs"
                       onClick={() => setShowAttachMenu(false)}
                     />
-                    <div className="fixed inset-x-0 bottom-0 z-50 md:absolute md:inset-x-auto md:bottom-full md:left-3 md:mb-3 md:w-72 bg-[#111b21] border-t md:border border-[#222d34] rounded-t-3xl md:rounded-2xl shadow-2xl p-3 md:p-2 text-slate-200 wa-bottom-sheet max-h-[75vh] overflow-y-auto">
+                    <div className="hl-card fixed inset-x-0 bottom-0 z-50 md:absolute md:inset-x-auto md:bottom-full md:left-3 md:mb-3 md:w-72 p-3 md:p-2 wa-bottom-sheet max-h-[75vh] overflow-y-auto">
                       <div className="wa-swipe-indicator md:hidden" />
-                      <div className="px-3 py-2 border-b border-[#222d34] flex items-center justify-between text-xs font-bold text-[#00a884]">
+                      <div className="px-3 py-2 border-b border-[var(--color-rule)] flex items-center justify-between text-xs font-bold text-[var(--color-ink)]">
                         <span className="flex items-center gap-1.5"><Paperclip size={14} /> Share Media & Quick Tools</span>
-                        <button onClick={() => setShowAttachMenu(false)} className="text-slate-400 hover:text-white p-1">
+                        <button onClick={() => setShowAttachMenu(false)} className="text-[var(--color-ink-2)] hover:text-[var(--color-ink)] p-1">
                           <X size={16} />
                         </button>
                       </div>
@@ -3875,14 +4395,14 @@ export default function WhatsAppPage() {
                           setShowAttachMenu(false);
                           document.getElementById("wa-doc-upload-input")?.click();
                         }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[#202c33] rounded-xl transition text-xs font-medium text-slate-200 group"
+                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center group-hover:scale-105 transition">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
                           <FileText size={16} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-100 group-hover:text-red-400">PDF & Document</p>
-                          <p className="text-[10px] text-slate-400 truncate">.pdf, .doc, .docx, .txt, .zip</p>
+                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-error)]">PDF & Document</p>
+                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">.pdf, .doc, .docx, .txt, .zip</p>
                         </div>
                       </button>
 
@@ -3892,14 +4412,14 @@ export default function WhatsAppPage() {
                           setShowAttachMenu(false);
                           document.getElementById("wa-excel-upload-input")?.click();
                         }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[#202c33] rounded-xl transition text-xs font-medium text-slate-200 group"
+                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center group-hover:scale-105 transition">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
                           <Database size={16} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-100 group-hover:text-emerald-400">Excel / Spreadsheet</p>
-                          <p className="text-[10px] text-slate-400 truncate">.xlsx, .xls, .csv spreadsheets</p>
+                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Excel / Spreadsheet</p>
+                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">.xlsx, .xls, .csv spreadsheets</p>
                         </div>
                       </button>
 
@@ -3909,14 +4429,14 @@ export default function WhatsAppPage() {
                           setShowAttachMenu(false);
                           document.getElementById("wa-media-upload-input")?.click();
                         }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[#202c33] rounded-xl transition text-xs font-medium text-slate-200 group"
+                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center group-hover:scale-105 transition">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
                           <Image size={16} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-100 group-hover:text-purple-400">Photos & Videos</p>
-                          <p className="text-[10px] text-slate-400 truncate">Images (.png, .jpg), Videos (.mp4)</p>
+                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Photos & Videos</p>
+                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Images (.png, .jpg), Videos (.mp4)</p>
                         </div>
                       </button>
 
@@ -3926,14 +4446,14 @@ export default function WhatsAppPage() {
                           setShowAttachMenu(false);
                           document.getElementById("wa-audio-upload-input")?.click();
                         }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[#202c33] rounded-xl transition text-xs font-medium text-slate-200 group"
+                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center group-hover:scale-105 transition">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
                           <Music size={16} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-100 group-hover:text-[#00a884]">Audio / Voice</p>
-                          <p className="text-[10px] text-slate-400 truncate">.mp3, .ogg, .wav audio files</p>
+                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Audio / Voice</p>
+                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">.mp3, .ogg, .wav audio files</p>
                         </div>
                       </button>
 
@@ -3943,14 +4463,14 @@ export default function WhatsAppPage() {
                           setShowAttachMenu(false);
                           setShowFlowModal(true);
                         }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[#202c33] rounded-xl transition text-xs font-medium text-slate-200 group"
+                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center group-hover:scale-105 transition">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
                           <Zap size={16} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-100 group-hover:text-amber-300">Trigger Chatbot Flow</p>
-                          <p className="text-[10px] text-slate-400 truncate">Automated customer flow & bot reply</p>
+                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Trigger Chatbot Flow</p>
+                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Automated customer flow & bot reply</p>
                         </div>
                       </button>
 
@@ -3961,14 +4481,14 @@ export default function WhatsAppPage() {
                           fetchAutomations();
                           setShowAutomationModal(true);
                         }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[#202c33] rounded-xl transition text-xs font-medium text-slate-200 group"
+                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center group-hover:scale-105 transition">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
                           <Sparkles size={16} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-100 group-hover:text-purple-300">Trigger CRM Automation</p>
-                          <p className="text-[10px] text-slate-400 truncate">Run automated invoice, receipt, or welcome rule</p>
+                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Trigger CRM Automation</p>
+                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Run automated invoice, receipt, or welcome rule</p>
                         </div>
                       </button>
 
@@ -3978,14 +4498,14 @@ export default function WhatsAppPage() {
                           setShowAttachMenu(false);
                           setShowReminderModal(true);
                         }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[#202c33] rounded-xl transition text-xs font-medium text-slate-200 group"
+                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center group-hover:scale-105 transition">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
                           <Bell size={16} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-100 group-hover:text-orange-300">Send Interactive Reminder</p>
-                          <p className="text-[10px] text-slate-400 truncate">2-way buttons: Confirm, Reschedule, Call</p>
+                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Send Interactive Reminder</p>
+                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">2-way buttons: Confirm, Reschedule, Call</p>
                         </div>
                       </button>
 
@@ -3996,14 +4516,14 @@ export default function WhatsAppPage() {
                           fetchCampaignGroups();
                           setShowAddToGroupModal(true);
                         }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[#202c33] rounded-xl transition text-xs font-medium text-slate-200 group"
+                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center group-hover:scale-105 transition">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
                           <Users size={16} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-100 group-hover:text-blue-300">Enroll in Campaign Group</p>
-                          <p className="text-[10px] text-slate-400 truncate">Add contact to bulk campaign target audience</p>
+                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Enroll in Campaign Group</p>
+                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Add contact to bulk campaign target audience</p>
                         </div>
                       </button>
 
@@ -4013,14 +4533,14 @@ export default function WhatsAppPage() {
                           setShowAttachMenu(false);
                           setShowOptionsModal(true);
                         }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[#202c33] rounded-xl transition text-xs font-medium text-slate-200 group"
+                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center group-hover:scale-105 transition">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
                           <ListOrdered size={16} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-100 group-hover:text-blue-300">Send Options / Inquiry Menu</p>
-                          <p className="text-[10px] text-slate-400 truncate">Numbered inquiry buttons & quick replies</p>
+                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Send Options / Inquiry Menu</p>
+                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Numbered inquiry buttons & quick replies</p>
                         </div>
                       </button>
 
@@ -4030,14 +4550,14 @@ export default function WhatsAppPage() {
                           setShowAttachMenu(false);
                           setShowTemplatePicker(true);
                         }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[#202c33] rounded-xl transition text-xs font-medium text-slate-200 group"
+                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center group-hover:scale-105 transition">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
                           <FileText size={16} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-100 group-hover:text-[#00a884]">Approved Template</p>
-                          <p className="text-[10px] text-slate-400 truncate">Insert WhatsApp formatted template</p>
+                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Approved Template</p>
+                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Insert WhatsApp formatted template</p>
                         </div>
                       </button>
 
@@ -4047,14 +4567,14 @@ export default function WhatsAppPage() {
                           setShowAttachMenu(false);
                           setShowPaymentModal(true);
                         }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[#202c33] rounded-xl transition text-xs font-medium text-slate-200 group"
+                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center group-hover:scale-105 transition">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
                           <CreditCard size={16} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-100 group-hover:text-emerald-300">Request WhatsApp Payment</p>
-                          <p className="text-[10px] text-slate-400 truncate">Generate 0% markup UPI / payment link</p>
+                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Request WhatsApp Payment</p>
+                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Generate 0% markup UPI / payment link</p>
                         </div>
                       </button>
 
@@ -4065,14 +4585,14 @@ export default function WhatsAppPage() {
                           fetchDripSequences();
                           setShowDripModal(true);
                         }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[#202c33] rounded-xl transition text-xs font-medium text-slate-200 group"
+                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center group-hover:scale-105 transition">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
                           <Sparkles size={16} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-100 group-hover:text-indigo-300">Enroll in Drip Sequence</p>
-                          <p className="text-[10px] text-slate-400 truncate">Automated multi-day lead nurturing</p>
+                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Enroll in Drip Sequence</p>
+                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Automated multi-day lead nurturing</p>
                         </div>
                       </button>
 
@@ -4083,14 +4603,14 @@ export default function WhatsAppPage() {
                           handleShareLocation();
                         }}
                         disabled={locationSending}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[#202c33] rounded-xl transition text-xs font-medium text-slate-200 group"
+                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center group-hover:scale-105 transition">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
                           <Navigation size={16} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-100 group-hover:text-rose-300">Share GPS Location</p>
-                          <p className="text-[10px] text-slate-400 truncate">Send current office / live coordinates</p>
+                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-error)]">Share GPS Location</p>
+                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Send current office / live coordinates</p>
                         </div>
                       </button>
                     </div>
@@ -4100,8 +4620,8 @@ export default function WhatsAppPage() {
 
                 {/* Slash commands quick-replies popup */}
                 {messageInput.startsWith("/") && (
-                  <div className="absolute bottom-full left-3 mb-2 w-80 max-h-60 overflow-y-auto bg-[#111b21] border border-[#222d34] rounded-2xl shadow-2xl z-30 p-2 space-y-1 text-slate-200">
-                    <div className="px-2 py-1 text-[10px] uppercase font-bold text-[#00a884]">Quick Replies (Click to insert)</div>
+                  <div className="hl-card absolute bottom-full left-3 mb-2 w-80 max-h-60 overflow-y-auto z-30 p-2 space-y-1">
+                    <div className="hl-section-label px-2 py-1 text-[10px] uppercase font-bold text-[var(--color-ink)]">Quick Replies (Click to insert)</div>
                     {quickReplies
                       .filter((qr) => qr.shortcut?.toLowerCase().includes(messageInput.slice(1).toLowerCase()) || qr.title?.toLowerCase().includes(messageInput.slice(1).toLowerCase()))
                       .map((qr) => (
@@ -4117,13 +4637,13 @@ export default function WhatsAppPage() {
                             });
                             setMessageInput(filled);
                           }}
-                          className="p-2 hover:bg-[#202c33] rounded-xl cursor-pointer transition"
+                          className="p-2 hover:bg-[var(--color-paper)] rounded-xl cursor-pointer transition"
                         >
                           <div className="flex items-center justify-between">
-                            <span className="font-bold text-xs text-[#00a884]">/{qr.shortcut}</span>
-                            <span className="text-[10px] text-slate-400 font-semibold">{qr.title}</span>
+                            <span className="font-bold text-xs text-[var(--color-ink)]">/{qr.shortcut}</span>
+                            <span className="text-[10px] text-[var(--color-ink-2)] font-semibold">{qr.title}</span>
                           </div>
-                          <p className="text-[11px] text-slate-300 truncate mt-0.5">{qr.content}</p>
+                          <p className="text-[11px] text-[var(--color-ink-2)] truncate mt-0.5">{qr.content}</p>
                         </div>
                       ))}
                   </div>
@@ -4131,39 +4651,39 @@ export default function WhatsAppPage() {
 
                 {/* Message Template Picker Modal Popup */}
                 {showTemplatePicker && (
-                  <div className="absolute bottom-full left-3 mb-2 w-88 max-h-80 overflow-y-auto bg-[#111b21] border border-[#222d34] rounded-2xl shadow-2xl z-30 text-slate-200">
-                    <div className="px-3 py-2 bg-[#202c33] border-b border-[#222d34] text-xs font-bold text-slate-200 flex items-center justify-between">
+                  <div className="hl-card absolute bottom-full left-3 mb-2 max-h-80 overflow-y-auto z-30">
+                    <div className="px-3 py-2 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] text-xs font-bold text-[var(--color-ink)] flex items-center justify-between">
                       <span>Insert Message Template</span>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => { setShowTemplatePicker(false); setShowCreateTemplateModal(true); }}
-                          className="text-[10px] font-bold text-[#00a884] hover:underline"
+                          className="text-[10px] font-bold text-[var(--color-ink)] hover:underline"
                         >
                           + Create Template
                         </button>
-                        <button onClick={() => setShowTemplatePicker(false)} className="text-slate-400 hover:text-white">
+                        <button onClick={() => setShowTemplatePicker(false)} className="text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
                           <X size={14} />
                         </button>
                       </div>
                     </div>
                     {templates.length === 0 ? (
-                      <div className="p-4 text-xs text-slate-400 text-center space-y-2">
+                      <div className="hl-empty p-4 text-xs text-[var(--color-ink-2)] text-center space-y-2">
                         <p>No templates loaded yet</p>
                         <div className="flex justify-center gap-2 pt-1">
                           <button
                             onClick={handleSeedTemplates}
                             disabled={tmplLoading}
-                            className="px-3 py-1 bg-[#00a884] text-[#111b21] rounded text-xs font-bold hover:bg-[#008f70]"
+                            className="hl-btn-primary px-3 py-1 bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded text-xs font-bold hover:bg-[var(--color-ink)]"
                           >
                             {tmplLoading ? "Seeding..." : "Seed 8 Default Templates"}
                           </button>
                         </div>
                       </div>
                     ) : (
-                      <div className="divide-y divide-[#222d34]">
-                        <div className="p-2 bg-[#111b21] flex justify-between items-center text-[10px]">
-                          <span className="text-slate-400">{templates.length} templates available</span>
-                          <button onClick={() => { setShowTemplatePicker(false); setShowCreateTemplateModal(true); }} className="text-[#00a884] font-bold hover:underline">
+                      <div className="divide-y divide-[var(--color-rule)]">
+                        <div className="hl-id p-2 flex justify-between items-center bg-[var(--color-paper-2)] border-t border-[var(--color-rule)]">
+                          <span className="text-[var(--color-ink-2)]">{templates.length} templates available</span>
+                          <button onClick={() => { setShowTemplatePicker(false); setShowCreateTemplateModal(true); }} className="text-[var(--color-ink)] font-bold hover:underline">
                             + New Template
                           </button>
                         </div>
@@ -4171,17 +4691,17 @@ export default function WhatsAppPage() {
                           <button
                             key={t.id}
                             onClick={() => insertTemplate(t)}
-                            className="w-full text-left px-3 py-2.5 hover:bg-[#202c33] transition group"
+                            className="w-full text-left px-3 py-2.5 hover:bg-[var(--color-paper)] transition group text-[var(--color-ink)]"
                           >
                             <div className="flex items-center justify-between">
-                              <p className="text-xs font-bold text-slate-200 group-hover:text-[#00a884]">{t.name}</p>
+                              <p className="text-xs font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">{t.name}</p>
                               {t.category && (
-                                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-white/10 text-slate-300">
+                                <span className="hl-badge px-1.5 py-0.2">
                                   {t.category}
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-slate-400 truncate mt-0.5">{t.body}</p>
+                            <p className="text-xs text-[var(--color-ink-2)] truncate mt-0.5">{t.body}</p>
                           </button>
                         ))}
                       </div>
@@ -4193,17 +4713,17 @@ export default function WhatsAppPage() {
                 <button
                   type="button"
                   onClick={() => setShowAttachMenu((v) => !v)}
-                  className={`p-2.5 rounded-full transition shrink-0 ${showAttachMenu ? "bg-[#00a884] text-[#111b21]" : "text-slate-400 hover:text-[#00a884] hover:bg-[#2a3942]"}`}
+                  className={`hl-btn-secondary p-2.5 rounded-full transition shrink-0 ${showAttachMenu ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)]" : ""}`}
                   title="Share document, photo, video, audio, trigger flows or inquiry menu"
                 >
-                  {mediaSending ? <Loader2 size={18} className="animate-spin text-[#00a884]" /> : <Paperclip size={18} />}
+                  {mediaSending ? <Loader2 size={18} className="animate-spin text-[var(--color-ink)]" /> : <Paperclip size={18} />}
                 </button>
 
                 {/* Templates Quick Button */}
                 <button
                   type="button"
                   onClick={() => setShowTemplatePicker((v) => !v)}
-                  className="p-2.5 text-slate-400 hover:text-[#00a884] hover:bg-[#2a3942] rounded-full transition shrink-0"
+                  className="hl-btn-secondary p-2.5 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] rounded-full transition shrink-0"
                   title="Insert a saved template"
                 >
                   <FileText size={18} />
@@ -4213,7 +4733,7 @@ export default function WhatsAppPage() {
                 <button
                   type="button"
                   onClick={() => setShowFlowModal(true)}
-                  className="p-2.5 text-amber-400 hover:text-amber-300 hover:bg-[#2a3942] rounded-full transition shrink-0"
+                  className="hl-btn-secondary p-2.5 text-[var(--color-ink)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] rounded-full transition shrink-0"
                   title="Trigger Chatbot Flow"
                 >
                   <Zap size={18} />
@@ -4223,7 +4743,7 @@ export default function WhatsAppPage() {
                 <button
                   type="button"
                   onClick={() => setShowOptionsModal(true)}
-                  className="p-2.5 text-blue-400 hover:text-blue-300 hover:bg-[#2a3942] rounded-full transition shrink-0"
+                  className="hl-btn-secondary p-2.5 text-[var(--color-ink)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] rounded-full transition shrink-0"
                   title="Send WhatsApp Interactive Buttons & Flow Menu (Call, Links, Quick Replies)"
                 >
                   <ListOrdered size={18} />
@@ -4234,7 +4754,7 @@ export default function WhatsAppPage() {
                   <button
                     type="button"
                     onClick={() => setShowEmojiPicker((v) => !v)}
-                    className={`p-2 rounded-full transition ${showEmojiPicker ? "text-[#00a884] bg-white/10" : "text-slate-400 hover:text-slate-200"}`}
+                    className={`hl-btn-secondary p-2 rounded-full transition ${showEmojiPicker ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)]" : ""}`}
                     title="Emoji"
                   >
                     <Smile size={21} />
@@ -4243,19 +4763,19 @@ export default function WhatsAppPage() {
                   {showEmojiPicker && (
                     <>
                       <div className="fixed inset-0 z-30" onClick={() => setShowEmojiPicker(false)} />
-                      <div className="absolute bottom-12 left-0 z-40 w-80 max-h-72 flex flex-col bg-[#233138] border border-slate-700 rounded-2xl shadow-2xl p-2.5">
+                      <div className="hl-card absolute bottom-12 left-0 z-40 w-80 max-h-72 flex flex-col p-2.5">
                         {/* Search Bar in Emoji Picker */}
                         <div className="mb-2 relative">
-                          <Search size={13} className="absolute left-2.5 top-2 text-slate-400" />
+                          <Search size={13} className="absolute left-2.5 top-2 text-[var(--color-ink-2)]" />
                           <input
                             type="text"
                             placeholder="Search emojis..."
                             value={emojiSearch}
                             onChange={(e) => setEmojiSearch(e.target.value)}
-                            className="w-full pl-8 pr-7 py-1 bg-[#111b21] text-slate-100 placeholder-slate-400 text-xs rounded-lg outline-none border border-white/10 focus:border-[#00a884]"
+                            className="hl-input w-full pl-8 pr-7 py-1 text-xs"
                           />
                           {emojiSearch && (
-                            <button onClick={() => setEmojiSearch("")} className="absolute right-2 top-1.5 text-slate-400 hover:text-white">
+                            <button onClick={() => setEmojiSearch("")} className="absolute right-2 top-1.5 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
                               <X size={12} />
                             </button>
                           )}
@@ -4265,7 +4785,7 @@ export default function WhatsAppPage() {
                           {/* Recently Used Emojis */}
                           {!emojiSearch && recentEmojis.length > 0 && (
                             <div className="mb-2">
-                              <div className="text-[10px] font-bold uppercase text-[#00a884] px-1 mb-1">Recent</div>
+                              <div className="hl-section-label text-[10px] font-bold uppercase text-[var(--color-ink)] px-1 mb-1">Recent</div>
                               <div className="grid grid-cols-8 gap-0.5">
                                 {recentEmojis.map((emo) => (
                                   <button
@@ -4275,7 +4795,7 @@ export default function WhatsAppPage() {
                                       setMessageInput((prev) => prev + emo);
                                       addRecentEmoji(emo);
                                     }}
-                                    className="text-lg leading-none p-1 rounded hover:bg-white/10 active:scale-90 transition"
+                                    className="text-lg leading-none p-1 rounded hover:bg-[var(--color-paper)] active:scale-90 transition text-[var(--color-ink)]"
                                   >
                                     {emo}
                                   </button>
@@ -4291,7 +4811,7 @@ export default function WhatsAppPage() {
                             if (filtered.length === 0) return null;
                             return (
                               <div key={group.label} className="mb-2 last:mb-0">
-                                <div className="text-[10px] font-bold uppercase text-slate-400 px-1 mb-1">{group.label}</div>
+                                <div className="hl-section-label text-[10px] font-bold uppercase text-[var(--color-ink-2)] px-1 mb-1">{group.label}</div>
                                 <div className="grid grid-cols-8 gap-0.5">
                                   {filtered.map((emo) => (
                                     <button
@@ -4301,7 +4821,7 @@ export default function WhatsAppPage() {
                                         setMessageInput((prev) => prev + emo);
                                         addRecentEmoji(emo);
                                       }}
-                                      className="text-lg leading-none p-1 rounded hover:bg-white/10 active:scale-90 transition"
+                                      className="text-lg leading-none p-1 rounded hover:bg-[var(--color-paper)] active:scale-90 transition text-[var(--color-ink)]"
                                     >
                                       {emo}
                                     </button>
@@ -4318,16 +4838,16 @@ export default function WhatsAppPage() {
 
                 {/* Message Input Box — replaced by the recording bar while recording */}
                 {recording ? (
-                  <div className="flex-1 flex items-center gap-3 px-4 py-2.5 bg-[#2a3942] rounded-xl">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-                    <span className="text-sm font-mono text-slate-100 tabular-nums">
+                  <div className="hl-card flex-1 flex items-center gap-3 px-4 py-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[var(--color-error)] animate-pulse shrink-0" />
+                    <span className="hl-id text-sm tabular-nums">
                       {String(Math.floor(recordSecs / 60)).padStart(2, "0")}:{String(recordSecs % 60).padStart(2, "0")}
                     </span>
-                    <span className="text-xs text-slate-400 truncate">Recording voice note…</span>
+                    <span className="text-xs text-[var(--color-ink-2)] truncate">Recording voice note…</span>
                     <button
                       type="button"
                       onClick={() => stopRecording(true)}
-                      className="ml-auto text-xs font-bold text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-white/5 shrink-0"
+                      className="hl-btn-danger-ghost ml-auto text-xs font-bold px-2 py-1 shrink-0"
                     >
                       Cancel
                     </button>
@@ -4344,7 +4864,7 @@ export default function WhatsAppPage() {
                     }}
                     onKeyDown={handleKeyDown}
                     placeholder={`Message ${selectedChat.name}... (Type / for quick replies, Shift+Enter for new line)`}
-                    className="flex-1 px-4 py-2 bg-[#2a3942] text-slate-100 placeholder-slate-400 rounded-2xl text-sm outline-none border border-transparent focus:border-[#00a884] wa-auto-textarea leading-relaxed max-h-32 transition-[height] duration-75"
+                    className="hl-input flex-1 px-4 py-2 rounded-2xl text-sm wa-auto-textarea leading-relaxed max-h-32 transition-[height] duration-75"
                     disabled={sending}
                   />
                 )}
@@ -4354,7 +4874,7 @@ export default function WhatsAppPage() {
                   <button
                     onClick={handleSend}
                     disabled={!messageInput.trim() || sending}
-                    className="p-2.5 bg-[#00a884] text-[#111b21] font-bold rounded-full hover:bg-[#008f70] transition disabled:opacity-50 disabled:cursor-not-allowed shadow"
+                    className="hl-btn-primary p-2.5 rounded-full font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Send"
                   >
                     {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
@@ -4363,9 +4883,9 @@ export default function WhatsAppPage() {
                   <button
                     onClick={() => (recording ? stopRecording(false) : startRecording())}
                     disabled={mediaSending}
-                    className={`p-2.5 rounded-full transition shadow disabled:opacity-50 ${recording
-                        ? "bg-red-500 text-white hover:bg-red-600"
-                        : "bg-[#00a884] text-[#111b21] hover:bg-[#008f70]"
+                    className={`hl-btn-primary p-2.5 rounded-full transition disabled:opacity-50 ${recording
+                        ? "hl-btn-danger-ghost"
+                        : ""
                       }`}
                     title={recording ? "Send voice note" : "Record voice note"}
                   >
@@ -4376,72 +4896,80 @@ export default function WhatsAppPage() {
             </>
           )}
         </div>
+
+        {/* Desktop Docked 3rd Parallel Column: Contact CRM Profile or Team Notes */}
+        {selectedChat && (showContactInfoDrawer || showNotesDrawer) && (
+          <aside className="hidden xl:flex w-88 xl:w-96 shrink-0 h-full border-l border-[var(--color-rule)] bg-[var(--color-paper-2)] flex-col min-h-0 wa-parallel-pane overflow-hidden animate-fadeIn">
+            {showContactInfoDrawer && renderContactInfoContent(true)}
+            {showNotesDrawer && renderNotesContent(true)}
+          </aside>
+        )}
       </div>
 
       {/* New Direct Chat & CRM Contact Picker Modal */}
       {showNewChatModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowNewChatModal(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowNewChatModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+          <div className="hl-card w-full max-w-md p-6 relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowNewChatModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
             <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 bg-emerald-100 text-[#25D366] rounded-xl">
+              <div className="p-3 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]">
                 <UserPlus size={24} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-800">Start New WhatsApp Chat</h3>
-                <p className="text-xs text-gray-500">Enter a phone number to start a new chat directly</p>
+                <h3 className="hl-title">Start New WhatsApp Chat</h3>
+                <p className="text-xs text-[var(--color-ink-2)]">Enter a phone number to start a new chat directly</p>
               </div>
             </div>
 
             <form onSubmit={handleStartNewChat} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Mobile Number *</label>
+                <label className="hl-section-label block text-xs font-semibold text-[var(--color-ink-2)] uppercase mb-1">Mobile Number *</label>
                 <div className="flex items-center gap-2">
-                  <span className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-600 font-semibold">+91</span>
+                  <span className="hl-input px-3 py-2 text-sm font-semibold">+91</span>
                   <input
                     type="text"
                     placeholder="e.g. 9876543210"
                     value={newChatPhone}
                     onChange={(e) => setNewChatPhone(e.target.value)}
-                    className="flex-1 px-3.5 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#25D366]"
+                    className="hl-input flex-1 px-3.5 py-2 text-sm"
                     required
                   />
                 </div>
-                <p className="text-[11px] text-gray-400 mt-1">Enter 10-digit mobile number</p>
+                <p className="text-[11px] text-[var(--color-ink-2)] mt-1">Enter 10-digit mobile number</p>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Contact Name (Optional)</label>
+                <label className="hl-section-label block text-xs font-semibold text-[var(--color-ink-2)] uppercase mb-1">Contact Name (Optional)</label>
                 <input
                   type="text"
                   placeholder="e.g. Rahul Sharma"
                   value={newChatName}
                   onChange={(e) => setNewChatName(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#25D366]"
+                  className="hl-input w-full px-3.5 py-2 text-sm"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">First Message (Optional)</label>
+                <label className="hl-section-label block text-xs font-semibold text-[var(--color-ink-2)] uppercase mb-1">First Message (Optional)</label>
                 <textarea
                   rows={3}
                   placeholder="Hello! Welcome to Madhura Tech..."
                   value={newChatMessage}
                   onChange={(e) => setNewChatMessage(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#25D366] resize-none"
+                  className="hl-input w-full px-3.5 py-2 text-sm resize-none"
                 />
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowNewChatModal(false)} className="px-4 py-2 border rounded-lg text-xs text-gray-600 hover:bg-gray-50">
+                <button type="button" onClick={() => setShowNewChatModal(false)} className="hl-btn-secondary px-4 py-2 border rounded-lg text-xs text-[var(--color-ink-2)] hover:bg-[var(--color-paper-2)]">
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={newChatLoading || !newChatPhone.trim()}
-                  className="px-5 py-2 bg-[#25D366] text-white rounded-lg text-xs font-bold hover:bg-[#1ebe5d] flex items-center gap-2 shadow-md disabled:opacity-50"
+                  className="hl-btn-primary px-5 py-2 bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded-lg text-xs font-bold hover:bg-[var(--color-ink)] flex items-center gap-2 shadow-md disabled:opacity-50"
                 >
                   {newChatLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   <span>Start Chat & Send</span>
@@ -4452,430 +4980,11 @@ export default function WhatsAppPage() {
         </div>
       )}
 
-      {/* Slide-over Contact Profile Drawer */}
+      {/* Slide-over Contact Profile Drawer (Mobile & Tablet) */}
       {showContactInfoDrawer && selectedChat && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex justify-end backdrop-blur-sm" onClick={() => setShowContactInfoDrawer(false)}>
-          <div className="w-full max-w-sm bg-white h-full shadow-2xl p-6 overflow-y-auto relative animate-fadeIn" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowContactInfoDrawer(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
-              <X size={20} />
-            </button>
-
-            <div className="text-center pb-6 border-b border-gray-100">
-              <div className="flex flex-col items-center justify-center mx-auto mb-3">
-                <WAContactAvatar
-                  src={selectedChat.profilePicUrl}
-                  name={selectedChat.name}
-                  phone={selectedChat.id}
-                  isGroup={selectedChat.isGroup}
-                  size="2xl"
-                  clickable={true}
-                  className="shadow-lg shadow-black/10"
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      const res = await axios.get(`${API}/api/whatsapp/chat/${encodeURIComponent(selectedChat.id)}/profile-pic`, {
-                        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-                      });
-                      if (res.data?.profilePicUrl) {
-                        setSelectedChat(prev => ({ ...prev, profilePicUrl: res.data.profilePicUrl }));
-                        setChats(prev => prev.map(c => c.id === selectedChat.id ? { ...c, profilePicUrl: res.data.profilePicUrl } : c));
-                      }
-                    } catch (_) {}
-                  }}
-                  className="mt-2 text-[10px] text-[#00a884] font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <RefreshCw size={11} />
-                  <span>Refresh WhatsApp Photo</span>
-                </button>
-              </div>
-              <h3 className="text-lg font-bold text-gray-800">{selectedChat.name}</h3>
-              <p className="text-xs font-mono text-gray-500 mt-0.5">+{selectedChat.id?.replace(/\D/g, "")}</p>
-
-              {selectedChat.source && (
-                <span className="inline-block mt-2 text-xs font-bold px-3 py-1 rounded-full bg-blue-100 text-blue-700">
-                  {selectedChat.source}
-                </span>
-              )}
-            </div>
-
-            {/* CRM Invoices, Quotations, and AMC History */}
-            <div className="py-4 border-b border-gray-100 space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Linked CRM Records</h4>
-                <button
-                  onClick={() => fetchContactCrmDetails(selectedChat.id)}
-                  className="text-[10px] text-[#00a884] font-bold hover:underline"
-                >
-                  Refresh
-                </button>
-              </div>
-
-              {crmDetailsLoading ? (
-                <div className="py-3 text-center">
-                  <Loader2 size={18} className="animate-spin text-[#00a884] mx-auto" />
-                </div>
-              ) : crmDetails ? (
-                <div className="space-y-3 text-xs">
-                  {/* Invoices list */}
-                  {crmDetails.invoices && crmDetails.invoices.length > 0 && (
-                    <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                      <p className="font-bold text-gray-700 mb-1.5 text-[11px]">Recent Invoices ({crmDetails.invoices.length})</p>
-                      <div className="space-y-1">
-                        {crmDetails.invoices.slice(0, 3).map((inv) => (
-                          <div key={inv.id} className="flex justify-between text-[11px]">
-                            <span className="text-gray-600 truncate">{inv.invoice_number || `INV-#${inv.id}`}</span>
-                            <span className="font-bold text-gray-800">₹{parseFloat(inv.grand_total || inv.total_amount || 0).toLocaleString()}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Quotations list */}
-                  {crmDetails.quotations && crmDetails.quotations.length > 0 && (
-                    <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                      <p className="font-bold text-gray-700 mb-1.5 text-[11px]">Quotations ({crmDetails.quotations.length})</p>
-                      <div className="space-y-1">
-                        {crmDetails.quotations.slice(0, 3).map((q) => (
-                          <div key={q.id} className="flex justify-between text-[11px]">
-                            <span className="text-gray-600 truncate">{q.quotation_number || `QTN-#${q.id}`}</span>
-                            <span className="font-bold text-emerald-700">₹{parseFloat(q.grand_total || q.total_amount || 0).toLocaleString()}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* AMC Contracts */}
-                  {crmDetails.amc && crmDetails.amc.length > 0 && (
-                    <div className="bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200/60">
-                      <p className="font-bold text-emerald-800 mb-1 text-[11px]">Active AMC Contract</p>
-                      <p className="text-[11px] text-emerald-900">{crmDetails.amc[0].contract_title || "Annual Maintenance"}</p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <button
-                  onClick={() => fetchContactCrmDetails(selectedChat.id)}
-                  className="w-full py-2 bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold hover:bg-gray-100 transition border border-gray-200"
-                >
-                  Load CRM Invoices & Quotes
-                </button>
-              )}
-            </div>
-
-            {/* ── Add as CRM Client ─────────────────────────────────────── */}
-            <div className="py-4 border-b border-gray-100 space-y-2.5">
-              <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">CRM Client Status</h4>
-
-              {/* Already a client — show linked info */}
-              {crmDetails?.client ? (
-                <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200/60 space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-                    <span className="text-xs font-bold text-emerald-800">Linked CRM Client</span>
-                    {crmDetails.client.source && (
-                      <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300/60">
-                        {crmDetails.client.source}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-emerald-900 font-semibold">{crmDetails.client.name || crmDetails.client.company_name}</p>
-                  {crmDetails.client.company_name && crmDetails.client.name !== crmDetails.client.company_name && (
-                    <p className="text-[10px] text-emerald-700">{crmDetails.client.company_name}</p>
-                  )}
-                  {crmDetails.client.email && (
-                    <p className="text-[10px] text-emerald-700">{crmDetails.client.email}</p>
-                  )}
-                  <button
-                    onClick={() => navigate(`/whatsapp/contacts`)}
-                    className="mt-1 text-[10px] text-emerald-700 font-bold hover:underline flex items-center gap-1"
-                  >
-                    <ExternalLink size={10} /> View in CRM Clients
-                  </button>
-                </div>
-              ) : addClientResult?.success ? (
-                /* Just added — show success */
-                <div className={`p-3 rounded-xl border space-y-1.5 ${addClientResult.isExisting ? "bg-blue-50 border-blue-200/60" : "bg-emerald-50 border-emerald-200/60"}`}>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={16} className={addClientResult.isExisting ? "text-blue-600" : "text-emerald-600"} />
-                    <span className={`text-xs font-bold ${addClientResult.isExisting ? "text-blue-800" : "text-emerald-800"}`}>
-                      {addClientResult.isExisting ? "Already in CRM" : "✅ Added to CRM!"}
-                    </span>
-                    <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300/60">
-                      WhatsApp
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-gray-800 font-semibold">{addClientResult.client?.name}</p>
-                  {addClientResult.client?.company_name && (
-                    <p className="text-[10px] text-gray-600">{addClientResult.client.company_name}</p>
-                  )}
-                  <button
-                    onClick={() => navigate(`/whatsapp/contacts`)}
-                    className="mt-1 text-[10px] text-emerald-700 font-bold hover:underline flex items-center gap-1"
-                  >
-                    <ExternalLink size={10} /> View in CRM Clients
-                  </button>
-                </div>
-              ) : showAddClientForm ? (
-                /* Inline add form */
-                <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-2">
-                  <div className="space-y-1.5">
-                    <input
-                      type="text"
-                      placeholder="Customer Name *"
-                      value={addClientData.name}
-                      onChange={(e) => setAddClientData(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400 outline-none text-gray-800"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Company Name"
-                      value={addClientData.company_name}
-                      onChange={(e) => setAddClientData(prev => ({ ...prev, company_name: e.target.value }))}
-                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400 outline-none text-gray-800"
-                    />
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <input
-                        type="email"
-                        placeholder="Email"
-                        value={addClientData.email}
-                        onChange={(e) => setAddClientData(prev => ({ ...prev, email: e.target.value }))}
-                        className="px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400 outline-none text-gray-800"
-                      />
-                      <input
-                        type="text"
-                        placeholder="City"
-                        value={addClientData.city}
-                        onChange={(e) => setAddClientData(prev => ({ ...prev, city: e.target.value }))}
-                        className="px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400 outline-none text-gray-800"
-                      />
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Service / Product Interest"
-                      value={addClientData.service}
-                      onChange={(e) => setAddClientData(prev => ({ ...prev, service: e.target.value }))}
-                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400 outline-none text-gray-800"
-                    />
-                    <textarea
-                      placeholder="Notes (optional)"
-                      value={addClientData.notes}
-                      onChange={(e) => setAddClientData(prev => ({ ...prev, notes: e.target.value }))}
-                      rows={2}
-                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400 outline-none text-gray-800 resize-none"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      disabled={addClientLoading || !addClientData.name.trim()}
-                      onClick={async () => {
-                        setAddClientLoading(true);
-                        try {
-                          const token = localStorage.getItem("token");
-                          const cleanPhone = selectedChat.id?.replace(/\D/g, "").slice(-10);
-                          const res = await axios.post(`${API}/api/whatsapp/add-to-crm-client`, {
-                            phone: cleanPhone,
-                            ...addClientData,
-                          }, { headers: { Authorization: `Bearer ${token}` } });
-                          setAddClientResult(res.data);
-                          setShowAddClientForm(false);
-                          // Refresh CRM details
-                          fetchContactCrmDetails(selectedChat.id);
-                        } catch (err) {
-                          alert(err.response?.data?.error || "Failed to add client");
-                        }
-                        setAddClientLoading(false);
-                      }}
-                      className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition disabled:opacity-50"
-                    >
-                      {addClientLoading ? (
-                        <><Loader2 size={13} className="animate-spin" /> Saving...</>
-                      ) : (
-                        <><UserPlus size={13} /> Save as Client</>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => { setShowAddClientForm(false); setAddClientData({ name: "", company_name: "", email: "", city: "", service: "", notes: "" }); }}
-                      className="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-xs font-semibold transition"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* Show "Add as Client" button */
-                <button
-                  onClick={() => {
-                    // Pre-fill name from chat
-                    setAddClientData({
-                      name: selectedChat.name || "",
-                      company_name: "",
-                      email: "",
-                      city: "",
-                      service: "",
-                      notes: "",
-                    });
-                    setAddClientResult(null);
-                    setShowAddClientForm(true);
-                  }}
-                  className="w-full py-2.5 px-3.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300/80 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition"
-                >
-                  <UserPlus size={15} className="text-emerald-600" />
-                  <span>Add as CRM Client (Source: WhatsApp)</span>
-                </button>
-              )}
-            </div>
-
-            {/* WhatsApp CRM & Marketing Hub Navigation Bar */}
-            <div className="py-4 border-b border-gray-100 space-y-2">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">⚡ Unified WhatsApp Hub</h4>
-                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">All Linked</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => navigate("/whatsapp/campaigns")}
-                  className="flex items-center gap-2 p-2.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-xl transition text-xs font-semibold text-left border border-blue-200/60"
-                >
-                  <SendHorizontal size={15} className="text-blue-600 shrink-0" />
-                  <span className="truncate">Bulk Campaigns</span>
-                </button>
-
-                <button
-                  onClick={() => navigate("/whatsapp/automations")}
-                  className="flex items-center gap-2 p-2.5 bg-purple-50 hover:bg-purple-100 text-purple-800 rounded-xl transition text-xs font-semibold text-left border border-purple-200/60"
-                >
-                  <Sparkles size={15} className="text-purple-600 shrink-0" />
-                  <span className="truncate">Automations</span>
-                </button>
-
-                <button
-                  onClick={() => navigate("/whatsapp/flows")}
-                  className="flex items-center gap-2 p-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl transition text-xs font-semibold text-left border border-amber-200/60"
-                >
-                  <Zap size={15} className="text-amber-600 shrink-0" />
-                  <span className="truncate">Chatbot Flows</span>
-                </button>
-
-                <button
-                  onClick={() => navigate("/whatsapp/reminders")}
-                  className="flex items-center gap-2 p-2.5 bg-orange-50 hover:bg-orange-100 text-orange-800 rounded-xl transition text-xs font-semibold text-left border border-orange-200/60"
-                >
-                  <Bell size={15} className="text-orange-600 shrink-0" />
-                  <span className="truncate">Reminders</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Actions & Instant Bot Tools */}
-            <div className="py-4 space-y-2.5">
-              <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Execute for this Contact</h4>
-              
-              <button
-                onClick={() => {
-                  setShowContactInfoDrawer(false);
-                  setShowFlowModal(true);
-                }}
-                className="w-full py-2.5 px-3.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300/80 rounded-xl text-xs font-bold flex items-center justify-between transition"
-              >
-                <div className="flex items-center gap-2">
-                  <Zap size={15} className="text-amber-600" />
-                  <span>Launch Chatbot Flow</span>
-                </div>
-                <span className="text-[10px] bg-amber-200/70 px-2 py-0.5 rounded-full font-mono">5 Bots</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowContactInfoDrawer(false);
-                  fetchAutomations();
-                  setShowAutomationModal(true);
-                }}
-                className="w-full py-2.5 px-3.5 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-300/80 rounded-xl text-xs font-bold flex items-center justify-between transition"
-              >
-                <div className="flex items-center gap-2">
-                  <Sparkles size={15} className="text-purple-600" />
-                  <span>Trigger CRM Automation</span>
-                </div>
-                <span className="text-[10px] bg-purple-200/70 px-2 py-0.5 rounded-full font-mono">11 Rules</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowContactInfoDrawer(false);
-                  setShowReminderModal(true);
-                }}
-                className="w-full py-2.5 px-3.5 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300/80 rounded-xl text-xs font-bold flex items-center justify-between transition"
-              >
-                <div className="flex items-center gap-2">
-                  <Bell size={15} className="text-orange-600" />
-                  <span>Send 2-Way Interactive Reminder</span>
-                </div>
-                <span className="text-[10px] bg-orange-200/70 px-2 py-0.5 rounded-full font-mono">Buttons</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowContactInfoDrawer(false);
-                  fetchCampaignGroups();
-                  setShowAddToGroupModal(true);
-                }}
-                className="w-full py-2.5 px-3.5 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300/80 rounded-xl text-xs font-bold flex items-center justify-between transition"
-              >
-                <div className="flex items-center gap-2">
-                  <Users size={15} className="text-blue-600" />
-                  <span>Enroll in Campaign Group</span>
-                </div>
-                <span className="text-[10px] bg-blue-200/70 px-2 py-0.5 rounded-full font-mono">Bulk</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowContactInfoDrawer(false);
-                  fetchDripSequences();
-                  setShowDripModal(true);
-                }}
-                className="w-full py-2.5 px-3.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-300/80 rounded-xl text-xs font-bold flex items-center justify-between transition"
-              >
-                <div className="flex items-center gap-2">
-                  <Sparkles size={15} className="text-indigo-600" />
-                  <span>Enroll in Drip Sequence</span>
-                </div>
-                <span className="text-[10px] bg-indigo-200/70 px-2 py-0.5 rounded-full font-mono">Nurture</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowContactInfoDrawer(false);
-                  setShowOptionsModal(true);
-                }}
-                className="w-full py-2.5 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 rounded-xl text-xs font-bold flex items-center justify-between transition"
-              >
-                <div className="flex items-center gap-2">
-                  <ListOrdered size={15} className="text-slate-600" />
-                  <span>Send Inquiry Options Menu</span>
-                </div>
-                <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded-full font-mono">Quick</span>
-              </button>
-
-              <a
-                href={`tel:+${selectedChat.id?.replace(/\D/g, "")}`}
-                className="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300/80 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition"
-              >
-                <PhoneCall size={15} className="text-emerald-600" />
-                <span>Direct Call +{selectedChat.id?.replace(/\D/g, "")}</span>
-              </a>
-
-              <button
-                onClick={() => setShowContactInfoDrawer(false)}
-                className="w-full py-2.5 px-4 bg-[#00a884] text-white rounded-xl text-xs font-bold hover:bg-[#008f70] transition shadow"
-              >
-                Return to Chat
-              </button>
-            </div>
+        <div className="xl:hidden fixed inset-0 bg-black/40 z-50 flex justify-end backdrop-blur-sm animate-fadeIn" onClick={() => setShowContactInfoDrawer(false)}>
+          <div className="hl-card w-full max-w-sm h-full overflow-hidden relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            {renderContactInfoContent(false)}
           </div>
         </div>
       )}
@@ -4883,64 +4992,64 @@ export default function WhatsAppPage() {
       {/* Trigger Chatbot Flow Modal */}
       {showFlowModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowFlowModal(false)}>
-          <div className="bg-[#111b21] border border-[#222d34] rounded-2xl w-full max-w-lg p-6 shadow-2xl relative text-slate-200" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowFlowModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+          <div className="hl-card w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowFlowModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
 
-            <div className="flex items-center gap-3 mb-4 border-b border-[#222d34] pb-3">
-              <div className="p-3 bg-amber-500/20 text-amber-400 rounded-xl">
+            <div className="flex items-center gap-3 mb-4 border-b border-[var(--color-rule)] pb-3">
+              <div className="p-3 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]">
                 <Zap size={24} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Trigger Chatbot Flow</h3>
-                <p className="text-xs text-slate-400">Launch an automated multi-step chatbot flow for <span className="text-[#00a884] font-semibold">{selectedChat?.name}</span></p>
+                <h3 className="hl-title">Trigger Chatbot Flow</h3>
+                <p className="text-xs text-[var(--color-ink-2)]">Launch an automated multi-step chatbot flow for <span className="text-[var(--color-ink)] font-semibold">{selectedChat?.name}</span></p>
               </div>
             </div>
 
             {flowsLoading ? (
               <div className="py-12 text-center">
-                <Loader2 size={32} className="animate-spin text-[#00a884] mx-auto mb-3" />
-                <p className="text-xs text-slate-400">Loading chatbot flows...</p>
+                <Loader2 size={32} className="animate-spin text-[var(--color-ink)] mx-auto mb-3" />
+                <p className="text-xs text-[var(--color-ink-2)]">Loading chatbot flows...</p>
               </div>
             ) : flows.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-400 space-y-3">
+              <div className="hl-empty p-6 text-center text-xs text-[var(--color-ink-2)] space-y-3">
                 <p>No Chatbot Flows created yet.</p>
                 <button
                   onClick={() => navigate("/whatsapp/flows")}
-                  className="px-4 py-2 bg-[#00a884] text-[#111b21] rounded-xl text-xs font-bold hover:bg-[#008f70] transition"
+                  className="hl-btn-primary px-4 py-2 bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded-xl text-xs font-bold hover:bg-[var(--color-ink)] transition"
                 >
                   Create Flow in Flow Builder
                 </button>
               </div>
             ) : (
               <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-300">Select a flow to execute:</p>
+                <p className="text-xs font-semibold text-[var(--color-ink-2)]">Select a flow to execute:</p>
                 <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
                   {flows.map((fl) => (
                     <div
                       key={fl.id}
                       onClick={() => setSelectedFlowId(fl.id)}
-                      className={`p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${selectedFlowId === fl.id ? "bg-[#005c4b]/40 border-[#00a884] text-white" : "bg-[#202c33] border-[#2a3942] hover:bg-[#2a3942] text-slate-200"}`}
+                      className={`hl-card p-3.5 cursor-pointer transition flex items-center justify-between ${selectedFlowId === fl.id ? "border-[var(--color-accent)]" : ""}`}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-xs truncate">{fl.name}</p>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/40 text-slate-300 font-mono">
+                          <span className="hl-badge text-[10px] px-2 py-0.5 rounded-full">
                             {fl.node_count || 1} nodes
                           </span>
                         </div>
-                        {fl.description && <p className="text-[11px] text-slate-400 truncate mt-0.5">{fl.description}</p>}
+                        {fl.description && <p className="text-[11px] text-[var(--color-ink-2)] truncate mt-0.5">{fl.description}</p>}
                       </div>
-                      {selectedFlowId === fl.id && <CheckCircle2 size={18} className="text-[#00a884] shrink-0 ml-2" />}
+                      {selectedFlowId === fl.id && <CheckCircle2 size={18} className="text-[var(--color-ink)] shrink-0 ml-2" />}
                     </div>
                   ))}
                 </div>
 
-                <div className="flex justify-between items-center pt-4 border-t border-[#222d34]">
+                <div className="flex justify-between items-center pt-4 border-t border-[var(--color-rule)]">
                   <button
                     onClick={() => navigate("/whatsapp/flows")}
-                    className="text-xs text-[#00a884] hover:underline font-bold"
+                    className="text-xs text-[var(--color-ink)] hover:underline font-bold"
                   >
                     Open Flow Builder →
                   </button>
@@ -4948,7 +5057,7 @@ export default function WhatsAppPage() {
                     <button
                       type="button"
                       onClick={() => setShowFlowModal(false)}
-                      className="px-4 py-2 bg-[#202c33] hover:bg-[#2a3942] rounded-xl text-xs text-slate-300 font-semibold"
+                      className="hl-btn-secondary px-4 py-2 bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] rounded-xl text-xs text-[var(--color-ink-2)] font-semibold"
                     >
                       Cancel
                     </button>
@@ -4956,7 +5065,7 @@ export default function WhatsAppPage() {
                       type="button"
                       disabled={!selectedFlowId || triggeringFlow}
                       onClick={() => handleTriggerFlow(selectedFlowId)}
-                      className="px-5 py-2 bg-[#00a884] text-[#111b21] rounded-xl text-xs font-bold hover:bg-[#008f70] transition flex items-center gap-1.5 disabled:opacity-50 shadow"
+                      className="hl-btn-primary px-5 py-2 bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded-xl text-xs font-bold hover:bg-[var(--color-ink)] transition flex items-center gap-1.5 disabled:opacity-50 shadow"
                     >
                       {triggeringFlow ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
                       <span>Launch Flow</span>
@@ -4972,22 +5081,22 @@ export default function WhatsAppPage() {
       {/* Send Inquiry Options / Interactive Buttons Modal */}
       {showOptionsModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowOptionsModal(false)}>
-          <div className="bg-[#111b21] border border-[#222d34] rounded-2xl w-full max-w-xl p-5 md:p-6 shadow-2xl relative text-slate-200 max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowOptionsModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+          <div className="hl-card w-full max-w-xl p-5 md:p-6 relative max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowOptionsModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] p-1 rounded-lg hover:bg-[var(--color-paper)] transition">
               <X size={20} />
             </button>
 
             {/* Modal Header */}
-            <div className="flex items-center gap-3 mb-4 border-b border-[#222d34] pb-3 shrink-0">
-              <div className="p-3 bg-[#00a884]/20 text-[#00a884] rounded-xl">
+            <div className="flex items-center gap-3 mb-4 border-b border-[var(--color-rule)] pb-3 shrink-0">
+              <div className="p-3 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]">
                 <ListOrdered size={24} />
               </div>
               <div>
-                <h3 className="text-base md:text-lg font-bold text-white flex items-center gap-2">
+                <h3 className="hl-title flex items-center gap-2">
                   <span>Send WhatsApp Interactive Buttons & Flow Menu</span>
                 </h3>
-                <p className="text-xs text-slate-400">
-                  Send authentic action buttons (Call Now, Web Links & Quick Replies) or launch a Chatbot Flow for <span className="text-[#00a884] font-semibold">{selectedChat?.name || "Customer"}</span>
+                <p className="text-xs text-[var(--color-ink-2)]">
+                  Send authentic action buttons (Call Now, Web Links & Quick Replies) or launch a Chatbot Flow for <span className="text-[var(--color-ink)] font-semibold">{selectedChat?.name || "Customer"}</span>
                 </p>
               </div>
             </div>
@@ -4995,17 +5104,17 @@ export default function WhatsAppPage() {
             {/* Scrollable Body */}
             <div className="space-y-4 overflow-y-auto wa-custom-scrollbar pr-1 flex-1">
               {/* Optional Flow Bot Selector */}
-              <div className="p-3 bg-[#202c33]/60 rounded-xl border border-[#2a3942]">
+              <div className="hl-card p-3 bg-[var(--color-paper-2)] rounded-xl border border-[var(--color-rule)]">
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                    <Zap size={14} className="text-amber-400" />
+                  <label className="text-xs font-bold text-[var(--color-ink)] flex items-center gap-1.5">
+                    <Zap size={14} className="text-[var(--color-ink)]" />
                     <span>Attach Chatbot Flow (Optional)</span>
                   </label>
                   {optionsMenuBotFlowId && (
                     <button
                       type="button"
                       onClick={() => setOptionsMenuBotFlowId("")}
-                      className="text-[10px] text-amber-400 hover:underline"
+                      className="text-[10px] text-[var(--color-ink)] hover:underline"
                     >
                       Clear Flow
                     </button>
@@ -5014,7 +5123,7 @@ export default function WhatsAppPage() {
                 <select
                   value={optionsMenuBotFlowId}
                   onChange={(e) => setOptionsMenuBotFlowId(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#111b21] border border-[#2a3942] rounded-lg text-xs text-slate-200 outline-none focus:border-[#00a884]"
+                  className="hl-input w-full px-3 py-2 text-xs"
                 >
                   <option value="">None (Standard Interactive Buttons)</option>
                   {flows.map((fl) => (
@@ -5023,9 +5132,9 @@ export default function WhatsAppPage() {
                     </option>
                   ))}
                 </select>
-                <p className="text-[11px] text-slate-400 mt-1.5">
+                <p className="text-[11px] text-[var(--color-ink-2)] mt-1.5">
                   {optionsMenuBotFlowId ? (
-                    <span className="text-amber-300 font-medium">⚡ Customer clicking options will trigger automated multi-step chatbot replies from this flow!</span>
+                    <span className="text-[var(--color-ink)] font-medium">⚡ Customer clicking options will trigger automated multi-step chatbot replies from this flow!</span>
                   ) : (
                     "When customer clicks a button, it responds with the selected action or quick reply text."
                   )}
@@ -5034,7 +5143,7 @@ export default function WhatsAppPage() {
 
               {/* Message Header / Body Prompt */}
               <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
+                <label className="hl-section-label block text-xs font-bold text-[var(--color-ink-2)] uppercase mb-1">
                   Message Header / Prompt Text
                 </label>
                 <textarea
@@ -5042,21 +5151,21 @@ export default function WhatsAppPage() {
                   value={optionsMenuTitle}
                   onChange={(e) => setOptionsMenuTitle(e.target.value)}
                   placeholder="e.g. Welcome to Madhura Tech! Please choose an option below:"
-                  className="w-full px-3.5 py-2.5 bg-[#202c33] border border-[#2a3942] rounded-xl text-xs text-white outline-none focus:border-[#00a884] resize-none"
+                  className="hl-input w-full px-3.5 py-2.5 text-xs resize-none"
                 />
               </div>
 
               {/* Buttons Editor */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-300 uppercase">
+                  <label className="hl-section-label text-xs font-bold text-[var(--color-ink-2)] uppercase">
                     Interactive Buttons ({optionsMenuItems.length})
                   </label>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => setOptionsMenuItems((prev) => [...prev, { type: "reply", text: `Option ${prev.length + 1}` }])}
-                      className="px-2 py-1 bg-[#00a884]/20 hover:bg-[#00a884]/30 text-[#00a884] rounded-lg text-[11px] font-bold transition flex items-center gap-1"
+                      className="hl-badge hl-badge-accent px-2 py-1 text-[11px] font-bold transition flex items-center gap-1"
                       title="Add Quick Reply Button"
                     >
                       <CornerDownLeft size={12} />
@@ -5065,7 +5174,7 @@ export default function WhatsAppPage() {
                     <button
                       type="button"
                       onClick={() => setOptionsMenuItems((prev) => [...prev, { type: "call", text: "Call Now", phone: "+91 " }])}
-                      className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
+                      className="hl-badge hl-badge-success px-2 py-1 text-[11px] font-bold transition flex items-center gap-1"
                       title="Add Call Now Button"
                     >
                       <Phone size={12} />
@@ -5074,7 +5183,7 @@ export default function WhatsAppPage() {
                     <button
                       type="button"
                       onClick={() => setOptionsMenuItems((prev) => [...prev, { type: "url", text: "Apply Now", url: "https://" }])}
-                      className="px-2 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
+                      className="hl-badge hl-badge-info px-2 py-1 text-[11px] font-bold transition flex items-center gap-1"
                       title="Add Web URL Button"
                     >
                       <ExternalLink size={12} />
@@ -5087,7 +5196,7 @@ export default function WhatsAppPage() {
                   {optionsMenuItems.map((item, idx) => {
                     const itemObj = typeof item === "string" ? { type: "reply", text: item } : item;
                     return (
-                      <div key={idx} className="p-2.5 bg-[#202c33] border border-[#2a3942] rounded-xl space-y-2">
+                      <div key={idx} className="hl-card p-2.5 bg-[var(--color-paper-2)] border border-[var(--color-rule)] rounded-xl space-y-2">
                         <div className="flex items-center gap-2">
                           <select
                             value={itemObj.type || "reply"}
@@ -5102,7 +5211,7 @@ export default function WhatsAppPage() {
                               };
                               setOptionsMenuItems(updated);
                             }}
-                            className="bg-[#111b21] border border-[#2a3942] text-[#00a884] font-bold text-xs rounded-lg px-2 py-1.5 outline-none"
+                            className="hl-select font-bold text-xs px-2 py-1.5 outline-none"
                           >
                             <option value="reply">↩ Reply</option>
                             <option value="call">📞 Call</option>
@@ -5118,14 +5227,14 @@ export default function WhatsAppPage() {
                               setOptionsMenuItems(updated);
                             }}
                             placeholder="Button label (e.g. English, Call Now)"
-                            className="flex-1 px-3 py-1.5 bg-[#111b21] border border-[#2a3942] rounded-lg text-xs text-white outline-none focus:border-[#00a884]"
+                            className="hl-input flex-1 px-3 py-1.5 text-xs"
                           />
 
                           {optionsMenuItems.length > 1 && (
                             <button
                               type="button"
                               onClick={() => setOptionsMenuItems(optionsMenuItems.filter((_, i) => i !== idx))}
-                              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-white/5 rounded-lg transition"
+                              className="p-1.5 text-[var(--color-ink-2)] hover:text-[var(--color-error)] hover:bg-[var(--color-paper)] rounded-lg transition"
                               title="Delete button"
                             >
                               <X size={15} />
@@ -5135,7 +5244,7 @@ export default function WhatsAppPage() {
 
                         {itemObj.type === "call" && (
                           <div className="flex items-center gap-2 pl-2">
-                            <Phone size={13} className="text-emerald-400 shrink-0" />
+                            <Phone size={13} className="text-[var(--color-ink)] shrink-0" />
                             <input
                               type="tel"
                               value={itemObj.phone || ""}
@@ -5145,14 +5254,14 @@ export default function WhatsAppPage() {
                                 setOptionsMenuItems(updated);
                               }}
                               placeholder="Phone Number (e.g. +91 98765 43210)"
-                              className="flex-1 px-2.5 py-1 bg-[#111b21] border border-[#2a3942] rounded-lg text-xs text-emerald-300 outline-none focus:border-emerald-400"
+                              className="hl-input flex-1 px-2.5 py-1 text-xs"
                             />
                           </div>
                         )}
 
                         {itemObj.type === "url" && (
                           <div className="flex items-center gap-2 pl-2">
-                            <ExternalLink size={13} className="text-blue-400 shrink-0" />
+                            <ExternalLink size={13} className="text-[var(--color-ink)] shrink-0" />
                             <input
                               type="url"
                               value={itemObj.url || ""}
@@ -5162,7 +5271,7 @@ export default function WhatsAppPage() {
                                 setOptionsMenuItems(updated);
                               }}
                               placeholder="Web URL (e.g. https://example.com/apply)"
-                              className="flex-1 px-2.5 py-1 bg-[#111b21] border border-[#2a3942] rounded-lg text-xs text-blue-300 outline-none focus:border-blue-400"
+                              className="hl-input flex-1 px-2.5 py-1 text-xs"
                             />
                           </div>
                         )}
@@ -5175,22 +5284,22 @@ export default function WhatsAppPage() {
               {/* WhatsApp Authentic Live Preview */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-bold text-[#00a884] uppercase tracking-wider">
+                  <p className="hl-section-label text-[10px] font-bold text-[var(--color-ink)] uppercase tracking-wider">
                     Live WhatsApp Customer Preview:
                   </p>
-                  <span className="text-[10px] text-slate-400">Matches official WhatsApp client UI</span>
+                  <span className="text-[10px] text-[var(--color-ink-2)]">Matches official WhatsApp client UI</span>
                 </div>
 
-                <div className="p-3 bg-[#0b141a] rounded-xl border border-white/10 flex justify-start">
-                  <div className="max-w-[85%] bg-[#202c33] rounded-lg p-2.5 text-xs text-white shadow-md relative">
+                <div className="hl-card p-3 bg-[var(--color-paper-2)] rounded-xl border border-[var(--color-rule)] flex justify-start">
+                  <div className="hl-card max-w-[85%] rounded-lg p-2.5 text-xs relative">
                     <p className="whitespace-pre-wrap break-words">{optionsMenuTitle || "Please choose an option:"}</p>
-                    <div className="flex justify-end mt-1 text-[10px] text-slate-400">
+                    <div className="hl-id flex justify-end mt-1">
                       <span>1:58 pm</span>
                     </div>
 
                     {/* Button Rows */}
                     {optionsMenuItems.filter((it) => (typeof it === "string" ? it.trim() : it.text?.trim())).length > 0 && (
-                      <div className="mt-2 -mx-2.5 -mb-2.5 border-t border-white/10 divide-y divide-white/10 overflow-hidden rounded-b-lg">
+                      <div className="mt-2 -mx-2.5 -mb-2.5 border-t border-[var(--color-rule)] divide-y divide-[var(--color-rule)] overflow-hidden rounded-b-lg bg-[var(--color-paper)]">
                         {optionsMenuItems
                           .filter((it) => (typeof it === "string" ? it.trim() : it.text?.trim()))
                           .map((it, bIdx) => {
@@ -5198,14 +5307,14 @@ export default function WhatsAppPage() {
                             return (
                               <div
                                 key={bIdx}
-                                className="w-full py-2.5 px-3 flex items-center justify-center gap-2 text-xs font-semibold text-[#00a884] bg-white/[0.02]"
+                                className="w-full py-2.5 px-3 flex items-center justify-center gap-2 text-xs font-semibold text-[var(--color-ink)] bg-[var(--color-paper-2)]"
                               >
                                 {btn.type === "call" ? (
-                                  <Phone size={13} className="text-[#00a884] shrink-0" />
+                                  <Phone size={13} className="text-[var(--color-ink)] shrink-0" />
                                 ) : btn.type === "url" ? (
-                                  <ExternalLink size={13} className="text-[#00a884] shrink-0" />
+                                  <ExternalLink size={13} className="text-[var(--color-ink)] shrink-0" />
                                 ) : (
-                                  <CornerDownLeft size={13} className="text-[#00a884] shrink-0" />
+                                  <CornerDownLeft size={13} className="text-[var(--color-ink)] shrink-0" />
                                 )}
                                 <span className="truncate">{btn.text || "Option"}</span>
                               </div>
@@ -5219,11 +5328,11 @@ export default function WhatsAppPage() {
             </div>
 
             {/* Footer Action Buttons */}
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-2 pt-4 border-t border-[#222d34] mt-2 shrink-0">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-2 pt-4 border-t border-[var(--color-rule)] mt-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setShowOptionsModal(false)}
-                className="w-full sm:w-auto px-4 py-2 bg-[#202c33] hover:bg-[#2a3942] rounded-xl text-xs text-slate-300 font-semibold transition"
+                className="hl-btn-secondary w-full sm:w-auto px-4 py-2 bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] rounded-xl text-xs text-[var(--color-ink-2)] font-semibold transition"
               >
                 Cancel
               </button>
@@ -5231,7 +5340,7 @@ export default function WhatsAppPage() {
                 <button
                   type="button"
                   onClick={handleInsertOptionsMenuToComposer}
-                  className="flex-1 sm:flex-initial px-4 py-2 bg-[#202c33] hover:bg-[#2a3942] border border-[#2a3942] text-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                  className="hl-btn-secondary flex-1 sm:flex-initial px-4 py-2 bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] border border-[var(--color-rule)] text-[var(--color-ink)] rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
                   title="Insert formatted text into the message composer"
                 >
                   <Send size={14} />
@@ -5240,7 +5349,7 @@ export default function WhatsAppPage() {
                 <button
                   type="button"
                   onClick={handleSendInteractiveMenuNow}
-                  className="flex-1 sm:flex-initial px-5 py-2 bg-[#00a884] hover:bg-[#008f70] text-[#111b21] rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg active:scale-95"
+                  className="hl-btn-primary flex-1 sm:flex-initial px-5 py-2 text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95"
                   title="Send interactive buttons directly into chat"
                 >
                   <Zap size={14} />
@@ -5255,26 +5364,26 @@ export default function WhatsAppPage() {
       {/* WhatsApp Payment Request Modal */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowPaymentModal(false)}>
-          <div className="bg-[#111b21] border border-[#222d34] rounded-2xl w-full max-w-md p-6 shadow-2xl relative text-slate-200" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowPaymentModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+          <div className="hl-card w-full max-w-md p-6 relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowPaymentModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
 
-            <div className="flex items-center gap-3 mb-4 border-b border-[#222d34] pb-3">
-              <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-xl">
+            <div className="flex items-center gap-3 mb-4 border-b border-[var(--color-rule)] pb-3">
+              <div className="p-3 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]">
                 <CreditCard size={24} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Request WhatsApp Payment</h3>
-                <p className="text-xs text-slate-400">Generate 0% markup direct payment link for <span className="text-[#00a884] font-semibold">{selectedChat?.name}</span></p>
+                <h3 className="hl-title">Request WhatsApp Payment</h3>
+                <p className="text-xs text-[var(--color-ink-2)]">Generate 0% markup direct payment link for <span className="text-[var(--color-ink)] font-semibold">{selectedChat?.name}</span></p>
               </div>
             </div>
 
             <form onSubmit={handleCreatePaymentRequest} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase mb-1">Amount Due (INR ₹) *</label>
+                <label className="hl-section-label block text-xs font-bold text-[var(--color-ink-2)] uppercase mb-1">Amount Due (INR ₹) *</label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-2.5 text-slate-400 font-bold">₹</span>
+                  <span className="absolute left-3.5 top-2.5 text-[var(--color-ink-2)] font-bold">₹</span>
                   <input
                     type="number"
                     step="0.01"
@@ -5283,40 +5392,40 @@ export default function WhatsAppPage() {
                     value={paymentAmount}
                     onChange={(e) => setPaymentAmount(e.target.value)}
                     required
-                    className="w-full pl-8 pr-3.5 py-2.5 bg-[#202c33] border border-[#2a3942] rounded-xl text-white font-bold outline-none focus:border-[#00a884]"
+                    className="hl-input w-full pl-8 pr-3.5 py-2.5 font-bold"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase mb-1">Payment Description *</label>
+                <label className="hl-section-label block text-xs font-bold text-[var(--color-ink-2)] uppercase mb-1">Payment Description *</label>
                 <input
                   type="text"
                   value={paymentDesc}
                   onChange={(e) => setPaymentDesc(e.target.value)}
                   placeholder="e.g. Annual Maintenance Contract / Service A"
                   required
-                  className="w-full px-3.5 py-2.5 bg-[#202c33] border border-[#2a3942] rounded-xl text-xs text-white outline-none focus:border-[#00a884]"
+                  className="hl-input w-full px-3.5 py-2.5 text-xs"
                 />
               </div>
 
-              <div className="p-3 bg-[#0b141a] rounded-xl border border-white/10 space-y-1 text-xs">
-                <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">0% Markup Guarantee:</p>
-                <p className="text-slate-300 text-[11px]">Instant UPI / Payment link generated directly without 3rd-party aggregator markup fees. Real-time webhook marks invoice paid.</p>
+              <div className="hl-card p-3 bg-[var(--color-paper-2)] rounded-xl border border-[var(--color-rule)] space-y-1 text-xs">
+                <p className="hl-section-label text-[10px] font-bold text-[var(--color-ink)] uppercase tracking-wider">0% Markup Guarantee:</p>
+                <p className="text-[var(--color-ink-2)] text-[11px]">Instant UPI / Payment link generated directly without 3rd-party aggregator markup fees. Real-time webhook marks invoice paid.</p>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-[#222d34]">
+              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-rule)]">
                 <button
                   type="button"
                   onClick={() => setShowPaymentModal(false)}
-                  className="px-4 py-2 bg-[#202c33] hover:bg-[#2a3942] rounded-xl text-xs text-slate-300 font-semibold"
+                  className="hl-btn-secondary px-4 py-2 bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] rounded-xl text-xs text-[var(--color-ink-2)] font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creatingPayment || !paymentAmount}
-                  className="px-5 py-2 bg-[#00a884] text-[#111b21] rounded-xl text-xs font-bold hover:bg-[#008f70] transition flex items-center gap-1.5 disabled:opacity-50 shadow"
+                  className="hl-btn-primary px-5 py-2 bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded-xl text-xs font-bold hover:bg-[var(--color-ink)] transition flex items-center gap-1.5 disabled:opacity-50 shadow"
                 >
                   {creatingPayment ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   <span>Send Payment Link to WhatsApp</span>
@@ -5330,64 +5439,64 @@ export default function WhatsAppPage() {
       {/* Drip Sequence Enrollment Modal */}
       {showDripModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowDripModal(false)}>
-          <div className="bg-[#111b21] border border-[#222d34] rounded-2xl w-full max-w-lg p-6 shadow-2xl relative text-slate-200" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowDripModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+          <div className="hl-card w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowDripModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
 
-            <div className="flex items-center gap-3 mb-4 border-b border-[#222d34] pb-3">
-              <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-xl">
+            <div className="flex items-center gap-3 mb-4 border-b border-[var(--color-rule)] pb-3">
+              <div className="p-3 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]">
                 <Sparkles size={24} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Enroll in Drip Sequence</h3>
-                <p className="text-xs text-slate-400">Automated multi-day follow-up and nurturing for <span className="text-[#00a884] font-semibold">{selectedChat?.name}</span></p>
+                <h3 className="hl-title">Enroll in Drip Sequence</h3>
+                <p className="text-xs text-[var(--color-ink-2)]">Automated multi-day follow-up and nurturing for <span className="text-[var(--color-ink)] font-semibold">{selectedChat?.name}</span></p>
               </div>
             </div>
 
             {dripLoading ? (
               <div className="py-12 text-center">
-                <Loader2 size={32} className="animate-spin text-[#00a884] mx-auto mb-3" />
-                <p className="text-xs text-slate-400">Loading drip sequences...</p>
+                <Loader2 size={32} className="animate-spin text-[var(--color-ink)] mx-auto mb-3" />
+                <p className="text-xs text-[var(--color-ink-2)]">Loading drip sequences...</p>
               </div>
             ) : dripSequences.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-400 space-y-3">
+              <div className="hl-empty p-6 text-center text-xs text-[var(--color-ink-2)] space-y-3">
                 <p>No active drip campaigns created yet.</p>
                 <button
                   onClick={() => navigate("/whatsapp/automations")}
-                  className="px-4 py-2 bg-[#00a884] text-[#111b21] rounded-xl text-xs font-bold hover:bg-[#008f70] transition"
+                  className="hl-btn-primary px-4 py-2 bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded-xl text-xs font-bold hover:bg-[var(--color-ink)] transition"
                 >
                   Create Drip Sequence in Automations
                 </button>
               </div>
             ) : (
               <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-300">Select a drip sequence:</p>
+                <p className="text-xs font-semibold text-[var(--color-ink-2)]">Select a drip sequence:</p>
                 <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
                   {dripSequences.map((seq) => (
                     <div
                       key={seq.id}
                       onClick={() => setSelectedDripId(seq.id)}
-                      className={`p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${selectedDripId === seq.id ? "bg-indigo-950/60 border-indigo-500 text-white" : "bg-[#202c33] border-[#2a3942] hover:bg-[#2a3942] text-slate-200"}`}
+                      className={`hl-card p-3.5 cursor-pointer transition flex items-center justify-between ${selectedDripId === seq.id ? "border-[var(--color-accent)]" : ""}`}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-xs truncate">{seq.name}</p>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/40 text-indigo-300 font-mono">
+                          <span className="hl-badge text-[10px] px-2 py-0.5 rounded-full">
                             {seq.step_count || 1} steps
                           </span>
                         </div>
-                        {seq.description && <p className="text-[11px] text-slate-400 truncate mt-0.5">{seq.description}</p>}
+                        {seq.description && <p className="text-[11px] text-[var(--color-ink-2)] truncate mt-0.5">{seq.description}</p>}
                       </div>
-                      {selectedDripId === seq.id && <CheckCircle2 size={18} className="text-[#00a884] shrink-0 ml-2" />}
+                      {selectedDripId === seq.id && <CheckCircle2 size={18} className="text-[var(--color-ink)] shrink-0 ml-2" />}
                     </div>
                   ))}
                 </div>
 
-                <div className="flex justify-between items-center pt-4 border-t border-[#222d34]">
+                <div className="flex justify-between items-center pt-4 border-t border-[var(--color-rule)]">
                   <button
                     onClick={() => navigate("/whatsapp/automations")}
-                    className="text-xs text-[#00a884] hover:underline font-bold"
+                    className="text-xs text-[var(--color-ink)] hover:underline font-bold"
                   >
                     Manage Sequences →
                   </button>
@@ -5395,7 +5504,7 @@ export default function WhatsAppPage() {
                     <button
                       type="button"
                       onClick={() => setShowDripModal(false)}
-                      className="px-4 py-2 bg-[#202c33] hover:bg-[#2a3942] rounded-xl text-xs text-slate-300 font-semibold"
+                      className="hl-btn-secondary px-4 py-2 bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] rounded-xl text-xs text-[var(--color-ink-2)] font-semibold"
                     >
                       Cancel
                     </button>
@@ -5403,7 +5512,7 @@ export default function WhatsAppPage() {
                       type="button"
                       disabled={!selectedDripId || enrollingDrip}
                       onClick={() => handleEnrollDrip(selectedDripId)}
-                      className="px-5 py-2 bg-[#00a884] text-[#111b21] rounded-xl text-xs font-bold hover:bg-[#008f70] transition flex items-center gap-1.5 disabled:opacity-50 shadow"
+                      className="hl-btn-primary px-5 py-2 bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded-xl text-xs font-bold hover:bg-[var(--color-ink)] transition flex items-center gap-1.5 disabled:opacity-50 shadow"
                     >
                       {enrollingDrip ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                       <span>Enroll Contact</span>
@@ -5416,75 +5525,11 @@ export default function WhatsAppPage() {
         </div>
       )}
 
-      {/* Shared Team Inbox Internal Notes Slide-over Drawer */}
+      {/* Shared Team Inbox Internal Notes Slide-over Drawer (Mobile & Tablet) */}
       {showNotesDrawer && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex justify-end backdrop-blur-xs animate-fadeIn" onClick={() => setShowNotesDrawer(false)}>
-          <div className="w-full max-w-sm bg-[#111b21] border-l border-[#222d34] h-full flex flex-col shadow-2xl p-5 text-slate-200" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between pb-3 border-b border-[#222d34]">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-amber-500/20 text-amber-400 rounded-lg">
-                  <FileText size={18} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-white">Internal Team Notes</h3>
-                  <p className="text-[11px] text-slate-400">Private notes for CRM agents (hidden from customer)</p>
-                </div>
-              </div>
-              <button onClick={() => setShowNotesDrawer(false)} className="p-1 text-slate-400 hover:text-white rounded-full">
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Notes List */}
-            <div className="flex-1 overflow-y-auto py-4 space-y-3">
-              {notesLoading ? (
-                <div className="py-10 text-center">
-                  <Loader2 size={24} className="animate-spin text-[#00a884] mx-auto" />
-                </div>
-              ) : internalNotes.length === 0 ? (
-                <div className="py-12 text-center text-xs text-slate-400 space-y-1">
-                  <p className="font-bold text-slate-300">No internal notes yet</p>
-                  <p>Add private notes below to collaborate with colleagues.</p>
-                </div>
-              ) : (
-                internalNotes.map((note) => (
-                  <div key={note.id} className="p-3 bg-[#1e293b] border border-amber-500/30 rounded-xl space-y-1.5 shadow-sm">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-bold text-amber-400 flex items-center gap-1">
-                        👤 {note.author_name}
-                      </span>
-                      <span className="text-[10px] text-slate-400">
-                        {new Date(note.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-200 whitespace-pre-wrap">{note.note_text}</p>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Add Note Input */}
-            <form onSubmit={handleCreateInternalNote} className="pt-3 border-t border-[#222d34] space-y-2">
-              <textarea
-                rows={3}
-                value={newNoteText}
-                onChange={(e) => setNewNoteText(e.target.value)}
-                placeholder="Type private note or @colleague mention..."
-                className="w-full px-3 py-2 bg-[#202c33] border border-[#2a3942] rounded-xl text-xs text-white outline-none focus:border-amber-400 resize-none"
-                required
-              />
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] text-amber-400/80">🔒 Only visible to team members</span>
-                <button
-                  type="submit"
-                  disabled={submittingNote || !newNoteText.trim()}
-                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  {submittingNote ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-                  <span>Save Note</span>
-                </button>
-              </div>
-            </form>
+        <div className="xl:hidden fixed inset-0 bg-black/50 z-50 flex justify-end backdrop-blur-xs animate-fadeIn" onClick={() => setShowNotesDrawer(false)}>
+          <div className="hl-card w-full max-w-sm border-l h-full overflow-hidden relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            {renderNotesContent(false)}
           </div>
         </div>
       )}
@@ -5492,77 +5537,77 @@ export default function WhatsAppPage() {
       {/* Account Messaging Quota Balance Modal */}
       {showAccountBalanceModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowAccountBalanceModal(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowAccountBalanceModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+          <div className="hl-card w-full max-w-md p-6 relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowAccountBalanceModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
 
-            <div className="flex items-center gap-3 mb-5 border-b border-gray-100 pb-3">
-              <div className="p-3 bg-emerald-100 text-emerald-700 rounded-xl">
+            <div className="flex items-center gap-3 mb-5 border-b border-[var(--color-rule)] pb-3">
+              <div className="p-3 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]">
                 <CreditCard size={24} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-800">WhatsApp Engine & Quota Balance</h3>
-                <p className="text-xs text-gray-500">Live messaging analytics and connection status</p>
+                <h3 className="hl-title">WhatsApp Engine & Quota Balance</h3>
+                <p className="text-xs text-[var(--color-ink-2)]">Live messaging analytics and connection status</p>
               </div>
             </div>
 
             {accountBalanceLoading ? (
               <div className="py-12 text-center">
-                <Loader2 size={32} className="animate-spin text-emerald-600 mx-auto mb-3" />
-                <p className="text-sm font-semibold text-gray-600">Checking account quota balance...</p>
+                <Loader2 size={32} className="animate-spin text-[var(--color-ink)] mx-auto mb-3" />
+                <p className="text-sm font-semibold text-[var(--color-ink-2)]">Checking account quota balance...</p>
               </div>
             ) : accountBalance?.error ? (
-              <div className="p-4 bg-red-50 text-red-700 rounded-xl text-xs font-semibold">
+              <div className="hl-card p-4 bg-[var(--color-error)] text-[var(--color-error)] rounded-xl text-xs font-semibold">
                 {accountBalance.error}
               </div>
             ) : accountBalance ? (
               <div className="space-y-4">
-                <div className="bg-gray-50 p-4 rounded-xl space-y-2 border border-gray-100">
+                <div className="hl-card bg-[var(--color-paper-2)] p-4 rounded-xl space-y-2 border border-[var(--color-rule)]">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500 font-medium">Connection Status:</span>
-                    <span className={`font-bold px-2.5 py-0.5 rounded-full text-xs flex items-center gap-1 ${accountBalance.connected ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"}`}>
-                      <span className={`w-2 h-2 rounded-full ${accountBalance.connected ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`}></span>
+                    <span className="text-[var(--color-ink-2)] font-medium">Connection Status:</span>
+                    <span className={`hl-badge font-bold px-2.5 py-0.5 text-xs flex items-center gap-1 ${accountBalance.connected ? "hl-badge-success" : "hl-badge-error"}`}>
+                      <span className={`w-2 h-2 rounded-full ${accountBalance.connected ? "bg-[var(--color-success)] animate-pulse" : "bg-[var(--color-error)]"}`}></span>
                       {accountBalance.connected ? "Connected & Active" : "Disconnected"}
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500 font-medium">Active Engine:</span>
-                    <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded text-xs">
+                    <span className="text-[var(--color-ink-2)] font-medium">Active Engine:</span>
+                    <span className="hl-badge hl-badge-info px-2 py-0.5 rounded text-xs">
                       {accountBalance.activeEngine}
                     </span>
                   </div>
                   {accountBalance.phone && (
                     <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500 font-medium">Sender Number:</span>
-                      <span className="font-mono text-gray-800">+{accountBalance.phone}</span>
+                      <span className="text-[var(--color-ink-2)] font-medium">Sender Number:</span>
+                      <span className="hl-id">+{accountBalance.phone}</span>
                     </div>
                   )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 text-center">
-                  <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl">
-                    <p className="text-[10px] font-bold uppercase text-emerald-700">Messages Today</p>
-                    <p className="text-xl font-extrabold text-emerald-900 mt-1">{accountBalance.todaySent.toLocaleString()}</p>
+                  <div className="hl-card bg-[var(--color-paper)] border border-[var(--color-rule)] p-3 rounded-xl">
+                    <p className="hl-section-label text-[10px] font-bold uppercase text-[var(--color-ink)]">Messages Today</p>
+                    <p className="hl-kpi-num mt-1">{accountBalance.todaySent.toLocaleString()}</p>
                   </div>
-                  <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl">
-                    <p className="text-[10px] font-bold uppercase text-blue-700">Total Outbound</p>
-                    <p className="text-xl font-extrabold text-blue-900 mt-1">{accountBalance.totalSent.toLocaleString()}</p>
+                  <div className="hl-card bg-[var(--color-paper)] border border-[var(--color-rule)] p-3 rounded-xl">
+                    <p className="hl-section-label text-[10px] font-bold uppercase text-[var(--color-ink)]">Total Outbound</p>
+                    <p className="hl-kpi-num mt-1">{accountBalance.totalSent.toLocaleString()}</p>
                   </div>
-                  <div className="bg-teal-50 border border-teal-100 p-3 rounded-xl">
-                    <p className="text-[10px] font-bold uppercase text-teal-700">Delivered</p>
-                    <p className="text-xl font-extrabold text-teal-900 mt-1">{accountBalance.totalDelivered.toLocaleString()}</p>
+                  <div className="hl-card bg-[var(--color-paper)] border border-[var(--color-rule)] p-3 rounded-xl">
+                    <p className="hl-section-label text-[10px] font-bold uppercase text-[var(--color-ink)]">Delivered</p>
+                    <p className="hl-kpi-num mt-1">{accountBalance.totalDelivered.toLocaleString()}</p>
                   </div>
-                  <div className="bg-gray-50 border border-gray-200 p-3 rounded-xl">
-                    <p className="text-[10px] font-bold uppercase text-gray-600">Failed / Bounced</p>
-                    <p className="text-xl font-extrabold text-gray-700 mt-1">{accountBalance.totalFailed.toLocaleString()}</p>
+                  <div className="hl-card bg-[var(--color-paper-2)] border border-[var(--color-rule)] p-3 rounded-xl">
+                    <p className="hl-section-label text-[10px] font-bold uppercase text-[var(--color-ink-2)]">Failed / Bounced</p>
+                    <p className="hl-kpi-num mt-1">{accountBalance.totalFailed.toLocaleString()}</p>
                   </div>
                 </div>
 
                 <div className="pt-2 flex justify-end">
                   <button
                     onClick={() => setShowAccountBalanceModal(false)}
-                    className="px-5 py-2 bg-[#25D366] text-white rounded-lg text-xs font-bold hover:bg-[#1ebe5d] transition shadow"
+                    className="hl-btn-primary px-5 py-2 bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded-lg text-xs font-bold hover:bg-[var(--color-ink)] transition shadow"
                   >
                     Done
                   </button>
@@ -5576,40 +5621,40 @@ export default function WhatsAppPage() {
       {/* Create New Template Modal */}
       {showCreateTemplateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowCreateTemplateModal(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowCreateTemplateModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+          <div className="hl-card w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowCreateTemplateModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
 
-            <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-3">
-              <div className="p-3 bg-emerald-100 text-[#25D366] rounded-xl">
+            <div className="flex items-center gap-3 mb-4 border-b border-[var(--color-rule)] pb-3">
+              <div className="p-3 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]">
                 <FileText size={24} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-800">Create WhatsApp Template</h3>
-                <p className="text-xs text-gray-500">Draft & save template with full Markdown support</p>
+                <h3 className="hl-title">Create WhatsApp Template</h3>
+                <p className="text-xs text-[var(--color-ink-2)]">Draft & save template with full Markdown support</p>
               </div>
             </div>
 
             <form onSubmit={handleCreateTemplate} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Template Identifier *</label>
+                <label className="hl-section-label block text-xs font-semibold text-[var(--color-ink-2)] uppercase mb-1">Template Identifier *</label>
                 <input
                   type="text"
                   placeholder="e.g. promotional_discount_offer"
                   value={newTmplName}
                   onChange={(e) => setNewTmplName(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#25D366]"
+                  className="hl-input w-full px-3.5 py-2 text-xs"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Category</label>
+                <label className="hl-section-label block text-xs font-semibold text-[var(--color-ink-2)] uppercase mb-1">Category</label>
                 <select
                   value={newTmplCategory}
                   onChange={(e) => setNewTmplCategory(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#25D366]"
+                  className="hl-input w-full px-3.5 py-2 text-xs"
                 >
                   <option value="MARKETING">MARKETING</option>
                   <option value="UTILITY">UTILITY</option>
@@ -5619,8 +5664,8 @@ export default function WhatsAppPage() {
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-gray-600 uppercase">Template Content (Supports Markdown & Dynamic Placeholders) *</label>
-                  <span className="text-[10px] text-gray-400 font-mono">{(newTmplBody || "").length} chars</span>
+                  <label className="hl-section-label block text-xs font-semibold text-[var(--color-ink-2)] uppercase">Template Content (Supports Markdown & Dynamic Placeholders) *</label>
+                  <span className="hl-id text-[10px] text-[var(--color-ink-2)]">{(newTmplBody || "").length} chars</span>
                 </div>
                 <WAVariablePicker
                   onInsert={(tag) => setNewTmplBody((prev) => (prev || "") + " " + tag)}
@@ -5631,31 +5676,31 @@ export default function WhatsAppPage() {
                   placeholder={`Hello {name}!\n\nYour appointment tomorrow is on {tomorrow} ({tomorrow_day}).\n\n## Special Offer\nUse code **DISCOUNT20** to get 20% off.`}
                   value={newTmplBody}
                   onChange={(e) => setNewTmplBody(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#25D366] font-mono leading-relaxed resize-none"
+                  className="hl-input w-full px-3.5 py-2 text-xs leading-relaxed resize-none"
                   required
                 />
-                <p className="text-[10px] text-gray-400 mt-1">Supports Markdown headers (#), bold (**), and dynamic tokens ({"{tomorrow}"}, {"{tomorrow_day}"}, {"{day}"}, {"{time}"}, {"{date}"})</p>
+                <p className="hl-id text-[10px] text-[var(--color-ink-2)] mt-1">Supports Markdown headers (#), bold (**), and dynamic tokens ({"{tomorrow}"}, {"{tomorrow_day}"}, {"{day}"}, {"{time}"}, {"{date}"})</p>
               </div>
 
               {/* Live Markdown & Dynamic Evaluated Preview */}
               {newTmplBody.trim() && (
-                <div className="p-3 bg-[#0b141a] rounded-xl border border-white/10 text-white space-y-1">
-                  <div className="flex items-center justify-between text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1">
+                <div className="hl-card p-3 bg-[var(--color-paper-2)] rounded-xl border border-[var(--color-rule)] text-[var(--color-paper-2)] space-y-1">
+                  <div className="hl-section-label flex items-center justify-between text-[10px] font-bold text-[var(--color-ink)] uppercase tracking-wider mb-1">
                     <span>Live Chat Evaluated Preview:</span>
-                    <span className="text-amber-300 font-mono text-[9px]">Multi-Dynamic Active</span>
+                    <span className="hl-id text-[var(--color-ink)] text-[9px]">Multi-Dynamic Active</span>
                   </div>
                   <RichMessageContent text={evaluateMessagePlaceholders(newTmplBody, { name: selectedChat?.name && !selectedChat.name.startsWith("+") ? selectedChat.name : "Rajesh Kumar" })} isMe={true} />
                 </div>
               )}
 
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowCreateTemplateModal(false)} className="px-4 py-2 border rounded-lg text-xs text-gray-600 hover:bg-gray-50">
+                <button type="button" onClick={() => setShowCreateTemplateModal(false)} className="hl-btn-secondary px-4 py-2 border rounded-lg text-xs text-[var(--color-ink-2)] hover:bg-[var(--color-paper-2)]">
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={tmplLoading || !newTmplName.trim() || !newTmplBody.trim()}
-                  className="px-5 py-2 bg-[#25D366] text-white rounded-lg text-xs font-bold hover:bg-[#1ebe5d] flex items-center gap-2 shadow-md disabled:opacity-50"
+                  className="hl-btn-primary px-5 py-2 bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded-lg text-xs font-bold hover:bg-[var(--color-ink)] flex items-center gap-2 shadow-md disabled:opacity-50"
                 >
                   {tmplLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   <span>Save & Insert Template</span>
@@ -5669,26 +5714,26 @@ export default function WhatsAppPage() {
       {/* Send Interactive Reminder Modal */}
       {showReminderModal && selectedChat && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowReminderModal(false)}>
-          <div className="bg-[#111b21] border border-[#222d34] rounded-2xl w-full max-w-lg p-6 shadow-2xl relative text-slate-200" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowReminderModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+          <div className="hl-card w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowReminderModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
 
-            <div className="flex items-center gap-3 mb-4 border-b border-[#222d34] pb-3">
-              <div className="p-3 bg-orange-500/20 text-orange-400 rounded-xl">
+            <div className="flex items-center gap-3 mb-4 border-b border-[var(--color-rule)] pb-3">
+              <div className="p-3 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]">
                 <Bell size={24} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Send Interactive Reminder</h3>
-                <p className="text-xs text-slate-400">
-                  Deliver 2-way confirmation notice to <span className="text-[#00a884] font-semibold">{selectedChat.name}</span> (+{selectedChat.id.replace(/\D/g, "")})
+                <h3 className="hl-title">Send Interactive Reminder</h3>
+                <p className="text-xs text-[var(--color-ink-2)]">
+                  Deliver 2-way confirmation notice to <span className="text-[var(--color-ink)] font-semibold">{selectedChat.name}</span> (+{selectedChat.id.replace(/\D/g, "")})
                 </p>
               </div>
             </div>
 
             <div className="space-y-4 max-h-[72vh] overflow-y-auto pr-1">
               <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase mb-1.5">Reminder Category</label>
+                <label className="hl-section-label block text-xs font-bold text-[var(--color-ink-2)] uppercase mb-1.5">Reminder Category</label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { id: "appointment_reminder", label: "📅 Service Visit / Appointment" },
@@ -5700,10 +5745,10 @@ export default function WhatsAppPage() {
                       key={cat.id}
                       type="button"
                       onClick={() => handleReminderTypeChange(cat.id)}
-                      className={`p-2.5 rounded-xl border text-xs font-semibold text-left transition ${
+                      className={`hl-card p-2.5 text-xs font-semibold text-left transition ${
                         reminderType === cat.id
-                          ? "bg-orange-500/20 border-orange-500 text-orange-200"
-                          : "bg-[#202c33] border-[#2a3942] text-slate-300 hover:bg-[#2a3942]"
+                          ? "border-[var(--color-accent)]"
+                          : ""
                       }`}
                     >
                       {cat.label}
@@ -5713,36 +5758,36 @@ export default function WhatsAppPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase mb-1">Title / Notification Tag</label>
+                <label className="hl-section-label block text-xs font-bold text-[var(--color-ink-2)] uppercase mb-1">Title / Notification Tag</label>
                 <input
                   type="text"
                   value={reminderTitle}
                   onChange={(e) => setReminderTitle(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#202c33] border border-[#2a3942] rounded-xl text-xs text-slate-200 outline-none focus:border-[#00a884]"
+                  className="hl-input w-full px-3 py-2 text-xs"
                 />
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-300 uppercase">Message Body</label>
-                  <span className="text-[10px] text-[#00a884] font-mono">Placeholders Supported</span>
+                  <label className="hl-section-label block text-xs font-bold text-[var(--color-ink-2)] uppercase">Message Body</label>
+                  <span className="hl-id text-[10px] text-[var(--color-ink)]">Placeholders Supported</span>
                 </div>
                 <textarea
                   value={reminderText}
                   onChange={(e) => setReminderText(e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 bg-[#202c33] border border-[#2a3942] rounded-xl text-xs text-slate-200 outline-none focus:border-[#00a884] resize-none"
+                  className="hl-input w-full px-3 py-2 text-xs resize-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase mb-1.5">
+                <label className="hl-section-label block text-xs font-bold text-[var(--color-ink-2)] uppercase mb-1.5">
                   Interactive Response Buttons (Customer taps on WhatsApp)
                 </label>
                 <div className="space-y-1.5">
                   {reminderOptions.map((opt, idx) => (
                     <div key={opt.id || idx} className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-slate-400 w-5 text-right">{idx + 1}.</span>
+                      <span className="hl-id text-xs text-[var(--color-ink-2)] w-5 text-right">{idx + 1}.</span>
                       <input
                         type="text"
                         value={opt.label}
@@ -5751,22 +5796,22 @@ export default function WhatsAppPage() {
                           updated[idx] = { ...updated[idx], label: e.target.value };
                           setReminderOptions(updated);
                         }}
-                        className="flex-1 px-3 py-1.5 bg-[#202c33] border border-[#2a3942] rounded-lg text-xs text-slate-200 outline-none focus:border-[#00a884]"
+                        className="hl-input flex-1 px-3 py-1.5 text-xs"
                       />
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
-                <label className="block text-xs font-bold text-amber-300 uppercase mb-1 flex items-center gap-1.5">
-                  <Zap size={13} className="text-amber-400" />
+              <div className="hl-card p-3 bg-[var(--color-paper)] border border-[var(--color-rule)] rounded-xl">
+                <label className="block text-xs font-bold text-[var(--color-ink)] uppercase mb-1 flex items-center gap-1.5">
+                  <Zap size={13} className="text-[var(--color-ink)]" />
                   Auto-Launch Flow Bot on Response (Optional)
                 </label>
                 <select
                   value={reminderFlowId}
                   onChange={(e) => setReminderFlowId(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#202c33] border border-amber-500/40 rounded-xl text-xs text-slate-200 outline-none focus:border-amber-400"
+                  className="hl-input w-full px-3 py-2 text-xs"
                 >
                   <option value="">None (Standard Confirmation Acknowledgment)</option>
                   {flows.map((fl) => (
@@ -5775,17 +5820,17 @@ export default function WhatsAppPage() {
                     </option>
                   ))}
                 </select>
-                <p className="text-[10px] text-amber-300/80 mt-1 leading-relaxed">
+                <p className="text-[10px] text-[var(--color-ink)] mt-1 leading-relaxed">
                   When the customer responds to this reminder, our bot engine will automatically engage them in this conversational flow!
                 </p>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-4 border-t border-[#222d34] mt-4">
+            <div className="flex justify-end gap-2 pt-4 border-t border-[var(--color-rule)] mt-4">
               <button
                 type="button"
                 onClick={() => setShowReminderModal(false)}
-                className="px-4 py-2 bg-[#202c33] hover:bg-[#2a3942] rounded-xl text-xs text-slate-300 font-semibold"
+                className="hl-btn-secondary px-4 py-2 bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] rounded-xl text-xs text-[var(--color-ink-2)] font-semibold"
               >
                 Cancel
               </button>
@@ -5793,7 +5838,7 @@ export default function WhatsAppPage() {
                 type="button"
                 disabled={sendingReminder || !reminderText.trim()}
                 onClick={handleSendReminderNow}
-                className="px-5 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl text-xs font-bold hover:brightness-110 disabled:opacity-50 transition shadow-lg flex items-center gap-1.5"
+                className="hl-btn-primary px-5 py-2 text-[var(--color-paper-2)] rounded-xl text-xs font-bold  disabled:opacity-50 transition shadow-lg flex items-center gap-1.5"
               >
                 {sendingReminder ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 <span>{sendingReminder ? "Sending..." : "Send Reminder Now"}</span>
@@ -5806,33 +5851,33 @@ export default function WhatsAppPage() {
       {/* Add Contact to Campaign Group Modal */}
       {showAddToGroupModal && selectedChat && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowAddToGroupModal(false)}>
-          <div className="bg-[#111b21] border border-[#222d34] rounded-2xl w-full max-w-lg p-6 shadow-2xl relative text-slate-200" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowAddToGroupModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+          <div className="hl-card w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowAddToGroupModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
 
-            <div className="flex items-center gap-3 mb-4 border-b border-[#222d34] pb-3">
-              <div className="p-3 bg-blue-500/20 text-blue-400 rounded-xl">
+            <div className="flex items-center gap-3 mb-4 border-b border-[var(--color-rule)] pb-3">
+              <div className="p-3 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]">
                 <Users size={24} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Enroll in Bulk Campaign Group</h3>
-                <p className="text-xs text-slate-400">
-                  Add <span className="text-[#00a884] font-semibold">{selectedChat.name}</span> (+{selectedChat.id.replace(/\D/g, "")}) to campaign target lists
+                <h3 className="hl-title">Enroll in Bulk Campaign Group</h3>
+                <p className="text-xs text-[var(--color-ink-2)]">
+                  Add <span className="text-[var(--color-ink)] font-semibold">{selectedChat.name}</span> (+{selectedChat.id.replace(/\D/g, "")}) to campaign target lists
                 </p>
               </div>
             </div>
 
             <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
               <div>
-                <p className="text-xs font-bold text-slate-300 uppercase mb-2">Select Target Group(s):</p>
+                <p className="hl-section-label text-xs font-bold text-[var(--color-ink-2)] uppercase mb-2">Select Target Group(s):</p>
                 {groupsLoading ? (
-                  <div className="py-8 text-center text-xs text-slate-400">
-                    <Loader2 size={24} className="animate-spin text-[#00a884] mx-auto mb-2" />
+                  <div className="hl-empty py-8 text-center text-xs text-[var(--color-ink-2)]">
+                    <Loader2 size={24} className="animate-spin text-[var(--color-ink)] mx-auto mb-2" />
                     Loading campaign groups...
                   </div>
                 ) : campaignGroups.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-3 text-center">No campaign groups found. Create one below!</p>
+                  <p className="hl-empty text-xs text-[var(--color-ink-2)] py-3 text-center">No campaign groups found. Create one below!</p>
                 ) : (
                   <div className="space-y-2 max-h-52 overflow-y-auto">
                     {campaignGroups.map((grp) => {
@@ -5845,21 +5890,21 @@ export default function WhatsAppPage() {
                               prev.includes(grp.id) ? prev.filter((id) => id !== grp.id) : [...prev, grp.id]
                             );
                           }}
-                          className={`p-3 rounded-xl border cursor-pointer transition flex items-center justify-between ${
+                          className={`hl-card p-3 cursor-pointer transition flex items-center justify-between ${
                             isSelected
-                              ? "bg-blue-500/20 border-blue-500 text-white"
-                              : "bg-[#202c33] border-[#2a3942] text-slate-300 hover:bg-[#2a3942]"
+                              ? "border-[var(--color-accent)]"
+                              : ""
                           }`}
                         >
                           <div>
                             <p className="text-xs font-bold">{grp.name}</p>
-                            {grp.description && <p className="text-[11px] text-slate-400 mt-0.5">{grp.description}</p>}
+                            {grp.description && <p className="text-[11px] text-[var(--color-ink-2)] mt-0.5">{grp.description}</p>}
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/40 text-slate-300 font-mono">
+                            <span className="hl-badge text-[10px] px-2 py-0.5 rounded-full">
                               {grp.contact_count || grp.total_contacts || 0} contacts
                             </span>
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? "bg-blue-500 border-blue-500 text-white" : "border-slate-500"}`}>
+                            <div className={`w-4 h-4 rounded border border-[var(--color-rule)] flex items-center justify-center ${isSelected ? "bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-accent-ink)]" : ""}`}>
                               {isSelected && <CheckCircle2 size={12} />}
                             </div>
                           </div>
@@ -5871,21 +5916,21 @@ export default function WhatsAppPage() {
               </div>
 
               {/* Create new group inline */}
-              <div className="p-3 bg-[#182229] rounded-xl border border-[#222d34] space-y-2">
-                <label className="block text-[11px] font-bold text-slate-400 uppercase">Or Create New Campaign Group</label>
+              <div className="hl-card p-3 bg-[var(--color-paper-2)] rounded-xl border border-[var(--color-rule)] space-y-2">
+                <label className="hl-section-label block text-[11px] font-bold text-[var(--color-ink-2)] uppercase">Or Create New Campaign Group</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={newGroupName}
                     onChange={(e) => setNewGroupName(e.target.value)}
                     placeholder="e.g. High-Value Clients, Festive 2026..."
-                    className="flex-1 px-3 py-1.5 bg-[#202c33] border border-[#2a3942] rounded-lg text-xs text-slate-200 outline-none focus:border-[#00a884]"
+                    className="hl-input flex-1 px-3 py-1.5 text-xs"
                   />
                   <button
                     type="button"
                     disabled={creatingGroup || !newGroupName.trim()}
                     onClick={handleCreateNewGroupAndAdd}
-                    className="px-3 py-1.5 bg-[#00a884] text-[#111b21] rounded-lg text-xs font-bold hover:bg-[#008f70] disabled:opacity-50 transition shrink-0"
+                    className="hl-btn-primary px-3 py-1.5 bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded-lg text-xs font-bold hover:bg-[var(--color-ink)] disabled:opacity-50 transition shrink-0"
                   >
                     {creatingGroup ? "Creating..." : "Create & Add"}
                   </button>
@@ -5893,11 +5938,11 @@ export default function WhatsAppPage() {
               </div>
             </div>
 
-            <div className="flex justify-between items-center pt-4 border-t border-[#222d34] mt-4">
+            <div className="flex justify-between items-center pt-4 border-t border-[var(--color-rule)] mt-4">
               <button
                 type="button"
                 onClick={() => navigate("/whatsapp/campaigns")}
-                className="text-xs text-blue-400 hover:underline font-bold"
+                className="text-xs text-[var(--color-ink)] hover:underline font-bold"
               >
                 Open Campaigns Manager →
               </button>
@@ -5905,7 +5950,7 @@ export default function WhatsAppPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddToGroupModal(false)}
-                  className="px-4 py-2 bg-[#202c33] hover:bg-[#2a3942] rounded-xl text-xs text-slate-300 font-semibold"
+                  className="hl-btn-secondary px-4 py-2 bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] rounded-xl text-xs text-[var(--color-ink-2)] font-semibold"
                 >
                   Cancel
                 </button>
@@ -5913,7 +5958,7 @@ export default function WhatsAppPage() {
                   type="button"
                   disabled={addingToGroup || selectedGroupIds.length === 0}
                   onClick={handleAddToCampaignGroups}
-                  className="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-500 disabled:opacity-50 transition shadow flex items-center gap-1.5"
+                  className="hl-btn-primary px-5 py-2 bg-[var(--color-paper)] text-[var(--color-paper-2)] rounded-xl text-xs font-bold hover:bg-[var(--color-paper)] disabled:opacity-50 transition shadow flex items-center gap-1.5"
                 >
                   {addingToGroup ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />}
                   <span>{addingToGroup ? "Adding..." : `Add to ${selectedGroupIds.length} Group(s)`}</span>
@@ -5927,32 +5972,32 @@ export default function WhatsAppPage() {
       {/* Trigger CRM Automation Modal */}
       {showAutomationModal && selectedChat && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowAutomationModal(false)}>
-          <div className="bg-[#111b21] border border-[#222d34] rounded-2xl w-full max-w-lg p-6 shadow-2xl relative text-slate-200" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowAutomationModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+          <div className="hl-card w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowAutomationModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
 
-            <div className="flex items-center gap-3 mb-4 border-b border-[#222d34] pb-3">
-              <div className="p-3 bg-purple-500/20 text-purple-400 rounded-xl">
+            <div className="flex items-center gap-3 mb-4 border-b border-[var(--color-rule)] pb-3">
+              <div className="p-3 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]">
                 <Sparkles size={24} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Execute CRM Automation Workflow</h3>
-                <p className="text-xs text-slate-400">
-                  Trigger automated CRM message sequence for <span className="text-[#00a884] font-semibold">{selectedChat.name}</span>
+                <h3 className="hl-title">Execute CRM Automation Workflow</h3>
+                <p className="text-xs text-[var(--color-ink-2)]">
+                  Trigger automated CRM message sequence for <span className="text-[var(--color-ink)] font-semibold">{selectedChat.name}</span>
                 </p>
               </div>
             </div>
 
             <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
-              <p className="text-xs font-bold text-slate-300 uppercase">Select Active Automation Rule:</p>
+              <p className="hl-section-label text-xs font-bold text-[var(--color-ink-2)] uppercase">Select Active Automation Rule:</p>
               {automationsLoading ? (
-                <div className="py-8 text-center text-xs text-slate-400">
-                  <Loader2 size={24} className="animate-spin text-purple-400 mx-auto mb-2" />
+                <div className="hl-empty py-8 text-center text-xs text-[var(--color-ink-2)]">
+                  <Loader2 size={24} className="animate-spin text-[var(--color-ink)] mx-auto mb-2" />
                   Loading automation rules...
                 </div>
               ) : automations.length === 0 ? (
-                <p className="text-xs text-slate-400 py-4 text-center">No active automations found.</p>
+                <p className="hl-empty text-xs text-[var(--color-ink-2)] py-4 text-center">No active automations found.</p>
               ) : (
                 <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                   {automations.map((rule) => {
@@ -5961,29 +6006,29 @@ export default function WhatsAppPage() {
                       <div
                         key={rule.id}
                         onClick={() => setSelectedAutomationId(rule.id)}
-                        className={`p-3 rounded-xl border cursor-pointer transition flex items-center justify-between ${
+                        className={`hl-card p-3 cursor-pointer transition flex items-center justify-between ${
                           isSelected
-                            ? "bg-purple-500/20 border-purple-500 text-white"
-                            : "bg-[#202c33] border-[#2a3942] text-slate-300 hover:bg-[#2a3942]"
+                            ? "border-[var(--color-accent)]"
+                            : ""
                         }`}
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-xs font-bold text-slate-100">{rule.name}</p>
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/40 text-purple-300 font-mono">
+                            <p className="text-xs font-bold text-[var(--color-ink)]">{rule.name}</p>
+                            <span className="hl-badge text-[10px] px-2 py-0.5 rounded-full">
                               {rule.trigger_label || rule.trigger_type}
                             </span>
                             {rule.flow_name && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
+                              <span className="hl-badge hl-badge-warn text-[10px] px-2 py-0.5 rounded-full">
                                 🤖 {rule.flow_name}
                               </span>
                             )}
                           </div>
                           {rule.message_text && (
-                            <p className="text-[11px] text-slate-400 truncate mt-1">{rule.message_text}</p>
+                            <p className="text-[11px] text-[var(--color-ink-2)] truncate mt-1">{rule.message_text}</p>
                           )}
                         </div>
-                        {isSelected && <CheckCircle2 size={18} className="text-purple-400 shrink-0 ml-2" />}
+                        {isSelected && <CheckCircle2 size={18} className="text-[var(--color-ink)] shrink-0 ml-2" />}
                       </div>
                     );
                   })}
@@ -5991,11 +6036,11 @@ export default function WhatsAppPage() {
               )}
             </div>
 
-            <div className="flex justify-between items-center pt-4 border-t border-[#222d34] mt-4">
+            <div className="flex justify-between items-center pt-4 border-t border-[var(--color-rule)] mt-4">
               <button
                 type="button"
                 onClick={() => navigate("/whatsapp/automations")}
-                className="text-xs text-purple-400 hover:underline font-bold"
+                className="text-xs text-[var(--color-ink)] hover:underline font-bold"
               >
                 Open Automations Manager →
               </button>
@@ -6003,7 +6048,7 @@ export default function WhatsAppPage() {
                 <button
                   type="button"
                   onClick={() => setShowAutomationModal(false)}
-                  className="px-4 py-2 bg-[#202c33] hover:bg-[#2a3942] rounded-xl text-xs text-slate-300 font-semibold"
+                  className="hl-btn-secondary px-4 py-2 bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] rounded-xl text-xs text-[var(--color-ink-2)] font-semibold"
                 >
                   Cancel
                 </button>
@@ -6011,7 +6056,7 @@ export default function WhatsAppPage() {
                   type="button"
                   disabled={runningAutomation || !selectedAutomationId}
                   onClick={() => handleTriggerAutomation(selectedAutomationId)}
-                  className="px-5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl text-xs font-bold hover:brightness-110 disabled:opacity-50 transition shadow flex items-center gap-1.5"
+                  className="hl-btn-primary px-5 py-2 text-[var(--color-paper-2)] rounded-xl text-xs font-bold  disabled:opacity-50 transition shadow flex items-center gap-1.5"
                 >
                   {runningAutomation ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                   <span>{runningAutomation ? "Executing..." : "Execute Automation"}</span>
@@ -6025,12 +6070,12 @@ export default function WhatsAppPage() {
       {/* WhatsApp Floating Context Menu */}
       {contextMenu && (
         <div
-          className="fixed z-50 bg-[#233138] border border-slate-700/80 rounded-xl shadow-2xl py-1.5 w-52 text-slate-200 text-xs wa-context-menu"
+          className="hl-card fixed z-50 py-1.5 w-52 text-xs wa-context-menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Quick Reactions Bar inside context menu */}
-          <div className="flex items-center justify-around px-2 py-1.5 border-b border-white/10 mb-1">
+          <div className="flex items-center justify-around px-2 py-1.5 border-b border-[var(--color-rule)] mb-1">
             {["👍", "❤️", "😂", "😮", "🙏", "🔥"].map((emoji) => (
               <button
                 key={emoji}
@@ -6053,7 +6098,7 @@ export default function WhatsAppPage() {
               setReplyingTo(contextMenu.message);
               setContextMenu(null);
             }}
-            className="w-full text-left px-3 py-2 hover:bg-[#182229] flex items-center gap-2.5 transition"
+            className="w-full text-left px-3 py-2 hover:bg-[var(--color-paper)] flex items-center gap-2.5 transition text-[var(--color-ink)]"
           >
             <ChevronLeft size={14} className="rotate-180" />
             <span>Reply</span>
@@ -6066,7 +6111,7 @@ export default function WhatsAppPage() {
                 handleCopyMessage(contextMenu.message.body);
                 setContextMenu(null);
               }}
-              className="w-full text-left px-3 py-2 hover:bg-[#182229] flex items-center gap-2.5 transition"
+              className="w-full text-left px-3 py-2 hover:bg-[var(--color-paper)] flex items-center gap-2.5 transition text-[var(--color-ink)]"
             >
               <Copy size={14} />
               <span>Copy Text</span>
@@ -6079,9 +6124,9 @@ export default function WhatsAppPage() {
               handleToggleStar(contextMenu.message.id);
               setContextMenu(null);
             }}
-            className="w-full text-left px-3 py-2 hover:bg-[#182229] flex items-center gap-2.5 transition"
+            className="w-full text-left px-3 py-2 hover:bg-[var(--color-paper)] flex items-center gap-2.5 transition text-[var(--color-ink)]"
           >
-            <Star size={14} className={starredMsgIds.has(contextMenu.message.id) ? "text-amber-400 fill-amber-400" : ""} />
+            <Star size={14} className={starredMsgIds.has(contextMenu.message.id) ? "text-[var(--color-focus)] fill-[var(--color-focus)]" : ""} />
             <span>{starredMsgIds.has(contextMenu.message.id) ? "Unstar Message" : "Star Message"}</span>
           </button>
 
@@ -6093,7 +6138,7 @@ export default function WhatsAppPage() {
                 setContextMenu(null);
                 textareaRef.current?.focus();
               }}
-              className="w-full text-left px-3 py-2 hover:bg-[#182229] flex items-center gap-2.5 transition"
+              className="w-full text-left px-3 py-2 hover:bg-[var(--color-paper)] flex items-center gap-2.5 transition text-[var(--color-ink)]"
             >
               <Forward size={14} />
               <span>Forward</span>
@@ -6108,16 +6153,16 @@ export default function WhatsAppPage() {
           {/* Top Lightbox Toolbar */}
           <div className="w-full flex items-center justify-between z-10 px-2 py-1 max-w-5xl">
             <div className="flex items-center gap-2">
-              <span className="text-white/90 text-sm font-semibold truncate max-w-xs sm:max-w-md">
+              <span className="text-[var(--color-paper-2)] text-sm font-semibold truncate max-w-xs sm:max-w-md">
                 {lightboxImage.title || "Photo Preview"}
               </span>
-              <span className="text-white/40 text-xs hidden sm:inline">• {Math.round(lightboxZoom * 100)}%</span>
+              <span className="text-[var(--color-paper-2)] text-xs hidden sm:inline">• {Math.round(lightboxZoom * 100)}%</span>
             </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setLightboxZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
-                className="p-2 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition"
+                className="hl-btn-secondary p-2 text-[var(--color-paper-2)] hover:text-[var(--color-ink)] bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] rounded-full transition"
                 title="Zoom Out (-)"
               >
                 <ZoomOut size={18} />
@@ -6125,7 +6170,7 @@ export default function WhatsAppPage() {
               <button
                 type="button"
                 onClick={() => setLightboxZoom((z) => Math.min(3, Number((z + 0.25).toFixed(2))))}
-                className="p-2 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition"
+                className="hl-btn-secondary p-2 text-[var(--color-paper-2)] hover:text-[var(--color-ink)] bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] rounded-full transition"
                 title="Zoom In (+)"
               >
                 <ZoomIn size={18} />
@@ -6133,7 +6178,7 @@ export default function WhatsAppPage() {
               <button
                 type="button"
                 onClick={() => setLightboxRotation((r) => (r + 90) % 360)}
-                className="p-2 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition"
+                className="hl-btn-secondary p-2 text-[var(--color-paper-2)] hover:text-[var(--color-ink)] bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] rounded-full transition"
                 title="Rotate Clockwise (R)"
               >
                 <RotateCw size={18} />
@@ -6141,7 +6186,7 @@ export default function WhatsAppPage() {
               <a
                 href={lightboxImage.src}
                 download={lightboxImage.title || "photo.jpg"}
-                className="px-3 py-1.5 bg-[#00a884] hover:bg-[#008f70] text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-lg"
+                className="hl-btn-primary px-3 py-1.5 bg-[var(--color-ink)] hover:bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-lg"
                 title="Download"
               >
                 <Download size={14} />
@@ -6150,7 +6195,7 @@ export default function WhatsAppPage() {
               <button
                 type="button"
                 onClick={() => setLightboxImage(null)}
-                className="p-2 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition ml-1"
+                className="hl-btn-secondary p-2 text-[var(--color-paper-2)] hover:text-[var(--color-ink)] bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] rounded-full transition ml-1"
                 title="Close (Esc)"
               >
                 <X size={20} />
@@ -6179,7 +6224,7 @@ export default function WhatsAppPage() {
                   setLightboxZoom(1);
                   setLightboxRotation(0);
                 }}
-                className="text-xs text-white/70 hover:text-white bg-white/10 hover:bg-white/20 px-3 py-1 rounded-full transition"
+                className="hl-badge px-3 py-1 transition"
               >
                 Reset View
               </button>

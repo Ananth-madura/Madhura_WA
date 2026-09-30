@@ -154,6 +154,9 @@ router.get("/qr", async (req, res) => {
   try {
     const session = userSession(req);
     if (req.query.force === "true" || req.query.refresh === "true") {
+      if (req.query.force === "true" && !session.ready) {
+        await session.init(true).catch(() => {});
+      }
       const refreshed = await session.refreshQr();
       const qrVal = refreshed.qr || session.qrCode || null;
       const qrDataUrl = await toDataUrl(qrVal);

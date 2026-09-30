@@ -36,7 +36,7 @@ function parseInline(text, isMe) {
         target="_blank"
         rel="noopener noreferrer"
         className={`underline font-semibold hover:opacity-80 transition ${
-          isMe ? "text-emerald-200" : "text-emerald-400"
+          isMe ? "text-[var(--color-accent)]" : "text-[var(--color-info)]"
         }`}
       >
         {label}
@@ -73,7 +73,7 @@ function formatInlineText(text, isMe, baseKey) {
     parts.push(
       <code
         key={`code_${k++}`}
-        className="px-1.5 py-0.5 mx-0.5 rounded bg-black/25 font-mono text-[11px] text-emerald-300 border border-white/10"
+        className="px-1.5 py-0.5 mx-0.5 rounded hl-id bg-[var(--color-paper)] border border-[var(--color-rule)] font-mono text-[11px]"
       >
         {m[1]}
       </code>
@@ -99,19 +99,19 @@ function formatStyles(text, isMe, baseKey) {
     if (!part) return;
     if (part.startsWith("**") && part.endsWith("**")) {
       tokens.push(
-        <strong key={`b_${baseKey}_${i}`} className="font-extrabold text-white">
+        <strong key={`b_${baseKey}_${i}`} className="font-extrabold text-[var(--color-paper-2)] font-[var(--font-display)]">
           {part.slice(2, -2)}
         </strong>
       );
     } else if (part.startsWith("*") && part.endsWith("*")) {
       tokens.push(
-        <strong key={`b1_${baseKey}_${i}`} className="font-bold text-white">
+        <strong key={`b1_${baseKey}_${i}`} className="font-bold text-[var(--color-paper-2)] font-[var(--font-display)]">
           {part.slice(1, -1)}
         </strong>
       );
     } else if (part.startsWith("_") && part.endsWith("_")) {
       tokens.push(
-        <em key={`i_${baseKey}_${i}`} className="italic text-slate-100">
+        <em key={`i_${baseKey}_${i}`} className="italic text-[var(--color-paper-2)]">
           {part.slice(1, -1)}
         </em>
       );
@@ -141,22 +141,22 @@ function renderTable(tableLines, isMe, tableIdx) {
   const bodyRows = rows.slice(1).filter((r) => !r.every((cell) => /^[-:\s]+$/.test(cell)));
 
   return (
-    <div key={`table_${tableIdx}`} className="my-2.5 overflow-x-auto rounded-xl border border-white/20 shadow-md">
-      <table className="w-full text-left text-xs border-collapse">
-        <thead className={isMe ? "bg-[#014739] text-white" : "bg-[#111b21] text-emerald-400"}>
+    <div key={`table_${tableIdx}`} className="my-2.5 overflow-x-auto rounded-xl border border-[var(--color-rule)] shadow-md hl-card">
+      <table className="hl-table w-full text-left text-xs border-collapse">
+        <thead className={isMe ? "bg-[var(--color-ink)] text-[var(--color-paper-2)]" : "bg-[var(--color-paper)] text-[var(--color-ink-2)]"}>
           <tr>
             {header.map((col, cIdx) => (
-              <th key={`th_${cIdx}`} className="px-3 py-2 border-b border-white/20 font-bold tracking-wide uppercase text-[10px]">
+              <th key={`th_${cIdx}`} className="px-3 py-2 border-b border-[var(--color-rule)] font-bold tracking-wide uppercase text-[10px]">
                 {col}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-white/10">
+        <tbody className="divide-y divide-[var(--color-rule)]">
           {bodyRows.map((row, rIdx) => (
-            <tr key={`tr_${rIdx}`} className={rIdx % 2 === 0 ? "bg-black/10" : "bg-black/20"}>
+            <tr key={`tr_${rIdx}`} className={rIdx % 2 === 0 ? "bg-[var(--color-paper-2)]" : "bg-[var(--color-paper)]"}>
               {row.map((cell, cIdx) => (
-                <td key={`td_${rIdx}_${cIdx}`} className="px-3 py-2 text-white/90 font-normal">
+                <td key={`td_${rIdx}_${cIdx}`} className="px-3 py-2 text-[var(--color-ink)] font-normal font-[var(--font-body)]">
                   {parseInline(cell, isMe)}
                 </td>
               ))}
@@ -192,7 +192,7 @@ export default function RichMessageContent({ text, isMe = false }) {
       elements.push(
         <pre
           key={`codeblock_${keyCounter++}`}
-          className="my-2 p-3 bg-black/40 rounded-xl font-mono text-xs text-emerald-300 border border-white/15 overflow-x-auto whitespace-pre leading-relaxed shadow-inner"
+          className="my-2 p-3 bg-[var(--color-shell)] rounded-xl font-mono text-xs text-[var(--color-accent)] border border-[var(--color-rule)] overflow-x-auto whitespace-pre leading-relaxed shadow-inner"
         >
           {codeLines.join("\n")}
         </pre>
@@ -217,7 +217,7 @@ export default function RichMessageContent({ text, isMe = false }) {
     // 3. Headings (# Heading, ## Subheading, ### Section)
     if (line.startsWith("# ")) {
       elements.push(
-        <h1 key={`h1_${keyCounter++}`} className="text-base font-black text-white mt-2 mb-1 tracking-tight border-b border-white/20 pb-0.5">
+        <h1 key={`h1_${keyCounter++}`} className="hl-title text-base font-black mt-2 mb-1 tracking-tight border-b border-[var(--color-rule)] pb-0.5">
           {parseInline(line.slice(2), isMe)}
         </h1>
       );
@@ -226,7 +226,7 @@ export default function RichMessageContent({ text, isMe = false }) {
     }
     if (line.startsWith("## ")) {
       elements.push(
-        <h2 key={`h2_${keyCounter++}`} className="text-sm font-extrabold text-white mt-1.5 mb-1">
+        <h2 key={`h2_${keyCounter++}`} className="hl-title text-sm font-extrabold mt-1.5 mb-1">
           {parseInline(line.slice(3), isMe)}
         </h2>
       );
@@ -235,7 +235,7 @@ export default function RichMessageContent({ text, isMe = false }) {
     }
     if (line.startsWith("### ")) {
       elements.push(
-        <h3 key={`h3_${keyCounter++}`} className="text-xs font-bold text-slate-200 mt-1 mb-0.5">
+        <h3 key={`h3_${keyCounter++}`} className="hl-section-label text-xs font-bold mt-1 mb-0.5">
           {parseInline(line.slice(4), isMe)}
         </h3>
       );
@@ -248,7 +248,7 @@ export default function RichMessageContent({ text, isMe = false }) {
       elements.push(
         <blockquote
           key={`quote_${keyCounter++}`}
-          className="my-1 pl-3 py-1 border-l-4 border-[#25D366] italic bg-white/10 rounded-r-lg text-slate-100 text-xs"
+          className="my-1 pl-3 py-1 border-l-4 border-[var(--color-accent)] italic bg-[var(--color-paper)] rounded-r-lg text-[var(--color-ink-2)] text-xs font-[var(--font-body)]"
         >
           {parseInline(line.slice(2), isMe)}
         </blockquote>
@@ -261,8 +261,8 @@ export default function RichMessageContent({ text, isMe = false }) {
     if (/^\s*[-*]\s+/.test(line)) {
       const itemText = line.replace(/^\s*[-*]\s+/, "");
       elements.push(
-        <div key={`bullet_${keyCounter++}`} className="flex items-start gap-2 my-0.5 text-xs text-white">
-          <span className="text-[#25D366] font-bold text-sm leading-none shrink-0">•</span>
+        <div key={`bullet_${keyCounter++}`} className="flex items-start gap-2 my-0.5 text-xs text-[var(--color-ink)]">
+          <span className="text-[var(--color-accent)] font-bold text-sm leading-none shrink-0">•</span>
           <span>{parseInline(itemText, isMe)}</span>
         </div>
       );
@@ -274,8 +274,8 @@ export default function RichMessageContent({ text, isMe = false }) {
     const numMatch = line.match(/^\s*(\d+)\.\s+(.*)/);
     if (numMatch) {
       elements.push(
-        <div key={`num_${keyCounter++}`} className="flex items-start gap-2 my-0.5 text-xs text-white">
-          <span className="text-emerald-300 font-bold font-mono shrink-0">{numMatch[1]}.</span>
+        <div key={`num_${keyCounter++}`} className="flex items-start gap-2 my-0.5 text-xs text-[var(--color-ink)]">
+          <span className="text-[var(--color-ink-2)] font-bold font-mono shrink-0">{numMatch[1]}.</span>
           <span>{parseInline(numMatch[2], isMe)}</span>
         </div>
       );
@@ -288,7 +288,7 @@ export default function RichMessageContent({ text, isMe = false }) {
       elements.push(<div key={`br_${keyCounter++}`} className="h-1.5" />);
     } else {
       elements.push(
-        <p key={`p_${keyCounter++}`} className="whitespace-pre-wrap break-words leading-relaxed text-white">
+        <p key={`p_${keyCounter++}`} className="whitespace-pre-wrap break-words leading-relaxed text-[var(--color-ink)] font-[var(--font-body)]">
           {parseInline(line, isMe)}
         </p>
       );

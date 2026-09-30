@@ -471,8 +471,8 @@ router.put("/:id/options", auth, async (req, res) => {
 // ── Trigger automation manually (for testing) ─────────────────────────────────
 router.post("/:id/trigger", auth, async (req, res) => {
   try {
-    const { phone, contact_name, trigger_data } = req.body;
-    if (!phone) return res.status(400).json({ error: "phone required" });
+    const { phone, contact_name, trigger_data, chatId, sessionKey } = req.body;
+    if (!phone && !chatId) return res.status(400).json({ error: "phone required" });
 
     const [rows] = await db.promise().query(
       `SELECT a.*, 
@@ -488,7 +488,30 @@ router.post("/:id/trigger", auth, async (req, res) => {
 
     const automation = rows[0];
     const { executeAutomationSend, formatMessagePlaceholders, lookupCrmDataByPhone } = require("../services/waAutomationService");
-    const cleanPhone = phone.replace(/\D/g, "");
+    const waService = require("../services/whatsappService");
+
+    let targetPhone = phone;
+    const targetChatId = chatId || null;
+
+    // Resolve LID if necessary
+    const waInstance = (sessionKey ? waService.get(sessionKey) : null) || waService.default();
+    if (waInstance && typeof waInstance.resolveLidToPhone === "function") {
+      if (targetChatId && targetChatId.includes("@lid")) {
+        const resolved = await waInstance.resolveLidToPhone(targetChatId).catch(() => null);
+        if (resolved) targetPhone = resolved;
+      } else if (targetPhone && String(targetPhone).replace(/\D/g, "").length >= 14) {
+        const resolved = await waInstance.resolveLidToPhone(targetPhone).catch(() => null);
+        if (resolved) targetPhone = resolved;
+      }
+    }
+
+    let cleanPhone = String(targetPhone || "").replace(/\D/g, "");
+    if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
+
+    let reqSessionKey = sessionKey || req.headers["x-session-key"] || req.query?.sessionKey || null;
+    if (!reqSessionKey || !waService.get(reqSessionKey)?.ready) {
+      reqSessionKey = waInstance?.key || waService.defaultKey || "708";
+    }
 
     const crmData = await lookupCrmDataByPhone(cleanPhone).catch(() => ({}));
     const mergedData = {
@@ -509,12 +532,13 @@ router.post("/:id/trigger", auth, async (req, res) => {
     const rawText = automation.message_text || automation.template_body || "Hello {name}!";
     const messageText = formatMessagePlaceholders(rawText, resolvedName, mergedData);
 
-    // Run execution
-    await executeAutomationSend(automation, cleanPhone, resolvedName, messageText, mergedData);
+    // Run execution with resolved phone, activeSessionKey, and targetChatId
+    await executeAutomationSend(automation, cleanPhone, resolvedName, messageText, mergedData, reqSessionKey, targetChatId);
 
     const hasSeq = automation.followup_message_text || automation.followup_media_url || automation.followup_template_name;
     res.json({
       success: true,
+      phone: cleanPhone,
       message: hasSeq
         ? `Step 1 sent! Step 2 follow-up will send in ${automation.sequence_delay_seconds || 7} seconds.`
         : "Automation message sent successfully!"

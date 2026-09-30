@@ -402,35 +402,35 @@ export default function WhatsAppAutomations() {
   };
 
   return (
-    <div className="w-full pb-12 bg-slate-50/50 min-h-screen">
+    <div className="w-full pb-12 min-h-screen">
       <WhatsAppNav />
 
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white p-5 rounded-2xl border border-gray-200/80 shadow-sm">
+      <div className="hl-commandbar hl-card flex-col md:flex-row md:items-center gap-4 mb-6 p-5">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center shadow-md shadow-orange-500/20">
+          <div className="w-12 h-12 flex items-center justify-center">
             <Zap size={26} />
           </div>
           <div>
             <div className="flex items-center gap-2.5">
-              <h1 className="text-xl font-bold text-gray-900">WhatsApp Event Automations</h1>
-              <span className="text-xs font-bold bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full border border-amber-200">
+              <h1 className="hl-title">WhatsApp Event Automations</h1>
+              <span className="hl-badge hl-badge-accent">
                 {automations.length} Active Rules
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="hl-subtitle mt-0.5">
               Hands-off background rules: Automatic invoice notices, instant payment receipts, lead greetings, and AMC alerts.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="hl-actions flex-wrap">
           <button
             onClick={() => {
               setSimResult(null);
               setShowSimulateModal(true);
             }}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition text-xs font-bold shadow-md shadow-blue-500/20"
+            className="hl-btn-secondary"
           >
             <PlayCircle size={15} />
             <span>⚡ Test Any CRM Trigger</span>
@@ -439,19 +439,19 @@ export default function WhatsAppAutomations() {
           <button
             onClick={handleSeedPrebuilt}
             disabled={seeding}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-amber-50 to-orange-50 text-amber-900 border border-amber-300 rounded-xl hover:bg-amber-100 transition text-xs font-bold shadow-sm"
+            className="hl-btn-secondary"
           >
-            {seeding ? <Loader2 size={15} className="animate-spin text-amber-700" /> : <Sparkles size={15} className="text-amber-700" />}
+            {seeding ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} className="" />}
             <span>Load 12 Prebuilt Smart Rules</span>
           </button>
 
           <button
             onClick={handleBulkToggle}
             disabled={bulkToggling || automations.length === 0}
-            className={`flex items-center gap-1.5 px-3.5 py-2.5 border rounded-xl text-xs font-bold transition shadow-sm ${
+            className={` ${
               anyActive
-                ? "bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100"
-                : "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                ? "hl-btn-danger-ghost"
+                : "hl-btn-secondary"
             }`}
           >
             {bulkToggling ? <Loader2 size={14} className="animate-spin" /> : anyActive ? <OctagonMinus size={14} /> : <PlayCircle size={14} />}
@@ -460,7 +460,7 @@ export default function WhatsAppAutomations() {
 
           <button
             onClick={openCreate}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#25D366] hover:bg-[#1ebe5d] text-white rounded-xl transition text-xs font-bold shadow-md shadow-[#25D366]/20"
+            className="hl-btn-primary"
           >
             <Plus size={16} />
             <span>Create Automation Rule</span>
@@ -469,68 +469,68 @@ export default function WhatsAppAutomations() {
       </div>
 
       {/* Metrics Summary Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+      <div className="hl-kpis grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div className="hl-kpi flex items-center gap-3 p-4">
+          <div className="w-10 h-10 flex items-center justify-center">
             <Zap size={20} />
           </div>
           <div>
-            <div className="text-lg font-bold text-gray-900">{stats.totalRules}</div>
-            <div className="text-[11px] text-gray-500 font-medium">Configured Rules</div>
+            <div className="hl-kpi-num">{stats.totalRules}</div>
+            <div className="hl-kpi-label">Configured Rules</div>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+        <div className="hl-kpi flex items-center gap-3 p-4">
+          <div className="w-10 h-10 flex items-center justify-center">
             <ShieldCheck size={20} />
           </div>
           <div>
-            <div className="text-lg font-bold text-emerald-600">{stats.activeRules}</div>
-            <div className="text-[11px] text-gray-500 font-medium">Active (Listening)</div>
+            <div className="hl-kpi-num">{stats.activeRules}</div>
+            <div className="hl-kpi-label">Active (Listening)</div>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+        <div className="hl-kpi flex items-center gap-3 p-4">
+          <div className="w-10 h-10 flex items-center justify-center">
             <Send size={20} />
           </div>
           <div>
-            <div className="text-lg font-bold text-purple-600">{stats.totalRuns}</div>
-            <div className="text-[11px] text-gray-500 font-medium">Total Auto-Sends</div>
+            <div className="hl-kpi-num">{stats.totalRuns}</div>
+            <div className="hl-kpi-label">Total Auto-Sends</div>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+        <div className="hl-kpi flex items-center gap-3 p-4">
+          <div className="w-10 h-10 flex items-center justify-center">
             <CheckCircle2 size={20} />
           </div>
           <div>
-            <div className="text-lg font-bold text-amber-600">{stats.sentCount}</div>
-            <div className="text-[11px] text-gray-500 font-medium">Delivered Successfully</div>
+            <div className="hl-kpi-num">{stats.sentCount}</div>
+            <div className="hl-kpi-label">Delivered Successfully</div>
           </div>
         </div>
       </div>
 
       {/* Educational Explainer Banner */}
       {showExplainer && (
-        <div className="mb-6 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 shadow-xl border border-indigo-500/20 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+        <div className="hl-card mb-6 p-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 pointer-events-none">
             <Cpu size={140} />
           </div>
 
           <div className="flex items-start justify-between gap-4 relative z-10 mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-400/20 text-amber-400 flex items-center justify-center border border-amber-400/30">
+              <div className="w-10 h-10 flex items-center justify-center">
                 <Sparkles size={22} />
               </div>
               <div>
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <h2 className="hl-title flex items-center gap-2">
                   <span>How WhatsApp Automations Work</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-400/30">
+                  <span className="hl-badge hl-badge-success">
                     ⚡ 100% Hands-Off Background Engine
                   </span>
                 </h2>
-                <p className="text-xs text-indigo-200 mt-0.5">
+                <p className="hl-subtitle mt-0.5">
                   Automations trigger automatically whenever staff performs actions inside the CRM database.
                 </p>
               </div>
@@ -538,7 +538,7 @@ export default function WhatsAppAutomations() {
 
             <button
               onClick={() => setShowExplainer(false)}
-              className="text-indigo-300 hover:text-white p-1 transition"
+              className="hl-btn-secondary p-1"
               title="Dismiss banner"
             >
               <X size={18} />
@@ -547,41 +547,41 @@ export default function WhatsAppAutomations() {
 
           {/* 3 Module Architecture Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 relative z-10">
-            <div className="bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-amber-400/30 space-y-2 hover:bg-white/10 transition">
-              <div className="flex items-center justify-between text-xs font-bold text-amber-300">
+            <div className="hl-card p-4 space-y-2">
+              <div className="flex items-center justify-between hl-section-label">
                 <span>⚡ 1. CRM Automations</span>
-                <span className="text-[10px] bg-amber-400/20 px-2 py-0.5 rounded-full">Set & Forget</span>
+                <span className="hl-badge hl-badge-accent">Set & Forget</span>
               </div>
-              <p className="text-[11px] text-gray-300 leading-relaxed">
+              <p className="hl-subtitle">
                 Triggered by <strong>CRM Database Events</strong> (Invoices created, payments received, lead added, AMC expiry). Sends 1-to-1 instant updates in &lt; 2s.
               </p>
-              <div className="text-[10px] text-amber-300/90 font-mono bg-black/30 p-2 rounded-xl border border-white/5">
+              <div className="hl-id p-2">
                 New Invoice ➔ Auto Send PDF & Pay Link
               </div>
             </div>
 
-            <div className="bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-blue-400/20 space-y-2 hover:bg-white/10 transition">
-              <div className="flex items-center justify-between text-xs font-bold text-blue-300">
+            <div className="hl-card p-4 space-y-2">
+              <div className="flex items-center justify-between hl-section-label">
                 <span>📢 2. Bulk Campaigns</span>
-                <span className="text-[10px] bg-blue-400/20 px-2 py-0.5 rounded-full">1-to-Many Blast</span>
+                <span className="hl-badge hl-badge-info">1-to-Many Blast</span>
               </div>
-              <p className="text-[11px] text-gray-300 leading-relaxed">
+              <p className="hl-subtitle">
                 <strong>Outbound Marketing Broadcasts</strong> sent by the marketer to 600–800 selected contacts with photos, catalog PDFs, and anti-ban pacing.
               </p>
-              <div className="text-[10px] text-blue-300/90 font-mono bg-black/30 p-2 rounded-xl border border-white/5">
+              <div className="hl-id p-2">
                 Diwali Offer ➔ Send to 500 Walkin Leads
               </div>
             </div>
 
-            <div className="bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-emerald-400/20 space-y-2 hover:bg-white/10 transition">
-              <div className="flex items-center justify-between text-xs font-bold text-emerald-300">
+            <div className="hl-card p-4 space-y-2">
+              <div className="flex items-center justify-between hl-section-label">
                 <span>🔀 3. Chatbot Flows</span>
-                <span className="text-[10px] bg-emerald-400/20 px-2 py-0.5 rounded-full">Interactive Bot</span>
+                <span className="hl-badge hl-badge-success">Interactive Bot</span>
               </div>
-              <p className="text-[11px] text-gray-300 leading-relaxed">
+              <p className="hl-subtitle">
                 <strong>24/7 Conversational State Machine</strong>. When customer sends "Hi" or taps a button, the bot asks qualifying questions and books appointments.
               </p>
-              <div className="text-[10px] text-emerald-300/90 font-mono bg-black/30 p-2 rounded-xl border border-white/5">
+              <div className="hl-id p-2">
                 Customer types "1" ➔ Shows Price Menu
               </div>
             </div>
@@ -590,11 +590,11 @@ export default function WhatsAppAutomations() {
       )}
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 mb-6 border-b border-gray-200 pb-2">
+      <div className="hl-tabs flex items-center gap-2 mb-6 pb-2">
         <button
           onClick={() => setActiveTab("rules")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
-            activeTab === "rules" ? "bg-amber-600 text-white shadow-sm" : "bg-white text-gray-600 border hover:bg-gray-50"
+          className={`hl-tab flex items-center gap-2 ${
+            activeTab === "rules" ? "is-active" : ""
           }`}
         >
           <Zap size={15} />
@@ -603,8 +603,8 @@ export default function WhatsAppAutomations() {
 
         <button
           onClick={() => setActiveTab("welcome")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
-            activeTab === "welcome" ? "bg-amber-600 text-white shadow-sm" : "bg-white text-gray-600 border hover:bg-gray-50"
+          className={`hl-tab flex items-center gap-2 ${
+            activeTab === "welcome" ? "is-active" : ""
           }`}
         >
           <Users size={15} />
@@ -613,8 +613,8 @@ export default function WhatsAppAutomations() {
 
         <button
           onClick={() => setActiveTab("reminders")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
-            activeTab === "reminders" ? "bg-amber-600 text-white shadow-sm" : "bg-white text-gray-600 border hover:bg-gray-50"
+          className={`hl-tab flex items-center gap-2 ${
+            activeTab === "reminders" ? "is-active" : ""
           }`}
         >
           <Bell size={15} />
@@ -623,8 +623,8 @@ export default function WhatsAppAutomations() {
 
         <button
           onClick={() => setActiveTab("logs")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
-            activeTab === "logs" ? "bg-amber-600 text-white shadow-sm" : "bg-white text-gray-600 border hover:bg-gray-50"
+          className={`hl-tab flex items-center gap-2 ${
+            activeTab === "logs" ? "is-active" : ""
           }`}
         >
           <ListChecks size={15} />
@@ -642,18 +642,18 @@ export default function WhatsAppAutomations() {
         <>
           {loading ? (
             <div className="flex justify-center py-20">
-              <Loader2 size={36} className="animate-spin text-amber-600" />
+              <Loader2 size={36} className="animate-spin" />
             </div>
           ) : automations.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-3xl border border-gray-200 shadow-sm p-8 max-w-lg mx-auto">
-              <Zap size={48} className="mx-auto mb-3 text-amber-500/60" />
-              <h3 className="text-base font-bold text-gray-800">No Automation Rules Configured</h3>
-              <p className="text-xs text-gray-500 mt-1 mb-5 leading-relaxed">
+            <div className="hl-card hl-empty text-center py-16 p-8 max-w-lg mx-auto">
+              <Zap size={48} className="mx-auto mb-3" />
+              <h3 className="hl-empty-title">No Automation Rules Configured</h3>
+              <p className="hl-subtitle mt-1 mb-5">
                 Install 10 prebuilt automated rules (Invoice notice, Payment receipt, AMC alerts, Lead greetings) with 1 click.
               </p>
               <button
                 onClick={handleSeedPrebuilt}
-                className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl text-xs font-bold shadow-md hover:opacity-90 transition flex items-center gap-2 mx-auto"
+                className="hl-btn-primary flex items-center gap-2 mx-auto"
               >
                 <Sparkles size={15} />
                 <span>Load Prebuilt Rules</span>
@@ -668,12 +668,12 @@ export default function WhatsAppAutomations() {
                 return (
                   <div
                     key={a.id}
-                    className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between group"
+                    className="hl-card flex flex-col justify-between p-5 group"
                   >
                     <div>
                       {/* Top Bar: Trigger emoji badge & toggle */}
                       <div className="flex items-center justify-between gap-2 mb-3">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                        <span className="hl-badge hl-badge-accent inline-flex items-center gap-1.5">
                           <span>{tr.emoji}</span>
                           <span>{tr.label}</span>
                         </span>
@@ -681,21 +681,21 @@ export default function WhatsAppAutomations() {
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => { setTestModal(a); setTestResult(null); }}
-                            className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                            className="hl-btn-secondary p-1.5"
                             title="Test trigger"
                           >
                             <Play size={14} />
                           </button>
                           <button
                             onClick={() => openEdit(a)}
-                            className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                            className="hl-btn-secondary p-1.5"
                             title="Edit rule"
                           >
                             <Edit2 size={14} />
                           </button>
                           <button
                             onClick={() => handleDelete(a.id)}
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                            className="hl-btn-danger-ghost p-1.5"
                             title="Delete rule"
                           >
                             <Trash2 size={14} />
@@ -703,68 +703,68 @@ export default function WhatsAppAutomations() {
                         </div>
                       </div>
 
-                      <h3 className="text-sm font-bold text-gray-900 group-hover:text-amber-700 transition line-clamp-1">
+                      <h3 className="hl-empty-title line-clamp-1">
                         {a.name}
                       </h3>
 
-                      <p className="text-xs text-gray-600 mt-2 bg-gray-50 p-2.5 rounded-xl border border-gray-100 line-clamp-3 font-sans leading-relaxed">
+                      <p className="hl-subtitle mt-2 p-2.5 line-clamp-3">
                         {a.template_body || a.message_text || "Automated template send"}
                       </p>
 
                       {/* Multi-Step & Linking Badges */}
                       <div className="mt-3 flex flex-wrap gap-1.5">
                         {hasSeq && (
-                          <span className="px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-md text-[10px] font-bold flex items-center gap-1">
+                          <span className="hl-badge hl-badge-info flex items-center gap-1">
                             <Layers size={10} />
                             <span>Step 2 ({a.sequence_delay_seconds || 7}s delay)</span>
                           </span>
                         )}
 
                         {a.group_name && (
-                          <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-md text-[10px] font-bold flex items-center gap-1">
+                          <span className="hl-badge hl-badge-info flex items-center gap-1">
                             <Users size={10} />
                             <span>{a.group_name}</span>
                           </span>
                         )}
 
                         {a.flow_name && (
-                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[10px] font-bold flex items-center gap-1">
+                          <span className="hl-badge hl-badge-success flex items-center gap-1">
                             <Bot size={10} />
                             <span>{a.flow_name}</span>
                           </span>
                         )}
 
                         {a.option_count > 0 && (
-                          <span className="px-2 py-0.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-md text-[10px] font-bold">
+                          <span className="hl-badge hl-badge-success">
                             🔘 {a.option_count} Quick Options
                           </span>
                         )}
                       </div>
 
                       {/* Details row */}
-                      <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                      <div className="mt-4 pt-3 border-t flex items-center justify-between hl-subtitle">
                         <span>Delay: {a.delay_minutes > 0 ? `${a.delay_minutes}m` : "Instant"}</span>
-                        <span className="font-bold text-amber-700">{a.run_count || 0} executions</span>
+                        <span className="hl-badge hl-badge-accent">{a.run_count || 0} executions</span>
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+                    <div className="mt-4 pt-3 border-t flex items-center justify-between">
                       <button
                         onClick={() => handleToggle(a)}
                         disabled={toggling === a.id}
-                        className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl transition ${
+                        className={`hl-badge flex items-center gap-1.5 px-3 py-1.5 ${
                           a.is_active
-                            ? "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                            : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                            ? "hl-badge-success"
+                            : ""
                         }`}
                       >
-                        {a.is_active ? <ToggleRight size={18} className="text-emerald-600" /> : <ToggleLeft size={18} />}
+                        {a.is_active ? <ToggleRight size={18} className="" /> : <ToggleLeft size={18} />}
                         <span>{a.is_active ? "Active" : "Paused"}</span>
                       </button>
 
                       <button
                         onClick={() => { setTestModal(a); setTestResult(null); }}
-                        className="text-xs font-bold text-gray-600 hover:text-emerald-700 flex items-center gap-1"
+                        className="hl-btn-secondary flex items-center gap-1"
                       >
                         <Play size={12} />
                         <span>Test Send</span>
@@ -780,17 +780,17 @@ export default function WhatsAppAutomations() {
 
       {/* ── TAB 2: Welcome Auto-Reply Settings ── */}
       {activeTab === "welcome" && (
-        <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm max-w-3xl mx-auto space-y-6">
-          <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-start gap-3">
-            <ShieldCheck className="text-emerald-700 mt-0.5 shrink-0" size={20} />
-            <div className="text-xs text-emerald-950 space-y-1.5">
-              <p className="font-bold text-emerald-900 flex items-center gap-2">
+        <div className="hl-card p-6 max-w-3xl mx-auto space-y-6">
+          <div className="hl-card p-4 flex items-start gap-3">
+            <ShieldCheck className="mt-0.5 shrink-0" size={20} />
+            <div className="hl-subtitle space-y-1.5">
+              <p className="hl-empty-title flex items-center gap-2">
                 <span>Safe User-Initiated Welcome Engine</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 font-extrabold">
+                <span className="hl-badge hl-badge-success">
                   🛡️ Anti-Spam & Quarantine Protected
                 </span>
               </p>
-              <ul className="list-disc list-inside text-emerald-800 space-y-0.5 text-[11px] leading-relaxed">
+              <ul className="list-disc list-inside space-y-0.5 hl-subtitle">
                 <li><strong>Connecting a WhatsApp number will NEVER send messages.</strong> Historic and synced messages are safely quarantined.</li>
                 <li>Triggers <strong>ONLY</strong> when a customer sends the first incoming message to start a conversation.</li>
                 <li><strong>Bulk campaigns are isolated:</strong> Replies to promotional broadcasts will never trigger this welcome message.</li>
@@ -802,19 +802,19 @@ export default function WhatsAppAutomations() {
 
           <div className="flex items-center justify-between border-b pb-4">
             <div>
-              <h2 className="text-base font-bold text-gray-900">Welcome Auto-Reply & Cooldown Manager</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Greets new contacts on their first inbound message with strict one-time cooldown protection</p>
+              <h2 className="hl-title">Welcome Auto-Reply & Cooldown Manager</h2>
+              <p className="hl-subtitle mt-0.5">Greets new contacts on their first inbound message with strict one-time cooldown protection</p>
             </div>
 
             <button
               onClick={() => setWelcomeSettings((s) => ({ ...s, enabled: !s.enabled }))}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+              className={`hl-badge flex items-center gap-2 px-4 py-2 ${
                 welcomeSettings.enabled
-                  ? "bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-sm"
-                  : "bg-gray-100 text-gray-600 border border-gray-300"
+                  ? "hl-badge-success"
+                  : ""
               }`}
             >
-              <span className={`w-2.5 h-2.5 rounded-full ${welcomeSettings.enabled ? "bg-emerald-500 animate-pulse" : "bg-gray-400"}`} />
+              <span className={`w-2.5 h-2.5 rounded-full ${welcomeSettings.enabled ? "animate-pulse" : ""}`} />
               <span>{welcomeSettings.enabled ? "Active (Auto-Reply ON)" : "Disabled (Safe Mode)"}</span>
             </button>
           </div>
@@ -822,8 +822,8 @@ export default function WhatsAppAutomations() {
           <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-bold text-gray-700 uppercase">Welcome Message Copy</label>
-                <span className="text-[10px] text-gray-400 font-mono">Dynamic Multi-Keywords</span>
+                <label className="hl-section-label block">Welcome Message Copy</label>
+                <span className="hl-id">Dynamic Multi-Keywords</span>
               </div>
               <WAVariablePicker
                 onInsert={(tag) => setWelcomeSettings((s) => ({ ...s, welcome_text: (s.welcome_text || "") + " " + tag }))}
@@ -833,14 +833,14 @@ export default function WhatsAppAutomations() {
                 rows={3}
                 value={welcomeSettings.welcome_text || ""}
                 onChange={(e) => setWelcomeSettings((s) => ({ ...s, welcome_text: e.target.value }))}
-                className="w-full p-3 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-500 bg-gray-50"
+                className="hl-input w-full p-3"
                 placeholder="Hello {name}! Welcome to Madhura Tech..."
               />
             </div>
 
             {/* Message Type: plain text vs REAL tappable WhatsApp buttons */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">Welcome Message Type</label>
+              <label className="hl-section-label block mb-1.5">Welcome Message Type</label>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { key: "text", label: "Plain Text", hint: "Simple greeting, no options" },
@@ -860,19 +860,19 @@ export default function WhatsAppAutomations() {
                             : s.welcome_buttons || [],
                       }))
                     }
-                    className={`text-left p-3 rounded-xl border transition ${
+                    className={`hl-tab text-left p-3 ${
                       (welcomeSettings.welcome_type || "text") === opt.key
-                        ? "border-amber-500 bg-amber-50 shadow-sm"
-                        : "border-gray-200 bg-white hover:border-gray-300"
+                        ? "is-active"
+                        : ""
                     }`}
                   >
-                    <span className="block text-xs font-bold text-gray-900">{opt.label}</span>
-                    <span className="block text-[11px] text-gray-500 mt-0.5">{opt.hint}</span>
+                    <span className="hl-section-label block">{opt.label}</span>
+                    <span className="hl-subtitle block mt-0.5">{opt.hint}</span>
                   </button>
                 ))}
               </div>
               {welcomeSettings.welcome_type === "buttons" && (
-                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mt-2">
+                <p className="hl-badge hl-badge-accent px-2.5 py-1.5 mt-2">
                   Native buttons are delivered by the <strong>WhatsApp Cloud API</strong>. If only a QR/web session is
                   connected, the same message is delivered as a numbered text menu instead — customers still get it.
                 </p>
@@ -880,9 +880,9 @@ export default function WhatsAppAutomations() {
             </div>
 
             {welcomeSettings.welcome_type === "buttons" && (
-              <div className="space-y-3 p-3.5 rounded-2xl border border-gray-200 bg-gray-50/60">
+              <div className="hl-card space-y-3 p-3.5">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-gray-700 uppercase">
+                  <label className="hl-section-label block">
                     Reply Buttons ({(welcomeSettings.welcome_buttons || []).length}/3)
                   </label>
                   <button
@@ -897,7 +897,7 @@ export default function WhatsAppAutomations() {
                         ],
                       }))
                     }
-                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                    className="hl-btn-secondary px-2.5 py-1 flex items-center gap-1"
                   >
                     <Plus size={12} /> Add Button
                   </button>
@@ -906,7 +906,7 @@ export default function WhatsAppAutomations() {
                 {(welcomeSettings.welcome_buttons || []).map((btn, idx) => (
                   <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-start">
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Title (shown)</label>
+                      <label className="hl-section-label block mb-0.5">Title (shown)</label>
                       <input
                         value={btn.title || ""}
                         maxLength={20}
@@ -917,13 +917,13 @@ export default function WhatsAppAutomations() {
                             return { ...s, welcome_buttons: btns };
                           })
                         }
-                        className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white outline-none focus:ring-2 focus:ring-amber-500"
+                        className="hl-input w-full px-2.5 py-1.5"
                         placeholder="Check my quote"
                       />
-                      <span className="text-[10px] text-gray-400">{(btn.title || "").length}/20 chars</span>
+                      <span className="hl-subtitle">{(btn.title || "").length}/20 chars</span>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Action ID (stable)</label>
+                      <label className="hl-section-label block mb-0.5">Action ID (stable)</label>
                       <input
                         value={btn.id || ""}
                         onChange={(e) =>
@@ -934,10 +934,10 @@ export default function WhatsAppAutomations() {
                             return { ...s, welcome_buttons: btns };
                           })
                         }
-                        className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white font-mono outline-none focus:ring-2 focus:ring-amber-500"
+                        className="hl-input hl-id w-full px-2.5 py-1.5"
                         placeholder="quote_view"
                       />
-                      <span className="text-[10px] text-gray-400">Never renamed when the title changes</span>
+                      <span className="hl-subtitle">Never renamed when the title changes</span>
                     </div>
                     <button
                       type="button"
@@ -947,7 +947,7 @@ export default function WhatsAppAutomations() {
                           welcome_buttons: (s.welcome_buttons || []).filter((_, i) => i !== idx),
                         }))
                       }
-                      className="mt-5 p-1.5 rounded-lg text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200"
+                      className="hl-btn-danger-ghost mt-5 p-1.5"
                       title="Remove button"
                     >
                       <Trash2 size={13} />
@@ -956,22 +956,22 @@ export default function WhatsAppAutomations() {
                 ))}
 
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Footer (optional)</label>
+                  <label className="hl-section-label block mb-0.5">Footer (optional)</label>
                   <input
                     value={welcomeSettings.welcome_footer || ""}
                     maxLength={60}
                     onChange={(e) => setWelcomeSettings((s) => ({ ...s, welcome_footer: e.target.value }))}
-                    className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white outline-none focus:ring-2 focus:ring-amber-500"
+                    className="hl-input w-full px-2.5 py-1.5"
                     placeholder="Madhura Tech • Reply MENU anytime"
                   />
-                  <span className="text-[10px] text-gray-400">{(welcomeSettings.welcome_footer || "").length}/60 chars</span>
+                  <span className="hl-subtitle">{(welcomeSettings.welcome_footer || "").length}/60 chars</span>
                 </div>
               </div>
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label className="hl-section-label block mb-1">
                   Cooldown Period: {welcomeSettings.cooldown_hours === 0 ? "Only Once (Lifetime)" : `${welcomeSettings.cooldown_hours || 24} Hours`}
                 </label>
                 <input
@@ -981,9 +981,9 @@ export default function WhatsAppAutomations() {
                   step={6}
                   value={welcomeSettings.cooldown_hours != null ? welcomeSettings.cooldown_hours : 24}
                   onChange={(e) => setWelcomeSettings((s) => ({ ...s, cooldown_hours: parseInt(e.target.value, 10) }))}
-                  className="w-full accent-amber-600"
+                  className="w-full"
                 />
-                <p className="text-[11px] text-gray-400 mt-1">
+                <p className="hl-subtitle mt-1">
                   {welcomeSettings.cooldown_hours === 0
                     ? "Lifetime protection: Customer will receive the welcome greeting only once in their lifetime."
                     : `Prevents sending duplicate welcome messages to the same customer within ${welcomeSettings.cooldown_hours || 24} hours.`}
@@ -991,16 +991,16 @@ export default function WhatsAppAutomations() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Business Working Hours Filter</label>
+                <label className="hl-section-label block mb-1">Business Working Hours Filter</label>
                 <div className="flex items-center gap-2 mt-1">
                   <input
                     type="checkbox"
                     id="wh_only"
                     checked={welcomeSettings.working_hours_only || false}
                     onChange={(e) => setWelcomeSettings((s) => ({ ...s, working_hours_only: e.target.checked }))}
-                    className="w-4 h-4 accent-amber-600 rounded"
+                    className="w-4 h-4"
                   />
-                  <label htmlFor="wh_only" className="text-xs text-gray-700 font-medium">Restricted to working hours only</label>
+                  <label htmlFor="wh_only" className="hl-subtitle">Restricted to working hours only</label>
                 </div>
                 {welcomeSettings.working_hours_only && (
                   <div className="flex items-center gap-2 mt-2">
@@ -1008,14 +1008,14 @@ export default function WhatsAppAutomations() {
                       type="time"
                       value={welcomeSettings.start_time || "09:00"}
                       onChange={(e) => setWelcomeSettings((s) => ({ ...s, start_time: e.target.value }))}
-                      className="px-2.5 py-1 border rounded-lg text-xs bg-white font-mono"
+                      className="hl-input hl-id px-2.5 py-1"
                     />
-                    <span className="text-xs text-gray-400">to</span>
+                    <span className="hl-subtitle">to</span>
                     <input
                       type="time"
                       value={welcomeSettings.end_time || "21:00"}
                       onChange={(e) => setWelcomeSettings((s) => ({ ...s, end_time: e.target.value }))}
-                      className="px-2.5 py-1 border rounded-lg text-xs bg-white font-mono"
+                      className="hl-input hl-id px-2.5 py-1"
                     />
                   </div>
                 )}
@@ -1023,18 +1023,18 @@ export default function WhatsAppAutomations() {
             </div>
 
             {/* Live Message Preview — mirrors how WhatsApp renders the bubble */}
-            <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl">
+            <div className="hl-card p-3.5">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase text-emerald-800 tracking-wider">Live Customer Preview</span>
-                <span className="text-[10px] text-emerald-700/70">UI preview only — not a live send</span>
+                <span className="hl-section-label">Live Customer Preview</span>
+                <span className="hl-subtitle">UI preview only — not a live send</span>
               </div>
-              <div className="mt-2 bg-white p-3 rounded-xl border border-emerald-100 shadow-sm">
-                <p className="text-xs text-emerald-950 whitespace-pre-line leading-relaxed font-sans">
+              <div className="hl-card mt-2 p-3">
+                <p className="hl-subtitle whitespace-pre-line">
                   {evaluateMessagePlaceholders(welcomeSettings.welcome_text || "Hello {name}! Welcome to Madhura Tech.")}
                 </p>
 
                 {welcomeSettings.welcome_type === "buttons" && welcomeSettings.welcome_footer && (
-                  <p className="text-[11px] text-gray-400 mt-1.5">{welcomeSettings.welcome_footer}</p>
+                  <p className="hl-subtitle mt-1.5">{welcomeSettings.welcome_footer}</p>
                 )}
 
                 {welcomeSettings.welcome_type === "buttons" &&
@@ -1045,7 +1045,7 @@ export default function WhatsAppAutomations() {
                         .map((b, i) => (
                           <div
                             key={i}
-                            className="border-t border-gray-200 py-2 text-center text-[13px] font-medium text-[#00a5f4]"
+                            className="border-t py-2 text-center hl-section-label"
                             title={`Action ID: ${b.id || "(none)"}`}
                           >
                             {b.title}
@@ -1056,7 +1056,7 @@ export default function WhatsAppAutomations() {
               </div>
 
               {welcomeSettings.welcome_type === "buttons" && (
-                <p className="text-[10px] text-emerald-800/80 mt-2">
+                <p className="hl-subtitle mt-2">
                   Taps return the <strong>Action ID</strong>, not the label — so renaming a button never breaks an automation.
                 </p>
               )}
@@ -1066,7 +1066,7 @@ export default function WhatsAppAutomations() {
               <button
                 onClick={handleSaveWelcomeSettings}
                 disabled={welcomeSaving}
-                className="px-6 py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 transition shadow-md flex items-center gap-1.5"
+                className="hl-btn-primary flex items-center gap-1.5"
               >
                 {welcomeSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                 <span>Save Welcome Settings</span>
@@ -1075,20 +1075,20 @@ export default function WhatsAppAutomations() {
           </div>
 
           {/* Test Welcome Send */}
-          <div className="p-4 bg-gray-50 rounded-2xl border space-y-3">
-            <h3 className="text-xs font-bold text-gray-800 uppercase">Test Welcome Reply on Real Phone</h3>
+          <div className="hl-card p-4 space-y-3">
+            <h3 className="hl-section-label uppercase">Test Welcome Reply on Real Phone</h3>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={welcomeTestPhone}
                 onChange={(e) => setWelcomeTestPhone(e.target.value)}
                 placeholder="Enter 10-digit mobile number..."
-                className="flex-1 px-3 py-2 border rounded-xl text-xs font-mono bg-white outline-none focus:ring-2 focus:ring-amber-500"
+                className="hl-input hl-id flex-1 px-3 py-2"
               />
               <button
                 onClick={handleTestWelcome}
                 disabled={!welcomeTestPhone.trim() || welcomeTestLoading}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1.5"
+                className="hl-btn-primary flex items-center gap-1.5"
               >
                 {welcomeTestLoading ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                 <span>Send Test</span>
@@ -1096,11 +1096,11 @@ export default function WhatsAppAutomations() {
             </div>
             {welcomeTestResult && (
               <div className="space-y-1">
-                <p className={`text-xs font-semibold ${welcomeTestResult.success ? "text-emerald-700" : "text-rose-700"}`}>
+                <p className={`hl-badge ${welcomeTestResult.success ? "hl-badge-success" : "hl-badge-error"}`}>
                   {welcomeTestResult.message}
                 </p>
                 {welcomeTestResult.warning && (
-                  <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                  <p className="hl-badge hl-badge-accent px-2.5 py-1.5">
                     ⚠️ {welcomeTestResult.warning}
                   </p>
                 )}
@@ -1112,27 +1112,27 @@ export default function WhatsAppAutomations() {
 
       {/* ── TAB 3: Execution Audit Logs ── */}
       {activeTab === "logs" && (
-        <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm">
+        <div className="hl-card p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-base font-bold text-gray-900">Automation Trigger Audit Logs</h2>
-              <p className="text-xs text-gray-500">Live feed of all automated messages triggered by CRM events</p>
+              <h2 className="hl-title">Automation Trigger Audit Logs</h2>
+              <p className="hl-subtitle">Live feed of all automated messages triggered by CRM events</p>
             </div>
-            <button onClick={fetchData} className="p-2 border rounded-xl hover:bg-gray-50 text-gray-600">
+            <button onClick={fetchData} className="hl-btn-secondary p-2">
               <RefreshCw size={15} />
             </button>
           </div>
 
           {logs.length === 0 ? (
-            <div className="text-center py-14 text-gray-400">
-              <ListChecks size={36} className="mx-auto mb-2 text-gray-300" />
-              <p className="text-xs font-bold">No automation triggers executed yet.</p>
+            <div className="hl-empty text-center py-14">
+              <ListChecks size={36} className="mx-auto mb-2" />
+              <p className="hl-section-label">No automation triggers executed yet.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="hl-table w-full text-left">
                 <thead>
-                  <tr className="border-b bg-gray-50 text-gray-600 uppercase font-bold text-[10px]">
+                  <tr className="border-b">
                     <th className="py-2.5 px-3">Rule Name</th>
                     <th className="py-2.5 px-3">Trigger Type</th>
                     <th className="py-2.5 px-3">Recipient</th>
@@ -1141,7 +1141,7 @@ export default function WhatsAppAutomations() {
                     <th className="py-2.5 px-3">Executed At</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y">
                   {logs.map((log) => {
                     let triggerData = {};
                     try {
@@ -1149,26 +1149,26 @@ export default function WhatsAppAutomations() {
                     } catch (_) {}
 
                     return (
-                      <tr key={log.id} className="hover:bg-gray-50/80">
-                        <td className="py-3 px-3 font-bold text-gray-900">{log.automation_name || "Automation"}</td>
-                        <td className="py-3 px-3 uppercase text-[10px] font-bold text-amber-800">{log.trigger_type}</td>
-                        <td className="py-3 px-3 font-mono">
+                      <tr key={log.id} className="">
+                        <td className="py-3 px-3">{log.automation_name || "Automation"}</td>
+                        <td className="py-3 px-3 hl-section-label">{log.trigger_type}</td>
+                        <td className="py-3 px-3 hl-id">
                           +{log.phone}
-                          {log.contact_name && <span className="block text-[11px] font-normal text-gray-500">{log.contact_name}</span>}
+                          {log.contact_name && <span className="hl-subtitle block">{log.contact_name}</span>}
                         </td>
                         <td className="py-3 px-3">
                           <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                              log.status === "sent" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                            className={`hl-badge px-2 py-0.5 uppercase ${
+                              log.status === "sent" ? "hl-badge-success" : "hl-badge-error"
                             }`}
                           >
                             {log.status}
                           </span>
                         </td>
-                        <td className="py-3 px-3 max-w-xs truncate text-gray-500 font-mono text-[11px]">
+                        <td className="py-3 px-3 max-w-xs truncate hl-id">
                           {JSON.stringify(triggerData)}
                         </td>
-                        <td className="py-3 px-3 text-gray-400 text-[11px]">
+                        <td className="py-3 px-3 hl-id">
                           {log.sent_at ? new Date(log.sent_at).toLocaleString("en-IN") : "-"}
                         </td>
                       </tr>
@@ -1184,20 +1184,20 @@ export default function WhatsAppAutomations() {
       {/* ── MODAL: Create / Edit Automation ── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3" onClick={() => setShowModal(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-3xl max-h-[92vh] flex flex-col border shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50/90">
+          <div className="hl-card w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+                <div className="w-9 h-9 flex items-center justify-center">
                   <Zap size={18} />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-gray-900">
+                  <h2 className="hl-title">
                     {editAutomation ? "Edit Automation Rule" : "Create WhatsApp Automation"}
                   </h2>
-                  <p className="text-xs text-gray-500">Configure background event triggers, anti-ban pacing, and follow-ups</p>
+                  <p className="hl-subtitle">Configure background event triggers, anti-ban pacing, and follow-ups</p>
                 </div>
               </div>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowModal(false)} className="hl-btn-secondary p-1">
                 <X size={20} />
               </button>
             </div>
@@ -1205,19 +1205,19 @@ export default function WhatsAppAutomations() {
             <div className="p-6 overflow-y-auto space-y-5 flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Rule Name *</label>
+                  <label className="hl-section-label block mb-1">Rule Name *</label>
                   <input
                     type="text"
                     value={form.name}
                     onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                     placeholder="e.g. Instant Invoice WhatsApp Notice"
-                    className="w-full px-3.5 py-2.5 border rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+                    className="hl-input w-full px-3.5 py-2.5"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Trigger Event *</label>
+                  <label className="hl-section-label block mb-1">Trigger Event *</label>
                   <select
                     value={form.trigger_type}
                     onChange={(e) => {
@@ -1228,7 +1228,7 @@ export default function WhatsAppAutomations() {
                         message_text: PRESET_MESSAGES[t] || f.message_text,
                       }));
                     }}
-                    className="w-full px-3 py-2.5 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-500 bg-white font-medium"
+                    className="hl-select w-full px-3 py-2.5"
                   >
                     {TRIGGER_TYPES.map((t) => (
                       <option key={t.value} value={t.value}>
@@ -1240,9 +1240,9 @@ export default function WhatsAppAutomations() {
               </div>
 
               {/* Step 1: Main Message Box */}
-              <div className="p-4 bg-amber-50/40 rounded-2xl border border-amber-200/70 space-y-3">
+              <div className="hl-card p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-900 uppercase flex items-center gap-1.5">
+                  <span className="hl-section-label flex items-center gap-1.5">
                     <span>1️⃣</span>
                     <span>Step 1: Main WhatsApp Message</span>
                   </span>
@@ -1253,8 +1253,8 @@ export default function WhatsAppAutomations() {
                         key={kind}
                         type="button"
                         onClick={() => setForm((f) => ({ ...f, msg_kind: kind }))}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase transition ${
-                          form.msg_kind === kind ? "bg-amber-600 text-white shadow-sm" : "bg-white text-gray-600 border hover:bg-gray-50"
+                        className={`hl-tab px-2.5 py-1 uppercase ${
+                          form.msg_kind === kind ? "is-active" : ""
                         }`}
                       >
                         {kind}
@@ -1273,17 +1273,17 @@ export default function WhatsAppAutomations() {
                       rows={4}
                       value={form.message_text || ""}
                       onChange={(e) => setForm((f) => ({ ...f, message_text: e.target.value }))}
-                      className="w-full p-3 border rounded-xl text-xs bg-white outline-none focus:ring-2 focus:ring-amber-500 resize-none font-sans"
+                      className="hl-input w-full p-3 resize-none"
                       placeholder="Type dynamic message here, e.g. Hello {{name}}! Your invoice {{invoice_no}} for {{amount}} is due on {{due_date}}..."
                     />
 
                     {form.message_text && (
-                      <div className="p-3 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 space-y-1 text-xs">
-                        <div className="flex items-center justify-between text-[10px] text-amber-400 font-bold uppercase">
+                      <div className="hl-card p-3 space-y-1">
+                        <div className="flex items-center justify-between hl-section-label">
                           <span className="flex items-center gap-1"><Sparkles size={11} /> Live Preview:</span>
-                          <span className="text-[9px] text-emerald-400 font-mono">Dynamic Per Recipient</span>
+                          <span className="hl-id">Dynamic Per Recipient</span>
                         </div>
-                        <div className="p-2 bg-slate-800/80 rounded-lg text-emerald-300 font-mono text-[11px] whitespace-pre-wrap">
+                        <div className="hl-id p-2 whitespace-pre-wrap">
                           {evaluateMessagePlaceholders(form.message_text)}
                         </div>
                       </div>
@@ -1295,11 +1295,11 @@ export default function WhatsAppAutomations() {
                   <div className="space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div>
-                        <label className="block text-[10px] text-gray-500 font-bold uppercase">Media Type</label>
+                        <label className="hl-section-label block">Media Type</label>
                         <select
                           value={form.media_type}
                           onChange={(e) => setForm((f) => ({ ...f, media_type: e.target.value }))}
-                          className="w-full p-2 border rounded-xl text-xs bg-white font-medium"
+                          className="hl-select w-full p-2"
                         >
                           <option value="image">📷 Image (PNG, JPG, WEBP)</option>
                           <option value="video">🎥 Video (MP4, MOV, 3GP)</option>
@@ -1309,13 +1309,13 @@ export default function WhatsAppAutomations() {
                         </select>
                       </div>
                       <div className="sm:col-span-2">
-                        <label className="block text-[10px] text-gray-500 font-bold uppercase">Media Public URL or Upload</label>
+                        <label className="hl-section-label block">Media Public URL or Upload</label>
                         <input
                           type="text"
                           value={form.media_url || ""}
                           onChange={(e) => setForm((f) => ({ ...f, media_url: e.target.value }))}
                           placeholder="https://madhuratech.com/catalog.pdf"
-                          className="w-full p-2 border rounded-xl text-xs font-mono bg-white"
+                          className="hl-input hl-id w-full p-2"
                         />
                       </div>
                     </div>
@@ -1324,7 +1324,7 @@ export default function WhatsAppAutomations() {
                       rows={2}
                       value={form.message_text || ""}
                       onChange={(e) => setForm((f) => ({ ...f, message_text: e.target.value }))}
-                      className="w-full p-2.5 border rounded-xl text-xs bg-white resize-none"
+                      className="hl-input w-full p-2.5 resize-none"
                       placeholder="Optional Media Caption..."
                     />
                   </div>
@@ -1332,11 +1332,11 @@ export default function WhatsAppAutomations() {
 
                 {form.msg_kind === "template" && (
                   <div className="space-y-2">
-                    <label className="block text-[10px] text-gray-500 font-bold uppercase mb-1">Select Approved WhatsApp Template</label>
+                    <label className="hl-section-label block mb-1">Select Approved WhatsApp Template</label>
                     <select
                       value={form.template_id}
                       onChange={(e) => setForm((f) => ({ ...f, template_id: e.target.value }))}
-                      className="w-full p-2.5 border rounded-xl text-xs bg-white font-semibold"
+                      className="hl-select w-full p-2.5"
                     >
                       <option value="">-- Choose Template --</option>
                       {templates.map((t) => (
@@ -1348,12 +1348,12 @@ export default function WhatsAppAutomations() {
                       const tmpl = templates.find(t => String(t.id) === String(form.template_id));
                       if (!tmpl) return null;
                       return (
-                        <div className="p-3 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 space-y-1 text-xs">
-                          <div className="flex items-center justify-between text-[10px] text-amber-400 font-bold uppercase">
+                        <div className="hl-card p-3 space-y-1">
+                          <div className="flex items-center justify-between hl-section-label">
                             <span className="flex items-center gap-1"><Sparkles size={11} /> Template Evaluated Preview:</span>
-                            <span className="text-[9px] text-emerald-400 font-mono">Dynamic Live</span>
+                            <span className="hl-id">Dynamic Live</span>
                           </div>
-                          <div className="p-2 bg-slate-800/80 rounded-lg text-emerald-300 font-mono text-[11px] whitespace-pre-wrap">
+                          <div className="hl-id p-2 whitespace-pre-wrap">
                             {evaluateMessagePlaceholders(tmpl.body || "")}
                           </div>
                         </div>
@@ -1364,7 +1364,7 @@ export default function WhatsAppAutomations() {
               </div>
 
               {/* Step 2: Multi-Message Sequence (Anti-Ban Paced Follow-up) */}
-              <div className="p-4 bg-purple-50/40 rounded-2xl border border-purple-200/70 space-y-3">
+              <div className="hl-card p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <input
@@ -1372,15 +1372,15 @@ export default function WhatsAppAutomations() {
                       id="enable_seq"
                       checked={form.enable_sequence}
                       onChange={(e) => setForm((f) => ({ ...f, enable_sequence: e.target.checked }))}
-                      className="w-4 h-4 accent-purple-600 rounded"
+                      className="w-4 h-4"
                     />
-                    <label htmlFor="enable_seq" className="text-xs font-bold text-purple-900 uppercase cursor-pointer">
+                    <label htmlFor="enable_seq" className="hl-section-label cursor-pointer">
                       2️⃣ Enable Step 2 Follow-Up Message (Multi-Step Drip)
                     </label>
                   </div>
 
                   {form.enable_sequence && (
-                    <span className="text-[11px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                    <span className="hl-badge hl-badge-info">
                       ⏱️ {form.sequence_delay_seconds || 7}s Human Pacing
                     </span>
                   )}
@@ -1389,7 +1389,7 @@ export default function WhatsAppAutomations() {
                 {form.enable_sequence && (
                   <div className="space-y-3 pt-2">
                     <div>
-                      <label className="block text-[10px] text-gray-500 font-bold uppercase mb-1">
+                      <label className="hl-section-label block mb-1">
                         Pacing Delay Gap ({form.sequence_delay_seconds || 7} seconds)
                       </label>
                       <input
@@ -1398,7 +1398,7 @@ export default function WhatsAppAutomations() {
                         max={60}
                         value={form.sequence_delay_seconds || 7}
                         onChange={(e) => setForm((f) => ({ ...f, sequence_delay_seconds: parseInt(e.target.value, 10) }))}
-                        className="w-full accent-purple-600"
+                        className="w-full"
                       />
                     </div>
 
@@ -1406,17 +1406,17 @@ export default function WhatsAppAutomations() {
                       rows={2}
                       value={form.followup_message_text || ""}
                       onChange={(e) => setForm((f) => ({ ...f, followup_message_text: e.target.value }))}
-                      className="w-full p-2.5 border rounded-xl text-xs bg-white"
+                      className="hl-input w-full p-2.5"
                       placeholder="Follow-up message (e.g. 📄 Download our PDF brochure here: https://...)"
                     />
 
                     {form.followup_message_text && (
-                      <div className="p-2.5 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 space-y-1 text-xs">
-                        <div className="flex items-center justify-between text-[10px] text-purple-300 font-bold uppercase">
+                      <div className="hl-card p-2.5 space-y-1">
+                        <div className="flex items-center justify-between hl-section-label">
                           <span className="flex items-center gap-1"><Sparkles size={11} /> Step 2 Follow-Up Preview:</span>
-                          <span className="text-[9px] text-emerald-400 font-mono">Dynamic</span>
+                          <span className="hl-id">Dynamic</span>
                         </div>
-                        <div className="p-2 bg-slate-800/80 rounded-lg text-emerald-300 font-mono text-[11px] whitespace-pre-wrap">
+                        <div className="hl-id p-2 whitespace-pre-wrap">
                           {evaluateMessagePlaceholders(form.followup_message_text)}
                         </div>
                       </div>
@@ -1426,16 +1426,16 @@ export default function WhatsAppAutomations() {
               </div>
 
               {/* Cross-Module Linkages: Contact Group & Chatbot Flow */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-2xl border">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 hl-card">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1 flex items-center gap-1">
-                    <Users size={12} className="text-blue-600" />
+                  <label className="hl-section-label block mb-1 flex items-center gap-1">
+                    <Users size={12} className="" />
                     <span>Auto-Enroll into Contact Group</span>
                   </label>
                   <select
                     value={form.group_id || ""}
                     onChange={(e) => setForm((f) => ({ ...f, group_id: e.target.value }))}
-                    className="w-full p-2 border rounded-xl text-xs bg-white"
+                    className="hl-input w-full p-2"
                   >
                     <option value="">-- Do Not Enroll in Group --</option>
                     {groups.map((g) => (
@@ -1445,14 +1445,14 @@ export default function WhatsAppAutomations() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1 flex items-center gap-1">
-                    <Bot size={12} className="text-emerald-600" />
+                  <label className="hl-section-label block mb-1 flex items-center gap-1">
+                    <Bot size={12} className="" />
                     <span>Auto-Trigger Chatbot Flow</span>
                   </label>
                   <select
                     value={form.flow_id || ""}
                     onChange={(e) => setForm((f) => ({ ...f, flow_id: e.target.value }))}
-                    className="w-full p-2 border rounded-xl text-xs bg-white"
+                    className="hl-input w-full p-2"
                   >
                     <option value="">-- Do Not Trigger Flow --</option>
                     {flows.map((fl) => (
@@ -1463,18 +1463,18 @@ export default function WhatsAppAutomations() {
               </div>
             </div>
 
-            <div className="flex gap-3 p-4 border-t bg-white">
+            <div className="flex gap-3 p-4 border-t">
               <button
                 type="button"
                 onClick={() => setShowModal(false)}
-                className="flex-1 py-2.5 border rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50"
+                className="hl-btn-secondary flex-1 py-2.5"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleSave}
-                className="flex-1 py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 transition shadow-md flex items-center justify-center gap-1.5"
+                className="hl-btn-primary flex-1 py-2.5 flex items-center justify-center gap-1.5"
               >
                 <CheckCircle2 size={15} />
                 <span>{editAutomation ? "Update Rule" : "Create Automation"}</span>
@@ -1487,59 +1487,59 @@ export default function WhatsAppAutomations() {
       {/* ── MODAL: Test Trigger on Real Phone ── */}
       {testModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setTestModal(null)}>
-          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                <div className="w-9 h-9 flex items-center justify-center">
                   <Play size={16} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-gray-900">Test Send Automation</h3>
-                  <p className="text-xs text-gray-500 truncate max-w-[220px]">{testModal.name}</p>
+                  <h3 className="hl-empty-title">Test Send Automation</h3>
+                  <p className="hl-subtitle truncate max-w-[220px]">{testModal.name}</p>
                 </div>
               </div>
-              <button onClick={() => setTestModal(null)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setTestModal(null)} className="hl-btn-secondary p-1">
                 <X size={18} />
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Target 10-Digit Mobile Number</label>
+                <label className="hl-section-label block mb-1">Target 10-Digit Mobile Number</label>
                 <input
                   type="text"
                   value={testPhone}
                   onChange={(e) => setTestPhone(e.target.value)}
                   placeholder="e.g. 9876543210"
-                  className="w-full px-3.5 py-2.5 border rounded-xl text-xs font-mono bg-white outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="hl-input hl-id w-full px-3.5 py-2.5"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Simulated Contact Name</label>
+                <label className="hl-section-label block mb-1">Simulated Contact Name</label>
                 <input
                   type="text"
                   value={testName}
                   onChange={(e) => setTestName(e.target.value)}
                   placeholder="e.g. Rahul Sharma"
-                  className="w-full px-3.5 py-2.5 border rounded-xl text-xs bg-white"
+                  className="hl-input w-full px-3.5 py-2.5"
                 />
               </div>
 
               {testModal && (testModal.message_text || testModal.template_body) && (
-                <div className="p-3 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 space-y-1 text-xs">
-                  <div className="flex items-center justify-between text-[10px] text-amber-400 font-bold uppercase">
+                <div className="hl-card p-3 space-y-1">
+                  <div className="flex items-center justify-between hl-section-label">
                     <span className="flex items-center gap-1"><Sparkles size={11} /> Evaluated Message Preview:</span>
-                    <span className="text-[9px] text-emerald-400 font-mono">Dynamic Preview</span>
+                    <span className="hl-id">Dynamic Preview</span>
                   </div>
-                  <div className="p-2 bg-slate-800/80 rounded-lg text-emerald-300 font-mono text-[11px] whitespace-pre-wrap leading-relaxed">
+                  <div className="hl-id p-2 whitespace-pre-wrap">
                     {evaluateMessagePlaceholders(testModal.message_text || testModal.template_body || "", { name: testName || "Customer" })}
                   </div>
                 </div>
               )}
 
               {testResult && (
-                <div className={`p-3 rounded-xl text-xs font-bold ${testResult.success ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-rose-50 text-rose-800 border border-rose-200"}`}>
+                <div className={`hl-badge p-3 ${testResult.success ? "hl-badge-success" : "hl-badge-error"}`}>
                   {testResult.message}
                 </div>
               )}
@@ -1548,7 +1548,7 @@ export default function WhatsAppAutomations() {
                 <button
                   type="button"
                   onClick={() => setTestModal(null)}
-                  className="flex-1 py-2 border rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50"
+                  className="hl-btn-secondary flex-1 py-2"
                 >
                   Close
                 </button>
@@ -1556,7 +1556,7 @@ export default function WhatsAppAutomations() {
                   type="button"
                   onClick={handleTestTrigger}
                   disabled={!testPhone.trim() || testLoading}
-                  className="flex-1 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition shadow-md flex items-center justify-center gap-1.5"
+                  className="hl-btn-primary flex-1 py-2 flex items-center justify-center gap-1.5"
                 >
                   {testLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   <span>Execute Send</span>
@@ -1570,18 +1570,18 @@ export default function WhatsAppAutomations() {
       {/* ── MODAL: CRM Trigger Simulator & Test Runner ── */}
       {showSimulateModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowSimulateModal(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl border" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5 border-b pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
+                <div className="w-10 h-10 flex items-center justify-center">
                   <PlayCircle size={22} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-gray-900">CRM Event Trigger Simulator</h3>
-                  <p className="text-xs text-gray-500">Test how WhatsApp rules respond to CRM database events</p>
+                  <h3 className="hl-title">CRM Event Trigger Simulator</h3>
+                  <p className="hl-subtitle">Test how WhatsApp rules respond to CRM database events</p>
                 </div>
               </div>
-              <button onClick={() => setShowSimulateModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowSimulateModal(false)} className="hl-btn-secondary p-1">
                 <X size={20} />
               </button>
             </div>
@@ -1589,11 +1589,11 @@ export default function WhatsAppAutomations() {
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Select CRM Event to Simulate</label>
+                  <label className="hl-section-label block mb-1">Select CRM Event to Simulate</label>
                   <select
                     value={simTriggerType}
                     onChange={(e) => setSimTriggerType(e.target.value)}
-                    className="w-full px-3 py-2.5 border rounded-xl text-xs font-semibold bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                    className="hl-select w-full px-3 py-2.5"
                   >
                     {TRIGGER_TYPES.map((t) => (
                       <option key={t.value} value={t.value}>
@@ -1604,19 +1604,19 @@ export default function WhatsAppAutomations() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Simulated Customer Name</label>
+                  <label className="hl-section-label block mb-1">Simulated Customer Name</label>
                   <input
                     type="text"
                     value={simName}
                     onChange={(e) => setSimName(e.target.value)}
                     placeholder="e.g. Rahul Sharma"
-                    className="w-full px-3.5 py-2.5 border rounded-xl text-xs bg-white"
+                    className="hl-input w-full px-3.5 py-2.5"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label className="hl-section-label block mb-1">
                   Test WhatsApp Number (Optional)
                 </label>
                 <input
@@ -1624,19 +1624,19 @@ export default function WhatsAppAutomations() {
                   value={simPhone}
                   onChange={(e) => setSimPhone(e.target.value)}
                   placeholder="e.g. 9876543210 (Leave blank for simulation only)"
-                  className="w-full px-3.5 py-2.5 border rounded-xl text-xs font-mono bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                  className="hl-input hl-id w-full px-3.5 py-2.5"
                 />
               </div>
 
-              <div className="flex items-center gap-2 p-3 bg-blue-50/60 rounded-xl border border-blue-200/80">
+              <div className="hl-card flex items-center gap-2 p-3">
                 <input
                   type="checkbox"
                   id="sim_real_send"
                   checked={simSendReal}
                   onChange={(e) => setSimSendReal(e.target.checked)}
-                  className="w-4 h-4 accent-blue-600 rounded"
+                  className="w-4 h-4"
                 />
-                <label htmlFor="sim_real_send" className="text-xs font-bold text-blue-900 cursor-pointer">
+                <label htmlFor="sim_real_send" className="hl-section-label cursor-pointer">
                   Send actual WhatsApp message to this number during simulation
                 </label>
               </div>
@@ -1645,7 +1645,7 @@ export default function WhatsAppAutomations() {
                 <button
                   type="button"
                   onClick={() => setShowSimulateModal(false)}
-                  className="px-4 py-2 border rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50"
+                  className="hl-btn-secondary"
                 >
                   Cancel
                 </button>
@@ -1653,7 +1653,7 @@ export default function WhatsAppAutomations() {
                   type="button"
                   onClick={handleSimulateTrigger}
                   disabled={simLoading}
-                  className="px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md flex items-center gap-2 disabled:opacity-50"
+                  className="hl-btn-primary flex items-center gap-2"
                 >
                   {simLoading ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
                   <span>Run Event Simulation</span>
@@ -1662,44 +1662,44 @@ export default function WhatsAppAutomations() {
 
               {/* Simulation Results Output Panel */}
               {simResult && (
-                <div className="mt-5 p-4 bg-slate-900 text-white rounded-2xl border border-slate-800 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="hl-card mt-5 p-4 space-y-4">
+                  <div className="flex items-center justify-between border-b pb-3">
                     <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                      <span className="w-2 h-2 rounded-full animate-pulse"></span>
+                      <h4 className="hl-section-label">
                         Simulation Result: {simResult.matched_rules_count || 0} Rule(s) Matched
                       </h4>
                     </div>
                     {simResult.real_message_dispatched && (
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-400/30">
+                      <span className="hl-badge hl-badge-success">
                         ✅ Live Message Dispatched
                       </span>
                     )}
                   </div>
 
                   {simResult.evaluated_rules?.length === 0 ? (
-                    <div className="py-4 text-center text-xs text-gray-400">
-                      <AlertCircle size={20} className="mx-auto mb-1 text-amber-400" />
-                      <p className="font-bold text-gray-300">No active rules configured for "{simTriggerType}"</p>
-                      <p className="text-[11px] text-gray-500 mt-1">Create an automation rule for this trigger or click "Load 12 Prebuilt Smart Rules".</p>
+                    <div className="hl-empty py-4 text-center">
+                      <AlertCircle size={20} className="mx-auto mb-1" />
+                      <p className="hl-empty-title">No active rules configured for "{simTriggerType}"</p>
+                      <p className="hl-subtitle mt-1">Create an automation rule for this trigger or click "Load 12 Prebuilt Smart Rules".</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {simResult.evaluated_rules?.map((r, rIdx) => (
-                        <div key={rIdx} className="p-3 bg-slate-800/80 rounded-xl border border-slate-700/80 space-y-2">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-bold text-amber-300">Rule: {r.name}</span>
-                            <span className="text-[10px] text-gray-400 font-mono">Delay: {r.delay_minutes > 0 ? `${r.delay_minutes}m` : "Instant"}</span>
+                        <div key={rIdx} className="hl-card p-3 space-y-2">
+                          <div className="flex items-center justify-between hl-subtitle">
+                            <span className="hl-badge hl-badge-accent">Rule: {r.name}</span>
+                            <span className="hl-id">Delay: {r.delay_minutes > 0 ? `${r.delay_minutes}m` : "Instant"}</span>
                           </div>
 
-                          <div className="bg-[#0b141a] p-3 rounded-xl text-xs font-sans text-gray-100 whitespace-pre-line border border-emerald-500/20 shadow-inner">
-                            <div className="text-[10px] font-bold uppercase text-emerald-400 mb-1">1️⃣ Step 1 Output Message:</div>
+                          <div className="hl-card p-3 whitespace-pre-line">
+                            <div className="hl-section-label mb-1">1️⃣ Step 1 Output Message:</div>
                             {r.step1_text}
                           </div>
 
                           {r.step2_followup_text && (
-                            <div className="bg-[#0b141a] p-3 rounded-xl text-xs font-sans text-purple-200 whitespace-pre-line border border-purple-500/20 shadow-inner">
-                              <div className="text-[10px] font-bold uppercase text-purple-400 mb-1">
+                            <div className="hl-card p-3 whitespace-pre-line">
+                              <div className="hl-section-label mb-1">
                                 2️⃣ Step 2 Follow-Up Message (after {r.sequence_delay_seconds}s):
                               </div>
                               {r.step2_followup_text}

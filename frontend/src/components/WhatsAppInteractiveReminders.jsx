@@ -18,31 +18,31 @@ const PERSONA_STYLES = [
     id: "professional",
     label: "💼 Corporate & Formal",
     desc: "Polite, crisp, concise, enterprise-grade",
-    badgeColor: "bg-blue-100 text-blue-800 border-blue-200",
+    badgeColor: "hl-badge-info",
   },
   {
     id: "friendly",
     label: "😊 Warm & Friendly",
     desc: "Approachable, conversational, positive emojis",
-    badgeColor: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    badgeColor: "hl-badge-success",
   },
   {
     id: "urgent",
     label: "⚡ Urgent & Action-Driven",
     desc: "Clear deadline focus, priority action call",
-    badgeColor: "bg-rose-100 text-rose-800 border-rose-200",
+    badgeColor: "hl-badge-error",
   },
   {
     id: "vip",
     label: "👑 VIP Executive",
     desc: "White-glove concierge treatment, premium tone",
-    badgeColor: "bg-purple-100 text-purple-800 border-purple-200",
+    badgeColor: "hl-badge-accent",
   },
   {
     id: "technical",
     label: "🛠️ Technical & Field",
     desc: "Logistics-focused, site inspection details",
-    badgeColor: "bg-amber-100 text-amber-800 border-amber-200",
+    badgeColor: "hl-badge-warn",
   },
 ];
 
@@ -116,7 +116,7 @@ const REMINDER_TYPES = [
     label: "📅 Service & Appointment Visit",
     desc: "Pre-visit confirmation gateway with technician details",
     icon: Calendar,
-    color: "bg-blue-50 text-blue-700 border-blue-200",
+    color: "hl-badge-info",
     defaultOptions: [
       { id: "btn_confirm", label: "✅ Confirm Visit", action: "confirm_appointment" },
       { id: "btn_reschedule", label: "🔄 Reschedule", action: "reschedule_appointment" },
@@ -128,7 +128,7 @@ const REMINDER_TYPES = [
     label: "💰 Payment Due Invoice",
     desc: "Automated invoice collection & payment receipt gateway",
     icon: CreditCard,
-    color: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    color: "hl-badge-success",
     defaultOptions: [
       { id: "btn_paid", label: "💳 Already Paid", action: "confirm_payment" },
       { id: "btn_invoice", label: "📄 Send Invoice", action: "send_invoice_copy" },
@@ -140,7 +140,7 @@ const REMINDER_TYPES = [
     label: "💼 Quotation & Proposal Followup",
     desc: "Close high-value quotes with 1-tap customer approvals",
     icon: FileText,
-    color: "bg-purple-50 text-purple-700 border-purple-200",
+    color: "hl-badge-accent",
     defaultOptions: [
       { id: "btn_approve_quote", label: "👍 Approve & Proceed", action: "approve_quotation" },
       { id: "btn_modify_quote", label: "💬 Need Changes", action: "request_callback" },
@@ -152,7 +152,7 @@ const REMINDER_TYPES = [
     label: "🛡️ AMC Contract Renewal",
     desc: "Prevent contract churn with timed renewal triggers",
     icon: ShieldCheck,
-    color: "bg-amber-50 text-amber-700 border-amber-200",
+    color: "hl-badge-warn",
     defaultOptions: [
       { id: "btn_renew_amc", label: "🛡️ Renew AMC", action: "renew_amc" },
       { id: "btn_call_amc", label: "📞 Speak to Engineer", action: "request_callback" },
@@ -163,7 +163,7 @@ const REMINDER_TYPES = [
     label: "🎯 Lead Interest Check",
     desc: "Qualify fresh leads with demo and callback options",
     icon: UserCheck,
-    color: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    color: "hl-badge",
     defaultOptions: [
       { id: "btn_interested", label: "👍 Interested", action: "confirm_lead_interest" },
       { id: "btn_demo", label: "📅 Book Demo", action: "reschedule_appointment" },
@@ -664,85 +664,85 @@ export default function WhatsAppInteractiveReminders() {
   return (
     <div className="space-y-6">
       {/* ── Top Summary & Response Rate Bar ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-amber-400 transition">
-          <div className="flex items-center justify-between text-gray-500 text-xs font-bold uppercase">
+      <div className="hl-kpis grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+        <div className="hl-kpi bg-[var(--color-paper-2)] p-4 rounded-2xl border border-[var(--color-rule)] shadow-sm space-y-1 transition">
+          <div className="hl-kpi-label flex items-center justify-between text-xs font-bold uppercase">
             <span>Total Sent</span>
-            <Send size={15} className="text-gray-400" />
+            <Send size={15} className="text-[var(--color-ink-2)]" />
           </div>
-          <p className="text-2xl font-black text-gray-900">{summary.total || 0}</p>
-          <span className="text-[11px] text-gray-400">Interactive Requests</span>
+          <p className="hl-kpi-num text-2xl font-black">{summary.total || 0}</p>
+          <span className="text-[11px] text-[var(--color-ink-2)]">Interactive Requests</span>
         </div>
 
-        <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200 shadow-sm space-y-1 hover:border-emerald-400 transition">
-          <div className="flex items-center justify-between text-emerald-800 text-xs font-bold uppercase">
+        <div className="hl-kpi bg-[var(--color-paper-2)] p-4 rounded-2xl border border-[var(--color-rule)] shadow-sm space-y-1 transition">
+          <div className="hl-kpi-label flex items-center justify-between text-xs font-bold uppercase">
             <span>Confirmed</span>
-            <CheckCircle2 size={16} className="text-emerald-600" />
+            <CheckCircle2 size={16} className="text-[var(--color-ink-2)]" />
           </div>
-          <p className="text-2xl font-black text-emerald-900">{summary.confirmed || 0}</p>
-          <span className="text-[11px] font-bold text-emerald-700">
+          <p className="hl-kpi-num text-2xl font-black">{summary.confirmed || 0}</p>
+          <span className="text-[11px] font-bold text-[var(--color-ink-2)]">
             {summary.total > 0 ? `${Math.round((summary.confirmed / summary.total) * 100)}% Conversion` : "0%"}
           </span>
         </div>
 
-        <div className="bg-amber-50/70 p-4 rounded-2xl border border-amber-200 shadow-sm space-y-1 hover:border-amber-400 transition">
-          <div className="flex items-center justify-between text-amber-800 text-xs font-bold uppercase">
+        <div className="hl-kpi bg-[var(--color-paper-2)] p-4 rounded-2xl border border-[var(--color-rule)] shadow-sm space-y-1 transition">
+          <div className="hl-kpi-label flex items-center justify-between text-xs font-bold uppercase">
             <span>Rescheduled</span>
-            <Clock size={16} className="text-amber-600" />
+            <Clock size={16} className="text-[var(--color-ink-2)]" />
           </div>
-          <p className="text-2xl font-black text-amber-900">{summary.rescheduled || 0}</p>
-          <span className="text-[11px] text-amber-700 font-semibold">Gated Followup Set</span>
+          <p className="hl-kpi-num text-2xl font-black">{summary.rescheduled || 0}</p>
+          <span className="text-[11px] font-semibold text-[var(--color-ink-2)]">Gated Followup Set</span>
         </div>
 
-        <div className="bg-rose-50/70 p-4 rounded-2xl border border-rose-200 shadow-sm space-y-1 hover:border-rose-400 transition">
-          <div className="flex items-center justify-between text-rose-800 text-xs font-bold uppercase">
+        <div className="hl-kpi bg-[var(--color-paper-2)] p-4 rounded-2xl border border-[var(--color-rule)] shadow-sm space-y-1 transition">
+          <div className="hl-kpi-label flex items-center justify-between text-xs font-bold uppercase">
             <span>Cancelled</span>
-            <XCircle size={16} className="text-rose-600" />
+            <XCircle size={16} className="text-[var(--color-ink-2)]" />
           </div>
-          <p className="text-2xl font-black text-rose-900">{summary.cancelled || 0}</p>
-          <span className="text-[11px] text-rose-700 font-semibold">CRM Auto-Closed</span>
+          <p className="hl-kpi-num text-2xl font-black">{summary.cancelled || 0}</p>
+          <span className="text-[11px] font-semibold text-[var(--color-ink-2)]">CRM Auto-Closed</span>
         </div>
 
-        <div className="bg-purple-50/70 p-4 rounded-2xl border border-purple-200 shadow-sm space-y-1 hover:border-purple-400 transition">
-          <div className="flex items-center justify-between text-purple-800 text-xs font-bold uppercase">
+        <div className="hl-kpi bg-[var(--color-paper-2)] p-4 rounded-2xl border border-[var(--color-rule)] shadow-sm space-y-1 transition">
+          <div className="hl-kpi-label flex items-center justify-between text-xs font-bold uppercase">
             <span>Paid / Approved</span>
-            <CreditCard size={16} className="text-purple-600" />
+            <CreditCard size={16} className="text-[var(--color-ink-2)]" />
           </div>
-          <p className="text-2xl font-black text-purple-900">{summary.paid || 0}</p>
-          <span className="text-[11px] text-purple-700 font-semibold">Collections Recorded</span>
+          <p className="hl-kpi-num text-2xl font-black">{summary.paid || 0}</p>
+          <span className="text-[11px] font-semibold text-[var(--color-ink-2)]">Collections Recorded</span>
         </div>
 
-        <div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-200 shadow-sm space-y-1 hover:border-indigo-400 transition">
-          <div className="flex items-center justify-between text-indigo-800 text-xs font-bold uppercase">
+        <div className="hl-kpi bg-[var(--color-paper-2)] p-4 rounded-2xl border border-[var(--color-rule)] shadow-sm space-y-1 transition">
+          <div className="hl-kpi-label flex items-center justify-between text-xs font-bold uppercase">
             <span>Response Rate</span>
-            <Sparkles size={16} className="text-indigo-600" />
+            <Sparkles size={16} className="text-[var(--color-focus)]" />
           </div>
-          <p className="text-2xl font-black text-indigo-900">{summary.responseRate || 0}%</p>
-          <span className="text-[11px] font-bold text-indigo-700">2-Way Action Gate</span>
+          <p className="hl-kpi-num text-2xl font-black">{summary.responseRate || 0}%</p>
+          <span className="text-[11px] font-bold text-[var(--color-ink-2)]">2-Way Action Gate</span>
         </div>
       </div>
 
       {/* ── Control Bar & Action Buttons ── */}
-      <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="hl-card hl-commandbar bg-[var(--color-paper-2)] p-5 rounded-2xl border border-[var(--color-rule)] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
-              <Bot size={20} className="text-amber-600" />
+            <h2 className="hl-title text-base font-bold flex items-center gap-2 text-[var(--color-ink)]">
+              <Bot size={20} className="text-[var(--color-focus)]" />
               <span>Multi-Dynamic Personalized Reminders</span>
             </h2>
-            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-              <Zap size={11} className="text-emerald-600" />
+            <span className="hl-badge hl-badge-success text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+              <Zap size={11} className="text-[var(--color-ink)]" />
               <span>Auto-Pilot Ready</span>
             </span>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="hl-subtitle text-xs mt-1 text-[var(--color-ink-2)]">
             Scans CRM schedules, tailors personalized tone personas, dispatches interactive button gates, and auto-syncs CRM statuses.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="hl-actions flex flex-wrap items-center gap-2">
           {triggerMessage && (
-            <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 animate-fade-in flex items-center gap-1.5">
+            <span className="hl-badge hl-badge-success text-xs font-bold px-3 py-1.5 rounded-xl animate-fade-in flex items-center gap-1.5">
               <CheckCircle2 size={13} />
               <span>{triggerMessage}</span>
             </span>
@@ -751,16 +751,16 @@ export default function WhatsAppInteractiveReminders() {
           <button
             onClick={handleTriggerSchedulers}
             disabled={triggeringCheck}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50"
+            className="hl-btn-secondary flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50"
             title="Scan CRM tables and trigger automated cron routines right now"
           >
-            {triggeringCheck ? <Loader2 size={14} className="animate-spin text-amber-600" /> : <Play size={14} />}
+            {triggeringCheck ? <Loader2 size={14} className="animate-spin text-[var(--color-ink)]" /> : <Play size={14} />}
             <span>Run Schedulers Now</span>
           </button>
 
           <button
             onClick={() => setShowSettingsModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition shadow-sm"
+            className="hl-btn-secondary flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm"
           >
             <Settings size={14} />
             <span>Settings</span>
@@ -768,7 +768,7 @@ export default function WhatsAppInteractiveReminders() {
 
           <button
             onClick={() => setShowSendModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-amber-600/20"
+            className="hl-btn-primary flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition shadow-md"
           >
             <Plus size={15} />
             <span>Instant Personalized Send</span>
@@ -777,19 +777,19 @@ export default function WhatsAppInteractiveReminders() {
       </div>
 
       {/* ── Main Workspace Navigation Tabs ── */}
-      <div className="flex items-center gap-2 border-b border-gray-200 pb-1">
+      <div className="hl-tabs flex items-center gap-2 border-b border-[var(--color-rule)] pb-1">
         <button
           onClick={() => setActiveTab("queue")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition relative ${
+          className={`hl-tab flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition relative ${
             activeTab === "queue"
-              ? "bg-amber-600 text-white shadow-md shadow-amber-600/20"
-              : "bg-slate-100 text-gray-600 hover:bg-slate-200"
+              ? "is-active"
+              : ""
           }`}
         >
           <Zap size={14} />
           <span>⚡ Automated CRM Queue</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-            activeTab === "queue" ? "bg-white/20 text-white" : "bg-amber-100 text-amber-800"
+          <span className={`hl-badge px-2 py-0.5 rounded-full text-[10px] font-black ${
+            activeTab === "queue" ? "hl-badge-accent" : ""
           }`}>
             {queueItems.length}
           </span>
@@ -797,16 +797,16 @@ export default function WhatsAppInteractiveReminders() {
 
         <button
           onClick={() => setActiveTab("logs")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition ${
+          className={`hl-tab flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition ${
             activeTab === "logs"
-              ? "bg-amber-600 text-white shadow-md shadow-amber-600/20"
-              : "bg-slate-100 text-gray-600 hover:bg-slate-200"
+              ? "is-active"
+              : ""
           }`}
         >
           <Layers size={14} />
           <span>📊 Live Reminder Logs & Confirmations</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-            activeTab === "logs" ? "bg-white/20 text-white" : "bg-slate-200 text-gray-700"
+          <span className={`hl-badge px-2 py-0.5 rounded-full text-[10px] font-black ${
+            activeTab === "logs" ? "hl-badge-accent" : ""
           }`}>
             {reminders.length}
           </span>
@@ -814,10 +814,10 @@ export default function WhatsAppInteractiveReminders() {
 
         <button
           onClick={() => setActiveTab("cadence")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition ${
+          className={`hl-tab flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition ${
             activeTab === "cadence"
-              ? "bg-amber-600 text-white shadow-md shadow-amber-600/20"
-              : "bg-slate-100 text-gray-600 hover:bg-slate-200"
+              ? "is-active"
+              : ""
           }`}
         >
           <Sliders size={14} />
@@ -831,9 +831,9 @@ export default function WhatsAppInteractiveReminders() {
       {activeTab === "queue" && (
         <div className="space-y-4">
           {/* Queue Filter & Bulk Bar */}
-          <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="hl-card bg-[var(--color-paper-2)] p-4 rounded-2xl border border-[var(--color-rule)] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="font-bold text-gray-700 mr-1">Pipeline:</span>
+              <span className="hl-section-label font-bold mr-1 text-[var(--color-ink-2)]">Pipeline:</span>
               {[
                 { id: "all", label: "All Pipelines" },
                 { id: "appointment_reminder", label: "📅 Visits" },
@@ -844,10 +844,10 @@ export default function WhatsAppInteractiveReminders() {
                 <button
                   key={pill.id}
                   onClick={() => setQueueTypeFilter(pill.id)}
-                  className={`px-3 py-1.5 rounded-xl font-bold transition ${
+                  className={`hl-badge px-3 py-1.5 rounded-xl font-bold transition ${
                     queueTypeFilter === pill.id
-                      ? "bg-amber-600 text-white shadow-sm"
-                      : "bg-slate-100 text-gray-600 hover:bg-slate-200"
+                      ? "hl-badge-accent"
+                      : ""
                   }`}
                 >
                   {pill.label}
@@ -855,9 +855,9 @@ export default function WhatsAppInteractiveReminders() {
               ))}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="hl-actions flex items-center gap-2">
               {bulkFeedback && (
-                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 animate-fade-in">
+                <span className="hl-badge hl-badge-success text-xs font-bold px-2.5 py-1 rounded-lg animate-fade-in">
                   {bulkFeedback}
                 </span>
               )}
@@ -866,7 +866,7 @@ export default function WhatsAppInteractiveReminders() {
                 <button
                   onClick={handleBulkDispatchSelected}
                   disabled={bulkDispatching}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-md transition disabled:opacity-50"
+                  className="hl-btn-primary flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-md transition disabled:opacity-50"
                 >
                   {bulkDispatching ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
                   <span>Bulk Dispatch ({selectedQueueIds.size})</span>
@@ -875,7 +875,7 @@ export default function WhatsAppInteractiveReminders() {
 
               <button
                 onClick={fetchQueue}
-                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-gray-600 transition shrink-0"
+                className="hl-btn-secondary p-2 rounded-xl transition shrink-0"
                 title="Refresh CRM Queue"
               >
                 <RefreshCw size={14} className={queueLoading ? "animate-spin" : ""} />
@@ -884,30 +884,30 @@ export default function WhatsAppInteractiveReminders() {
           </div>
 
           {/* Queue Items Table / Cards */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden text-xs">
+          <div className="hl-card bg-[var(--color-paper-2)] rounded-2xl border border-[var(--color-rule)] shadow-sm overflow-hidden text-xs">
             {queueLoading ? (
               <div className="flex justify-center py-20">
-                <Loader2 size={32} className="animate-spin text-amber-600" />
+                <Loader2 size={32} className="animate-spin text-[var(--color-ink)]" />
               </div>
             ) : filteredQueue.length === 0 ? (
-              <div className="text-center py-16 p-6">
-                <CheckCircle2 size={36} className="mx-auto mb-2 text-emerald-500" />
-                <p className="font-bold text-gray-800">All automated reminder pipelines are up to date!</p>
-                <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
+              <div className="hl-empty text-center py-16 p-6">
+                <CheckCircle2 size={36} className="mx-auto mb-2 text-[var(--color-focus)]" />
+                <p className="hl-empty-title font-bold">All automated reminder pipelines are up to date!</p>
+                <p className="text-xs mt-1 max-w-md mx-auto text-[var(--color-ink-2)]">
                   No pending appointment visits, quotations, invoices, or AMC contracts require followups right now.
                 </p>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="hl-table w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-gray-200 text-gray-600 font-bold uppercase text-[10px]">
+                    <tr className="bg-[var(--color-paper)] border-b border-[var(--color-rule)] font-bold uppercase text-[10px]">
                       <th className="py-3 px-4 w-10">
                         <input
                           type="checkbox"
                           checked={selectedQueueIds.size === filteredQueue.length && filteredQueue.length > 0}
                           onChange={toggleSelectAllQueue}
-                          className="rounded text-amber-600"
+                          className="rounded"
                         />
                       </th>
                       <th className="py-3 px-4">Customer & Phone</th>
@@ -918,76 +918,76 @@ export default function WhatsAppInteractiveReminders() {
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-[var(--color-rule)]">
                     {filteredQueue.map((item) => {
                       const isSelected = selectedQueueIds.has(item.queue_id);
                       return (
                         <tr
                           key={item.queue_id}
-                          className={`transition ${isSelected ? "bg-amber-50/50" : "hover:bg-slate-50/80"}`}
+                          className={`transition ${isSelected ? "bg-[var(--color-paper)]" : "hover:bg-[var(--color-paper)]"}`}
                         >
                           <td className="py-3.5 px-4">
                             <input
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => toggleQueueSelect(item.queue_id)}
-                              className="rounded text-amber-600"
+                              className="rounded"
                             />
                           </td>
 
                           <td className="py-3.5 px-4">
-                            <div className="font-bold text-gray-900">{item.customer_name}</div>
-                            <div className="text-[11px] text-gray-500 font-mono">+{item.phone}</div>
+                            <div className="font-bold text-[var(--color-ink)] font-[var(--font-display)]">{item.customer_name}</div>
+                            <div className="hl-id text-[11px] font-mono text-[var(--color-ink-2)]">+{item.phone}</div>
                             {item.company && item.company !== item.customer_name && (
-                              <div className="text-[10px] text-gray-400">{item.company}</div>
+                              <div className="text-[10px] text-[var(--color-ink-2)]">{item.company}</div>
                             )}
                           </td>
 
                           <td className="py-3.5 px-4">
-                            <span className="font-bold text-gray-800 block">{item.context_title}</span>
-                            <span className="text-[10px] text-gray-400">
+                            <span className="font-bold block text-[var(--color-ink)]">{item.context_title}</span>
+                            <span className="text-[10px] text-[var(--color-ink-2)]">
                               Table: {item.ref_table} #{item.ref_id} {item.amount ? `(${item.amount})` : ""}
                             </span>
                           </td>
 
                           <td className="py-3.5 px-4">
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                            <span className="hl-badge hl-badge-warn inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full">
                               <Clock size={10} />
                               <span>{item.due_label}</span>
                             </span>
                           </td>
 
                           <td className="py-3.5 px-4 max-w-xs">
-                            <div className="p-2 bg-slate-50 rounded-xl border border-slate-200 text-gray-700 text-[11px] truncate">
+                            <div className="p-2 bg-[var(--color-paper)] rounded-xl border border-[var(--color-rule)] text-[var(--color-ink)] text-[11px] truncate font-[var(--font-body)]">
                               "{interpolateText(item.suggested_text, item.variables)}"
                             </div>
                           </td>
 
                           <td className="py-3.5 px-4">
                             {item.already_sent ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-gray-700 border border-gray-300">
-                                <CheckCheck size={11} className="text-emerald-600" />
+                              <span className="hl-badge inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                <CheckCheck size={11} className="text-[var(--color-ink)]" />
                                 <span>Sent ({item.last_status || "sent"})</span>
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="hl-badge hl-badge-success inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full">
                                 <span>⚡ Ready to Send</span>
                               </span>
                             )}
                           </td>
 
                           <td className="py-3.5 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="hl-actions flex items-center justify-end gap-1.5">
                               <button
                                 onClick={() => handleSendFromQueue(item)}
-                                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold transition shadow-sm flex items-center gap-1"
+                                className="hl-btn-primary px-3 py-1 rounded-lg text-[11px] font-bold transition shadow-sm flex items-center gap-1"
                               >
                                 <Send size={11} />
                                 <span>Send</span>
                               </button>
                               <button
                                 onClick={() => handleOpenCustomizeQueueItem(item)}
-                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-lg text-[11px] font-bold transition"
+                                className="hl-btn-secondary px-2.5 py-1 rounded-lg text-[11px] font-bold transition"
                                 title="Customize template & tone before sending"
                               >
                                 Customize
@@ -1011,17 +1011,17 @@ export default function WhatsAppInteractiveReminders() {
       {activeTab === "logs" && (
         <div className="space-y-4">
           {/* Status Filters & Search Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-200 shadow-sm text-xs">
+          <div className="hl-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[var(--color-paper-2)] p-4 rounded-2xl border border-[var(--color-rule)] shadow-sm text-xs">
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="font-bold text-gray-700 mr-1">Status:</span>
+              <span className="hl-section-label font-bold mr-1 text-[var(--color-ink-2)]">Status:</span>
               {["all", "confirmed", "rescheduled", "cancelled", "paid", "sent"].map((st) => (
                 <button
                   key={st}
                   onClick={() => setFilterStatus(st)}
-                  className={`px-3 py-1.5 rounded-xl font-bold transition capitalize ${
+                  className={`hl-badge px-3 py-1.5 rounded-xl font-bold transition capitalize ${
                     filterStatus === st
-                      ? "bg-amber-600 text-white shadow-sm"
-                      : "bg-slate-100 text-gray-600 hover:bg-slate-200"
+                      ? "hl-badge-accent"
+                      : ""
                   }`}
                 >
                   {st === "sent" ? "Pending Reply" : st}
@@ -1029,17 +1029,17 @@ export default function WhatsAppInteractiveReminders() {
               ))}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="hl-actions flex items-center gap-2">
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search recipient, mobile, title..."
-                className="px-3.5 py-1.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 w-full sm:w-60 text-xs"
+                className="hl-input px-3.5 py-1.5 border border-[var(--color-rule)] rounded-xl outline-none w-full sm:w-60 text-xs"
               />
               <button
                 onClick={fetchData}
-                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-gray-600 transition shrink-0"
+                className="hl-btn-secondary p-2 rounded-xl transition shrink-0"
                 title="Refresh logs"
               >
                 <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
@@ -1048,24 +1048,24 @@ export default function WhatsAppInteractiveReminders() {
           </div>
 
           {/* Logs Table */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden text-xs">
+          <div className="hl-card bg-[var(--color-paper-2)] rounded-2xl border border-[var(--color-rule)] shadow-sm overflow-hidden text-xs">
             {loading ? (
               <div className="flex justify-center py-20">
-                <Loader2 size={32} className="animate-spin text-amber-600" />
+                <Loader2 size={32} className="animate-spin text-[var(--color-ink)]" />
               </div>
             ) : filteredReminders.length === 0 ? (
-              <div className="text-center py-16 p-6">
-                <Bell size={36} className="mx-auto mb-2 text-gray-300" />
-                <p className="font-bold text-gray-700">No reminder logs found</p>
-                <p className="text-xs text-gray-400 mt-0.5">
+              <div className="hl-empty text-center py-16 p-6">
+                <Bell size={36} className="mx-auto mb-2 text-[var(--color-ink-2)]" />
+                <p className="hl-empty-title font-bold">No reminder logs found</p>
+                <p className="text-xs mt-0.5 text-[var(--color-ink-2)]">
                   Click "Instant Personalized Send" or "Bulk Dispatch" to send interactive confirmations.
                 </p>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="hl-table w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-gray-200 text-gray-600 font-bold uppercase text-[10px]">
+                    <tr className="bg-[var(--color-paper)] border-b border-[var(--color-rule)] font-bold uppercase text-[10px]">
                       <th className="py-3 px-4">Recipient</th>
                       <th className="py-3 px-4">Reminder Type & Title</th>
                       <th className="py-3 px-4">Sent / Scheduled</th>
@@ -1074,7 +1074,7 @@ export default function WhatsAppInteractiveReminders() {
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-[var(--color-rule)]">
                     {filteredReminders.map((rem) => {
                       const isConfirmed = rem.status === "confirmed";
                       const isRescheduled = rem.status === "rescheduled";
@@ -1082,43 +1082,43 @@ export default function WhatsAppInteractiveReminders() {
                       const isPaid = rem.status === "paid";
 
                       const statusBadgeClass = isConfirmed
-                        ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                        ? "hl-badge-success"
                         : isRescheduled
-                        ? "bg-amber-100 text-amber-800 border-amber-300"
+                        ? "hl-badge-warn"
                         : isCancelled
-                        ? "bg-rose-100 text-rose-800 border-rose-300"
+                        ? "hl-badge-error"
                         : isPaid
-                        ? "bg-purple-100 text-purple-800 border-purple-300"
-                        : "bg-gray-100 text-gray-700 border-gray-200";
+                        ? "hl-badge-accent"
+                        : "";
 
                       return (
-                        <tr key={rem.id} className="hover:bg-slate-50/80 transition">
+                        <tr key={rem.id} className="hover:bg-[var(--color-paper)] transition">
                           <td className="py-3.5 px-4">
-                            <div className="font-bold text-gray-900">{rem.contact_name || "Customer"}</div>
-                            <div className="text-[11px] text-gray-500 font-mono">+{rem.phone}</div>
+                            <div className="font-bold text-[var(--color-ink)] font-[var(--font-display)]">{rem.contact_name || "Customer"}</div>
+                            <div className="hl-id text-[11px] font-mono text-[var(--color-ink-2)]">+{rem.phone}</div>
                           </td>
 
                           <td className="py-3.5 px-4">
-                            <span className="font-bold text-gray-800 capitalize block">{rem.title}</span>
-                            <span className="text-[10px] text-gray-400 font-medium">
+                            <span className="font-bold capitalize block text-[var(--color-ink)]">{rem.title}</span>
+                            <span className="text-[10px] font-medium text-[var(--color-ink-2)]">
                               Type: {rem.reminder_type.replace(/_/g, " ")} {rem.reference_table ? `(${rem.reference_table} #${rem.reference_id})` : ""}
                             </span>
                           </td>
 
-                          <td className="py-3.5 px-4 text-[11px] text-gray-600">
+                          <td className="py-3.5 px-4 text-[11px] text-[var(--color-ink)]">
                             <div>{new Date(rem.sent_at || rem.created_at).toLocaleDateString("en-IN")}</div>
-                            <div className="text-[10px] text-gray-400">
+                            <div className="hl-id text-[10px] text-[var(--color-ink-2)]">
                               {new Date(rem.sent_at || rem.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
                             </div>
                           </td>
 
                           <td className="py-3.5 px-4">
-                            <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${statusBadgeClass}`}>
+                            <span className={`hl-badge inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${statusBadgeClass}`}>
                               {isConfirmed ? <CheckCircle2 size={12} /> : isRescheduled ? <Clock size={12} /> : isCancelled ? <XCircle size={12} /> : <Clock size={12} />}
                               <span className="capitalize">{rem.status}</span>
                             </span>
                             {rem.response_action && (
-                              <div className="text-[10px] text-gray-500 mt-1 font-mono">
+                              <div className="hl-id text-[10px] mt-1 font-mono text-[var(--color-ink-2)]">
                                 Action: {rem.response_action}
                               </div>
                             )}
@@ -1126,23 +1126,23 @@ export default function WhatsAppInteractiveReminders() {
 
                           <td className="py-3.5 px-4 max-w-xs">
                             {rem.response_text ? (
-                              <div className="p-2 bg-slate-50 rounded-xl border border-slate-200 text-gray-800 text-[11px]">
-                                <span className="font-semibold text-gray-900 block truncate">"{rem.response_text}"</span>
-                                <span className="text-[9px] text-gray-400">
+                              <div className="p-2 bg-[var(--color-paper)] rounded-xl border border-[var(--color-rule)] text-[var(--color-ink)] text-[11px]">
+                                <span className="font-semibold block truncate">"{rem.response_text}"</span>
+                                <span className="text-[9px] text-[var(--color-ink-2)]">
                                   Received {new Date(rem.response_received_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
                                 </span>
                               </div>
                             ) : (
-                              <span className="text-[11px] text-gray-400 italic">Awaiting customer reply...</span>
+                              <span className="text-[11px] italic text-[var(--color-ink-2)]">Awaiting customer reply...</span>
                             )}
                           </td>
 
                           <td className="py-3.5 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="hl-actions flex items-center justify-end gap-1.5">
                               {/* 2-Way Simulator Button */}
                               <button
                                 onClick={() => openSimulationModal(rem)}
-                                className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
+                                className="hl-badge hl-badge-warn px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
                                 title="Simulate incoming customer click or reply to test CRM auto-updates"
                               >
                                 <Wand2 size={11} />
@@ -1151,14 +1151,14 @@ export default function WhatsAppInteractiveReminders() {
 
                               <button
                                 onClick={() => handleResend(rem.id)}
-                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-lg text-[11px] font-bold transition"
+                                className="hl-btn-secondary px-2.5 py-1 rounded-lg text-[11px] font-bold transition"
                                 title="Resend to recipient"
                               >
                                 Resend
                               </button>
                               <button
                                 onClick={() => handleDelete(rem.id)}
-                                className="p-1 text-gray-400 hover:text-rose-600 transition"
+                                className="hl-btn-danger-ghost p-1 transition"
                                 title="Delete record"
                               >
                                 <Trash2 size={13} />
@@ -1181,27 +1181,27 @@ export default function WhatsAppInteractiveReminders() {
       ────────────────────────────────────────────────────────────────────────── */}
       {activeTab === "cadence" && (
         <div className="space-y-6">
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="hl-card hl-commandbar bg-[var(--color-paper-2)] p-5 rounded-2xl border border-[var(--color-rule)] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                <Sliders size={18} className="text-amber-600" />
+              <h3 className="hl-title text-base font-bold flex items-center gap-2 text-[var(--color-ink)]">
+                <Sliders size={18} className="text-[var(--color-focus)]" />
                 <span>Multi-Stage Cadence Pipelines & Tone Personas</span>
               </h3>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="hl-subtitle text-xs mt-1 text-[var(--color-ink-2)]">
                 Configure automated timing intervals, tone persona profiles, dynamic template variables, and response button actions.
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="hl-actions flex items-center gap-2">
               {cadenceFeedback && (
-                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 animate-fade-in">
+                <span className="hl-badge hl-badge-success text-xs font-bold px-3 py-1.5 rounded-xl animate-fade-in">
                   {cadenceFeedback}
                 </span>
               )}
               <button
                 onClick={handleSaveCadenceRules}
                 disabled={savingCadence}
-                className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md transition disabled:opacity-50"
+                className="hl-btn-primary flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold shadow-md transition disabled:opacity-50"
               >
                 {savingCadence ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                 <span>Save Cadence Rules</span>
@@ -1211,12 +1211,12 @@ export default function WhatsAppInteractiveReminders() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {cadenceRules.map((rule, rIdx) => (
-              <div key={rule.category} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div key={rule.category} className="hl-card bg-[var(--color-paper-2)] p-5 rounded-2xl border border-[var(--color-rule)] shadow-sm space-y-4">
+                <div className="hl-commandbar flex items-center justify-between border-b border-[var(--color-rule)] pb-3">
                   <div className="flex items-center gap-2">
-                    <h4 className="font-bold text-gray-900 text-sm">{rule.label}</h4>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      rule.enabled ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-500"
+                    <h4 className="font-bold text-sm text-[var(--color-ink)] font-[var(--font-display)]">{rule.label}</h4>
+                    <span className={`hl-badge text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      rule.enabled ? "hl-badge-success" : ""
                     }`}>
                       {rule.enabled ? "Active" : "Disabled"}
                     </span>
@@ -1224,9 +1224,7 @@ export default function WhatsAppInteractiveReminders() {
 
                   <button
                     onClick={() => handleToggleCadenceCategory(rIdx)}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
-                      rule.enabled ? "bg-rose-50 text-rose-700 hover:bg-rose-100" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                    }`}
+                    className={`${rule.enabled ? "hl-btn-danger-ghost" : "hl-btn-secondary"} px-3 py-1 rounded-xl text-xs font-bold transition`}
                   >
                     {rule.enabled ? "Disable" : "Enable"}
                   </button>
@@ -1234,11 +1232,11 @@ export default function WhatsAppInteractiveReminders() {
 
                 <div className="space-y-3">
                   {rule.stages?.map((stage, sIdx) => (
-                    <div key={stage.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
+                    <div key={stage.id} className="p-3.5 bg-[var(--color-paper)] rounded-xl border border-[var(--color-rule)] text-xs space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-gray-800">{stage.name}</span>
+                        <span className="font-bold text-[var(--color-ink)]">{stage.name}</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white text-gray-600 border border-gray-200">
+                          <span className="hl-badge text-[10px] font-bold px-2 py-0.5 rounded bg-[var(--color-paper-2)] text-[var(--color-ink-2)] border border-[var(--color-rule)]">
                             {stage.triggerLabel}
                           </span>
                           <input
@@ -1249,13 +1247,13 @@ export default function WhatsAppInteractiveReminders() {
                               copy[rIdx].stages[sIdx].time = e.target.value;
                               setCadenceRules(copy);
                             }}
-                            className="px-2 py-0.5 bg-white border border-gray-200 rounded font-mono text-[11px]"
+                            className="hl-input hl-id px-2 py-0.5 bg-[var(--color-paper-2)] border border-[var(--color-rule)] rounded font-mono text-[11px]"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Message Template</label>
+                        <label className="hl-section-label block text-[10px] font-bold uppercase mb-1 text-[var(--color-ink-2)]">Message Template</label>
                         <textarea
                           rows={2}
                           value={stage.template}
@@ -1264,14 +1262,14 @@ export default function WhatsAppInteractiveReminders() {
                             copy[rIdx].stages[sIdx].template = e.target.value;
                             setCadenceRules(copy);
                           }}
-                          className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-amber-500 resize-none font-sans"
+                          className="hl-input w-full px-2.5 py-1.5 bg-[var(--color-paper-2)] border border-[var(--color-rule)] rounded-lg text-xs outline-none resize-none font-[var(--font-body)]"
                         />
                       </div>
 
                       <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase">Response Options:</span>
+                        <span className="hl-section-label text-[10px] font-bold uppercase text-[var(--color-ink-2)]">Response Options:</span>
                         {stage.options?.map((opt) => (
-                          <span key={opt.id} className="text-[10px] font-semibold bg-white text-gray-700 px-2 py-0.5 rounded border border-gray-200">
+                          <span key={opt.id} className="hl-badge text-[10px] font-semibold px-2 py-0.5 rounded border border-[var(--color-rule)] bg-[var(--color-paper-2)] text-[var(--color-ink-2)]">
                             {opt.label}
                           </span>
                         ))}
@@ -1289,29 +1287,29 @@ export default function WhatsAppInteractiveReminders() {
           MODAL 1: INSTANT MULTI-DYNAMIC PERSONALIZED SEND WITH SMARTPHONE SIMULATOR
       ────────────────────────────────────────────────────────────────────────── */}
       {showSendModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-5xl w-full p-5 sm:p-7 shadow-2xl border border-gray-100 text-xs space-y-5 max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-[var(--color-shell)]/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className="hl-card bg-[var(--color-paper-2)] rounded-3xl max-w-5xl w-full p-5 sm:p-7 shadow-2xl border border-[var(--color-rule)] text-xs space-y-5 max-h-[92vh] overflow-y-auto">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <div className="hl-commandbar flex items-center justify-between border-b border-[var(--color-rule)] pb-3">
               <div>
-                <h3 className="font-black text-gray-900 text-lg flex items-center gap-2">
-                  <Sparkles size={20} className="text-amber-600" />
+                <h3 className="hl-title font-black text-[var(--color-ink)] text-lg flex items-center gap-2">
+                  <Sparkles size={20} className="text-[var(--color-focus)]" />
                   <span>Multi-Dynamic Personalized WhatsApp Sender</span>
                 </h3>
-                <p className="text-gray-500 text-xs mt-0.5">
+                <p className="text-[var(--color-ink-2)] text-xs mt-0.5">
                   Select CRM contact, tune the tone persona, insert dynamic tags, and preview live on smartphone simulator.
                 </p>
               </div>
               <button
                 onClick={() => setShowSendModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-gray-500 font-bold flex items-center justify-center transition"
+                className="hl-btn-secondary w-8 h-8 rounded-full bg-[var(--color-paper)] hover:bg-[var(--color-paper)] text-[var(--color-ink-2)] font-bold flex items-center justify-center transition"
               >
                 ✕
               </button>
             </div>
 
             {sendSuccess && (
-              <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold flex items-center gap-2 animate-fade-in">
+              <div className="p-3.5 hl-badge hl-badge-success rounded-2xl text-xs font-bold flex items-center gap-2 animate-fade-in">
                 <CheckCircle2 size={18} />
                 <span>Interactive Personalized Reminder Dispatched Successfully!</span>
               </div>
@@ -1322,7 +1320,7 @@ export default function WhatsAppInteractiveReminders() {
               <form onSubmit={handleSendNow} className="lg:col-span-7 space-y-4">
                 {/* 1. Quick CRM Contact Search */}
                 <div className="relative">
-                  <label className="block font-bold text-gray-700 uppercase tracking-wide text-[10px] mb-1">
+                  <label className="hl-section-label block font-bold text-[var(--color-ink)] uppercase tracking-wide text-[10px] mb-1">
                     🔍 Quick Search & Auto-Fill from CRM Contacts
                   </label>
                   <div className="relative">
@@ -1331,26 +1329,26 @@ export default function WhatsAppInteractiveReminders() {
                       value={contactSearchQuery}
                       onChange={(e) => setContactSearchQuery(e.target.value)}
                       placeholder="Type name, company, or phone number to auto-fill..."
-                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 text-xs"
+                      className="hl-input w-full px-3.5 py-2.5 border border-[var(--color-rule)] rounded-xl outline-none  text-xs"
                     />
                     {searchingContacts && (
-                      <Loader2 size={14} className="animate-spin text-amber-600 absolute right-3 top-3" />
+                      <Loader2 size={14} className="animate-spin text-[var(--color-focus)] absolute right-3 top-3" />
                     )}
                   </div>
 
                   {contactSuggestions.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl z-30 max-h-48 overflow-y-auto divide-y divide-gray-100">
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--color-paper-2)] border border-[var(--color-rule)] rounded-2xl shadow-xl z-30 max-h-48 overflow-y-auto divide-y divide-[var(--color-rule)]">
                       {contactSuggestions.map((c) => (
                         <div
                           key={`${c.source}_${c.id}`}
                           onClick={() => handleSelectContact(c)}
-                          className="p-2.5 hover:bg-amber-50 cursor-pointer flex items-center justify-between text-xs transition"
+                          className="p-2.5 hover:bg-[var(--color-paper)] cursor-pointer flex items-center justify-between text-xs transition"
                         >
                           <div>
-                            <span className="font-bold text-gray-900 block">{c.name}</span>
-                            <span className="text-[11px] text-gray-500 font-mono">+{c.phone} {c.company ? `• ${c.company}` : ""}</span>
+                            <span className="font-bold text-[var(--color-ink)] block">{c.name}</span>
+                            <span className="text-[11px] text-[var(--color-ink-2)] font-mono">+{c.phone} {c.company ? `• ${c.company}` : ""}</span>
                           </div>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-gray-600 capitalize">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[var(--color-paper)] text-[var(--color-ink-2)] capitalize">
                             {c.source}
                           </span>
                         </div>
@@ -1362,11 +1360,11 @@ export default function WhatsAppInteractiveReminders() {
                 {/* Recipient Details */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-bold text-gray-700 uppercase tracking-wide text-[10px] mb-1">
+                    <label className="hl-section-label block font-bold text-[var(--color-ink)] uppercase tracking-wide text-[10px] mb-1">
                       Recipient Mobile *
                     </label>
                     <div className="flex items-center gap-1">
-                      <span className="px-3 py-2 bg-slate-100 border border-gray-200 rounded-xl font-bold text-gray-600">+91</span>
+                      <span className="px-3 py-2 bg-[var(--color-paper)] border border-[var(--color-rule)] rounded-xl font-bold text-[var(--color-ink-2)]">+91</span>
                       <input
                         type="text"
                         value={sendForm.phone}
@@ -1379,14 +1377,14 @@ export default function WhatsAppInteractiveReminders() {
                           });
                         }}
                         placeholder="9876543210"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                        className="hl-input hl-id hl-input w-full px-3 py-2 border border-[var(--color-rule)] rounded-xl outline-none font-mono"
                         required
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block font-bold text-gray-700 uppercase tracking-wide text-[10px] mb-1">
+                    <label className="hl-section-label block font-bold text-[var(--color-ink)] uppercase tracking-wide text-[10px] mb-1">
                       Customer Name
                     </label>
                     <input
@@ -1405,7 +1403,7 @@ export default function WhatsAppInteractiveReminders() {
                         });
                       }}
                       placeholder="Rahul Sharma"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500"
+                      className="hl-input w-full px-3 py-2 border border-[var(--color-rule)] rounded-xl outline-none "
                     />
                   </div>
                 </div>
@@ -1413,13 +1411,13 @@ export default function WhatsAppInteractiveReminders() {
                 {/* Category & Persona Tone */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-bold text-gray-700 uppercase tracking-wide text-[10px] mb-1">
+                    <label className="hl-section-label block font-bold text-[var(--color-ink)] uppercase tracking-wide text-[10px] mb-1">
                       Reminder Pipeline
                     </label>
                     <select
                       value={sendForm.reminder_type}
                       onChange={(e) => handleReminderTypeChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-white font-semibold text-gray-800"
+                      className="hl-select hl-input w-full px-3 py-2 border border-[var(--color-rule)] rounded-xl outline-none bg-[var(--color-paper-2)] font-semibold text-[var(--color-ink)]"
                     >
                       {REMINDER_TYPES.map((t) => (
                         <option key={t.value} value={t.value}>
@@ -1430,13 +1428,13 @@ export default function WhatsAppInteractiveReminders() {
                   </div>
 
                   <div>
-                    <label className="block font-bold text-gray-700 uppercase tracking-wide text-[10px] mb-1">
+                    <label className="hl-section-label block font-bold text-[var(--color-ink)] uppercase tracking-wide text-[10px] mb-1">
                       Tone Persona Preset
                     </label>
                     <select
                       value={activePersona}
                       onChange={(e) => handlePersonaChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-white font-semibold text-gray-800"
+                      className="hl-select hl-input w-full px-3 py-2 border border-[var(--color-rule)] rounded-xl outline-none bg-[var(--color-paper-2)] font-semibold text-[var(--color-ink)]"
                     >
                       {PERSONA_STYLES.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -1450,18 +1448,18 @@ export default function WhatsAppInteractiveReminders() {
                 {/* Dynamic Variable Chips */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-bold text-gray-700 uppercase tracking-wide text-[10px]">
+                    <span className="font-bold text-[var(--color-ink)] uppercase tracking-wide text-[10px]">
                       ⚡ Insert Dynamic Variable Tag (Click to insert):
                     </span>
-                    <span className="text-[10px] text-gray-400">Replaced with real values</span>
+                    <span className="text-[10px] text-[var(--color-ink-2)]">Replaced with real values</span>
                   </div>
-                  <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-1.5 bg-slate-50 border border-gray-200 rounded-xl">
+                  <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-1.5 bg-[var(--color-paper)] border border-[var(--color-rule)] rounded-xl">
                     {DYNAMIC_VARIABLES.map((v) => (
                       <button
                         key={v.tag}
                         type="button"
                         onClick={() => insertVariableTag(v.tag)}
-                        className="px-2 py-0.5 bg-white hover:bg-amber-50 text-amber-900 border border-gray-200 hover:border-amber-300 rounded-lg text-[10px] font-bold transition shadow-2xs flex items-center gap-1"
+                        className="px-2 py-0.5 bg-[var(--color-paper-2)] hover:bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-rule)] hover:border-[var(--color-accent)] rounded-lg text-[10px] font-bold transition shadow-2xs flex items-center gap-1"
                         title={`Sample: ${v.sample}`}
                       >
                         <Plus size={9} />
@@ -1473,7 +1471,7 @@ export default function WhatsAppInteractiveReminders() {
 
                 {/* Message Body Textarea */}
                 <div>
-                  <label className="block font-bold text-gray-700 uppercase tracking-wide text-[10px] mb-1">
+                  <label className="hl-section-label block font-bold text-[var(--color-ink)] uppercase tracking-wide text-[10px] mb-1">
                     Message Body (with Dynamic Tags & WhatsApp Markdown) *
                   </label>
                   <textarea
@@ -1481,23 +1479,23 @@ export default function WhatsAppInteractiveReminders() {
                     rows={4}
                     value={sendForm.message_text}
                     onChange={(e) => setSendForm({ ...sendForm, message_text: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 resize-none font-sans text-xs leading-relaxed"
+                    className="w-full px-3.5 py-2.5 border border-[var(--color-rule)] rounded-xl outline-none  resize-none font-[var(--font-body)] text-xs leading-relaxed"
                     required
                   />
                 </div>
 
                 {/* Interactive Buttons Config */}
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                  <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wider block">
+                <div className="p-3 bg-[var(--color-paper)] rounded-xl border border-[var(--color-rule)] space-y-2">
+                  <span className="text-[10px] font-bold text-[var(--color-ink)] uppercase tracking-wider block">
                     Interactive Confirmation Buttons (Max 3 for WhatsApp):
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {sendForm.options?.map((opt) => (
                       <div
                         key={opt.id}
-                        className="px-3 py-1.5 bg-white text-gray-800 border border-gray-300 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs"
+                        className="px-3 py-1.5 bg-[var(--color-paper-2)] text-[var(--color-ink)] border border-[var(--color-rule)] rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs"
                       >
-                        <CheckSquare size={13} className="text-emerald-600" />
+                        <CheckSquare size={13} className="text-[var(--color-ink)]" />
                         <span>{opt.label}</span>
                       </div>
                     ))}
@@ -1505,18 +1503,18 @@ export default function WhatsAppInteractiveReminders() {
                 </div>
 
                 {/* Submit Actions */}
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--color-rule)]">
                   <button
                     type="button"
                     onClick={() => setShowSendModal(false)}
-                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-700 font-bold transition"
+                    className="hl-btn-secondary px-4 py-2 rounded-xl text-[var(--color-ink)] font-bold transition"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={sending || !sendForm.phone}
-                    className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold rounded-xl transition shadow-md shadow-amber-600/20 flex items-center gap-1.5 disabled:opacity-50"
+                    className="px-5 py-2.5 hl-btn-primary font-bold rounded-xl transition shadow-md flex items-center gap-1.5 disabled:opacity-50"
                   >
                     {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                     <span>Dispatch to WhatsApp</span>
@@ -1526,44 +1524,44 @@ export default function WhatsAppInteractiveReminders() {
 
               {/* Right Column: Live Smartphone Simulator (5 cols) */}
               <div className="lg:col-span-5 flex flex-col items-center">
-                <div className="w-full max-w-[310px] bg-slate-900 rounded-[38px] p-3 shadow-2xl border-[5px] border-slate-800 relative">
+                <div className="w-full max-w-[310px] bg-[var(--color-shell)] rounded-[38px] p-3 shadow-2xl border-[5px] border-[var(--color-shell-2)] relative">
                   {/* Phone Speaker & Camera Notch */}
-                  <div className="w-24 h-4 bg-slate-800 rounded-full mx-auto mb-2 flex items-center justify-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-slate-700" />
-                    <span className="w-8 h-1 bg-slate-700 rounded-full" />
+                  <div className="w-24 h-4 bg-[var(--color-shell-2)] rounded-full mx-auto mb-2 flex items-center justify-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[var(--color-ink-2)]" />
+                    <span className="w-8 h-1 bg-[var(--color-ink-2)] rounded-full" />
                   </div>
 
                   {/* Smartphone Screen */}
-                  <div className="bg-[#0b141a] rounded-[28px] overflow-hidden text-white flex flex-col h-[490px] shadow-inner relative border border-slate-800">
+                  <div className="bg-[var(--color-shell)] rounded-[28px] overflow-hidden text-[var(--color-paper-2)] flex flex-col h-[490px] shadow-inner relative border border-[var(--color-shell-2)]">
                     {/* WhatsApp Top Header Bar */}
                     <div className="bg-[#202c33] p-3 flex items-center gap-2.5 border-b border-[#2a3942]">
-                      <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-xs shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-[var(--color-accent-ink)] font-bold text-xs shrink-0">
                         MC
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1">
                           <span className="font-bold text-xs truncate">Madhura Official</span>
-                          <span className="w-3 h-3 rounded-full bg-emerald-500 text-black flex items-center justify-center text-[8px] font-bold">✓</span>
+                          <span className="w-3 h-3 rounded-full bg-[var(--color-accent)] text-[var(--color-accent-ink)] flex items-center justify-center text-[8px] font-bold">✓</span>
                         </div>
-                        <span className="text-[10px] text-emerald-400 block truncate">online</span>
+                        <span className="text-[10px] text-[var(--color-accent)] block truncate">online</span>
                       </div>
                     </div>
 
                     {/* Chat Background & Realistic Message Bubble */}
-                    <div className="flex-1 p-3 overflow-y-auto space-y-3 bg-[#0b141a] flex flex-col justify-end">
+                    <div className="flex-1 p-3 overflow-y-auto space-y-3 bg-[var(--color-shell)] flex flex-col justify-end">
                       <div className="text-center">
-                        <span className="text-[9px] bg-[#182229] text-gray-400 px-2.5 py-0.5 rounded-md font-mono">
+                        <span className="text-[9px] bg-[#182229] text-[var(--color-ink-2)] px-2.5 py-0.5 rounded-md font-mono">
                           TODAY
                         </span>
                       </div>
 
                       {/* The WhatsApp Outbound Interactive Message Bubble */}
-                      <div className="max-w-[92%] self-end bg-[#005c4b] text-white rounded-2xl rounded-tr-none p-3 shadow-md space-y-2 border border-[#02735e]/40">
-                        <p className="text-[11px] leading-relaxed whitespace-pre-wrap font-sans">
+                      <div className="max-w-[92%] self-end bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded-2xl rounded-tr-none p-3 shadow-md space-y-2 border border-[var(--color-rule)]">
+                        <p className="text-[11px] leading-relaxed whitespace-pre-wrap font-[var(--font-body)]">
                           {interpolateText(sendForm.message_text, sendForm.variables)}
                         </p>
 
-                        <div className="flex items-center justify-end gap-1 text-[9px] text-emerald-200/70 pt-0.5">
+                        <div className="flex items-center justify-end gap-1 text-[9px] text-[var(--color-paper-2)] pt-0.5">
                           <span>{new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
                           <CheckCheck size={13} className="text-sky-400" />
                         </div>
@@ -1584,16 +1582,16 @@ export default function WhatsAppInteractiveReminders() {
 
                     {/* Fake WhatsApp Input Box */}
                     <div className="p-2 bg-[#202c33] flex items-center gap-2 border-t border-[#2a3942]">
-                      <div className="flex-1 bg-[#2a3942] rounded-full px-3 py-1 text-[11px] text-gray-400">
+                      <div className="flex-1 bg-[#2a3942] rounded-full px-3 py-1 text-[11px] text-[var(--color-ink-2)]">
                         Type a message...
                       </div>
-                      <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-white">
+                      <div className="w-6 h-6 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-[var(--color-accent-ink)]">
                         <Send size={11} />
                       </div>
                     </div>
                   </div>
                 </div>
-                <span className="text-[10px] text-gray-400 mt-2 font-mono">Live Interactive WhatsApp Preview</span>
+                <span className="text-[10px] text-[var(--color-ink-2)] mt-2 font-mono">Live Interactive WhatsApp Preview</span>
               </div>
             </div>
           </div>
@@ -1604,42 +1602,42 @@ export default function WhatsAppInteractiveReminders() {
           MODAL 2: 2-WAY INTERACTIVE TEST SIMULATOR (Test CRM Auto-Sync Live)
       ────────────────────────────────────────────────────────────────────────── */}
       {showSimModal && simTarget && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 text-xs space-y-4 animate-fade-in">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+        <div className="fixed inset-0 bg-[var(--color-shell)]/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="hl-card bg-[var(--color-paper-2)] rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-[var(--color-rule)] text-xs space-y-4 animate-fade-in">
+            <div className="hl-commandbar flex items-center justify-between border-b border-[var(--color-rule)] pb-3">
               <div>
-                <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
-                  <Wand2 size={18} className="text-amber-600" />
+                <h3 className="hl-title font-bold text-[var(--color-ink)] text-base flex items-center gap-2">
+                  <Wand2 size={18} className="text-[var(--color-focus)]" />
                   <span>Simulate Customer Response (2-Way Gateway)</span>
                 </h3>
-                <p className="text-gray-500 text-[11px] mt-0.5">
+                <p className="text-[var(--color-ink-2)] text-[11px] mt-0.5">
                   Click a button or type text to simulate recipient action and verify automated CRM updates in real time.
                 </p>
               </div>
-              <button onClick={() => setShowSimModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+              <button onClick={() => setShowSimModal(false)} className="text-[var(--color-ink-2)] hover:text-[var(--color-ink-2)] p-1">
                 ✕
               </button>
             </div>
 
             {simFeedback && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2">
+              <div className="p-3 hl-badge hl-badge-success rounded-xl text-xs font-bold flex items-center gap-2">
                 <CheckCircle2 size={16} />
                 <span>{simFeedback}</span>
               </div>
             )}
 
             {/* Target Details */}
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+            <div className="p-3 bg-[var(--color-paper)] rounded-xl border border-[var(--color-rule)] space-y-1">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-gray-900">{simTarget.contact_name}</span>
-                <span className="font-mono text-gray-500 text-[11px]">+{simTarget.phone}</span>
+                <span className="font-bold text-[var(--color-ink)]">{simTarget.contact_name}</span>
+                <span className="font-mono text-[var(--color-ink-2)] text-[11px]">+{simTarget.phone}</span>
               </div>
-              <span className="text-[10px] text-gray-400 block">{simTarget.title}</span>
+              <span className="text-[10px] text-[var(--color-ink-2)] block">{simTarget.title}</span>
             </div>
 
             {/* Simulated Buttons */}
             <div className="space-y-2">
-              <span className="font-bold text-gray-700 uppercase text-[10px] block">
+              <span className="font-bold text-[var(--color-ink)] uppercase text-[10px] block">
                 Simulate Tapping Interactive Button:
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1664,10 +1662,10 @@ export default function WhatsAppInteractiveReminders() {
                       key={opt.id}
                       onClick={() => handleExecuteSimulation(opt.action, opt.label)}
                       disabled={simulating}
-                      className="p-3 bg-slate-900 hover:bg-slate-800 text-emerald-300 font-bold rounded-xl border border-slate-800 shadow-sm transition text-left flex items-center justify-between disabled:opacity-50"
+                      className="p-3 bg-[var(--color-shell)] hover:bg-[var(--color-shell-2)] text-[var(--color-paper-2)] font-bold rounded-xl border border-[var(--color-shell-2)] shadow-sm transition text-left flex items-center justify-between disabled:opacity-50"
                     >
                       <span>{opt.label}</span>
-                      <ArrowRight size={13} className="text-gray-400" />
+                      <ArrowRight size={13} className="text-[var(--color-ink-2)]" />
                     </button>
                   ));
                 })()}
@@ -1675,8 +1673,8 @@ export default function WhatsAppInteractiveReminders() {
             </div>
 
             {/* Or Simulate Custom Text Reply */}
-            <div className="pt-2 border-t border-gray-100 space-y-2">
-              <span className="font-bold text-gray-700 uppercase text-[10px] block">
+            <div className="pt-2 border-t border-[var(--color-rule)] space-y-2">
+              <span className="font-bold text-[var(--color-ink)] uppercase text-[10px] block">
                 Or Simulate Inbound Text Reply (Fuzzy Match Intent):
               </span>
               <div className="flex items-center gap-2">
@@ -1685,13 +1683,13 @@ export default function WhatsAppInteractiveReminders() {
                   value={customSimText}
                   onChange={(e) => setCustomSimText(e.target.value)}
                   placeholder="e.g. 'I will pay tomorrow morning' or 'Please reschedule'"
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 text-xs"
+                  className="flex-1 px-3 py-2 border border-[var(--color-rule)] rounded-xl outline-none  text-xs"
                 />
                 <button
                   type="button"
                   onClick={() => handleExecuteSimulation("custom_text", customSimText)}
                   disabled={simulating || !customSimText.trim()}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition disabled:opacity-50"
+                  className="px-4 py-2 hl-btn-primary font-bold rounded-xl transition disabled:opacity-50"
                 >
                   {simulating ? <Loader2 size={13} className="animate-spin" /> : "Send"}
                 </button>
@@ -1705,25 +1703,25 @@ export default function WhatsAppInteractiveReminders() {
           MODAL 3: ENGINE SETTINGS & PROMPTS
       ────────────────────────────────────────────────────────────────────────── */}
       {showSettingsModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-gray-100 text-xs space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+        <div className="fixed inset-0 bg-[var(--color-shell)]/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="hl-card bg-[var(--color-paper-2)] rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-[var(--color-rule)] text-xs space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="hl-commandbar flex items-center justify-between border-b border-[var(--color-rule)] pb-3">
               <div>
-                <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
-                  <Settings size={18} className="text-amber-600" />
+                <h3 className="hl-title font-bold text-[var(--color-ink)] text-base flex items-center gap-2">
+                  <Settings size={18} className="text-[var(--color-focus)]" />
                   <span>Reminder Engine Settings & Confirmation Prompts</span>
                 </h3>
-                <p className="text-gray-500 text-[11px] mt-0.5">
+                <p className="text-[var(--color-ink-2)] text-[11px] mt-0.5">
                   Configure automated cron triggers, hours before dispatch, and dynamic confirmation response messages.
                 </p>
               </div>
-              <button onClick={() => setShowSettingsModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+              <button onClick={() => setShowSettingsModal(false)} className="text-[var(--color-ink-2)] hover:text-[var(--color-ink-2)] p-1">
                 ✕
               </button>
             </div>
 
             {settingsSaved && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2">
+              <div className="p-3 hl-badge hl-badge-success rounded-xl text-xs font-bold flex items-center gap-2">
                 <CheckCircle2 size={16} />
                 <span>Settings Saved Successfully!</span>
               </div>
@@ -1749,82 +1747,82 @@ export default function WhatsAppInteractiveReminders() {
               className="space-y-4"
             >
               <div className="space-y-3">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                <div className="p-3 bg-[var(--color-paper)] rounded-xl border border-[var(--color-rule)] flex items-center justify-between">
                   <div>
-                    <span className="font-bold text-gray-900 block">Service & Appointment Reminders</span>
-                    <span className="text-[11px] text-gray-500">Auto-send 24h before technician visit</span>
+                    <span className="font-bold text-[var(--color-ink)] block">Service & Appointment Reminders</span>
+                    <span className="text-[11px] text-[var(--color-ink-2)]">Auto-send 24h before technician visit</span>
                   </div>
                   <input
                     type="checkbox"
                     checked={settings.appointment_reminders_enabled}
                     onChange={(e) => setSettings({ ...settings, appointment_reminders_enabled: e.target.checked })}
-                    className="w-4 h-4 text-amber-600 rounded"
+                    className="w-4 h-4 text-[var(--color-focus)] rounded"
                   />
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                <div className="p-3 bg-[var(--color-paper)] rounded-xl border border-[var(--color-rule)] flex items-center justify-between">
                   <div>
-                    <span className="font-bold text-gray-900 block">Payment Due Invoice Reminders</span>
-                    <span className="text-[11px] text-gray-500">Auto-send 1 day before invoice due date</span>
+                    <span className="font-bold text-[var(--color-ink)] block">Payment Due Invoice Reminders</span>
+                    <span className="text-[11px] text-[var(--color-ink-2)]">Auto-send 1 day before invoice due date</span>
                   </div>
                   <input
                     type="checkbox"
                     checked={settings.payment_due_reminders_enabled}
                     onChange={(e) => setSettings({ ...settings, payment_due_reminders_enabled: e.target.checked })}
-                    className="w-4 h-4 text-amber-600 rounded"
+                    className="w-4 h-4 text-[var(--color-focus)] rounded"
                   />
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                <div className="p-3 bg-[var(--color-paper)] rounded-xl border border-[var(--color-rule)] flex items-center justify-between">
                   <div>
-                    <span className="font-bold text-gray-900 block">AMC Contract Expiry Reminders</span>
-                    <span className="text-[11px] text-gray-500">Auto-send 7 days before agreement expires</span>
+                    <span className="font-bold text-[var(--color-ink)] block">AMC Contract Expiry Reminders</span>
+                    <span className="text-[11px] text-[var(--color-ink-2)]">Auto-send 7 days before agreement expires</span>
                   </div>
                   <input
                     type="checkbox"
                     checked={settings.amc_renewal_reminders_enabled}
                     onChange={(e) => setSettings({ ...settings, amc_renewal_reminders_enabled: e.target.checked })}
-                    className="w-4 h-4 text-amber-600 rounded"
+                    className="w-4 h-4 text-[var(--color-focus)] rounded"
                   />
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-gray-100 space-y-3">
+              <div className="pt-2 border-t border-[var(--color-rule)] space-y-3">
                 <div>
-                  <label className="block font-bold text-gray-700 uppercase mb-1">Dynamic Confirmation Receipt Message</label>
+                  <label className="block font-bold text-[var(--color-ink)] uppercase mb-1">Dynamic Confirmation Receipt Message</label>
                   <textarea
                     rows={2}
                     value={settings.default_confirm_prompt}
                     onChange={(e) => setSettings({ ...settings, default_confirm_prompt: e.target.value })}
                     placeholder="🎉 Thank you {name}! Your appointment has been CONFIRMED. Our executive will arrive on time."
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 resize-none text-xs"
+                    className="hl-input w-full px-3 py-2 border border-[var(--color-rule)] rounded-xl outline-none  resize-none text-xs"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-700 uppercase mb-1">Dynamic Reschedule Prompt Message</label>
+                  <label className="block font-bold text-[var(--color-ink)] uppercase mb-1">Dynamic Reschedule Prompt Message</label>
                   <textarea
                     rows={2}
                     value={settings.default_reschedule_prompt}
                     onChange={(e) => setSettings({ ...settings, default_reschedule_prompt: e.target.value })}
                     placeholder="We understand! When would you like to reschedule your visit? Please reply with your preferred date/time."
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 resize-none text-xs"
+                    className="hl-input w-full px-3 py-2 border border-[var(--color-rule)] rounded-xl outline-none  resize-none text-xs"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--color-rule)]">
                 <button
                   type="button"
                   onClick={() => setShowSettingsModal(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-700 font-bold transition"
+                  className="hl-btn-secondary px-4 py-2 rounded-xl text-[var(--color-ink)] font-bold transition"
                 >
                   Close
                 </button>
                 <button
                   type="submit"
                   disabled={savingSettings}
-                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition shadow-md flex items-center gap-1.5"
+                  className="px-5 py-2.5 hl-btn-primary font-bold rounded-xl transition shadow-md flex items-center gap-1.5"
                 >
                   {savingSettings ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                   <span>Save Settings</span>

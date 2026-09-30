@@ -19,12 +19,11 @@ const FILTERS = [
 ];
 
 const TAG_COLORS = [
-  "bg-blue-100 text-blue-700 border-blue-200",
-  "bg-emerald-100 text-emerald-700 border-emerald-200",
-  "bg-purple-100 text-purple-700 border-purple-200",
-  "bg-amber-100 text-amber-700 border-amber-200",
-  "bg-rose-100 text-rose-700 border-rose-200",
-  "bg-teal-100 text-teal-700 border-teal-200",
+  "hl-badge-info",
+  "hl-badge-success",
+  "hl-badge-accent",
+  "hl-badge-warn",
+  "hl-badge-error",
 ];
 
 function tagColor(tag) {
@@ -65,13 +64,13 @@ const exportToCsv = (filename, headers, rows) => {
 
 function StatCard({ label, value, color, icon: Icon }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition">
-      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${color} shadow-sm`}>
+    <div className="hl-kpi flex items-center gap-4">
+      <div className="w-12 h-12 flex items-center justify-center" style={{ borderRadius: "var(--radius-card)", background: "var(--color-paper)", border: "1px solid var(--color-rule)", color: "var(--color-ink)" }}>
         <Icon size={22} />
       </div>
       <div>
-        <p className="text-2xl font-black text-gray-900 tracking-tight">{value?.toLocaleString() ?? 0}</p>
-        <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">{label}</p>
+        <p className="hl-kpi-num">{value?.toLocaleString() ?? 0}</p>
+        <p className="hl-kpi-label">{label}</p>
       </div>
     </div>
   );
@@ -323,33 +322,33 @@ export default function WhatsAppContacts() {
   };
 
   return (
-    <div className="w-full pb-12 bg-slate-50/50 min-h-screen">
+    <div className="w-full pb-12 min-h-screen" style={{ background: "var(--color-paper)", fontFamily: "var(--font-body)" }}>
       <WhatsAppNav />
 
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white p-5 rounded-2xl border border-gray-200/80 shadow-sm">
+      <div className="hl-commandbar hl-card flex-col md:flex-row" style={{ padding: "var(--space-sm)" }}>
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#25D366] to-emerald-700 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
+          <div className="w-12 h-12 flex items-center justify-center" style={{ borderRadius: "var(--radius-card)", background: "var(--color-ink)", color: "var(--color-paper-2)", fontFamily: "var(--font-display)" }}>
             <UserCheck size={26} />
           </div>
           <div>
             <div className="flex items-center gap-2.5">
-              <h1 className="text-xl font-bold text-gray-900">WhatsApp Contacts Manager</h1>
-              <span className="text-xs font-bold bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full border border-emerald-200">
+              <h1 className="hl-title">WhatsApp Contacts Manager</h1>
+              <span className="hl-badge">
                 {total.toLocaleString()} Contacts
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="hl-subtitle">
               Sync, import, tag, and manage customer phone numbers with opt-in status compliance.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="hl-actions flex items-center flex-wrap">
           <button
             onClick={handleSyncWhatsAppContacts}
             disabled={importing}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition text-xs font-bold shadow-sm disabled:opacity-50"
+            className="hl-btn-secondary"
             title="Sync all contacts directly from connected WhatsApp phone"
           >
             {importing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
@@ -359,7 +358,7 @@ export default function WhatsAppContacts() {
           <button
             onClick={handleSyncProfilePics}
             disabled={syncingPics}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-xl hover:bg-purple-100 transition text-xs font-bold shadow-sm disabled:opacity-50"
+            className="hl-btn-secondary"
             title="Fetch real WhatsApp profile photos for all contacts"
           >
             {syncingPics ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
@@ -370,13 +369,13 @@ export default function WhatsAppContacts() {
           <div className="relative group">
             <button
               disabled={importing}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition text-xs font-bold shadow-sm disabled:opacity-50"
+              className="hl-btn-secondary"
             >
               {importing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
               <span>Import from CRM</span>
               <ChevronDown size={12} />
             </button>
-            <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl z-20 w-48 hidden group-hover:block p-1">
+            <div className="hl-card absolute right-0 top-full z-20 w-48 hidden group-hover:block" style={{ padding: "var(--space-3xs)", marginTop: "var(--space-3xs)" }}>
               {[
                 { key: "all", label: "✨ All CRM Sources" },
                 { key: "clients", label: "💼 Clients (Accounts)" },
@@ -387,7 +386,8 @@ export default function WhatsAppContacts() {
                 <button
                   key={src.key}
                   onClick={() => handleImport(src.key === "all" ? null : src.key)}
-                  className="block w-full px-3 py-2 text-left text-xs font-semibold text-gray-700 hover:bg-slate-50 rounded-xl transition"
+                  className="block w-full px-3 py-2 text-left"
+                  style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)", fontSize: "var(--text-sm)", fontWeight: 600 }}
                 >
                   {src.label}
                 </button>
@@ -397,7 +397,7 @@ export default function WhatsAppContacts() {
 
           <button
             onClick={() => setShowCsvModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition shadow-sm"
+            className="hl-btn-secondary"
           >
             <FileText size={14} />
             <span>Upload CSV</span>
@@ -411,7 +411,7 @@ export default function WhatsAppContacts() {
                 contacts
               )
             }
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition shadow-sm"
+            className="hl-btn-secondary"
           >
             <Download size={14} />
             <span>Export CSV</span>
@@ -419,7 +419,7 @@ export default function WhatsAppContacts() {
 
           <button
             onClick={openCreate}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#25D366] text-white rounded-xl hover:bg-[#1ebe5d] transition text-xs font-bold shadow-md shadow-[#25D366]/20"
+            className="hl-btn-primary"
           >
             <Plus size={15} />
             <span>Add Contact</span>
@@ -430,11 +430,8 @@ export default function WhatsAppContacts() {
       {/* Import Result Alert */}
       {importResult && (
         <div
-          className={`mb-6 p-4 rounded-2xl text-xs font-semibold flex items-center justify-between border shadow-sm ${
-            importResult.error
-              ? "bg-rose-50 border-rose-200 text-rose-800"
-              : "bg-emerald-50 border-emerald-200 text-emerald-800"
-          }`}
+          className="hl-card flex items-center justify-between"
+          style={{ padding: "var(--space-xs)", marginBottom: "var(--space-sm)", borderColor: importResult.error ? "var(--color-error)" : "var(--color-success)", color: importResult.error ? "var(--color-error)" : "var(--color-success)", fontFamily: "var(--font-body)", fontSize: "var(--text-sm)", fontWeight: 600 }}
         >
           <div className="flex items-center gap-2">
             {importResult.error ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
@@ -442,24 +439,24 @@ export default function WhatsAppContacts() {
               {importResult.error || `Successfully imported ${importResult.inserted} contacts (${importResult.skipped} duplicates skipped).`}
             </span>
           </div>
-          <button onClick={() => setImportResult(null)} className="p-1 hover:bg-emerald-100 rounded-lg">
+          <button onClick={() => setImportResult(null)} className="p-1" style={{ color: "inherit" }}>
             <X size={14} />
           </button>
         </div>
       )}
 
       {/* Stats Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-6">
-        <StatCard label="Total Contacts" value={stats.total} color="bg-gray-100 text-gray-600" icon={Users} />
-        <StatCard label="Opted-In" value={stats.opted_in} color="bg-emerald-100 text-emerald-700" icon={UserCheck} />
-        <StatCard label="Blocked" value={stats.blocked} color="bg-rose-100 text-rose-700" icon={ShieldOff} />
-        <StatCard label="Unsubscribed" value={stats.unsubscribed} color="bg-amber-100 text-amber-700" icon={UserX} />
-        <StatCard label="Opt-Out Requests" value={stats.opt_outs} color="bg-purple-100 text-purple-700" icon={AlertCircle} />
+      <div className="hl-kpis grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
+        <StatCard label="Total Contacts" value={stats.total} color="hl-badge" icon={Users} />
+        <StatCard label="Opted-In" value={stats.opted_in} color="hl-badge-success" icon={UserCheck} />
+        <StatCard label="Blocked" value={stats.blocked} color="hl-badge-error" icon={ShieldOff} />
+        <StatCard label="Unsubscribed" value={stats.unsubscribed} color="hl-badge-warn" icon={UserX} />
+        <StatCard label="Opt-Out Requests" value={stats.opt_outs} color="hl-badge-info" icon={AlertCircle} />
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-gray-200/80 shadow-sm mb-5">
-        <div className="flex items-center gap-1.5 overflow-x-auto">
+      <div className="hl-card flex flex-wrap items-center justify-between" style={{ padding: "var(--space-xs)", marginBottom: "var(--space-sm)" }}>
+        <div className="hl-tabs flex items-center overflow-x-auto">
           {FILTERS.map((f) => {
             const Icon = f.icon;
             const active = filter === f.id;
@@ -470,11 +467,7 @@ export default function WhatsAppContacts() {
                   setFilter(f.id);
                   setPage(1);
                 }}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                  active
-                    ? "bg-[#25D366] text-white shadow-sm font-extrabold"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
+                className={`hl-tab flex items-center ${active ? "is-active" : ""}`}
               >
                 <Icon size={13} />
                 <span>{f.label}</span>
@@ -484,17 +477,18 @@ export default function WhatsAppContacts() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-700 focus-within:ring-2 focus-within:ring-[#25D366]/20">
-            <Search size={14} className="text-gray-400" />
+          <div className="hl-input flex items-center gap-2" style={{ display: "flex", alignItems: "center" }}>
+            <Search size={14} />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, phone, email..."
-              className="bg-transparent outline-none text-xs w-52"
+              className="w-52"
+              style={{ background: "transparent", border: "none", outline: "none", fontFamily: "var(--font-body)", fontSize: "var(--text-sm)", color: "var(--color-ink)", minHeight: "auto", padding: 0 }}
             />
             {search && (
-              <button onClick={() => setSearch("")} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setSearch("")} className="flex items-center" style={{ color: "var(--color-ink-2)" }}>
                 <X size={12} />
               </button>
             )}
@@ -502,42 +496,42 @@ export default function WhatsAppContacts() {
 
           <button
             onClick={() => fetchContacts(page, filter, search)}
-            className="p-2 hover:bg-slate-100 rounded-xl border border-gray-200 text-gray-600 shadow-sm transition"
+            className="hl-btn-secondary"
             title="Refresh list"
           >
-            <RefreshCw size={14} className={loading ? "animate-spin text-emerald-600" : ""} />
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
       </div>
 
       {/* Contacts Table */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+      <div className="hl-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-slate-50 border-b border-gray-200 text-gray-600 font-bold">
+          <table className="hl-table w-full">
+            <thead>
               <tr>
-                <th className="px-4 py-3 text-left">Contact Profile</th>
-                <th className="px-4 py-3 text-left">Phone Number</th>
-                <th className="px-4 py-3 text-left">Tags</th>
-                <th className="px-4 py-3 text-center">Status</th>
-                <th className="px-4 py-3 text-left">Source</th>
-                <th className="px-4 py-3 text-left">Last Contacted</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="text-left">Contact Profile</th>
+                <th className="text-left">Phone Number</th>
+                <th className="text-left">Tags</th>
+                <th className="text-center">Status</th>
+                <th className="text-left">Source</th>
+                <th className="text-left">Last Contacted</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-20 text-center">
-                    <Loader2 size={32} className="animate-spin text-[#25D366] mx-auto" />
+                  <td colSpan={7} className="text-center" style={{ padding: "var(--space-xl)" }}>
+                    <Loader2 size={32} className="animate-spin mx-auto" style={{ color: "var(--color-ink)" }} />
                   </td>
                 </tr>
               ) : contacts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-gray-400">
-                    <UserCheck size={44} className="mx-auto mb-2 text-gray-300" />
-                    <p className="font-bold text-gray-600">No contacts found matching filter</p>
-                    <p className="text-[11px] mt-0.5">Click "Import from CRM" or "Add Contact" to populate.</p>
+                  <td colSpan={7} className="hl-empty">
+                    <UserCheck size={44} className="mx-auto mb-2" style={{ color: "var(--color-ink-2)" }} />
+                    <p className="hl-empty-title">No contacts found matching filter</p>
+                    <p className="hl-subtitle">Click "Import from CRM" or "Add Contact" to populate.</p>
                   </td>
                 </tr>
               ) : (
@@ -554,8 +548,8 @@ export default function WhatsAppContacts() {
                   }
 
                   return (
-                    <tr key={c.id} className="hover:bg-slate-50/80 transition">
-                      <td className="px-4 py-3">
+                    <tr key={c.id}>
+                      <td>
                         <div className="flex items-center gap-3">
                           <WAContactAvatar
                             src={c.profile_pic_url || c.avatar_url}
@@ -565,63 +559,65 @@ export default function WhatsAppContacts() {
                             clickable={true}
                           />
                           <div>
-                            <p className="font-bold text-gray-900">{c.name}</p>
-                            {c.email && <p className="text-[11px] text-gray-400">{c.email}</p>}
+                            <p className="font-bold" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>{c.name}</p>
+                            {c.email && <p className="hl-id">{c.email}</p>}
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-gray-800 font-semibold">
+                      <td>
+                        <span className="hl-id">
                           +{c.country_code || "91"} {c.phone}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         <div className="flex flex-wrap gap-1">
                           {tags.slice(0, 3).map((t, idx) => (
-                            <span key={idx} className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${tagColor(t)}`}>
+                            <span key={idx} className={`hl-badge ${tagColor(t)}`}>
                               {t}
                             </span>
                           ))}
                           {tags.length > 3 && (
-                            <span className="text-[10px] text-gray-400 font-bold px-1">+{tags.length - 3}</span>
+                            <span className="hl-badge">+{tags.length - 3}</span>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="text-center">
                         {c.is_blocked ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                          <span className="hl-badge hl-badge-error">
                             <ShieldOff size={10} /> Blocked
                           </span>
                         ) : c.is_unsubscribed ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                          <span className="hl-badge hl-badge-warn">
                             <UserX size={10} /> Opted Out
                           </span>
                         ) : c.opt_in_status ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="hl-badge hl-badge-success">
                             <UserCheck size={10} /> Opted In
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                          <span className="hl-badge">
                             No Consent
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-600 font-medium">{c.source || "Direct"}</td>
-                      <td className="px-4 py-3 text-gray-500">
+                      <td style={{ color: "var(--color-ink-2)", fontFamily: "var(--font-body)" }}>{c.source || "Direct"}</td>
+                      <td style={{ color: "var(--color-ink-2)", fontFamily: "var(--font-body)" }}>
                         {c.last_contacted ? new Date(c.last_contacted).toLocaleDateString("en-IN") : "Never"}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => navigate(`/whatsapp?phone=${c.phone}`)}
-                            className="p-1.5 hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700 rounded-lg transition"
+                            className="p-1.5 flex items-center"
+                            style={{ color: "var(--color-ink)" }}
                             title="Open in WhatsApp Live Chat"
                           >
                             <MessageSquare size={14} />
                           </button>
                           <button
                             onClick={() => openEdit(c)}
-                            className="p-1.5 hover:bg-slate-100 text-gray-500 hover:text-gray-700 rounded-lg transition"
+                            className="p-1.5 flex items-center"
+                            style={{ color: "var(--color-ink-2)" }}
                             title="Edit Contact"
                           >
                             <Edit2 size={14} />
@@ -629,9 +625,8 @@ export default function WhatsAppContacts() {
                           <button
                             onClick={() => handleBlock(c.id, c.is_blocked)}
                             disabled={actionLoading === c.id}
-                            className={`p-1.5 rounded-lg transition ${
-                              c.is_blocked ? "hover:bg-emerald-50 text-emerald-600" : "hover:bg-rose-50 text-rose-500"
-                            }`}
+                            className="p-1.5 flex items-center"
+                            style={{ color: c.is_blocked ? "var(--color-success)" : "var(--color-error)" }}
                             title={c.is_blocked ? "Unblock Contact" : "Block Contact"}
                           >
                             {actionLoading === c.id ? (
@@ -644,7 +639,8 @@ export default function WhatsAppContacts() {
                           </button>
                           <button
                             onClick={() => handleDelete(c.id)}
-                            className="p-1.5 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded-lg transition"
+                            className="hl-btn-danger-ghost"
+                            style={{ padding: "0.375rem 0.5rem" }}
                             title="Delete Contact"
                           >
                             <Trash2 size={14} />
@@ -661,8 +657,8 @@ export default function WhatsAppContacts() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-slate-50/50">
-            <p className="text-xs text-gray-500 font-medium">
+          <div className="flex items-center justify-between" style={{ padding: "var(--space-xs) var(--space-sm)", borderTop: "1px solid var(--color-rule)", background: "var(--color-paper)" }}>
+            <p className="hl-subtitle">
               Page {page} of {totalPages} ({total} contacts)
             </p>
             <div className="flex gap-2">
@@ -672,7 +668,7 @@ export default function WhatsAppContacts() {
                   setPage((p) => p - 1);
                   fetchContacts(page - 1, filter, search);
                 }}
-                className="px-3.5 py-1.5 text-xs font-bold bg-white border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-40 shadow-sm"
+                className="hl-btn-secondary"
               >
                 ← Prev
               </button>
@@ -682,7 +678,7 @@ export default function WhatsAppContacts() {
                   setPage((p) => p + 1);
                   fetchContacts(page + 1, filter, search);
                 }}
-                className="px-3.5 py-1.5 text-xs font-bold bg-white border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-40 shadow-sm"
+                className="hl-btn-secondary"
               >
                 Next →
               </button>
@@ -693,39 +689,39 @@ export default function WhatsAppContacts() {
 
       {/* Add / Edit Contact Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden border border-gray-100 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-gradient-to-r from-[#25D366] to-emerald-700 p-5 text-white flex items-center justify-between shrink-0">
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: "color-mix(in srgb, var(--color-shell) 60%, transparent)" }} onClick={() => setShowModal(false)}>
+          <div className="hl-card w-full max-w-lg flex flex-col overflow-hidden" style={{ maxHeight: "90vh" }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between shrink-0" style={{ padding: "var(--space-sm)", background: "var(--color-ink)", color: "var(--color-paper-2)" }}>
               <div>
-                <h2 className="text-base font-bold">{editContact ? "Edit Contact" : "Add WhatsApp Contact"}</h2>
-                <p className="text-xs text-emerald-100 mt-0.5">Save customer profile for bulk campaigns and automations</p>
+                <h2 className="hl-title" style={{ color: "var(--color-paper-2)", fontSize: "var(--text-md)" }}>{editContact ? "Edit Contact" : "Add WhatsApp Contact"}</h2>
+                <p className="hl-subtitle" style={{ color: "var(--color-paper-2)", opacity: 0.8 }}>Save customer profile for bulk campaigns and automations</p>
               </div>
-              <button onClick={() => setShowModal(false)} className="p-1.5 hover:bg-white/20 rounded-full transition">
+              <button onClick={() => setShowModal(false)} className="p-1.5 flex items-center" style={{ color: "var(--color-paper-2)" }}>
                 <X size={18} />
               </button>
             </div>
 
-            <div className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1" style={{ fontFamily: "var(--font-body)", fontSize: "var(--text-sm)" }}>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-bold text-gray-700 uppercase mb-1">Full Name *</label>
+                  <label className="hl-section-label block mb-1">Full Name *</label>
                   <input
                     type="text"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-[#25D366]"
+                    className="hl-input w-full"
                     placeholder="Customer Name"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-gray-700 uppercase mb-1">Phone Number * (10 Digits)</label>
+                  <label className="hl-section-label block mb-1">Phone Number * (10 Digits)</label>
                   <div className="flex items-center gap-1.5">
-                    <span className="px-2.5 py-2 bg-slate-100 border border-gray-200 rounded-xl font-bold text-gray-600">+91</span>
+                    <span className="hl-badge">+91</span>
                     <input
                       type="text"
                       value={form.phone}
                       onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                      className="flex-1 px-3.5 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-[#25D366]"
+                      className="hl-input flex-1"
                       placeholder="9876543210"
                       maxLength={10}
                     />
@@ -734,54 +730,51 @@ export default function WhatsAppContacts() {
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 uppercase mb-1">Email Address</label>
+                <label className="hl-section-label block mb-1">Email Address</label>
                 <input
                   type="email"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-[#25D366]"
+                  className="hl-input w-full"
                   placeholder="client@example.com"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 uppercase mb-1">Tags (Comma-separated)</label>
-                <div className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl">
-                  <Tag size={14} className="text-gray-400" />
+                <label className="hl-section-label block mb-1">Tags (Comma-separated)</label>
+                <div className="hl-input flex items-center gap-2">
+                  <Tag size={14} />
                   <input
                     type="text"
                     value={form.tags}
                     onChange={(e) => setForm({ ...form, tags: e.target.value })}
-                    className="flex-1 text-xs outline-none bg-transparent"
+                    className="flex-1"
+                    style={{ background: "transparent", border: "none", outline: "none", fontFamily: "var(--font-body)", fontSize: "var(--text-sm)", color: "var(--color-ink)", minHeight: "auto", padding: 0 }}
                     placeholder="VIP, AMC Client, Chennai..."
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 uppercase mb-1">Notes / Remarks</label>
+                <label className="hl-section-label block mb-1">Notes / Remarks</label>
                 <textarea
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   rows={2}
-                  className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-[#25D366] resize-none"
+                  className="hl-input w-full resize-none"
                   placeholder="Optional internal remarks..."
                 />
               </div>
 
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border">
+              <div className="hl-card flex items-center justify-between" style={{ padding: "var(--space-xs)" }}>
                 <div>
-                  <p className="font-bold text-gray-800">WhatsApp Opt-in Consent</p>
-                  <p className="text-[11px] text-gray-500">Contact has agreed to receive messages</p>
+                  <p className="font-bold" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>WhatsApp Opt-in Consent</p>
+                  <p className="hl-subtitle">Contact has agreed to receive messages</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, opt_in_status: form.opt_in_status ? 0 : 1 })}
-                  className={`px-3.5 py-1.5 rounded-full font-bold transition text-xs ${
-                    form.opt_in_status
-                      ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                      : "bg-gray-200 text-gray-600"
-                  }`}
+                  className={`hl-badge ${form.opt_in_status ? "hl-badge-success" : ""}`}
                 >
                   {form.opt_in_status ? "✓ Opted In" : "✗ No Consent"}
                 </button>
@@ -791,7 +784,7 @@ export default function WhatsAppContacts() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 py-2.5 border border-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-50 transition"
+                  className="hl-btn-secondary flex-1"
                 >
                   Cancel
                 </button>
@@ -799,7 +792,7 @@ export default function WhatsAppContacts() {
                   type="button"
                   onClick={handleSave}
                   disabled={!form.name || !form.phone}
-                  className="flex-1 py-2.5 bg-[#25D366] text-white rounded-xl font-bold hover:bg-[#1ebe5d] disabled:opacity-50 transition shadow-md shadow-[#25D366]/20"
+                  className="hl-btn-primary flex-1"
                 >
                   {editContact ? "Save Changes" : "Create Contact"}
                 </button>
@@ -811,44 +804,44 @@ export default function WhatsAppContacts() {
 
       {/* CSV Import Modal */}
       {showCsvModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowCsvModal(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden border border-gray-100 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-5 text-white flex items-center justify-between shrink-0">
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: "color-mix(in srgb, var(--color-shell) 60%, transparent)" }} onClick={() => setShowCsvModal(false)}>
+          <div className="hl-card w-full max-w-lg flex flex-col overflow-hidden" style={{ maxHeight: "90vh" }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between shrink-0" style={{ padding: "var(--space-sm)", background: "var(--color-ink)", color: "var(--color-paper-2)" }}>
               <div>
-                <h2 className="text-base font-bold">Import Contacts from CSV / Excel</h2>
-                <p className="text-xs text-blue-100 mt-0.5">Upload a CSV file containing Name and Phone numbers</p>
+                <h2 className="hl-title" style={{ color: "var(--color-paper-2)", fontSize: "var(--text-md)" }}>Import Contacts from CSV / Excel</h2>
+                <p className="hl-subtitle" style={{ color: "var(--color-paper-2)", opacity: 0.8 }}>Upload a CSV file containing Name and Phone numbers</p>
               </div>
-              <button onClick={() => setShowCsvModal(false)} className="p-1.5 hover:bg-white/20 rounded-full transition">
+              <button onClick={() => setShowCsvModal(false)} className="p-1.5 flex items-center" style={{ color: "var(--color-paper-2)" }}>
                 <X size={18} />
               </button>
             </div>
 
-            <div className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
-              <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center hover:border-blue-500 transition cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                <Upload size={32} className="mx-auto text-blue-500 mb-2" />
-                <p className="font-bold text-gray-800">Click to select CSV File</p>
-                <p className="text-[11px] text-gray-500 mt-1">Columns: Name, Phone (10 digits), Email, Tags, Notes</p>
+            <div className="p-6 space-y-4 overflow-y-auto flex-1" style={{ fontFamily: "var(--font-body)", fontSize: "var(--text-sm)" }}>
+              <div className="hl-card p-6 text-center cursor-pointer" style={{ borderStyle: "dashed", padding: "var(--space-md)" }} onClick={() => fileInputRef.current?.click()}>
+                <Upload size={32} className="mx-auto mb-2" style={{ color: "var(--color-ink)" }} />
+                <p className="font-bold" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>Click to select CSV File</p>
+                <p className="hl-subtitle">Columns: Name, Phone (10 digits), Email, Tags, Notes</p>
                 <input ref={fileInputRef} type="file" accept=".csv" onChange={handleCsvFileChange} className="hidden" />
               </div>
 
               {csvFile && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-between">
+                <div className="hl-card flex items-center justify-between" style={{ padding: "var(--space-xs)" }}>
                   <div className="flex items-center gap-2">
-                    <FileText size={16} className="text-blue-600" />
-                    <span className="font-bold text-blue-900">{csvFile.name}</span>
+                    <FileText size={16} style={{ color: "var(--color-ink)" }} />
+                    <span className="font-bold" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>{csvFile.name}</span>
                   </div>
-                  <span className="text-[11px] text-blue-700 font-semibold">{Math.round(csvFile.size / 1024)} KB</span>
+                  <span className="hl-id">{Math.round(csvFile.size / 1024)} KB</span>
                 </div>
               )}
 
               {csvPreview.length > 0 && (
                 <div>
-                  <p className="font-bold text-gray-700 mb-1.5">Preview (First {csvPreview.length} contacts):</p>
-                  <div className="max-h-40 overflow-y-auto border rounded-xl divide-y">
+                  <p className="hl-section-label mb-1.5">Preview (First {csvPreview.length} contacts):</p>
+                  <div className="hl-card max-h-40 overflow-y-auto" style={{ padding: 0 }}>
                     {csvPreview.map((item, i) => (
-                      <div key={i} className="p-2 flex justify-between items-center text-[11px]">
-                        <span className="font-bold text-gray-800">{item.name}</span>
-                        <span className="font-mono text-gray-600">+{item.phone}</span>
+                      <div key={i} className="p-2 flex justify-between items-center" style={{ borderBottom: "1px solid var(--color-rule)" }}>
+                        <span className="font-bold" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>{item.name}</span>
+                        <span className="hl-id">+{item.phone}</span>
                       </div>
                     ))}
                   </div>
@@ -859,7 +852,7 @@ export default function WhatsAppContacts() {
                 <button
                   type="button"
                   onClick={() => setShowCsvModal(false)}
-                  className="flex-1 py-2.5 border border-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-50"
+                  className="hl-btn-secondary flex-1"
                 >
                   Cancel
                 </button>
@@ -867,7 +860,7 @@ export default function WhatsAppContacts() {
                   type="button"
                   onClick={handleUploadParsedCsv}
                   disabled={!csvFile || csvUploading}
-                  className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition shadow-md shadow-blue-500/20 flex items-center justify-center gap-2"
+                  className="hl-btn-primary flex-1 flex items-center justify-center gap-2"
                 >
                   {csvUploading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                   <span>{csvUploading ? "Importing..." : "Start Import"}</span>

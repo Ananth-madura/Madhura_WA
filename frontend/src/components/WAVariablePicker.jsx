@@ -6,7 +6,7 @@ export const VARIABLE_GROUPS = [
     id: "contact",
     label: "👤 Contact",
     icon: User,
-    color: "text-purple-600 bg-purple-50 border-purple-200 hover:bg-purple-100",
+    color: "hl-badge-info",
     variables: [
       { tag: "{{name}}", label: "Full Name", sample: "Rahul Sharma" },
       { tag: "{{first_name}}", label: "First Name", sample: "Rahul" },
@@ -19,7 +19,7 @@ export const VARIABLE_GROUPS = [
     id: "location",
     label: "📍 Location",
     icon: MapPin,
-    color: "text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100",
+    color: "hl-badge-success",
     variables: [
       { tag: "{{address}}", label: "Full Address", sample: "Plot 42, MIDC Ind. Area" },
       { tag: "{{city}}", label: "City", sample: "Mumbai" },
@@ -31,7 +31,7 @@ export const VARIABLE_GROUPS = [
     id: "time",
     label: "⏰ Time & Date",
     icon: Clock,
-    color: "text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100",
+    color: "hl-badge-accent",
     variables: [
       { tag: "{{tomorrow}}", label: "Tomorrow Date", sample: "Tomorrow's date (e.g. 10 Sep 2026)" },
       { tag: "{{tomorrow_day}}", label: "Tomorrow Day Name", sample: "Tomorrow's weekday (e.g. Thursday)" },
@@ -48,7 +48,7 @@ export const VARIABLE_GROUPS = [
     id: "billing",
     label: "🧾 Billing & Service",
     icon: FileText,
-    color: "text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100",
+    color: "hl-badge-warn",
     variables: [
       { tag: "{{service}}", label: "Service / Product", sample: "AC AMC Maintenance" },
       { tag: "{{invoice_no}}", label: "Invoice #", sample: "INV-2026-084" },
@@ -61,7 +61,7 @@ export const VARIABLE_GROUPS = [
     id: "spintax",
     label: "🎲 Anti-Ban Spintax",
     icon: Shuffle,
-    color: "text-rose-600 bg-rose-50 border-rose-200 hover:bg-rose-100",
+    color: "hl-badge-error",
     variables: [
       { tag: "[Hi|Hello|Hey|Greetings]", label: "Greeting Spintax", sample: "Random unique greeting per message" },
       { tag: "[Thank you|Thanks|We appreciate you]", label: "Thanks Spintax", sample: "Random thank you" },
@@ -193,10 +193,10 @@ export default function WAVariablePicker({ onInsert, className = "" }) {
     : VARIABLE_GROUPS.filter((g) => g.id === selectedGroup);
 
   return (
-    <div className={`p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5 text-xs ${className}`}>
-      <div className="flex flex-wrap items-center justify-between gap-1.5 pb-2 border-b border-slate-200/80">
-        <div className="flex items-center gap-1.5 font-bold text-gray-700">
-          <Sparkles size={14} className="text-purple-600" />
+    <div className={`hl-card p-3 bg-[var(--color-paper-2)] border border-[var(--color-rule)] rounded-2xl space-y-2.5 text-xs ${className}`}>
+      <div className="flex flex-wrap items-center justify-between gap-1.5 pb-2 border-b border-[var(--color-rule)]">
+        <div className="flex items-center gap-1.5 font-bold text-[var(--color-ink)] font-[var(--font-display)]">
+          <Sparkles size={14} className="text-[var(--color-focus)]" />
           <span>Insert Dynamic Personalized Variables:</span>
         </div>
 
@@ -205,10 +205,10 @@ export default function WAVariablePicker({ onInsert, className = "" }) {
           <button
             type="button"
             onClick={() => setSelectedGroup("all")}
-            className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition ${
+            className={`hl-badge px-2 py-0.5 rounded-lg text-[10px] font-bold transition ${
               selectedGroup === "all"
-                ? "bg-purple-600 text-white"
-                : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
+                ? "hl-badge-accent"
+                : ""
             }`}
           >
             All
@@ -218,10 +218,10 @@ export default function WAVariablePicker({ onInsert, className = "" }) {
               key={g.id}
               type="button"
               onClick={() => setSelectedGroup(g.id)}
-              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition ${
+              className={`hl-badge px-2 py-0.5 rounded-lg text-[10px] font-bold transition ${
                 selectedGroup === g.id
-                  ? "bg-purple-600 text-white"
-                  : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
+                  ? "hl-badge-accent"
+                  : ""
               }`}
             >
               {g.label}
@@ -239,17 +239,17 @@ export default function WAVariablePicker({ onInsert, className = "" }) {
               type="button"
               onClick={() => handleSelect(v.tag)}
               title={`${v.label} (Example: ${v.sample}) — Click to insert`}
-              className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold border transition flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs ${group.color}`}
+              className={`hl-badge px-2.5 py-1 rounded-xl text-[11px] font-semibold border transition flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs ${group.color}`}
             >
               <Plus size={11} className="opacity-70" />
-              <span className="font-mono font-bold">{v.tag}</span>
-              <span className="text-[10px] opacity-75 font-sans">({v.label})</span>
+              <span className="hl-id font-mono font-bold text-[var(--color-ink)]">{v.tag}</span>
+              <span className="text-[10px] opacity-75 font-[var(--font-body)] text-[var(--color-ink-2)]">({v.label})</span>
             </button>
           ))
         )}
       </div>
 
-      <div className="flex items-center justify-between text-[10px] text-gray-400 pt-1 border-t border-slate-200/60">
+      <div className="flex items-center justify-between text-[10px] text-[var(--color-ink-2)] pt-1 border-t border-[var(--color-rule)]">
         <span>💡 Click any variable above to insert it at your cursor.</span>
         <span>Supports both <code>{"{{variable}}"}</code> and <code>{"{variable}"}</code>.</span>
       </div>

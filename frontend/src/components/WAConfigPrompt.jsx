@@ -100,115 +100,115 @@ export default function WAConfigPrompt({ onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100 max-h-[92vh] flex flex-col">
-        <div className="bg-gradient-to-r from-emerald-600 via-green-600 to-teal-700 px-6 py-5 relative text-white shrink-0">
-          <button type="button" onClick={handleSnooze} className="absolute top-4 right-4 p-1 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
+    <div className="fixed inset-0 bg-[var(--color-shell)]/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+      <div className="hl-card bg-[var(--color-paper-2)] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-[var(--color-rule)] max-h-[92vh] flex flex-col">
+        <div className="hl-commandbar bg-[var(--color-shell)] px-6 py-5 relative text-[var(--color-paper-2)] shrink-0">
+          <button type="button" onClick={handleSnooze} className="absolute top-4 right-4 p-1 rounded-full bg-[var(--color-shell-2)] hover:bg-[var(--color-ink-2)] text-[var(--color-paper-2)] transition-colors">
             <X size={18} />
           </button>
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-white/20 rounded-xl">
-              <MessageCircle size={24} className="text-white" />
+            <div className="p-2.5 bg-[var(--color-accent)] rounded-xl">
+              <MessageCircle size={24} className="text-[var(--color-accent-ink)]" />
             </div>
             <div>
-              <h3 className="text-lg font-bold tracking-wide">WhatsApp API Configuration</h3>
-              <p className="text-green-100 text-xs mt-0.5">Connect your Meta WhatsApp Cloud API account</p>
+              <h3 className="hl-title text-lg font-bold tracking-wide text-[var(--color-paper-2)]">WhatsApp API Configuration</h3>
+              <p className="hl-subtitle text-xs mt-0.5 text-[var(--color-paper-2)]">Connect your Meta WhatsApp Cloud API account</p>
             </div>
           </div>
         </div>
 
         <div className="overflow-y-auto p-6 space-y-4 flex-1">
           {message.text && (
-            <div className={`p-3 rounded-xl flex items-start gap-2.5 text-sm ${
-              message.type === "error" ? "bg-rose-50 text-rose-600 border border-rose-100" : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+            <div className={`p-3 rounded-xl flex items-start gap-2.5 text-sm hl-badge ${
+              message.type === "error" ? "hl-badge-error" : "hl-badge-success"
             }`}>
               {message.type === "success" ? <Check size={18} className="shrink-0 mt-0.5" /> : <ShieldAlert size={18} className="shrink-0 mt-0.5" />}
               <span className="font-medium leading-relaxed">{message.text}</span>
             </div>
           )}
 
-          <div className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200/60 rounded-xl">
+          <div className="flex items-center justify-between p-3.5 bg-[var(--color-paper)] border border-[var(--color-rule)] rounded-xl">
             <div>
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block">WhatsApp Service Status</span>
-              <span className="text-[11px] text-slate-400">Enable or disable your WhatsApp configuration</span>
+              <span className="hl-section-label text-xs font-bold uppercase tracking-wider block text-[var(--color-ink)]">WhatsApp Service Status</span>
+              <span className="text-[11px] text-[var(--color-ink-2)]">Enable or disable your WhatsApp configuration</span>
             </div>
             <button type="button" onClick={() => setIsEnabled(!isEnabled)} className="focus:outline-none transition-transform active:scale-95">
-              {isEnabled ? <ToggleRight size={44} className="text-emerald-600 cursor-pointer" /> : <ToggleLeft size={44} className="text-slate-300 cursor-pointer" />}
+              {isEnabled ? <ToggleRight size={44} className="text-[var(--color-ink)] cursor-pointer" /> : <ToggleLeft size={44} className="text-[var(--color-ink-2)] cursor-pointer" />}
             </button>
           </div>
 
           <form onSubmit={handleSave} className="space-y-4">
             <div className="space-y-1">
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phone Number ID *</label>
-              <input type="text" value={phoneNumberId} onChange={e => setPhoneNumberId(e.target.value)} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring focus:ring-emerald-100" placeholder="e.g. 123456789012345" required />
-              <p className="text-[10px] text-slate-400">From Meta Developer Portal → WhatsApp → Getting Started</p>
+              <label className="hl-section-label block text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-2)]">Phone Number ID *</label>
+              <input type="text" value={phoneNumberId} onChange={e => setPhoneNumberId(e.target.value)} className="hl-input w-full border border-[var(--color-rule)] rounded-xl px-3 py-2.5 text-sm focus:outline-none font-[var(--font-body)]" placeholder="e.g. 123456789012345" required />
+              <p className="text-[10px] text-[var(--color-ink-2)]">From Meta Developer Portal → WhatsApp → Getting Started</p>
             </div>
 
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Access Token *</label>
-                <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer" className="text-[11px] text-emerald-600 hover:text-emerald-700 hover:underline font-bold flex items-center gap-0.5">
+                <label className="hl-section-label block text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-2)]">Access Token *</label>
+                <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer" className="text-[11px] text-[var(--color-ink)] hover:text-[var(--color-focus)] hover:underline font-bold flex items-center gap-0.5">
                   Get Token <ExternalLink size={10} />
                 </a>
               </div>
               <div className="relative">
-                <input type={showToken ? "text" : "password"} value={accessToken} onChange={e => setAccessToken(e.target.value)} onClick={() => { if (accessToken === "••••••••••••••••") setAccessToken(""); }} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 pr-9 text-sm focus:outline-none focus:border-emerald-500 focus:ring focus:ring-emerald-100 font-mono" placeholder="EAAB..." required />
-                <button type="button" onClick={() => setShowToken(!showToken)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><EyeOff size={16} /></button>
+                <input type={showToken ? "text" : "password"} value={accessToken} onChange={e => setAccessToken(e.target.value)} onClick={() => { if (accessToken === "••••••••••••••••") setAccessToken(""); }} className="hl-input hl-id w-full border border-[var(--color-rule)] rounded-xl px-3 py-2.5 pr-9 text-sm focus:outline-none font-mono" placeholder="EAAB..." required />
+                <button type="button" onClick={() => setShowToken(!showToken)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"><EyeOff size={16} /></button>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">WABA ID</label>
-                <input type="text" value={wabaId} onChange={e => setWabaId(e.target.value)} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring focus:ring-emerald-100" placeholder="WhatsApp Business Account ID" />
+                <label className="hl-section-label block text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-2)]">WABA ID</label>
+                <input type="text" value={wabaId} onChange={e => setWabaId(e.target.value)} className="hl-input w-full border border-[var(--color-rule)] rounded-xl px-3 py-2.5 text-sm focus:outline-none font-[var(--font-body)]" placeholder="WhatsApp Business Account ID" />
               </div>
               <div className="space-y-1">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">App Secret</label>
+                <label className="hl-section-label block text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-2)]">App Secret</label>
                 <div className="relative">
-                  <input type={showSecret ? "text" : "password"} value={appSecret} onChange={e => setAppSecret(e.target.value)} onClick={() => { if (appSecret === "••••••••••••••••") setAppSecret(""); }} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 pr-9 text-sm focus:outline-none focus:border-emerald-500 focus:ring focus:ring-emerald-100 font-mono" placeholder="App Secret" />
-                  <button type="button" onClick={() => setShowSecret(!showSecret)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><EyeOff size={16} /></button>
+                  <input type={showSecret ? "text" : "password"} value={appSecret} onChange={e => setAppSecret(e.target.value)} onClick={() => { if (appSecret === "••••••••••••••••") setAppSecret(""); }} className="hl-input hl-id w-full border border-[var(--color-rule)] rounded-xl px-3 py-2.5 pr-9 text-sm focus:outline-none font-mono" placeholder="App Secret" />
+                  <button type="button" onClick={() => setShowSecret(!showSecret)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"><EyeOff size={16} /></button>
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Verify Token</label>
-                <input type="text" value={verifyToken} onChange={e => setVerifyToken(e.target.value)} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring focus:ring-emerald-100" placeholder="crm_verify_123" />
+                <label className="hl-section-label block text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-2)]">Verify Token</label>
+                <input type="text" value={verifyToken} onChange={e => setVerifyToken(e.target.value)} className="hl-input w-full border border-[var(--color-rule)] rounded-xl px-3 py-2.5 text-sm focus:outline-none font-[var(--font-body)]" placeholder="crm_verify_123" />
               </div>
               <div className="space-y-1">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Business Account ID</label>
-                <input type="text" value={businessAccountId} onChange={e => setBusinessAccountId(e.target.value)} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring focus:ring-emerald-100" placeholder="Optional" />
+                <label className="hl-section-label block text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-2)]">Business Account ID</label>
+                <input type="text" value={businessAccountId} onChange={e => setBusinessAccountId(e.target.value)} className="hl-input w-full border border-[var(--color-rule)] rounded-xl px-3 py-2.5 text-sm focus:outline-none font-[var(--font-body)]" placeholder="Optional" />
               </div>
             </div>
 
-            <div className="border border-slate-200 rounded-xl p-3.5 bg-slate-50">
+            <div className="border border-[var(--color-rule)] rounded-xl p-3.5 bg-[var(--color-paper)]">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-[11px] font-bold text-slate-700 uppercase block">Verify Connection</span>
-                  <span className="text-[10px] text-slate-400">Test credentials before saving</span>
+                  <span className="hl-section-label text-[11px] font-bold uppercase block text-[var(--color-ink)]">Verify Connection</span>
+                  <span className="text-[10px] text-[var(--color-ink-2)]">Test credentials before saving</span>
                 </div>
-                <button type="button" disabled={testLoading} onClick={handleTestConnection} className="px-3 py-1.5 bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50 text-[11px] font-bold uppercase rounded-lg transition-colors">
+                <button type="button" disabled={testLoading} onClick={handleTestConnection} className="hl-btn-secondary px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase transition-colors disabled:opacity-50">
                   {testLoading ? <Loader2 size={12} className="animate-spin inline" /> : "Test Connection"}
                 </button>
               </div>
             </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-700">
+            <div className="bg-[var(--color-paper)] border border-[var(--color-rule)] rounded-xl p-3 text-[11px] text-[var(--color-ink-2)]">
               <p className="font-semibold flex items-center gap-1"><HelpCircle size={12} /> How to get these credentials:</p>
               <ol className="list-decimal pl-4 space-y-0.5 mt-1">
-                <li>Go to <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer" className="text-emerald-600 font-bold underline">Meta Developer Portal</a></li>
+                <li>Go to <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer" className="text-[var(--color-ink)] font-bold underline">Meta Developer Portal</a></li>
                 <li>Create/select your app → Add "WhatsApp" product</li>
                 <li>Copy <strong>Phone Number ID</strong> and <strong>WABA ID</strong></li>
                 <li>Generate a <strong>Permanent Access Token</strong> (Settings → Advanced → System User)</li>
               </ol>
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex gap-3">
-              <button type="button" onClick={handleSnooze} className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-500 rounded-xl hover:bg-slate-50 font-bold text-xs uppercase tracking-wider transition-colors">
+            <div className="pt-3 border-t border-[var(--color-rule)] flex gap-3">
+              <button type="button" onClick={handleSnooze} className="hl-btn-secondary flex-1 px-4 py-2.5 border border-[var(--color-rule)] rounded-xl font-bold text-xs uppercase tracking-wider transition-colors">
                 Skip for Now
               </button>
-              <button type="submit" disabled={loading} className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:bg-emerald-400 font-bold text-xs uppercase tracking-wider shadow-md shadow-emerald-100 transition-all flex items-center justify-center gap-1.5">
+              <button type="submit" disabled={loading} className="hl-btn-primary flex-1 px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-1.5">
                 {loading ? <Loader2 size={14} className="animate-spin" /> : "Save Configuration"}
               </button>
             </div>

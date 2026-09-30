@@ -17,9 +17,9 @@ import WhatsAppNav from "../components/WhatsAppNav";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 
 const QUALITY_COLORS = {
-  GREEN: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", badge: "bg-emerald-100 text-emerald-800", label: "Green — High Quality (Tier 1)" },
-  YELLOW: { bg: "bg-amber-50 border-amber-200", text: "text-amber-700", badge: "bg-amber-100 text-amber-800", label: "Yellow — Medium Quality (Tier 2)" },
-  RED: { bg: "bg-rose-50 border-rose-200", text: "text-rose-700", badge: "bg-rose-100 text-rose-800", label: "Red — Low Quality Warning" },
+  GREEN: { bg: "hl-card", text: "", badge: "hl-badge hl-badge-success", label: "Green — High Quality (Tier 1)" },
+  YELLOW: { bg: "hl-card", text: "", badge: "hl-badge hl-badge-warn", label: "Yellow — Medium Quality (Tier 2)" },
+  RED: { bg: "hl-card", text: "", badge: "hl-badge hl-badge-error", label: "Red — Low Quality Warning" },
 };
 
 const PROMPT_PRESETS = [
@@ -347,12 +347,14 @@ export default function WhatsAppAccounts() {
     };
 
     socket.on("wa_qr", handleWaQr);
+    socket.on("wa_authenticated", handleWaReady);
     socket.on("wa_ready", handleWaReady);
     socket.on("wa_connected", handleWaReady);
     socket.on("wa_disconnected", handleWaDisconnected);
 
     return () => {
       socket.off("wa_qr", handleWaQr);
+      socket.off("wa_authenticated", handleWaReady);
       socket.off("wa_ready", handleWaReady);
       socket.off("wa_connected", handleWaReady);
       socket.off("wa_disconnected", handleWaDisconnected);
@@ -698,33 +700,33 @@ export default function WhatsAppAccounts() {
   };
 
   return (
-    <div className="w-full pb-16 bg-slate-50/60 min-h-screen">
+    <div className="w-full pb-16 min-h-screen">
       <WhatsAppNav />
 
       {/* Hero Header & Real-Time Status Hub */}
-      <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm mb-6">
+      <div className="hl-card p-5 border mb-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           <div className="flex items-start sm:items-center gap-4">
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white flex items-center justify-center shadow-lg shadow-purple-500/20 shrink-0">
+            <div className="w-13 h-13 rounded-2xl flex items-center justify-center shrink-0">
               <Bot size={28} />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-xl font-black text-gray-900 tracking-tight">WhatsApp Settings & Control Hub</h1>
-                <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${
-                  cloudConfigured || webConnected ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-gray-100 text-gray-600 border-gray-200"
+                <h1 className="hl-title">WhatsApp Settings & Control Hub</h1>
+                <span className={`hl-badge flex items-center gap-1.5 ${
+                  cloudConfigured || webConnected ? "hl-badge-success" : "bg-gray-100 text-gray-600 border-gray-200"
                 }`}>
-                  <span className={`w-2 h-2 rounded-full ${cloudConfigured || webConnected ? "bg-emerald-500 animate-pulse" : "bg-gray-400"}`} />
+                  <span className={`w-2 h-2 rounded-full bg-current ${cloudConfigured || webConnected ? "animate-pulse" : ""}`} />
                   <span>{activeEngine}</span>
                 </span>
-                <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${
-                  aiForm.enabled ? "bg-purple-50 text-purple-800 border-purple-200 shadow-sm" : "bg-gray-50 text-gray-500 border-gray-200"
+                <span className={`hl-badge flex items-center gap-1.5 ${
+                  aiForm.enabled ? "hl-badge-accent" : ""
                 }`}>
-                  <span className={`w-2 h-2 rounded-full ${aiForm.enabled ? "bg-purple-600 animate-pulse" : "bg-gray-400"}`} />
+                  <span className={`w-2 h-2 rounded-full bg-current ${aiForm.enabled ? "animate-pulse" : ""}`} />
                   <span>AI Assistant: {aiForm.enabled ? "ACTIVE" : "PAUSED"}</span>
                 </span>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="hl-subtitle mt-1">
                 Full real-time control over AI Intelligence, API Keys, Multi-Device WhatsApp Web QR, Meta Cloud API, and Automated Workflows.
               </p>
             </div>
@@ -734,10 +736,10 @@ export default function WhatsAppAccounts() {
             <button
               onClick={handleToggleAiService}
               disabled={toggleLoading}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm disabled:opacity-50 ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 disabled:opacity-50 ${
                 aiForm.enabled
-                  ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200"
-                  : "bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/20"
+                  ? "hl-btn-danger-ghost"
+                  : "hl-btn-primary"
               }`}
             >
               {toggleLoading ? <Loader2 size={14} className="animate-spin" /> : <Power size={14} />}
@@ -746,66 +748,66 @@ export default function WhatsAppAccounts() {
 
             <button
               onClick={fetchAll}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition shadow-sm"
+              className="hl-btn-secondary flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition"
             >
-              <RefreshCw size={14} className={loading ? "animate-spin text-purple-600" : ""} />
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
               <span>Refresh</span>
             </button>
           </div>
         </div>
 
         {/* Live Metrics Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-4 border-t border-gray-100">
-          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-100 text-purple-700">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-4 border-t hl-kpis">
+          <div className="hl-kpi p-3 flex items-center gap-3 border">
+            <div className="p-2 rounded-lg">
               <MessageSquare size={16} />
             </div>
             <div>
-              <p className="text-[10px] uppercase font-bold text-gray-500">AI Auto-Replies</p>
-              <p className="text-sm font-black text-gray-900">{aiStats?.totalReplies || 0}</p>
+              <p className="hl-kpi-label">AI Auto-Replies</p>
+              <p className="hl-kpi-num">{aiStats?.totalReplies || 0}</p>
             </div>
           </div>
 
-          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-100 text-emerald-700">
+          <div className="hl-kpi p-3 flex items-center gap-3 border">
+            <div className="p-2 rounded-lg">
               <UserCheck size={16} />
             </div>
             <div>
-              <p className="text-[10px] uppercase font-bold text-gray-500">Leads Captured</p>
-              <p className="text-sm font-black text-gray-900">{aiStats?.leadsCaptured || 0}</p>
+              <p className="hl-kpi-label">Leads Captured</p>
+              <p className="hl-kpi-num">{aiStats?.leadsCaptured || 0}</p>
             </div>
           </div>
 
-          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-100 text-blue-700">
+          <div className="hl-kpi p-3 flex items-center gap-3 border">
+            <div className="p-2 rounded-lg">
               <BookOpen size={16} />
             </div>
             <div>
-              <p className="text-[10px] uppercase font-bold text-gray-500">Knowledge Docs</p>
-              <p className="text-sm font-black text-gray-900">{kbDocs.length} Indexed</p>
+              <p className="hl-kpi-label">Knowledge Docs</p>
+              <p className="hl-kpi-num">{kbDocs.length} Indexed</p>
             </div>
           </div>
 
-          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-100 text-amber-700">
+          <div className="hl-kpi p-3 flex items-center gap-3 border">
+            <div className="p-2 rounded-lg">
               <PhoneCall size={16} />
             </div>
             <div>
-              <p className="text-[10px] uppercase font-bold text-gray-500">Active Handoffs</p>
-              <p className="text-sm font-black text-gray-900">{aiStats?.activeHandoffs || 0} Chats</p>
+              <p className="hl-kpi-label">Active Handoffs</p>
+              <p className="hl-kpi-num">{aiStats?.activeHandoffs || 0} Chats</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Navigation Sub-Tabs */}
-      <div className="flex items-center gap-2 mb-6 border-b border-gray-200 pb-3 overflow-x-auto">
+      <div className="flex items-center gap-2 mb-6 border-b pb-3 overflow-x-auto">
         <button
           onClick={() => setActiveTab("ai")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition shrink-0 ${
+          className={`hl-tab flex items-center gap-2 px-4 py-2.5 shrink-0 ${
             activeTab === "ai"
-              ? "bg-purple-600 text-white shadow-md shadow-purple-500/20"
-              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+              ? "is-active"
+              : ""
           }`}
         >
           <Bot size={16} />
@@ -817,10 +819,10 @@ export default function WhatsAppAccounts() {
             setActiveTab("web");
             if (!webConnected && !qrCode) fetchQr(false);
           }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition shrink-0 ${
+          className={`hl-tab flex items-center gap-2 px-4 py-2.5 shrink-0 ${
             activeTab === "web"
-              ? "bg-emerald-600 text-white shadow-md shadow-emerald-500/20"
-              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+              ? "is-active"
+              : ""
           }`}
         >
           <Smartphone size={16} />
@@ -829,10 +831,10 @@ export default function WhatsAppAccounts() {
 
         <button
           onClick={() => setActiveTab("meta")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition shrink-0 ${
+          className={`hl-tab flex items-center gap-2 px-4 py-2.5 shrink-0 ${
             activeTab === "meta"
-              ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
-              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+              ? "is-active"
+              : ""
           }`}
         >
           <Key size={16} />
@@ -841,10 +843,10 @@ export default function WhatsAppAccounts() {
 
         <button
           onClick={() => setActiveTab("welcome")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition shrink-0 ${
+          className={`hl-tab flex items-center gap-2 px-4 py-2.5 shrink-0 ${
             activeTab === "welcome"
-              ? "bg-amber-600 text-white shadow-md shadow-amber-500/20"
-              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+              ? "is-active"
+              : ""
           }`}
         >
           <Sparkles size={16} />
@@ -853,10 +855,10 @@ export default function WhatsAppAccounts() {
 
         <button
           onClick={() => setActiveTab("test")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition shrink-0 ${
+          className={`hl-tab flex items-center gap-2 px-4 py-2.5 shrink-0 ${
             activeTab === "test"
-              ? "bg-slate-800 text-white shadow-md"
-              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+              ? "is-active"
+              : ""
           }`}
         >
           <Send size={16} />
@@ -865,10 +867,10 @@ export default function WhatsAppAccounts() {
 
         <button
           onClick={() => setActiveTab("connector")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition shrink-0 ${
+          className={`hl-tab flex items-center gap-2 px-4 py-2.5 shrink-0 ${
             activeTab === "connector"
-              ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md shadow-indigo-500/25"
-              : "bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200"
+              ? "is-active"
+              : ""
           }`}
         >
           <Link2 size={16} />
@@ -878,8 +880,8 @@ export default function WhatsAppAccounts() {
 
       {loading && !status ? (
         <div className="flex flex-col items-center justify-center py-24 gap-3">
-          <Loader2 size={36} className="animate-spin text-purple-600" />
-          <p className="text-xs font-bold text-gray-500">Loading WhatsApp & AI Configuration...</p>
+          <Loader2 size={36} className="animate-spin" />
+          <p className="hl-subtitle">Loading WhatsApp & AI Configuration...</p>
         </div>
       ) : (
         <div>
@@ -891,14 +893,14 @@ export default function WhatsAppAccounts() {
               {/* Left Column (2 cols): AI Settings Form & Knowledge Base */}
               <div className="lg:col-span-2 space-y-6">
                 {/* 1. API Key & Provider Card */}
-                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-5 border-b border-gray-100">
+                <div className="hl-card border p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-5 border-b">
                     <div>
-                      <h2 className="font-black text-gray-900 text-base flex items-center gap-2">
-                        <Key size={18} className="text-purple-600" />
+                      <h2 className="font-black text-base flex items-center gap-2">
+                        <Key size={18} className="" />
                         <span>AI Provider Credentials & Engine Model</span>
                       </h2>
-                      <p className="text-xs text-gray-500 mt-0.5">
+                      <p className="hl-subtitle mt-0.5">
                         Supply your OpenAI, OpenRouter, Google Gemini, Groq, or DeepSeek API key to power 24/7 intelligent replies.
                       </p>
                     </div>
@@ -910,11 +912,11 @@ export default function WhatsAppAccounts() {
                         disabled={toggleLoading}
                         className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                           aiForm.enabled
-                            ? "bg-purple-100 text-purple-800 border border-purple-300 shadow-sm"
-                            : "bg-gray-100 text-gray-600 border border-gray-200"
+                            ? "hl-badge hl-badge-accent"
+                            : "hl-badge"
                         }`}
                       >
-                        <span className={`w-2 h-2 rounded-full ${aiForm.enabled ? "bg-purple-600 animate-pulse" : "bg-gray-400"}`} />
+                        <span className={`w-2 h-2 rounded-full bg-current ${aiForm.enabled ? "animate-pulse" : ""}`} />
                         <span>{aiForm.enabled ? "AI Service: RUNNING" : "AI Service: STOPPED"}</span>
                       </button>
                     </div>
@@ -924,7 +926,7 @@ export default function WhatsAppAccounts() {
                     {/* Provider & Model Selector */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">AI Provider Platform</label>
+                        <label className="hl-section-label block mb-1">AI Provider Platform</label>
                         <select
                           value={aiForm.provider}
                           onChange={(e) => setAiForm({ ...aiForm, provider: e.target.value })}
@@ -940,7 +942,7 @@ export default function WhatsAppAccounts() {
                       </div>
 
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">Model Name / Identifier</label>
+                        <label className="hl-section-label block mb-1">Model Name / Identifier</label>
                         <input
                           type="text"
                           value={aiForm.model}
@@ -953,7 +955,7 @@ export default function WhatsAppAccounts() {
 
                     {/* Quick Model Chips */}
                     <div>
-                      <span className="text-[11px] font-bold text-gray-500 mb-1.5 block">Recommended Fast Models:</span>
+                      <span className="hl-section-label mb-1.5 block">Recommended Fast Models:</span>
                       <div className="flex flex-wrap gap-1.5">
                         {MODEL_PRESETS.map((m) => (
                           <button
@@ -962,8 +964,8 @@ export default function WhatsAppAccounts() {
                             onClick={() => setAiForm({ ...aiForm, model: m.value, provider: m.provider })}
                             className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold border transition flex items-center gap-1.5 ${
                               aiForm.model === m.value
-                                ? "bg-purple-600 text-white border-purple-600 shadow-sm"
-                                : "bg-slate-50 text-gray-700 border-gray-200 hover:bg-slate-100"
+                                ? "hl-btn-primary"
+                                : "hl-btn-secondary"
                             }`}
                           >
                             <span>{m.label}</span>
@@ -975,7 +977,7 @@ export default function WhatsAppAccounts() {
                     {/* Custom Base URL (if custom provider) */}
                     {aiForm.provider === "custom" && (
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">Custom API Base URL</label>
+                        <label className="hl-section-label block mb-1">Custom API Base URL</label>
                         <input
                           type="text"
                           value={aiForm.custom_api_url}
@@ -987,14 +989,14 @@ export default function WhatsAppAccounts() {
                     )}
 
                     {/* API Key Input & Real-Time Validator */}
-                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                    <div className="hl-card p-4 border space-y-3">
                       <div className="flex items-center justify-between">
-                        <label className="font-bold text-gray-700 uppercase flex items-center gap-1.5">
+                        <label className="hl-section-label flex items-center gap-1.5">
                           <span>API Secret Key</span>
-                          {hasApiKey && <span className="text-emerald-700 font-normal">({maskedApiKey} saved)</span>}
+                          {hasApiKey && <span className="font-normal">({maskedApiKey} saved)</span>}
                         </label>
                         {hasApiKey && (
-                          <span className="text-[11px] text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full font-bold">
+                          <span className="hl-badge hl-badge-success text-[11px] px-2.5 py-0.5 font-bold">
                             ✓ Key Active
                           </span>
                         )}
@@ -1019,17 +1021,17 @@ export default function WhatsAppAccounts() {
 
                       {/* Live API Key Validation Result */}
                       {keyTestResult && (
-                        <div className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2 ${
+                        <div className={`hl-badge p-3 text-xs font-semibold flex items-center justify-between gap-2 ${
                           keyTestResult.success
-                            ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                            : "bg-rose-50 border-rose-200 text-rose-800"
+                            ? "hl-badge-success"
+                            : "hl-badge-error"
                         }`}>
                           <div className="flex items-center gap-2">
-                            {keyTestResult.success ? <CheckCircle2 size={16} className="text-emerald-600" /> : <AlertCircle size={16} className="text-rose-600" />}
+                            {keyTestResult.success ? <CheckCircle2 size={16} className="" /> : <AlertCircle size={16} className="" />}
                             <span>{keyTestResult.message || keyTestResult.error}</span>
                           </div>
                           {keyTestResult.latencyMs && (
-                            <span className="px-2 py-0.5 bg-white rounded-md text-[10px] font-mono border">
+                            <span className="hl-id px-2 py-0.5 rounded-md text-[10px] font-mono border">
                               {keyTestResult.latencyMs}ms
                             </span>
                           )}
@@ -1037,16 +1039,16 @@ export default function WhatsAppAccounts() {
                       )}
 
                       <div className="flex items-center justify-between pt-1">
-                        <p className="text-[11px] text-gray-500">
+                        <p className="text-[11px]">
                           Keys are AES-256 encrypted at rest before storing in database.
                         </p>
                         <button
                           type="button"
                           onClick={handleTestApiKey}
                           disabled={keyTesting}
-                          className="px-3.5 py-1.5 bg-white hover:bg-slate-100 border border-gray-300 text-gray-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                          className="hl-btn-secondary px-3.5 py-1.5 border rounded-xl text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50"
                         >
-                          {keyTesting ? <Loader2 size={13} className="animate-spin text-purple-600" /> : <Zap size={13} className="text-amber-500" />}
+                          {keyTesting ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} className="" />}
                           <span>{keyTesting ? "Testing Key..." : "Test & Validate Key"}</span>
                         </button>
                       </div>
@@ -1055,16 +1057,16 @@ export default function WhatsAppAccounts() {
                 </div>
 
                 {/* 2. System Persona & Role Presets */}
-                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4 text-xs">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-3 border-b border-gray-100">
+                <div className="hl-card border p-6 space-y-4 text-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-3 border-b">
                     <div>
-                      <h2 className="font-black text-gray-900 text-base flex items-center gap-2">
-                        <Sparkles size={18} className="text-purple-600" />
+                      <h2 className="font-black text-base flex items-center gap-2">
+                        <Sparkles size={18} className="" />
                         <span>AI Persona & Prompt Studio</span>
                       </h2>
-                      <p className="text-xs text-gray-500 mt-0.5">Define your AI assistant's personality, company knowledge, and tone of voice.</p>
+                      <p className="hl-subtitle mt-0.5">Define your AI assistant's personality, company knowledge, and tone of voice.</p>
                     </div>
-                    <span className="text-[11px] text-gray-400 font-medium">Click a role preset to fill</span>
+                    <span className="text-[11px] font-medium">Click a role preset to fill</span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1076,18 +1078,18 @@ export default function WhatsAppAccounts() {
                         className="p-3 rounded-xl text-left border bg-slate-50 hover:bg-purple-50 border-gray-200 hover:border-purple-200 transition flex flex-col justify-between"
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-bold text-gray-900">{p.title}</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                          <span className="font-bold">{p.title}</span>
+                          <span className="hl-badge hl-badge-accent text-[10px] font-bold px-2 py-0.5">
                             {p.badge}
                           </span>
                         </div>
-                        <p className="text-[11px] text-gray-500 line-clamp-2">{p.prompt}</p>
+                        <p className="text-[11px] line-clamp-2">{p.prompt}</p>
                       </button>
                     ))}
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block font-bold text-gray-700 uppercase">Custom System Instruction Prompt</label>
+                    <label className="hl-section-label block">Custom System Instruction Prompt</label>
                     <WAVariablePicker
                       onInsert={(tag) => setAiForm((prev) => ({ ...prev, system_prompt: (prev.system_prompt || "") + " " + tag }))}
                     />
@@ -1102,7 +1104,7 @@ export default function WhatsAppAccounts() {
 
                   {/* Fallback Message */}
                   <div>
-                    <label className="block font-bold text-gray-700 uppercase mb-1">Graceful Fallback Message (Out of Scope)</label>
+                    <label className="hl-section-label block mb-1">Graceful Fallback Message (Out of Scope)</label>
                     <input
                       type="text"
                       value={aiForm.fallback_message}
@@ -1114,18 +1116,18 @@ export default function WhatsAppAccounts() {
                 </div>
 
                 {/* 3. Advanced Fine-Tuning & Scheduling Controls */}
-                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4 text-xs">
-                  <h2 className="font-black text-gray-900 text-base flex items-center gap-2 pb-3 border-b border-gray-100">
-                    <Sliders size={18} className="text-purple-600" />
+                <div className="hl-card border p-6 space-y-4 text-xs">
+                  <h2 className="font-black text-base flex items-center gap-2 pb-3 border-b">
+                    <Sliders size={18} className="" />
                     <span>Fine-Tuning, Working Hours & Human Handoff</span>
                   </h2>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {/* Temperature Slider */}
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                      <div className="flex justify-between font-bold text-gray-700 mb-1">
+                    <div className="hl-card p-3 border">
+                      <div className="flex justify-between font-bold mb-1">
                         <span>Creativity (Temp):</span>
-                        <span className="font-mono text-purple-600">{aiForm.temperature}</span>
+                        <span className="hl-id font-mono">{aiForm.temperature}</span>
                       </div>
                       <input
                         type="range"
@@ -1136,17 +1138,17 @@ export default function WhatsAppAccounts() {
                         onChange={(e) => setAiForm({ ...aiForm, temperature: parseFloat(e.target.value) })}
                         className="w-full accent-purple-600 cursor-pointer"
                       />
-                      <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                      <div className="flex justify-between text-[10px] mt-1">
                         <span>Precise (0.0)</span>
                         <span>Creative (1.0)</span>
                       </div>
                     </div>
 
                     {/* Max Tokens Slider */}
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                      <div className="flex justify-between font-bold text-gray-700 mb-1">
+                    <div className="hl-card p-3 border">
+                      <div className="flex justify-between font-bold mb-1">
                         <span>Max Response Tokens:</span>
-                        <span className="font-mono text-purple-600">{aiForm.max_tokens}</span>
+                        <span className="hl-id font-mono">{aiForm.max_tokens}</span>
                       </div>
                       <input
                         type="range"
@@ -1157,17 +1159,17 @@ export default function WhatsAppAccounts() {
                         onChange={(e) => setAiForm({ ...aiForm, max_tokens: parseInt(e.target.value, 10) })}
                         className="w-full accent-purple-600 cursor-pointer"
                       />
-                      <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                      <div className="flex justify-between text-[10px] mt-1">
                         <span>Concise (100)</span>
                         <span>Detailed (1000)</span>
                       </div>
                     </div>
 
                     {/* Typing Delay Simulation */}
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                      <div className="flex justify-between font-bold text-gray-700 mb-1">
+                    <div className="hl-card p-3 border">
+                      <div className="flex justify-between font-bold mb-1">
                         <span>Typing Delay:</span>
-                        <span className="font-mono text-purple-600">{aiForm.typing_delay_sec}s</span>
+                        <span className="hl-id font-mono">{aiForm.typing_delay_sec}s</span>
                       </div>
                       <input
                         type="range"
@@ -1178,7 +1180,7 @@ export default function WhatsAppAccounts() {
                         onChange={(e) => setAiForm({ ...aiForm, typing_delay_sec: parseInt(e.target.value, 10) })}
                         className="w-full accent-purple-600 cursor-pointer"
                       />
-                      <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                      <div className="flex justify-between text-[10px] mt-1">
                         <span>Instant (0s)</span>
                         <span>Human (6s)</span>
                       </div>
@@ -1186,14 +1188,14 @@ export default function WhatsAppAccounts() {
                   </div>
 
                   {/* Working Hours Filter */}
-                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                  <div className="hl-card p-4 border space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-bold text-gray-900 text-xs flex items-center gap-1.5">
-                          <Clock size={16} className="text-amber-600" />
+                        <p className="font-bold text-xs flex items-center gap-1.5">
+                          <Clock size={16} className="" />
                           <span>Working Hours Schedule Filter</span>
                         </p>
-                        <p className="text-[11px] text-gray-500">
+                        <p className="text-[11px]">
                           When enabled, AI will only reply during configured business hours.
                         </p>
                       </div>
@@ -1206,9 +1208,9 @@ export default function WhatsAppAccounts() {
                     </div>
 
                     {aiForm.working_hours_only && (
-                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                      <div className="grid grid-cols-2 gap-3 pt-2 border-t">
                         <div>
-                          <label className="block font-bold text-gray-600 mb-1">Start Time</label>
+                          <label className="hl-section-label block mb-1">Start Time</label>
                           <input
                             type="time"
                             value={aiForm.work_start_time}
@@ -1217,7 +1219,7 @@ export default function WhatsAppAccounts() {
                           />
                         </div>
                         <div>
-                          <label className="block font-bold text-gray-600 mb-1">End Time</label>
+                          <label className="hl-section-label block mb-1">End Time</label>
                           <input
                             type="time"
                             value={aiForm.work_end_time}
@@ -1230,14 +1232,14 @@ export default function WhatsAppAccounts() {
                   </div>
 
                   {/* CRM Tools & Lead Capture Toggles */}
-                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                  <div className="hl-card p-4 border space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-bold text-gray-900 text-xs flex items-center gap-1.5">
-                          <UserCheck size={16} className="text-emerald-600" />
+                        <p className="font-bold text-xs flex items-center gap-1.5">
+                          <UserCheck size={16} className="" />
                           <span>Automated CRM Lead Capture</span>
                         </p>
-                        <p className="text-[11px] text-gray-500">
+                        <p className="text-[11px]">
                           Auto-extract customer names, inquiries, and requirements into CRM Telecalls & Contacts (Source = WhatsApp AI).
                         </p>
                       </div>
@@ -1249,13 +1251,13 @@ export default function WhatsAppAccounts() {
                       />
                     </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                    <div className="flex items-center justify-between pt-2 border-t">
                       <div>
-                        <p className="font-bold text-gray-900 text-xs flex items-center gap-1.5">
-                          <Cpu size={16} className="text-purple-600" />
+                        <p className="font-bold text-xs flex items-center gap-1.5">
+                          <Cpu size={16} className="" />
                           <span>Enable CRM Action Tools (Invoices, Callback, Services)</span>
                         </p>
-                        <p className="text-[11px] text-gray-500">
+                        <p className="text-[11px]">
                           Allows AI to look up invoice statuses, schedule callbacks, and fetch company services dynamically.
                         </p>
                       </div>
@@ -1267,9 +1269,9 @@ export default function WhatsAppAccounts() {
                       />
                     </div>
 
-                    <div className="pt-2 border-t border-slate-200 space-y-2">
+                    <div className="pt-2 border-t space-y-2">
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">Human Agent Handoff Keywords</label>
+                        <label className="hl-section-label block mb-1">Human Agent Handoff Keywords</label>
                         <input
                           type="text"
                           value={aiForm.human_handoff_keywords}
@@ -1279,7 +1281,7 @@ export default function WhatsAppAccounts() {
                         />
                       </div>
                       <div className="flex items-center justify-between pt-1">
-                        <span className="font-bold text-gray-700">Handoff Cooldown (Pause AI):</span>
+                        <span className="font-bold">Handoff Cooldown (Pause AI):</span>
                         <div className="flex items-center gap-1.5">
                           <input
                             type="number"
@@ -1289,7 +1291,7 @@ export default function WhatsAppAccounts() {
                             onChange={(e) => setAiForm({ ...aiForm, handoff_cooldown_min: parseInt(e.target.value, 10) || 180 })}
                             className="w-20 px-2 py-1 bg-white border border-gray-200 rounded-lg font-mono text-center"
                           />
-                          <span className="text-gray-500 text-xs">minutes</span>
+                          <span className="text-xs">minutes</span>
                         </div>
                       </div>
                     </div>
@@ -1298,11 +1300,11 @@ export default function WhatsAppAccounts() {
                   {/* Knowledge Base Documents */}
                   <div className="pt-2">
                     <div className="flex items-center justify-between mb-2">
-                      <label className="font-bold text-gray-700 uppercase flex items-center gap-1.5">
-                        <BookOpen size={16} className="text-purple-600" />
+                      <label className="hl-section-label flex items-center gap-1.5">
+                        <BookOpen size={16} className="" />
                         <span>Knowledge Base Documents ({kbDocs.length})</span>
                       </label>
-                      <label className="flex items-center gap-1 text-xs font-bold text-purple-600 hover:text-purple-800 cursor-pointer bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl border border-purple-200 transition">
+                      <label className="hl-btn-secondary flex items-center gap-1 text-xs font-bold cursor-pointer px-3 py-1.5 rounded-xl border transition">
                         <Upload size={13} />
                         <span>Upload Document (.pdf/.docx/.csv/.txt/.md/.json)</span>
                         <input type="file" accept=".pdf,.docx,.txt,.md,.csv,.json,.tsv" onChange={handleUploadKbDoc} className="hidden" />
@@ -1310,30 +1312,30 @@ export default function WhatsAppAccounts() {
                     </div>
 
                     {kbError && (
-                      <div className="p-2.5 mb-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold">
+                      <div className="hl-badge hl-badge-error p-2.5 mb-2 border text-xs font-semibold">
                         {kbError}
                       </div>
                     )}
 
                     {kbUploading && (
-                      <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center gap-2 text-purple-800 mb-2">
+                      <div className="hl-badge hl-badge-info p-3 border flex items-center gap-2 mb-2">
                         <Loader2 size={14} className="animate-spin" />
                         <span>Parsing and indexing document for AI...</span>
                       </div>
                     )}
 
                     {kbDocs.length === 0 ? (
-                      <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-gray-400">
+                      <div className="hl-card p-4 border text-center">
                         No knowledge documents uploaded yet. Upload product catalogs, brochures, or pricing sheets.
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {kbDocs.map((doc) => (
-                          <div key={doc.id} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                          <div key={doc.id} className="hl-card p-2.5 border flex items-center justify-between">
                             <div className="flex items-center gap-2 truncate">
-                              <FileText size={14} className="text-purple-600 shrink-0" />
-                              <span className="font-bold text-gray-800 truncate">{doc.filename}</span>
-                              <span className="text-[10px] text-gray-400">({doc.char_count} chars)</span>
+                              <FileText size={14} className="shrink-0" />
+                              <span className="font-bold truncate">{doc.filename}</span>
+                              <span className="text-[10px]">({doc.char_count} chars)</span>
                             </div>
                             <button onClick={() => handleDeleteKbDoc(doc.id)} className="p-1 text-gray-400 hover:text-rose-600">
                               <Trash2 size={13} />
@@ -1345,12 +1347,12 @@ export default function WhatsAppAccounts() {
                   </div>
 
                   {/* Save All AI Settings Button */}
-                  <div className="flex items-center justify-end pt-4 border-t border-gray-100">
+                  <div className="flex items-center justify-end pt-4 border-t">
                     <button
                       type="button"
                       onClick={handleSaveAiSettings}
                       disabled={aiSaveLoading}
-                      className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold transition shadow-md shadow-purple-500/20 flex items-center gap-2 disabled:opacity-50 text-xs"
+                      className="hl-btn-primary px-6 py-2.5 rounded-xl font-bold transition flex items-center gap-2 disabled:opacity-50 text-xs"
                     >
                       {aiSaveLoading ? <Loader2 size={14} className="animate-spin" /> : aiSaved ? <Check size={14} /> : <Settings size={14} />}
                       <span>{aiSaved ? "AI Settings Saved Successfully!" : "Save All AI Settings"}</span>
@@ -1361,18 +1363,18 @@ export default function WhatsAppAccounts() {
 
               {/* Right Column (1 col): Live Interactive AI Chat Simulation Playground */}
               <div className="space-y-6">
-                <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-                  <h2 className="font-black text-gray-900 text-sm flex items-center gap-2 mb-1">
-                    <Play size={16} className="text-purple-600" />
+                <div className="hl-card border p-5">
+                  <h2 className="font-black text-sm flex items-center gap-2 mb-1">
+                    <Play size={16} className="" />
                     <span>AI Testing & Simulation Playground</span>
                   </h2>
-                  <p className="text-xs text-gray-500 mb-4">
+                  <p className="hl-subtitle mb-4">
                     Test your system prompt, knowledge base, and CRM tool execution before going live.
                   </p>
 
                   <div className="space-y-3 text-xs">
                     <div>
-                      <label className="block font-bold text-gray-700 uppercase mb-1">Simulated Customer Name</label>
+                      <label className="hl-section-label block mb-1">Simulated Customer Name</label>
                       <input
                         type="text"
                         value={aiTestName}
@@ -1382,7 +1384,7 @@ export default function WhatsAppAccounts() {
                     </div>
 
                     <div>
-                      <label className="block font-bold text-gray-700 uppercase mb-1">Customer Inbound Message</label>
+                      <label className="hl-section-label block mb-1">Customer Inbound Message</label>
                       <textarea
                         rows={2}
                         value={aiTestMessage}
@@ -1396,22 +1398,22 @@ export default function WhatsAppAccounts() {
                       type="button"
                       onClick={handleTestAiReply}
                       disabled={aiTestLoading || !aiTestMessage.trim()}
-                      className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl transition shadow-md shadow-purple-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                      className="hl-btn-primary w-full py-2.5 font-bold rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       {aiTestLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                       <span>Generate AI Test Reply</span>
                     </button>
 
                     {aiTestError && (
-                      <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs">
+                      <div className="hl-badge hl-badge-error p-3 border text-xs">
                         {aiTestError}
                       </div>
                     )}
 
                     {aiTestReply && (
-                      <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-2">
-                        <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider block">AI Generated Response:</span>
-                        <div className="p-3 bg-white border border-purple-100 rounded-xl text-xs text-gray-800 whitespace-pre-wrap shadow-sm leading-relaxed">
+                      <div className="hl-card p-4 border space-y-2">
+                        <span className="hl-section-label block">AI Generated Response:</span>
+                        <div className="p-3 border rounded-xl text-xs whitespace-pre-wrap leading-relaxed">
                           {aiTestReply}
                         </div>
                       </div>
@@ -1420,30 +1422,30 @@ export default function WhatsAppAccounts() {
                 </div>
 
                 {/* CRM Tools Summary Card */}
-                <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm text-xs space-y-3">
-                  <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                    <Cpu size={16} className="text-emerald-600" />
+                <div className="hl-card border p-5 text-xs space-y-3">
+                  <h3 className="font-bold flex items-center gap-2">
+                    <Cpu size={16} className="" />
                     <span>Enabled CRM AI Tools</span>
                   </h3>
-                  <div className="space-y-2 text-gray-600">
+                  <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
                       <span><strong>create_lead:</strong> Records new leads in Telecalls</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
                       <span><strong>check_invoice_status:</strong> Checks invoice records</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
                       <span><strong>schedule_callback:</strong> Sets callback reminder</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
                       <span><strong>get_company_services:</strong> Fetches live services list</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
                       <span><strong>request_human_support:</strong> Instant team handoff</span>
                     </div>
                   </div>
@@ -1458,36 +1460,36 @@ export default function WhatsAppAccounts() {
           {activeTab === "web" && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left Column: Live QR Code & Connection Status */}
-              <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-5">
-                <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                  <h2 className="font-black text-gray-900 text-base flex items-center gap-2">
-                    <Wifi size={18} className="text-[#25D366]" />
+              <div className="hl-card border p-6 space-y-5">
+                <div className="flex items-center justify-between pb-3 border-b">
+                  <h2 className="font-black text-base flex items-center gap-2">
+                    <Wifi size={18} className="" />
                     <span>WhatsApp Web Multi-Device Session</span>
                   </h2>
-                  <span className={`text-[11px] font-bold px-3 py-1 rounded-full border ${
-                    webConnected ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-gray-100 text-gray-600 border-gray-200"
+                  <span className={`hl-badge ${
+                    webConnected ? "hl-badge-success" : "bg-gray-100 text-gray-600 border-gray-200"
                   }`}>
                     {webConnected ? "Connected" : "Disconnected"}
                   </span>
                 </div>
 
-                <div className={`flex items-center gap-4 p-4 rounded-2xl border ${
-                  webConnected ? "bg-emerald-50/70 border-emerald-200" : "bg-slate-50 border-slate-200"
+                <div className={`hl-card flex items-center gap-4 p-4 ${
+                  webConnected ? "" : ""
                 }`}>
                   {webConnected ? (
-                    <div className="p-3 bg-emerald-500 text-white rounded-xl shadow-md shadow-emerald-500/20">
+                    <div className="p-3 rounded-xl">
                       <CheckCircle2 size={24} />
                     </div>
                   ) : (
-                    <div className="p-3 bg-gray-200 text-gray-500 rounded-xl">
+                    <div className="p-3 rounded-xl">
                       <XCircle size={24} />
                     </div>
                   )}
                   <div>
-                    <p className="font-bold text-gray-900 text-sm">
+                    <p className="font-bold text-sm">
                       {webConnected ? `Linked: +${status?.web?.phone || accountDetails?.phone || "Active Session"}` : "No Web Session Connected"}
                     </p>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="hl-subtitle mt-0.5">
                       {webConnected ? `Platform: ${accountDetails?.platform || "WhatsApp Multi-Device"} • Push Name: ${accountDetails?.pushname || "CRM"}` : "Scan QR code or use pairing code below to link your device."}
                     </p>
                   </div>
@@ -1495,20 +1497,20 @@ export default function WhatsAppAccounts() {
 
                 {/* Live QR Scanner Card */}
                 {!webConnected && (
-                  <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-center justify-center text-center space-y-4">
-                    <h3 className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
-                      <Smartphone size={16} className="text-[#25D366]" />
+                  <div className="hl-card p-5 border flex flex-col items-center justify-center text-center space-y-4">
+                    <h3 className="font-bold text-sm flex items-center gap-1.5">
+                      <Smartphone size={16} className="" />
                       <span>Scan WhatsApp Web QR Code</span>
                     </h3>
 
                     {qrLoading ? (
-                      <div className="w-64 h-64 flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-200 gap-3 p-4">
-                        <Loader2 size={36} className="animate-spin text-[#25D366]" />
-                        <span className="text-xs font-bold text-gray-700">Starting WhatsApp Engine...</span>
-                        <span className="text-[11px] text-gray-400">Launching headless browser & fetching secure QR</span>
+                      <div className="hl-card w-64 h-64 flex flex-col items-center justify-center border gap-3 p-4">
+                        <Loader2 size={36} className="animate-spin" />
+                        <span className="text-xs font-bold">Starting WhatsApp Engine...</span>
+                        <span className="text-[11px]">Launching headless browser & fetching secure QR</span>
                       </div>
                     ) : qrCode ? (
-                      <div className="p-4 bg-white rounded-2xl border border-gray-200 shadow-md flex flex-col items-center">
+                      <div className="hl-card p-4 border flex flex-col items-center">
                         {qrDataUrl ? (
                           <img src={qrDataUrl} alt="WhatsApp Web QR Code" className="w-[220px] h-[220px] object-contain" />
                         ) : (
@@ -1516,9 +1518,9 @@ export default function WhatsAppAccounts() {
                         )}
                       </div>
                     ) : (
-                      <div className="w-64 h-64 flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-200 p-4 gap-3 text-center">
-                        <Smartphone size={36} className="text-gray-300" />
-                        <p className="text-xs text-gray-600 font-medium">Click below to generate a fresh QR Code</p>
+                      <div className="hl-card w-64 h-64 flex flex-col items-center justify-center border p-4 gap-3 text-center">
+                        <Smartphone size={36} className="" />
+                        <p className="text-xs font-medium">Click below to generate a fresh QR Code</p>
                         <button
                           type="button"
                           onClick={() => fetchQr(true)}
@@ -1533,9 +1535,9 @@ export default function WhatsAppAccounts() {
                     {qrCode && (
                       <div className="flex items-center gap-3 text-xs">
                         {qrCountdown > 0 ? (
-                          <span className="text-gray-500">QR Valid: <strong className="text-gray-800 font-mono">{qrCountdown}s</strong></span>
+                          <span className="">QR Valid: <strong className="font-mono">{qrCountdown}s</strong></span>
                         ) : (
-                          <span className="text-amber-600 font-semibold">QR Expired</span>
+                          <span className="font-semibold">QR Expired</span>
                         )}
                         <button
                           type="button"
@@ -1549,19 +1551,19 @@ export default function WhatsAppAccounts() {
                       </div>
                     )}
 
-                    <p className="text-[11px] text-gray-500 max-w-xs">
+                    <p className="text-[11px] max-w-xs">
                       Open WhatsApp on your phone &gt; Settings / Menu &gt; Linked Devices &gt; Link a Device &gt; Scan this QR.
                     </p>
                   </div>
                 )}
 
                 {/* Session Control Buttons */}
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100 text-xs font-bold">
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t text-xs font-bold">
                   <button
                     type="button"
                     onClick={handleReconnectWeb}
                     disabled={reconnecting}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl transition flex items-center gap-1.5 disabled:opacity-50"
+                    className="hl-btn-secondary px-4 py-2 rounded-xl transition flex items-center gap-1.5 disabled:opacity-50"
                   >
                     {reconnecting ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
                     <span>Reconnect Session</span>
@@ -1570,7 +1572,7 @@ export default function WhatsAppAccounts() {
                   <button
                     type="button"
                     onClick={handleHardResetWeb}
-                    className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl transition flex items-center gap-1.5"
+                    className="hl-btn-danger-ghost px-4 py-2 border rounded-xl transition flex items-center gap-1.5"
                   >
                     <Flame size={13} />
                     <span>Hard Reset QR</span>
@@ -1580,7 +1582,7 @@ export default function WhatsAppAccounts() {
                     <button
                       type="button"
                       onClick={handleLogoutWeb}
-                      className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl transition flex items-center gap-1.5 ml-auto"
+                      className="hl-btn-danger-ghost px-4 py-2 border rounded-xl transition flex items-center gap-1.5 ml-auto"
                     >
                       <Power size={13} />
                       <span>Disconnect Device</span>
@@ -1589,25 +1591,25 @@ export default function WhatsAppAccounts() {
                 </div>
 
                 {reconnectMsg && (
-                  <p className="text-xs text-purple-700 font-semibold">{reconnectMsg}</p>
+                  <p className="text-xs font-semibold">{reconnectMsg}</p>
                 )}
               </div>
 
               {/* Right Column: Pairing Code & Anti-Ban Safety */}
               <div className="space-y-6">
                 {/* 8-Digit Pairing Code Form */}
-                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
-                  <h2 className="font-black text-gray-900 text-base flex items-center gap-2">
-                    <Smartphone size={18} className="text-emerald-600" />
+                <div className="hl-card border p-6 space-y-4">
+                  <h2 className="font-black text-base flex items-center gap-2">
+                    <Smartphone size={18} className="" />
                     <span>Link with 8-Digit Phone Pairing Code</span>
                   </h2>
-                  <p className="text-xs text-gray-500">
+                  <p className="hl-subtitle">
                     If your camera is unable to scan QR codes, enter your WhatsApp phone number to receive an 8-character pairing code.
                   </p>
 
                   <form onSubmit={handleGeneratePairingCode} className="space-y-3 text-xs">
                     <div>
-                      <label className="block font-bold text-gray-700 uppercase mb-1">Phone Number (with country code)</label>
+                      <label className="hl-section-label block mb-1">Phone Number (with country code)</label>
                       <input
                         type="text"
                         value={pairingPhone}
@@ -1620,7 +1622,7 @@ export default function WhatsAppAccounts() {
                     <button
                       type="submit"
                       disabled={pairingLoading || !pairingPhone.trim()}
-                      className="w-full py-2.5 bg-[#25D366] hover:bg-[#1ebe5d] text-white font-bold rounded-xl transition shadow-md shadow-[#25D366]/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                      className="hl-btn-primary w-full py-2.5 font-bold rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       {pairingLoading ? <Loader2 size={14} className="animate-spin" /> : <Radio size={14} />}
                       <span>Generate 8-Digit Pairing Code</span>
@@ -1628,53 +1630,53 @@ export default function WhatsAppAccounts() {
                   </form>
 
                   {pairingCode && (
-                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-center space-y-2">
-                      <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Your Pairing Code:</span>
-                      <div className="text-2xl font-black font-mono tracking-widest text-emerald-950 select-all">
+                    <div className="hl-card p-4 border text-center space-y-2">
+                      <span className="hl-section-label block">Your Pairing Code:</span>
+                      <div className="text-2xl font-black font-mono tracking-widest select-all">
                         {pairingCode}
                       </div>
-                      <p className="text-[11px] text-emerald-700">Enter this code in WhatsApp &gt; Linked Devices &gt; Link with Phone Number.</p>
+                      <p className="text-[11px]">Enter this code in WhatsApp &gt; Linked Devices &gt; Link with Phone Number.</p>
                     </div>
                   )}
                 </div>
 
                 {/* Anti-Ban & Broadcast Safeguards */}
-                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-3 text-xs">
-                  <h2 className="font-black text-gray-900 text-base flex items-center gap-2">
-                    <ShieldCheck size={18} className="text-emerald-600" />
+                <div className="hl-card border p-6 space-y-3 text-xs">
+                  <h2 className="font-black text-base flex items-center gap-2">
+                    <ShieldCheck size={18} className="" />
                     <span>Anti-Ban Broadcast Safeguards</span>
                   </h2>
-                  <p className="text-xs text-gray-500">
+                  <p className="hl-subtitle">
                     Built-in humanized pacing dynamically protects your WhatsApp number from automated spam detection.
                   </p>
 
                   <div className="space-y-2">
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center">
-                      <span className="font-semibold text-gray-700">Random Delay Between Messages:</span>
-                      <span className="font-bold text-emerald-700">35s – 55s</span>
+                    <div className="hl-card p-3 border flex justify-between items-center">
+                      <span className="font-semibold">Random Delay Between Messages:</span>
+                      <span className="font-bold">35s – 55s</span>
                     </div>
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center">
-                      <span className="font-semibold text-gray-700">Batch Pause Cooldown:</span>
-                      <span className="font-bold text-emerald-700">Pause 3m every 25 messages</span>
+                    <div className="hl-card p-3 border flex justify-between items-center">
+                      <span className="font-semibold">Batch Pause Cooldown:</span>
+                      <span className="font-bold">Pause 3m every 25 messages</span>
                     </div>
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center">
-                      <span className="font-semibold text-gray-700">Opt-Out Filtering:</span>
-                      <span className="font-bold text-emerald-700">Automatic STOP filter active</span>
+                    <div className="hl-card p-3 border flex justify-between items-center">
+                      <span className="font-semibold">Opt-Out Filtering:</span>
+                      <span className="font-bold">Automatic STOP filter active</span>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+                  <div className="pt-2 border-t flex items-center justify-between">
                     <button
                       type="button"
                       onClick={handleSyncContacts}
                       disabled={syncingContacts}
-                      className="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl font-bold transition flex items-center gap-1.5"
+                      className="hl-btn-secondary px-4 py-2 border rounded-xl font-bold transition flex items-center gap-1.5"
                     >
-                      <RefreshCw size={13} className={syncingContacts ? "animate-spin text-emerald-600" : ""} />
+                      <RefreshCw size={13} className={syncingContacts ? "animate-spin" : ""} />
                       <span>{syncingContacts ? "Syncing Contacts..." : "Sync WhatsApp Contacts"}</span>
                     </button>
                     {syncResult && (
-                      <span className={`text-[11px] font-bold ${syncResult.success ? "text-emerald-700" : "text-rose-700"}`}>
+                      <span className={`hl-badge text-[11px] font-bold ${syncResult.success ? "hl-badge-success" : "hl-badge-error"}`}>
                         {syncResult.message}
                       </span>
                     )}
@@ -1690,28 +1692,28 @@ export default function WhatsAppAccounts() {
           {activeTab === "meta" && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
-                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-gray-100">
+                <div className="hl-card border p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b">
                     <div>
-                      <h2 className="font-black text-gray-900 text-base flex items-center gap-2">
-                        <Key size={18} className="text-blue-600" />
+                      <h2 className="font-black text-base flex items-center gap-2">
+                        <Key size={18} className="" />
                         <span>Meta Cloud API Credentials</span>
                       </h2>
-                      <p className="text-xs text-gray-500 mt-0.5">
+                      <p className="hl-subtitle mt-0.5">
                         Connect your official Meta WhatsApp Business Account (WABA) for official cloud messaging.
                       </p>
                     </div>
-                    <span className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+                    <span className="hl-badge hl-badge-info text-xs font-bold px-3 py-1 border">
                       Official Meta API
                     </span>
                   </div>
 
                   {metaTestResult && (
                     <div
-                      className={`mb-4 p-3.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 border ${
+                      className={`hl-badge mb-4 p-3.5 text-xs font-semibold flex items-center gap-2.5 ${
                         metaTestResult.success
-                          ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                          : "bg-rose-50 border-rose-200 text-rose-800"
+                          ? "hl-badge-success"
+                          : "hl-badge-error"
                       }`}
                     >
                       {metaTestResult.success ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
@@ -1726,7 +1728,7 @@ export default function WhatsAppAccounts() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                     <div>
-                      <label className="block font-bold text-gray-700 uppercase mb-1">Phone Number ID *</label>
+                      <label className="hl-section-label block mb-1">Phone Number ID *</label>
                       <input
                         type="text"
                         value={metaForm.phone_number_id}
@@ -1737,7 +1739,7 @@ export default function WhatsAppAccounts() {
                     </div>
 
                     <div>
-                      <label className="block font-bold text-gray-700 uppercase mb-1">Permanent Access Token *</label>
+                      <label className="hl-section-label block mb-1">Permanent Access Token *</label>
                       <input
                         type="password"
                         value={metaForm.access_token}
@@ -1748,7 +1750,7 @@ export default function WhatsAppAccounts() {
                     </div>
 
                     <div>
-                      <label className="block font-bold text-gray-700 uppercase mb-1">WABA Account ID</label>
+                      <label className="hl-section-label block mb-1">WABA Account ID</label>
                       <input
                         type="text"
                         value={metaForm.waba_id}
@@ -1759,7 +1761,7 @@ export default function WhatsAppAccounts() {
                     </div>
 
                     <div>
-                      <label className="block font-bold text-gray-700 uppercase mb-1">Webhook Verify Token</label>
+                      <label className="hl-section-label block mb-1">Webhook Verify Token</label>
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
@@ -1772,16 +1774,16 @@ export default function WhatsAppAccounts() {
                           onClick={() => copyToClipboard(metaForm.verify_token, "token")}
                           className="px-3 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl transition text-xs font-bold shrink-0"
                         >
-                          {copiedToken ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                          {copiedToken ? <Check size={14} className="" /> : <Copy size={14} />}
                         </button>
                       </div>
                     </div>
                   </div>
 
                   {/* Webhook URL Helper */}
-                  <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs space-y-2">
+                  <div className="hl-card mt-4 p-4 border text-xs space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-gray-800">Meta Webhook Callback URL:</span>
+                      <span className="font-bold">Meta Webhook Callback URL:</span>
                       <button
                         type="button"
                         onClick={() => copyToClipboard(webhookUrl, "webhook")}
@@ -1791,17 +1793,17 @@ export default function WhatsAppAccounts() {
                         <span>{copiedWebhook ? "Copied!" : "Copy URL"}</span>
                       </button>
                     </div>
-                    <code className="block p-2 bg-white border border-gray-200 rounded-xl font-mono text-[11px] text-gray-700 select-all overflow-x-auto">
+                    <code className="hl-id hl-card block p-2 border font-mono text-[11px] select-all overflow-x-auto">
                       {webhookUrl}
                     </code>
                   </div>
 
-                  <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-gray-100">
+                  <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t">
                     <button
                       type="button"
                       onClick={handleTestMetaConnection}
                       disabled={metaTestLoading || !metaForm.phone_number_id}
-                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-gray-700 rounded-xl text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+                      className="hl-btn-secondary px-4 py-2.5 rounded-xl text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5"
                     >
                       {metaTestLoading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
                       <span>Test Connection</span>
@@ -1811,7 +1813,7 @@ export default function WhatsAppAccounts() {
                       type="button"
                       onClick={handleSaveMetaConfig}
                       disabled={metaSaveLoading || !metaForm.phone_number_id}
-                      className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-blue-500/20 flex items-center gap-1.5 disabled:opacity-50"
+                      className="hl-btn-primary px-6 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50"
                     >
                       {metaSaveLoading ? <Loader2 size={14} className="animate-spin" /> : metaSaved ? <Check size={14} /> : <Settings size={14} />}
                       <span>{metaSaved ? "Saved!" : "Save Meta Config"}</span>
@@ -1822,16 +1824,16 @@ export default function WhatsAppAccounts() {
 
               {/* Meta Account Status Card */}
               <div className="space-y-6">
-                <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm text-xs">
-                  <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <ShieldCheck size={18} className="text-blue-600" />
+                <div className="hl-card border p-5 text-xs">
+                  <h3 className="font-bold mb-3 flex items-center gap-2">
+                    <ShieldCheck size={18} className="" />
                     <span>Meta Account Quality Status</span>
                   </h3>
-                  <div className={`p-4 rounded-2xl border ${qualityInfo.bg} mb-4`}>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${qualityInfo.badge}`}>
+                  <div className={`hl-card p-4 ${qualityInfo.bg} mb-4`}>
+                    <span className={`${qualityInfo.badge}`}>
                       {qualityInfo.label}
                     </span>
-                    <p className="text-[11px] text-gray-600 mt-2">
+                    <p className="text-[11px] mt-2">
                       Messaging Tier 1: 1,000 business-initiated conversations / 24 hours.
                     </p>
                   </div>
@@ -1844,14 +1846,14 @@ export default function WhatsAppAccounts() {
               TAB 4: AUTO-REPLY & WELCOME GREETINGS
              ══════════════════════════════════════════════════════════════════════ */}
           {activeTab === "welcome" && (
-            <div className="max-w-2xl mx-auto bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-5 text-xs">
-              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div className="hl-card max-w-2xl mx-auto border p-6 space-y-5 text-xs">
+              <div className="flex items-center justify-between pb-3 border-b">
                 <div>
-                  <h2 className="font-black text-gray-900 text-base flex items-center gap-2">
-                    <Sparkles size={18} className="text-amber-600" />
+                  <h2 className="font-black text-base flex items-center gap-2">
+                    <Sparkles size={18} className="" />
                     <span>First-Inbound Welcome Auto-Greeting</span>
                   </h2>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="hl-subtitle mt-0.5">
                     Automatically welcome new customers when they send their first message.
                   </p>
                 </div>
@@ -1861,18 +1863,18 @@ export default function WhatsAppAccounts() {
                   onClick={() => setWelcomeForm((prev) => ({ ...prev, enabled: !prev.enabled }))}
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                     welcomeForm.enabled
-                      ? "bg-amber-100 text-amber-800 border border-amber-300"
-                      : "bg-gray-100 text-gray-600 border border-gray-200"
+                      ? "hl-badge hl-badge-accent"
+                      : "hl-badge"
                   }`}
                 >
-                  <span className={`w-2 h-2 rounded-full ${welcomeForm.enabled ? "bg-amber-600 animate-pulse" : "bg-gray-400"}`} />
+                  <span className={`w-2 h-2 rounded-full bg-current ${welcomeForm.enabled ? "animate-pulse" : ""}`} />
                   <span>{welcomeForm.enabled ? "Welcome: ACTIVE" : "Welcome: DISABLED"}</span>
                 </button>
               </div>
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="block font-bold text-gray-700 uppercase">Welcome Message Text</label>
+                  <label className="hl-section-label block">Welcome Message Text</label>
                   <WAVariablePicker
                     onInsert={(tag) => setWelcomeForm((prev) => ({ ...prev, welcome_text: (prev.welcome_text || "") + " " + tag }))}
                   />
@@ -1886,12 +1888,12 @@ export default function WhatsAppAccounts() {
 
                   {/* Live Evaluated Customer Welcome Preview */}
                   {welcomeForm.welcome_text && (
-                    <div className="p-3.5 bg-slate-900 rounded-2xl border border-slate-800 text-white space-y-2">
-                      <div className="flex items-center justify-between text-[11px] text-amber-400 font-bold uppercase tracking-wider">
+                    <div className="hl-card p-3.5 border space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
                         <span className="flex items-center gap-1.5"><Sparkles size={13} /> Live Customer Welcome Preview:</span>
-                        <span className="text-[10px] text-emerald-400 font-mono">Dynamic Multi-Keyword Active</span>
+                        <span className="hl-id text-[10px] font-mono">Dynamic Multi-Keyword Active</span>
                       </div>
-                      <div className="p-3 bg-slate-800/90 rounded-xl text-emerald-300 font-mono text-xs whitespace-pre-wrap leading-relaxed border border-slate-700/50">
+                      <div className="hl-card hl-id p-3 font-mono text-xs whitespace-pre-wrap leading-relaxed border">
                         {evaluateMessagePlaceholders(welcomeForm.welcome_text, {
                           name: "Rahul Sharma",
                           first_name: "Rahul",
@@ -1899,16 +1901,16 @@ export default function WhatsAppAccounts() {
                           city: "Chennai"
                         })}
                       </div>
-                      <p className="text-[10px] text-slate-400">
-                        Evaluates all dynamic keywords like <code className="text-amber-300 font-bold">{"{tomorrow}"}</code>, <code className="text-amber-300 font-bold">{"{tomorrow_day}"}</code>, <code className="text-amber-300 font-bold">{"{greeting_time}"}</code>, <code className="text-amber-300 font-bold">{"{date}"}</code>, <code className="text-amber-300 font-bold">{"{time}"}</code> live on every inbound chat.
+                      <p className="text-[10px]">
+                        Evaluates all dynamic keywords like <code className="hl-id font-bold">{"{tomorrow}"}</code>, <code className="hl-id font-bold">{"{tomorrow_day}"}</code>, <code className="hl-id font-bold">{"{greeting_time}"}</code>, <code className="hl-id font-bold">{"{date}"}</code>, <code className="hl-id font-bold">{"{time}"}</code> live on every inbound chat.
                       </p>
                     </div>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                <div className="hl-card grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 border">
                   <div>
-                    <label className="block font-bold text-gray-700 uppercase mb-1">Cooldown Duration</label>
+                    <label className="hl-section-label block mb-1">Cooldown Duration</label>
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
@@ -1918,13 +1920,13 @@ export default function WhatsAppAccounts() {
                         onChange={(e) => setWelcomeForm({ ...welcomeForm, cooldown_hours: parseInt(e.target.value, 10) || 24 })}
                         className="w-24 px-3 py-2 bg-white border border-gray-200 rounded-xl font-mono text-center"
                       />
-                      <span className="text-gray-600">hours</span>
+                      <span className="">hours</span>
                     </div>
-                    <p className="text-[10px] text-gray-400 mt-1">Don't repeat welcome to the same number within this period.</p>
+                    <p className="text-[10px] mt-1">Don't repeat welcome to the same number within this period.</p>
                   </div>
 
                   <div>
-                    <label className="block font-bold text-gray-700 uppercase mb-1">Working Hours Only</label>
+                    <label className="hl-section-label block mb-1">Working Hours Only</label>
                     <label className="flex items-center gap-2 mt-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -1932,17 +1934,17 @@ export default function WhatsAppAccounts() {
                         onChange={(e) => setWelcomeForm({ ...welcomeForm, working_hours_only: e.target.checked })}
                         className="w-4 h-4 text-amber-600 rounded"
                       />
-                      <span className="font-semibold text-gray-700">Only send during business hours</span>
+                      <span className="font-semibold">Only send during business hours</span>
                     </label>
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-3 border-t border-gray-100">
+                <div className="flex justify-end pt-3 border-t">
                   <button
                     type="button"
                     onClick={handleSaveWelcomeSettings}
                     disabled={welcomeSaving}
-                    className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition shadow-md shadow-amber-500/20 flex items-center gap-2 disabled:opacity-50"
+                    className="hl-btn-primary px-6 py-2.5 font-bold rounded-xl transition flex items-center gap-2 disabled:opacity-50"
                   >
                     {welcomeSaving ? <Loader2 size={14} className="animate-spin" /> : welcomeSaved ? <Check size={14} /> : <Settings size={14} />}
                     <span>{welcomeSaved ? "Welcome Settings Saved!" : "Save Welcome Settings"}</span>
@@ -1956,19 +1958,19 @@ export default function WhatsAppAccounts() {
               TAB 5: INSTANT LIVE TEST MESSAGE DISPATCHER
              ══════════════════════════════════════════════════════════════════════ */}
           {activeTab === "test" && (
-            <div className="max-w-xl mx-auto bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-              <h2 className="font-black text-gray-900 text-base flex items-center gap-2 mb-2">
-                <Send size={18} className="text-[#25D366]" />
+            <div className="hl-card max-w-xl mx-auto border p-6">
+              <h2 className="font-black text-base flex items-center gap-2 mb-2">
+                <Send size={18} className="" />
                 <span>Instant Test Dispatcher</span>
               </h2>
-              <p className="text-xs text-gray-500 mb-5">
+              <p className="hl-subtitle mb-5">
                 Dispatch a live message to any WhatsApp number to verify outbound delivery on the active engine.
               </p>
 
               {testSendResult && (
                 <div
-                  className={`mb-4 p-3.5 rounded-xl text-xs font-semibold flex items-center gap-2 border ${
-                    testSendResult.success ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-rose-50 border-rose-200 text-rose-800"
+                  className={`hl-badge mb-4 p-3.5 text-xs font-semibold flex items-center gap-2 ${
+                    testSendResult.success ? "hl-badge-success" : "hl-badge-error"
                   }`}
                 >
                   {testSendResult.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
@@ -1978,7 +1980,7 @@ export default function WhatsAppAccounts() {
 
               <form onSubmit={handleSendTestMessage} className="space-y-4 text-xs">
                 <div>
-                  <label className="block font-bold text-gray-700 uppercase mb-1">Sending Channel</label>
+                  <label className="hl-section-label block mb-1">Sending Channel</label>
                   <select
                     value={testEngine}
                     onChange={(e) => setTestEngine(e.target.value)}
@@ -1995,9 +1997,9 @@ export default function WhatsAppAccounts() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-700 uppercase mb-1">Recipient Mobile Number</label>
+                  <label className="hl-section-label block mb-1">Recipient Mobile Number</label>
                   <div className="flex items-center gap-1.5">
-                    <span className="px-3 py-2.5 bg-slate-100 border border-gray-200 rounded-xl font-bold text-gray-600">+91</span>
+                    <span className="hl-badge px-3 py-2.5 border font-bold">+91</span>
                     <input
                       type="text"
                       value={testPhone}
@@ -2011,8 +2013,8 @@ export default function WhatsAppAccounts() {
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block font-bold text-gray-700 uppercase">Message Body</label>
-                    <span className="text-[10px] text-gray-400 font-mono">Supports {"{tomorrow}"}, {"{day}"}, etc.</span>
+                    <label className="hl-section-label block">Message Body</label>
+                    <span className="hl-id text-[10px] font-mono">Supports {"{tomorrow}"}, {"{day}"}, etc.</span>
                   </div>
                   <WAVariablePicker
                     onInsert={(tag) => setTestMsgText((prev) => (prev || "") + " " + tag)}
@@ -2027,8 +2029,8 @@ export default function WhatsAppAccounts() {
                     required
                   />
                   {testMsgText && (
-                    <div className="mt-2 p-2.5 bg-slate-900 rounded-xl border border-slate-800 text-xs text-emerald-300 font-mono whitespace-pre-wrap">
-                      <span className="text-[10px] text-amber-400 font-bold block mb-1">Evaluated Preview:</span>
+                    <div className="hl-card hl-id mt-2 p-2.5 border text-xs font-mono whitespace-pre-wrap">
+                      <span className="text-[10px] font-bold block mb-1">Evaluated Preview:</span>
                       {evaluateMessagePlaceholders(testMsgText, { phone: testPhone || "9876543210" })}
                     </div>
                   )}
@@ -2037,7 +2039,7 @@ export default function WhatsAppAccounts() {
                 <button
                   type="submit"
                   disabled={sendingTestMsg || !testPhone}
-                  className="w-full py-3 bg-[#25D366] hover:bg-[#1ebe5d] text-white font-bold rounded-xl transition shadow-md shadow-[#25D366]/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="hl-btn-primary w-full py-3 font-bold rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {sendingTestMsg ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                   <span>Send Test Message</span>
@@ -2052,16 +2054,16 @@ export default function WhatsAppAccounts() {
           {activeTab === "connector" && (
             <div className="space-y-6">
               {/* Header Hero Banner */}
-              <div className="bg-gradient-to-r from-violet-900 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-indigo-700/30 relative overflow-hidden">
+              <div className="hl-card from-violet-900 p-6 sm:p-8 border relative overflow-hidden">
                 <div className="relative z-10 max-w-3xl">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-semibold mb-3">
-                    <Sparkles size={14} className="text-amber-400" />
+                  <div className="hl-badge hl-badge-info inline-flex items-center gap-2 px-3 py-1 border text-xs font-semibold mb-3">
+                    <Sparkles size={14} className="" />
                     <span>Universal Microservice Mode</span>
                   </div>
-                  <h2 className="text-2xl font-black tracking-tight text-white mb-2">
+                  <h2 className="hl-title mb-2">
                     Connect This WhatsApp Engine To Any CRM
                   </h2>
-                  <p className="text-sm text-indigo-200/90 leading-relaxed mb-6">
+                  <p className="text-sm leading-relaxed mb-6">
                     This WhatsApp folder functions as an independent, high-performance microservice. Use our standard REST API endpoints to send messages, stream incoming customer chats via Webhooks, and embed live QR codes directly inside any CRM platform (HubSpot, Zoho, Salesforce, LeadSquared, Custom PHP/Python/Node).
                   </p>
                   <div className="flex flex-wrap items-center gap-3">
@@ -2074,14 +2076,14 @@ export default function WhatsAppAccounts() {
                       }}
                       className="px-4 py-2.5 rounded-xl bg-white text-gray-900 font-bold text-xs hover:bg-slate-100 transition shadow flex items-center gap-2"
                     >
-                      {copiedApiKey ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                      {copiedApiKey ? <Check size={14} className="" /> : <Copy size={14} />}
                       <span>{copiedApiKey ? "Copied API Key!" : "Copy Master API Key"}</span>
                     </button>
                     <a
                       href={`${API}/api/v1/status`}
                       target="_blank"
                       rel="noreferrer"
-                      className="px-4 py-2.5 rounded-xl bg-indigo-800/80 hover:bg-indigo-700/80 text-white font-bold text-xs border border-indigo-500/40 transition flex items-center gap-2"
+                      className="hl-btn-secondary px-4 py-2.5 rounded-xl font-bold text-xs border transition flex items-center gap-2"
                     >
                       <Activity size={14} />
                       <span>Test /api/v1/status Live</span>
@@ -2093,26 +2095,26 @@ export default function WhatsAppAccounts() {
               {/* Grid 1: REST API Credentials + Webhook Configuration */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* 1. REST API Configuration Card */}
-                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-5">
-                  <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                    <h3 className="font-black text-gray-900 text-sm flex items-center gap-2">
-                      <Key size={16} className="text-indigo-600" />
+                <div className="hl-card border p-6 space-y-5">
+                  <div className="flex items-center justify-between pb-3 border-b">
+                    <h3 className="font-black text-sm flex items-center gap-2">
+                      <Key size={16} className="" />
                       <span>REST API Connection Details</span>
                     </h3>
-                    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="hl-badge hl-badge-success text-[11px] font-bold px-2.5 py-0.5 border">
                       v2.0 Standalone
                     </span>
                   </div>
 
                   <div className="space-y-4 text-xs">
                     <div>
-                      <label className="block font-bold text-gray-700 uppercase mb-1">Base API URL</label>
+                      <label className="hl-section-label block mb-1">Base API URL</label>
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
                           readOnly
                           value={`${API}/api/v1`}
-                          className="flex-1 px-3.5 py-2.5 bg-slate-50 border border-gray-200 rounded-xl font-mono text-gray-800 font-semibold"
+                          className="hl-input hl-id flex-1 px-3.5 py-2.5 border font-mono font-semibold"
                         />
                         <button
                           type="button"
@@ -2123,17 +2125,17 @@ export default function WhatsAppAccounts() {
                           <span>Copy</span>
                         </button>
                       </div>
-                      <p className="text-[11px] text-gray-400 mt-1">Available locally at port 5001 or via your public reverse proxy / domain.</p>
+                      <p className="text-[11px] mt-1">Available locally at port 5001 or via your public reverse proxy / domain.</p>
                     </div>
 
                     <div>
-                      <label className="block font-bold text-gray-700 uppercase mb-1">Master API Key (Authentication)</label>
+                      <label className="hl-section-label block mb-1">Master API Key (Authentication)</label>
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
                           readOnly
                           value="wa_crm_secret_key_2026"
-                          className="flex-1 px-3.5 py-2.5 bg-slate-50 border border-gray-200 rounded-xl font-mono text-indigo-700 font-bold"
+                          className="hl-input hl-id flex-1 px-3.5 py-2.5 border font-mono font-bold"
                         />
                         <button
                           type="button"
@@ -2144,33 +2146,33 @@ export default function WhatsAppAccounts() {
                           }}
                           className="px-3.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl font-bold transition flex items-center gap-1.5"
                         >
-                          {copiedApiKey ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                          {copiedApiKey ? <Check size={13} className="" /> : <Copy size={13} />}
                           <span>{copiedApiKey ? "Copied" : "Copy Key"}</span>
                         </button>
                       </div>
-                      <p className="text-[11px] text-gray-400 mt-1">
-                        Pass this key in HTTP header: <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-gray-700">x-api-key: wa_crm_secret_key_2026</code> or <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-gray-700">Authorization: Bearer wa_crm_secret_key_2026</code>
+                      <p className="text-[11px] mt-1">
+                        Pass this key in HTTP header: <code className="hl-id px-1 py-0.5 rounded font-mono">x-api-key: wa_crm_secret_key_2026</code> or <code className="hl-id px-1 py-0.5 rounded font-mono">Authorization: Bearer wa_crm_secret_key_2026</code>
                       </p>
                     </div>
 
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2">
-                      <p className="font-bold text-gray-800 text-[11px] uppercase tracking-wide">Supported REST Endpoints</p>
+                    <div className="p-3 rounded-xl border space-y-2">
+                      <p className="hl-section-label">Supported REST Endpoints</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                        <div className="p-2 bg-white rounded-lg border border-gray-100">
-                          <strong className="text-emerald-600 font-mono">POST</strong> <span className="font-mono text-gray-700">/api/v1/messages/send</span>
-                          <p className="text-gray-400 text-[10px]">Send WhatsApp text</p>
+                        <div className="hl-card p-2">
+                          <strong className="font-mono">POST</strong> <span className="hl-id font-mono">/api/v1/messages/send</span>
+                          <p className="text-[10px]">Send WhatsApp text</p>
                         </div>
-                        <div className="p-2 bg-white rounded-lg border border-gray-100">
-                          <strong className="text-emerald-600 font-mono">POST</strong> <span className="font-mono text-gray-700">/api/v1/messages/send-media</span>
-                          <p className="text-gray-400 text-[10px]">Send PDF/Images</p>
+                        <div className="hl-card p-2">
+                          <strong className="font-mono">POST</strong> <span className="hl-id font-mono">/api/v1/messages/send-media</span>
+                          <p className="text-[10px]">Send PDF/Images</p>
                         </div>
-                        <div className="p-2 bg-white rounded-lg border border-gray-100">
-                          <strong className="text-blue-600 font-mono">GET</strong> <span className="font-mono text-gray-700">/api/v1/qr</span>
-                          <p className="text-gray-400 text-[10px]">Get live QR (JSON, PNG, SVG)</p>
+                        <div className="hl-card p-2">
+                          <strong className="font-mono">GET</strong> <span className="hl-id font-mono">/api/v1/qr</span>
+                          <p className="text-[10px]">Get live QR (JSON, PNG, SVG)</p>
                         </div>
-                        <div className="p-2 bg-white rounded-lg border border-gray-100">
-                          <strong className="text-blue-600 font-mono">GET</strong> <span className="font-mono text-gray-700">/api/v1/status</span>
-                          <p className="text-gray-400 text-[10px]">Live engine health</p>
+                        <div className="hl-card p-2">
+                          <strong className="font-mono">GET</strong> <span className="hl-id font-mono">/api/v1/status</span>
+                          <p className="text-[10px]">Live engine health</p>
                         </div>
                       </div>
                     </div>
@@ -2178,24 +2180,24 @@ export default function WhatsAppAccounts() {
                 </div>
 
                 {/* 2. Outbound Webhook Forwarding Card */}
-                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-5">
-                  <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                    <h3 className="font-black text-gray-900 text-sm flex items-center gap-2">
-                      <Webhook size={16} className="text-violet-600" />
+                <div className="hl-card border p-6 space-y-5">
+                  <div className="flex items-center justify-between pb-3 border-b">
+                    <h3 className="font-black text-sm flex items-center gap-2">
+                      <Webhook size={16} className="" />
                       <span>Outbound Webhook Dispatcher</span>
                     </h3>
-                    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                    <span className="hl-badge hl-badge-info text-[11px] font-bold px-2.5 py-0.5 border">
                       Real-Time Push
                     </span>
                   </div>
 
-                  <p className="text-xs text-gray-500">
+                  <p className="hl-subtitle">
                     Whenever a customer sends a message or a delivery tick updates, this WhatsApp engine posts a JSON payload to your CRM's webhook endpoint instantly.
                   </p>
 
                   <div className="space-y-4 text-xs">
                     <div>
-                      <label className="block font-bold text-gray-700 uppercase mb-1">Your External CRM Webhook URL</label>
+                      <label className="hl-section-label block mb-1">Your External CRM Webhook URL</label>
                       <input
                         type="url"
                         value={crmWebhookUrl}
@@ -2206,7 +2208,7 @@ export default function WhatsAppAccounts() {
                     </div>
 
                     <div>
-                      <label className="block font-bold text-gray-700 uppercase mb-1">Webhook Secret (HMAC SHA-256 Signature)</label>
+                      <label className="hl-section-label block mb-1">Webhook Secret (HMAC SHA-256 Signature)</label>
                       <input
                         type="text"
                         value={crmWebhookSecret}
@@ -2214,12 +2216,12 @@ export default function WhatsAppAccounts() {
                         placeholder="crm_secret_signature_key"
                         className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-600 font-mono"
                       />
-                      <p className="text-[11px] text-gray-400 mt-1">Used to verify the <code className="font-mono text-gray-700">x-hub-signature-256</code> header in your CRM.</p>
+                      <p className="text-[11px] mt-1">Used to verify the <code className="hl-id font-mono">x-hub-signature-256</code> header in your CRM.</p>
                     </div>
 
                     {crmWebhookTestResult && (
-                      <div className={`p-3 rounded-xl text-xs font-semibold flex items-center gap-2 border ${
-                        crmWebhookTestResult.success ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-rose-50 border-rose-200 text-rose-800"
+                      <div className={`hl-badge p-3 text-xs font-semibold flex items-center gap-2 ${
+                        crmWebhookTestResult.success ? "hl-badge-success" : "hl-badge-error"
                       }`}>
                         {crmWebhookTestResult.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
                         <span>
@@ -2235,7 +2237,7 @@ export default function WhatsAppAccounts() {
                         type="button"
                         onClick={handleSaveCrmWebhook}
                         disabled={crmWebhookSaving || !crmWebhookUrl}
-                        className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition shadow flex items-center gap-2 disabled:opacity-50"
+                        className="hl-btn-primary px-4 py-2.5 font-bold rounded-xl transition shadow flex items-center gap-2 disabled:opacity-50"
                       >
                         {crmWebhookSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                         <span>{crmWebhookSaved ? "Saved Successfully!" : "Save Webhook URL"}</span>
@@ -2245,9 +2247,9 @@ export default function WhatsAppAccounts() {
                         type="button"
                         onClick={handleTestCrmWebhook}
                         disabled={crmWebhookTesting || !crmWebhookUrl}
-                        className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-gray-800 font-bold rounded-xl transition flex items-center gap-2 disabled:opacity-50"
+                        className="hl-btn-secondary px-4 py-2.5 font-bold rounded-xl transition flex items-center gap-2 disabled:opacity-50"
                       >
-                        {crmWebhookTesting ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} className="text-amber-500" />}
+                        {crmWebhookTesting ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} className="" />}
                         <span>⚡ Test Ping Webhook</span>
                       </button>
                     </div>
@@ -2256,24 +2258,24 @@ export default function WhatsAppAccounts() {
               </div>
 
               {/* Ready-to-use Code Snippets (cURL, JavaScript, Python, PHP) */}
-              <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+              <div className="hl-card border p-6 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b">
                   <div>
-                    <h3 className="font-black text-gray-900 text-sm flex items-center gap-2">
-                      <Code2 size={16} className="text-indigo-600" />
+                    <h3 className="font-black text-sm flex items-center gap-2">
+                      <Code2 size={16} className="" />
                       <span>Ready-to-Use Code Snippets For Any CRM</span>
                     </h3>
-                    <p className="text-xs text-gray-500 mt-0.5">Copy and paste directly into your CRM backend or automation scripts.</p>
+                    <p className="hl-subtitle mt-0.5">Copy and paste directly into your CRM backend or automation scripts.</p>
                   </div>
 
-                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                  <div className="flex items-center gap-1 p-1 rounded-xl">
                     {["curl", "javascript", "python", "php"].map((lang) => (
                       <button
                         key={lang}
                         type="button"
                         onClick={() => setCodeTab(lang)}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold uppercase transition ${
-                          codeTab === lang ? "bg-white text-indigo-700 shadow-sm" : "text-gray-500 hover:text-gray-900"
+                        className={`hl-tab px-3 py-1 uppercase ${
+                          codeTab === lang ? "is-active" : ""
                         }`}
                       >
                         {lang}
@@ -2282,9 +2284,9 @@ export default function WhatsAppAccounts() {
                   </div>
                 </div>
 
-                <div className="bg-slate-950 rounded-2xl p-4 overflow-x-auto text-xs font-mono text-emerald-400 border border-slate-800">
+                <div className="hl-card hl-id p-4 overflow-x-auto text-xs font-mono border">
                   {codeTab === "curl" && (
-                    <pre className="whitespace-pre">{`# 1. Send WhatsApp Message from any terminal or script:
+                    <pre className="hl-id whitespace-pre">{`# 1. Send WhatsApp Message from any terminal or script:
 curl -X POST "${API}/api/v1/messages/send" \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: wa_crm_secret_key_2026" \\
@@ -2299,7 +2301,7 @@ curl -X GET "${API}/api/v1/qr" \\
                   )}
 
                   {codeTab === "javascript" && (
-                    <pre className="whitespace-pre">{`// Node.js / Express or Frontend Fetch:
+                    <pre className="hl-id whitespace-pre">{`// Node.js / Express or Frontend Fetch:
 const sendWhatsAppMessage = async (phone, message) => {
   const response = await fetch("${API}/api/v1/messages/send", {
     method: "POST",
@@ -2319,7 +2321,7 @@ sendWhatsAppMessage("919876543210", "Hi John, your invoice #1042 is ready!")
                   )}
 
                   {codeTab === "python" && (
-                    <pre className="whitespace-pre">{`# Python 3 (requests)
+                    <pre className="hl-id whitespace-pre">{`# Python 3 (requests)
 import requests
 
 def send_whatsapp(phone, message):
@@ -2338,7 +2340,7 @@ print(result)`}</pre>
                   )}
 
                   {codeTab === "php" && (
-                    <pre className="whitespace-pre">{`<?php
+                    <pre className="hl-id whitespace-pre">{`<?php
 // PHP cURL WhatsApp Dispatcher
 function sendWhatsApp($phone, $message) {
     $ch = curl_init("${API}/api/v1/messages/send");
@@ -2363,16 +2365,16 @@ print_r($res);
               </div>
 
               {/* Webhook Delivery History */}
-              <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                  <h3 className="font-black text-gray-900 text-sm flex items-center gap-2">
-                    <Activity size={16} className="text-indigo-600" />
+              <div className="hl-card border p-6 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b">
+                  <h3 className="font-black text-sm flex items-center gap-2">
+                    <Activity size={16} className="" />
                     <span>Recent Outbound Webhook Events Delivered</span>
                   </h3>
                   <button
                     type="button"
                     onClick={fetchAll}
-                    className="text-xs text-indigo-600 font-bold hover:underline flex items-center gap-1"
+                    className="text-xs font-bold hover:underline flex items-center gap-1"
                   >
                     <RefreshCw size={12} />
                     <span>Refresh Deliveries</span>
@@ -2380,33 +2382,33 @@ print_r($res);
                 </div>
 
                 {crmDeliveries.length === 0 ? (
-                  <div className="py-8 text-center text-xs text-gray-400">
+                  <div className="hl-empty py-8 text-center text-xs">
                     No webhook events recorded yet. Configure a webhook URL above to start streaming live message events.
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
+                    <table className="hl-table w-full">
                       <thead>
-                        <tr className="border-b border-gray-200 text-gray-400 uppercase text-[10px] font-bold">
+                        <tr className="border-b uppercase text-[10px] font-bold">
                           <th className="py-2 px-3">Event Type</th>
                           <th className="py-2 px-3">Status</th>
                           <th className="py-2 px-3">Target URL</th>
                           <th className="py-2 px-3">Timestamp</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100">
+                      <tbody className="divide-y">
                         {crmDeliveries.map((d, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50 font-mono text-[11px]">
-                            <td className="py-2.5 px-3 font-bold text-indigo-700">{d.event}</td>
+                          <tr key={idx} className="font-mono text-[11px]">
+                            <td className="py-2.5 px-3 font-bold">{d.event}</td>
                             <td className="py-2.5 px-3">
-                              <span className={`px-2 py-0.5 rounded-full font-sans text-[10px] font-bold ${
-                                d.success ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                              <span className={`hl-badge px-2 py-0.5 font-sans text-[10px] font-bold ${
+                                d.success ? "hl-badge-success" : "hl-badge-error"
                               }`}>
                                 {d.success ? `HTTP ${d.statusCode || 200}` : `Failed (${d.error || "error"})`}
                               </span>
                             </td>
-                            <td className="py-2.5 px-3 text-gray-600 max-w-xs truncate">{d.url}</td>
-                            <td className="py-2.5 px-3 text-gray-400 font-sans">{new Date(d.timestamp).toLocaleTimeString()}</td>
+                            <td className="py-2.5 px-3 max-w-xs truncate">{d.url}</td>
+                            <td className="py-2.5 px-3 font-sans">{new Date(d.timestamp).toLocaleTimeString()}</td>
                           </tr>
                         ))}
                       </tbody>

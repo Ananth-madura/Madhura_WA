@@ -189,17 +189,39 @@ router.delete("/:id", auth, async (req, res) => {
 // ── Trigger Flow directly for a Phone Number ──────────────────────────────────
 router.post("/:id/trigger-phone", auth, async (req, res) => {
   try {
-    const { phone, sessionKey } = req.body;
-    if (!phone) return res.status(400).json({ error: "Phone number required" });
-    let cleanPhone = String(phone).replace(/\D/g, "");
+    const { phone, sessionKey, chatId } = req.body;
+    if (!phone && !chatId) return res.status(400).json({ error: "Phone number required" });
+
+    const waService = require("../services/whatsappService");
+    let targetPhone = phone;
+    const targetChatId = chatId || null;
+
+    // Resolve LID to phone if phone is a LID or chatId is a LID
+    const waInstance = (sessionKey ? waService.get(sessionKey) : null) || waService.default();
+    if (waInstance && typeof waInstance.resolveLidToPhone === "function") {
+      if (targetChatId && targetChatId.includes("@lid")) {
+        const resolved = await waInstance.resolveLidToPhone(targetChatId).catch(() => null);
+        if (resolved) targetPhone = resolved;
+      } else if (targetPhone && String(targetPhone).replace(/\D/g, "").length >= 14) {
+        const resolved = await waInstance.resolveLidToPhone(targetPhone).catch(() => null);
+        if (resolved) targetPhone = resolved;
+      }
+    }
+
+    let cleanPhone = String(targetPhone || "").replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
 
     const [flows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ?", [req.params.id]);
     if (!flows.length) return res.status(404).json({ error: "Flow not found" });
 
-    const reqSessionKey = sessionKey || req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || null;
-    const result = await waFlowEngine.startFlowRun(flows[0], cleanPhone, reqSessionKey);
-    res.json({ success: true, message: `Flow "${flows[0].name}" started for +${cleanPhone}`, result });
+    // Fallback to active ready session key
+    let reqSessionKey = sessionKey || req.headers["x-session-key"] || req.query?.sessionKey || null;
+    if (!reqSessionKey || !waService.get(reqSessionKey)?.ready) {
+      reqSessionKey = waInstance?.key || waService.defaultKey || "708";
+    }
+
+    const result = await waFlowEngine.startFlowRun(flows[0], cleanPhone, reqSessionKey, "", targetChatId);
+    res.json({ success: true, message: `Flow "${flows[0].name}" started for +${cleanPhone}`, result, phone: cleanPhone });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

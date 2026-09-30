@@ -1,17 +1,17 @@
 import React, { useState } from "react";
 import { Users, User, X } from "lucide-react";
 
-// Deterministic color palette for unique contact avatars
+// Deterministic token palette for unique contact avatars (Corporate sharp)
 const AVATAR_GRADIENTS = [
-  "from-emerald-500 to-teal-700 text-white",
-  "from-blue-500 to-indigo-700 text-white",
-  "from-purple-500 to-violet-800 text-white",
-  "from-rose-500 to-pink-700 text-white",
-  "from-amber-500 to-orange-700 text-white",
-  "from-cyan-500 to-blue-700 text-white",
-  "from-indigo-500 to-purple-700 text-white",
-  "from-teal-500 to-emerald-800 text-white",
-  "from-fuchsia-500 to-pink-800 text-white",
+  "bg-[var(--color-ink)] text-[var(--color-paper-2)]",
+  "bg-[var(--color-shell)] text-[var(--color-paper-2)]",
+  "bg-[var(--color-shell-2)] text-[var(--color-paper-2)]",
+  "bg-[var(--color-accent)] text-[var(--color-accent-ink)]",
+  "bg-[var(--color-ink-2)] text-[var(--color-paper-2)]",
+  "bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-rule)]",
+  "bg-[var(--color-focus)] text-[var(--color-paper-2)]",
+  "bg-[var(--color-shell-2)] text-[var(--color-accent)]",
+  "bg-[var(--color-ink)] text-[var(--color-accent)]",
 ];
 
 function getGradient(identifier = "") {
@@ -80,7 +80,7 @@ export default function WAContactAvatar({
         } ${className}`}
       >
         {isGroup ? (
-          <div className={`w-full h-full rounded-full bg-purple-900/80 text-purple-200 border border-purple-700/50 flex items-center justify-center font-black shadow-sm ${sz.text}`}>
+          <div className={`w-full h-full rounded-full bg-[var(--color-shell-2)] text-[var(--color-paper-2)] border border-[var(--color-rule)] flex items-center justify-center font-black shadow-sm font-[var(--font-display)] ${sz.text}`}>
             <Users size={sz.icon} />
           </div>
         ) : hasValidImage ? (
@@ -88,11 +88,11 @@ export default function WAContactAvatar({
             src={src}
             alt={name || "Contact"}
             onError={() => setImgError(true)}
-            className="w-full h-full rounded-full object-cover shadow-sm border border-black/10 bg-[#202c33]"
+            className="w-full h-full rounded-full object-cover shadow-sm border border-[var(--color-rule)] bg-[var(--color-shell)]"
             loading="lazy"
           />
         ) : (
-          <div className={`w-full h-full rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center font-extrabold shadow-sm ${sz.text}`}>
+          <div className={`w-full h-full rounded-full ${gradient} flex items-center justify-center font-extrabold shadow-sm font-[var(--font-display)] ${sz.text}`}>
             {initials}
           </div>
         )}
@@ -100,7 +100,7 @@ export default function WAContactAvatar({
         {/* Online Pulse Dot */}
         {isOnline && (
           <span
-            className={`absolute rounded-full bg-emerald-500 ring-2 ring-[#111b21] animate-pulse ${sz.dot}`}
+            className={`absolute rounded-full bg-[var(--color-accent)] ring-2 ring-[var(--color-paper-2)] animate-pulse ${sz.dot}`}
             title="Online on WhatsApp"
           />
         )}
@@ -109,13 +109,13 @@ export default function WAContactAvatar({
       {/* Fullscreen Lightbox Modal */}
       {showLightbox && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn"
+          className="fixed inset-0 z-50 bg-[var(--color-shell)]/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn"
           onClick={() => setShowLightbox(false)}
         >
-          <div className="relative max-w-sm w-full bg-[#111b21] rounded-3xl p-6 border border-white/10 shadow-2xl text-center space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card relative max-w-sm w-full bg-[var(--color-paper-2)] rounded-3xl p-6 border border-[var(--color-rule)] shadow-2xl text-center space-y-4" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={() => setShowLightbox(false)}
-              className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-white rounded-full bg-white/10"
+              className="absolute top-4 right-4 p-1.5 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] rounded-full bg-[var(--color-paper)] border border-[var(--color-rule)]"
             >
               <X size={18} />
             </button>
@@ -123,12 +123,12 @@ export default function WAContactAvatar({
             <img
               src={src}
               alt={name}
-              className="w-48 h-48 rounded-full mx-auto object-cover border-4 border-[#00a884] shadow-xl shadow-[#00a884]/20"
+              className="w-48 h-48 rounded-full mx-auto object-cover border-4 border-[var(--color-accent)] shadow-xl"
             />
 
             <div>
-              <h3 className="text-lg font-bold text-white">{name}</h3>
-              {phone && <p className="text-xs text-emerald-400 font-mono mt-0.5">+{phone.replace(/\D/g, "")}</p>}
+              <h3 className="hl-title text-lg font-bold text-[var(--color-ink)]">{name}</h3>
+              {phone && <p className="hl-id text-xs mt-0.5 text-[var(--color-ink-2)]">+{phone.replace(/\D/g, "")}</p>}
             </div>
           </div>
         </div>

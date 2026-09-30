@@ -223,18 +223,23 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
     return location.pathname.startsWith(tab.path);
   };
 
+  const isChatView = location.pathname === "/whatsapp" || location.pathname === "/whatsapp/";
+
   return (
-    <div className="mb-3 bg-white rounded-xl border border-[#E8E8E8] p-2 shadow-card">
+    <div className="hl-card hl-reveal" style={{ marginBottom: isChatView ? 6 : 12, padding: isChatView ? "6px 8px" : 8 }}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         {/* Top Tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto py-1 px-1 scrollbar-none w-full sm:w-auto">
+        <div className="hl-tabs" style={{ borderBottom: "none", flex: "1 1 auto", minWidth: 0 }}>
           <button
             onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-1 px-3 py-2 bg-[#F5F5F5] text-[#202C52] hover:bg-[#E8E8E8] rounded-lg font-bold text-xs transition mr-1 shrink-0"
+            className="hl-tab"
+            style={{ fontWeight: 600 }}
             title="Return to CRM Dashboard"
           >
-            <ChevronLeft size={16} />
-            <span className="hidden sm:inline">CRM Dashboard</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <ChevronLeft size={16} />
+              <span className="hidden sm:inline">CRM Dashboard</span>
+            </span>
           </button>
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -243,18 +248,16 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
               <button
                 key={tab.id}
                 onClick={() => navigate(tab.path)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-medium text-xs sm:text-sm transition-all whitespace-nowrap ${
-                  active
-                    ? "bg-[#202C52] text-white shadow-sm font-semibold border-b-2 border-[#FCBD16]"
-                    : "text-[#667085] hover:text-[#202C52] hover:bg-[#F5F5F5]"
-                }`}
+                className={`hl-tab${active ? " is-active" : ""}`}
               >
-                <Icon size={16} className={active ? "text-[#FCBD16]" : "text-[#98A2B3]"} />
-                <span>{tab.label}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  <Icon size={16} />
+                  <span>{tab.label}</span>
+                </span>
                 {tab.id === "chats" && totalUnread > 0 && (
-                  <span className={`ml-1 px-1.5 py-0.5 text-xs font-bold rounded-full shadow-sm ${
-                    active ? "bg-[#FCBD16] text-[#202C52]" : "bg-[#D92D20] text-white animate-pulse"
-                  }`}>
+                  <span className="hl-badge" style={active
+                    ? { marginLeft: 4, background: "var(--color-accent)", borderColor: "var(--color-focus)", color: "var(--color-accent-ink)" }
+                    : { marginLeft: 4, color: "var(--color-error)", borderColor: "var(--color-error)" }}>
                     {totalUnread > 99 ? "99+" : totalUnread}
                   </span>
                 )}
@@ -266,18 +269,15 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
         {/* Action & Config Buttons */}
         <div className="flex items-center gap-2 ml-auto pr-1">
           {status?.cloud?.configured || status?.isCloud ? (
-            <span className="hidden sm:flex text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg items-center gap-1.5 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-              <span>☁️ Meta API: {status?.phone ? `+${status.phone}` : "Active"}</span>
+            <span className="hl-badge hl-badge-info hidden sm:inline-flex">
+              <span>Meta API: {status?.phone ? `+${status.phone}` : "Active"}</span>
             </span>
           ) : status?.web?.connected || status?.isWeb || statusPhone ? (
-            <span className="hidden sm:flex text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg items-center gap-1.5 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-[#25D366] animate-pulse"></span>
-              <span>📱 +{status?.phone || statusPhone}</span>
+            <span className="hl-badge hl-badge-success hidden sm:inline-flex">
+              <span>+{status?.phone || statusPhone}</span>
             </span>
           ) : (
-            <span className="hidden sm:flex text-xs font-bold text-gray-500 bg-gray-50 border border-gray-200 px-2.5 py-1.5 rounded-lg items-center gap-1.5 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+            <span className="hl-badge hidden sm:inline-flex">
               <span>Offline</span>
             </span>
           )}
@@ -285,10 +285,11 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
           {onAccountBalance && (
             <button
               onClick={onAccountBalance}
-              className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg transition text-xs font-semibold shadow-sm"
+              className="hl-btn-secondary"
+              style={{ padding: "0.5rem 0.75rem", fontSize: 12 }}
               title="View WhatsApp Engine & Messaging Quota Balance"
             >
-              <CreditCard size={14} className="text-gray-600" />
+              <CreditCard size={14} />
               <span className="hidden lg:inline">Quota & Balance</span>
             </button>
           )}
@@ -297,10 +298,11 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
             <button
               onClick={onSyncWhatsApp}
               disabled={isSyncing}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition text-xs font-semibold disabled:opacity-50 shadow-sm"
+              className="hl-btn-secondary"
+              style={{ padding: "0.5rem 0.75rem", fontSize: 12 }}
               title="Sync Contacts & Chat History"
             >
-              <RefreshCw size={14} className={isSyncing ? "animate-spin text-emerald-600" : "text-emerald-600"} />
+              <RefreshCw size={14} className={isSyncing ? "animate-spin" : undefined} />
               <span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Sync All"}</span>
             </button>
           )}
@@ -308,7 +310,8 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
           {onLogout && (
             <button
               onClick={onLogout}
-              className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded-lg transition text-xs font-semibold shadow-sm"
+              className="hl-btn-danger-ghost"
+              style={{ padding: "0.5rem 0.75rem", fontSize: 12 }}
               title="Disconnect WhatsApp Session"
             >
               <LogOut size={14} />
@@ -318,17 +321,18 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
 
           <button
             onClick={() => setShowConfig(true)}
-            className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg transition text-xs font-semibold shadow-sm"
+            className="hl-btn-secondary"
+            style={{ padding: "0.5rem 0.75rem", fontSize: 12 }}
             title="Configure Meta Cloud API"
           >
-            <Settings size={14} className="text-gray-600" />
+            <Settings size={14} />
             <span className="hidden md:inline">API Config</span>
           </button>
         </div>
       </div>
 
       {stopResult && (
-        <div className={`mt-2 mx-1 p-2.5 rounded-lg text-xs font-semibold flex items-center gap-2 ${stopResult.success ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+        <div className={`hl-badge ${stopResult.success ? "hl-badge-success" : "hl-badge-error"}`} style={{ marginTop: 8, fontSize: 12 }}>
           {stopResult.success ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
           {stopResult.message}
         </div>
@@ -339,51 +343,52 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
       {/* Test Send Modal */}
       {showTestModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full border border-gray-100 shadow-2xl relative">
-            <button onClick={() => setShowTestModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+          <div className="hl-card p-6 max-w-md w-full relative">
+            <button onClick={() => setShowTestModal(false)} className="absolute top-4 right-4" style={{ color: "var(--color-ink-2)" }}>
               <X size={20} />
             </button>
             <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 bg-emerald-100 text-[#25D366] rounded-xl">
+              <div style={{ color: "var(--color-success)" }}>
                 <Zap size={24} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-800">Test WhatsApp Connection</h3>
-                <p className="text-xs text-gray-500">Send instant test message to verify active engine</p>
+                <h3 className="hl-title" style={{ fontSize: "var(--text-lg)" }}>Test WhatsApp Connection</h3>
+                <p className="hl-subtitle">Send instant test message to verify active engine</p>
               </div>
             </div>
 
             {testResult && (
-              <div className={`mb-4 p-3 rounded-lg text-xs font-semibold ${testResult.success ? "bg-emerald-50 border border-emerald-200 text-emerald-700" : "bg-red-50 border border-red-200 text-red-700"}`}>
+              <div className={`hl-badge ${testResult.success ? "hl-badge-success" : "hl-badge-error"}`} style={{ marginBottom: 16, fontSize: 12 }}>
                 {testResult.message}
               </div>
             )}
 
             <form onSubmit={handleTestSend} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Mobile Number (with country code)</label>
+                <label className="hl-section-label" style={{ display: "block", marginBottom: 4 }}>Mobile Number (with country code)</label>
                 <input
                   type="text"
                   placeholder="e.g. 919876543210"
                   value={testPhone}
                   onChange={(e) => setTestPhone(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#25D366]"
+                  className="hl-input w-full"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Test Message Text</label>
+                <label className="hl-section-label" style={{ display: "block", marginBottom: 4 }}>Test Message Text</label>
                 <textarea
                   rows={3}
                   value={testMessage}
                   onChange={(e) => setTestMessage(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#25D366] resize-none"
+                  className="hl-input w-full"
+                  style={{ resize: "vertical" }}
                   required
                 />
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowTestModal(false)} className="px-4 py-2 border rounded-lg text-xs text-gray-600 hover:bg-gray-50">Cancel</button>
-                <button type="submit" disabled={testLoading || !testPhone} className="px-5 py-2 bg-[#25D366] text-white rounded-lg text-xs font-bold hover:bg-[#1ebe5d] flex items-center gap-2 shadow-md disabled:opacity-50">
+                <button type="button" onClick={() => setShowTestModal(false)} className="hl-btn-secondary">Cancel</button>
+                <button type="submit" disabled={testLoading || !testPhone} className="hl-btn-primary">
                   {testLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   <span>Send Test Message</span>
                 </button>

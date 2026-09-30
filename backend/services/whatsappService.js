@@ -37,6 +37,25 @@ function getExecutablePath() {
   if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
     return process.env.CHROME_PATH;
   }
+  // 1. Playwright / Puppeteer Chrome for Testing (Cleanest vanilla Chromium builds)
+  try {
+    const pwDir = path.join(process.env.LOCALAPPDATA || "", "ms-playwright");
+    if (fs.existsSync(pwDir)) {
+      const dirs = fs.readdirSync(pwDir);
+      for (const d of dirs) {
+        const p = path.join(pwDir, d, "chrome-win64", "chrome.exe");
+        if (fs.existsSync(p)) return p;
+      }
+    }
+  } catch (_) {}
+
+  try {
+    if (typeof puppeteer.executablePath === "function") {
+      const pPath = puppeteer.executablePath();
+      if (pPath && fs.existsSync(pPath)) return pPath;
+    }
+  } catch (_) {}
+
   const candidatePaths = [
     // Google Chrome paths
     "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -60,12 +79,6 @@ function getExecutablePath() {
   for (const p of candidatePaths) {
     if (p && fs.existsSync(p)) return p;
   }
-  try {
-    if (typeof puppeteer.executablePath === "function") {
-      const pPath = puppeteer.executablePath();
-      if (pPath && fs.existsSync(pPath)) return pPath;
-    }
-  } catch (_) {}
   return undefined;
 }
 
@@ -477,6 +490,8 @@ class WhatsAppService {
           "--no-zygote",
           "--disable-gpu",
           "--disable-blink-features=AutomationControlled",
+          "--disable-features=IsolateOrigins,site-per-process",
+          "--disable-site-isolation-trials",
           "--disable-extensions",
           "--disable-default-apps",
           "--mute-audio",
@@ -495,8 +510,61 @@ class WhatsAppService {
         userAgent: defaultUserAgent,
         takeoverOnConflict: true,
         takeoverTimeoutMs: 0,
-        authTimeoutMs: 60000,
+        authTimeoutMs: 120000,
         qrMaxRetries: 0,
+        bypassCSP: true,
+        userAgentMetadata: {
+          brands: [
+            { brand: "Chromium", version: "131" },
+            { brand: "Google Chrome", version: "131" },
+            { brand: "Not_A Brand", version: "24" }
+          ],
+          fullVersionList: [
+            { brand: "Chromium", version: "131.0.6778.205" },
+            { brand: "Google Chrome", version: "131.0.6778.205" },
+            { brand: "Not_A Brand", version: "24.0.0.0" }
+          ],
+          platform: "Windows",
+          platformVersion: "15.0.0",
+          architecture: "x86",
+          model: "",
+          mobile: false,
+          bitness: "64",
+          wow64: false
+        },
+        evalOnNewDoc: () => {
+          try {
+            Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+          } catch (_) {}
+          try {
+            delete Object.getPrototypeOf(navigator).webdriver;
+          } catch (_) {}
+          try {
+            const brands = [
+              { brand: "Chromium", version: "131" },
+              { brand: "Google Chrome", version: "131" },
+              { brand: "Not_A Brand", version: "24" }
+            ];
+            const uad = {
+              brands,
+              mobile: false,
+              platform: "Windows",
+              getHighEntropyValues: async () => ({
+                architecture: "x86",
+                bitness: "64",
+                brands,
+                mobile: false,
+                model: "",
+                platform: "Windows",
+                platformVersion: "15.0.0",
+                uaFullVersion: "131.0.6778.205",
+                wow64: false
+              }),
+              toJSON: () => ({ brands, mobile: false, platform: "Windows" })
+            };
+            Object.defineProperty(navigator, "userAgentData", { get: () => uad });
+          } catch (_) {}
+        },
       };
       if (pinnedWebVersion !== "latest") {
         clientOptions.webVersion = pinnedWebVersion;
@@ -586,9 +654,20 @@ class WhatsAppService {
         })();
       });
 
+      this.client.on("loading_screen", (percent, message) => {
+        console.log(`⏳ WhatsApp session ${this.key} loading: ${percent}% - ${message || "WhatsApp"}`);
+        this.emitWaEvent("wa_loading", null, null, { percent, message, sessionKey: this.key });
+      });
+
+      this.client.on("change_state", (state) => {
+        console.log(`📶 WhatsApp session ${this.key} state changed: ${state}`);
+        this.emitWaEvent("wa_state", null, null, { state, sessionKey: this.key });
+      });
+
       this.client.on("authenticated", () => {
         this.qrCode = null;
         console.log(`🔐 WhatsApp session ${this.key} authenticated successfully.`);
+        this.emitWaEvent("wa_authenticated", null, null, { sessionKey: this.key });
       });
 
       this.client.on("auth_failure", (msg) => {
@@ -876,7 +955,7 @@ class WhatsAppService {
               interactiveReplyId,
               this.key,
               inboundMedia,
-              { isCampaignReply, isHistoric: false }
+              { isCampaignReply, isHistoric: false, chatId }
             ).catch(() => false);
 
             if (!flowHandled) {
@@ -2743,19 +2822,9 @@ function getDefault() {
 function hasSavedProfile(dir) {
   try {
     const metaFile = path.join(dir, "session_meta.json");
-    if (fs.existsSync(metaFile)) {
-      try {
-        const meta = JSON.parse(fs.readFileSync(metaFile, "utf8"));
-        if (meta.status === "active" && meta.phone) return true;
-        if (meta.status === "logged_out") return false;
-      } catch (_) {}
-    }
-    // Check if real IndexedDB web.whatsapp.com authentication data exists
-    const idbDir = path.join(dir, "session", "Default", "IndexedDB");
-    if (fs.existsSync(idbDir)) {
-      const idbEntries = fs.readdirSync(idbDir);
-      if (idbEntries.some((e) => e.includes("web.whatsapp.com"))) return true;
-    }
+    if (!fs.existsSync(metaFile)) return false;
+    const meta = JSON.parse(fs.readFileSync(metaFile, "utf8"));
+    if (meta.status === "active" && meta.phone) return true;
     return false;
   } catch (_) {
     return false;

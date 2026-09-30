@@ -126,17 +126,19 @@ class WaFlowEngine {
   /**
    * Record outbound bot message in database & broadcast live WebSocket event to CRM chat
    */
-   async recordAndEmitBotMessage(phone, text, type = "text", interactivePayload = null) {
+   async recordAndEmitBotMessage(phone, text, type = "text", interactivePayload = null, sessionKey = null, targetChatId = null) {
     let cleanPhone = String(phone || "").replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
-    const chatId = `${cleanPhone}@c.us`;
+    const waService = require("./whatsappService");
+    const activeSessionKey = sessionKey || waService.defaultKey || "708";
+    const chatId = targetChatId || `${cleanPhone}@c.us`;
     const msgId = "bot_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
 
-    // 1. Insert DB log for audit & live chat history
+    // 1. Insert DB log for audit & live chat history (with active session_key)
     await db.promise().query(
-      `INSERT INTO wa_message_logs (phone, direction, message_type, message_text, wa_message_id, status, interactive_payload, created_at)
-       VALUES (?, 'outbound', ?, ?, ?, 'delivered', ?, NOW())`,
-      [cleanPhone, type, text, msgId, interactivePayload ? JSON.stringify(interactivePayload) : null]
+      `INSERT INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, interactive_payload, created_at)
+       VALUES (?, ?, 'outbound', ?, ?, ?, 'delivered', ?, NOW())`,
+      [activeSessionKey, cleanPhone, type, text, msgId, interactivePayload ? JSON.stringify(interactivePayload) : null]
     ).catch(() => {});
 
     // 2. Update wa_contacts last_message
@@ -167,6 +169,10 @@ class WaFlowEngine {
         };
         io.emit("wa_message_sent", { phone: cleanPhone, chatId, message: liveMsg });
         io.emit("wa_message", { phone: cleanPhone, chatId, message: liveMsg });
+        if (chatId !== `${cleanPhone}@c.us`) {
+          io.emit("wa_message_sent", { phone: cleanPhone, chatId: `${cleanPhone}@c.us`, message: liveMsg });
+          io.emit("wa_message", { phone: cleanPhone, chatId: `${cleanPhone}@c.us`, message: liveMsg });
+        }
       }
     } catch (_) {}
 
@@ -198,7 +204,24 @@ class WaFlowEngine {
   async dispatchInbound(phone, messageText, interactiveReplyId = null, sessionKey = null, inboundMedia = null, options = {}) {
     if (!phone) return false;
     if (options.isHistoric) return false;
-    const cleanPhone = phone.replace(/\D/g, "");
+    let cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
+
+    // Resolve LID if necessary
+    const incomingChatId = options?.chatId || null;
+    if (cleanPhone.length >= 14 || (incomingChatId && incomingChatId.includes("@lid"))) {
+      try {
+        const waService = require("./whatsappService");
+        const waInst = (sessionKey ? waService.get(sessionKey) : null) || waService.default();
+        if (waInst && typeof waInst.resolveLidToPhone === "function") {
+          const resolved = await waInst.resolveLidToPhone(incomingChatId || phone).catch(() => null);
+          if (resolved) {
+            cleanPhone = resolved.replace(/\D/g, "");
+            if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
+          }
+        }
+      } catch (_) {}
+    }
 
     // A live agent takeover, a previous handoff, or a per-contact bot switch
     // mutes the flow bot — including advancing a run that is already open.
@@ -209,14 +232,18 @@ class WaFlowEngine {
     }
 
     try {
-      // 1. Check for an active flow run for this phone
+      // 1. Check for an active flow run for this phone or chatId
+      const clean10 = cleanPhone.slice(-10);
       const [activeRuns] = await db.promise().query(
         `SELECT r.*, f.fallback_policy, f.name as flow_name, f.trigger_type, f.trigger_config, f.entry_node_key
          FROM wa_flow_runs r
          JOIN wa_flows f ON r.flow_id = f.id
-         WHERE r.phone LIKE ? AND r.status = 'active'
+         WHERE (
+           r.phone LIKE ? OR r.phone LIKE ? OR r.phone = ?
+           OR (? IS NOT NULL AND JSON_UNQUOTE(JSON_EXTRACT(r.vars, '$._chat_id')) = ?)
+         ) AND r.status = 'active'
          ORDER BY r.id DESC LIMIT 1`,
-        [`%${cleanPhone.slice(-10)}`]
+        [`%${clean10}`, `%${cleanPhone}`, cleanPhone, incomingChatId, incomingChatId]
       );
 
       // Check if run is stale (> 4 hours since last activity)
@@ -256,7 +283,7 @@ class WaFlowEngine {
           return await this.startFlowRun(switchedFlow, cleanPhone, sessionKey, messageText);
         }
 
-        return await this.advanceActiveRun(run, messageText, interactiveReplyId, sessionKey, inboundMedia);
+        return await this.advanceActiveRun(run, messageText, interactiveReplyId, sessionKey, inboundMedia, options);
       }
 
       // If stale run was open, mark as timed out before triggering fresh flow
@@ -298,9 +325,26 @@ class WaFlowEngine {
   /**
    * Start a brand new flow execution for a phone number
    */
-  async startFlowRun(flow, phone, sessionKey = null, triggerText = "") {
+  async startFlowRun(flow, phone, sessionKey = null, triggerText = "", targetChatId = null) {
     let cleanPhone = String(phone || "").replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
+
+    const waService = require("./whatsappService");
+    const activeSessionKey = sessionKey || waService.defaultKey || "708";
+
+    // Resolve LID if cleanPhone is 14+ digits or targetChatId is a LID
+    if (cleanPhone.length >= 14 || (targetChatId && targetChatId.includes("@lid"))) {
+      try {
+        const waInst = waService.get(activeSessionKey) || waService.default();
+        if (waInst && typeof waInst.resolveLidToPhone === "function") {
+          const resolved = await waInst.resolveLidToPhone(targetChatId || cleanPhone).catch(() => null);
+          if (resolved) {
+            cleanPhone = resolved.replace(/\D/g, "");
+            if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
+          }
+        }
+      } catch (_) {}
+    }
 
     // Resolve entry node key intelligently if empty or not matching existing nodes
     let entryNodeKey = flow.entry_node_key || "start";
@@ -330,12 +374,14 @@ class WaFlowEngine {
 
     // Close any previous active runs for this phone
     await db.promise().query(
-      "UPDATE wa_flow_runs SET status = 'completed', end_reason = 'new_flow_started', ended_at = NOW() WHERE phone LIKE ? AND status = 'active'",
-      [`%${cleanPhone.slice(-10)}`]
+      "UPDATE wa_flow_runs SET status = 'completed', end_reason = 'new_flow_started', ended_at = NOW() WHERE (phone LIKE ? OR phone LIKE ? OR phone = ?) AND status = 'active'",
+      [`%${cleanPhone.slice(-10)}`, `%${cleanPhone}`, cleanPhone]
     );
 
     // Deep CRM Context auto-resolution from database
     const initialVars = await this.resolveInitialCrmVars(cleanPhone);
+    if (targetChatId) initialVars._chat_id = targetChatId;
+    initialVars._session_key = activeSessionKey;
 
     // The message that triggered the flow is the AI nodes' input — without it,
     // an ai_generate / ai_intent step placed before any collect_input sees nothing.
@@ -359,16 +405,16 @@ class WaFlowEngine {
       [flow.id]
     );
 
-    await this.logEvent(runId, entryNodeKey, "flow_started", { flowName: flow.name, initialVars });
+    await this.logEvent(runId, entryNodeKey, "flow_started", { flowName: flow.name, initialVars, targetChatId });
 
-    // Execute the entry node with resolved CRM variables
-    return await this.executeNodeChain(runId, flow.id, cleanPhone, entryNodeKey, initialVars, sessionKey);
+    // Execute the entry node with resolved CRM variables, sessionKey, and targetChatId
+    return await this.executeNodeChain(runId, flow.id, cleanPhone, entryNodeKey, initialVars, activeSessionKey, targetChatId);
   }
 
   /**
    * Advance an active flow run with customer reply
    */
-  async advanceActiveRun(run, messageText, interactiveReplyId, sessionKey = null, inboundMedia = null) {
+  async advanceActiveRun(run, messageText, interactiveReplyId, sessionKey = null, inboundMedia = null, options = {}) {
     const runId = run.id;
     const cleanPhone = run.phone;
     const rawTrimmed = (messageText || "").trim();
@@ -379,13 +425,18 @@ class WaFlowEngine {
       vars = typeof run.vars === "string" ? JSON.parse(run.vars) : (run.vars || {});
     } catch (_) {}
 
+    const targetChatId = vars._chat_id || options?.chatId || null;
+    if (!vars._chat_id && options?.chatId) vars._chat_id = options.chatId;
+    const waService = require("./whatsappService");
+    const activeSessionKey = sessionKey || vars._session_key || waService.defaultKey || "708";
+
     // Every inbound reply — typed text OR a tapped option — becomes the input that
     // ai_generate / ai_intent steps read. Without this only collect_input fed them.
     if (rawTrimmed) vars.last_input = rawTrimmed;
 
     // Global Command: Live Agent Transfer
     if (["agent", "human", "support", "talk to human", "representative", "person", "help desk", "live support", "executive"].includes(lowerText)) {
-      await this.sendFlowMessage(cleanPhone, "👤 Transferring you to our support specialist now. Please stay online.", sessionKey);
+      await this.sendFlowMessage(cleanPhone, "👤 Transferring you to our support specialist now. Please stay online.", activeSessionKey, targetChatId);
       await db.promise().query(
         "UPDATE wa_flow_runs SET status = 'handed_off', ended_at = NOW(), end_reason = 'user_agent_command' WHERE id = ?",
         [runId]
@@ -409,7 +460,7 @@ class WaFlowEngine {
         "UPDATE wa_flow_runs SET current_node_key = ?, reprompt_count = 0, last_advanced_at = NOW() WHERE id = ?",
         [entryNode, runId]
       );
-      return await this.executeNodeChain(runId, run.flow_id, cleanPhone, entryNode, vars, sessionKey);
+      return await this.executeNodeChain(runId, run.flow_id, cleanPhone, entryNode, vars, activeSessionKey, targetChatId);
     }
 
     // Load current node
@@ -445,13 +496,14 @@ class WaFlowEngine {
         if (!mediaAllowed) {
           const repromptCount = (run.reprompt_count || 0) + 1;
           if (repromptCount >= 3) {
-            return await this.handleFallback(runId, cleanPhone, run.fallback_policy, sessionKey);
+            return await this.handleFallback(runId, cleanPhone, run.fallback_policy, activeSessionKey);
           }
           await db.promise().query("UPDATE wa_flow_runs SET reprompt_count = ? WHERE id = ?", [repromptCount, runId]);
           await this.sendFlowMessage(
             cleanPhone,
             config.invalid_prompt || "Sorry, I can't read attachments for this question. Please type your answer.",
-            sessionKey
+            activeSessionKey,
+            targetChatId
           );
           return true;
         }
@@ -489,7 +541,7 @@ class WaFlowEngine {
           "UPDATE wa_flow_runs SET vars = ?, current_node_key = ?, reprompt_count = 0, last_advanced_at = NOW() WHERE id = ?",
           [JSON.stringify(vars), nextNodeKey, runId]
         );
-        return await this.executeNodeChain(runId, run.flow_id, cleanPhone, nextNodeKey, vars, sessionKey);
+        return await this.executeNodeChain(runId, run.flow_id, cleanPhone, nextNodeKey, vars, activeSessionKey, targetChatId);
       }
 
       // Input Validation
@@ -519,13 +571,13 @@ class WaFlowEngine {
       if (!isValid) {
         const repromptCount = (run.reprompt_count || 0) + 1;
         if (repromptCount >= 3) {
-          return await this.handleFallback(runId, cleanPhone, run.fallback_policy, sessionKey);
+          return await this.handleFallback(runId, cleanPhone, run.fallback_policy, activeSessionKey);
         }
         await db.promise().query(
           "UPDATE wa_flow_runs SET reprompt_count = ? WHERE id = ?",
           [repromptCount, runId]
         );
-        await this.sendFlowMessage(cleanPhone, errorMsg, sessionKey);
+        await this.sendFlowMessage(cleanPhone, errorMsg, activeSessionKey, targetChatId);
         return true;
       }
 
@@ -690,7 +742,7 @@ class WaFlowEngine {
             promptMsg += `*${idx + 1}.* ${cleanTitle}\n`;
           });
           promptMsg += "\n_Reply with option number (1, 2, 3...) or MENU for main menu._";
-          await this.sendFlowMessage(cleanPhone, promptMsg, sessionKey);
+          await this.sendFlowMessage(cleanPhone, promptMsg, activeSessionKey, targetChatId);
           return true;
         } else {
           const firstBtn = buttons[0];
@@ -712,13 +764,13 @@ class WaFlowEngine {
       [JSON.stringify(vars), nextNodeKey, runId]
     );
 
-    return await this.executeNodeChain(runId, run.flow_id, cleanPhone, nextNodeKey, vars, sessionKey);
+    return await this.executeNodeChain(runId, run.flow_id, cleanPhone, nextNodeKey, vars, activeSessionKey, targetChatId);
   }
 
   /**
    * Sequentially execute nodes until a suspension node (collect_input / send_buttons / send_list) or end is reached
    */
-  async executeNodeChain(runId, flowId, phone, startNodeKey, currentVars, sessionKey = null) {
+  async executeNodeChain(runId, flowId, phone, startNodeKey, currentVars, sessionKey = null, targetChatId = null) {
     let cleanPhone = String(phone || "").replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
 
@@ -761,7 +813,7 @@ class WaFlowEngine {
         config = typeof node.config === "string" ? JSON.parse(node.config) : (node.config || {});
       } catch (_) {}
 
-      await this.logEvent(runId, nodeKey, `node_exec_${node.node_type}`, { config, vars });
+      await this.logEvent(runId, nodeKey, `node_exec_${node.node_type}`, { config, vars, targetChatId });
 
       switch (node.node_type) {
         case "start":
@@ -785,7 +837,7 @@ class WaFlowEngine {
         case "send_message": {
           const renderedText = this.interpolate(config.text || "", vars);
           if (renderedText.trim()) {
-            await this.sendFlowMessage(cleanPhone, renderedText, sessionKey);
+            await this.sendFlowMessage(cleanPhone, renderedText, sessionKey, targetChatId);
           }
           nodeKey = config.next_node_key;
           break;
@@ -800,15 +852,15 @@ class WaFlowEngine {
           if (declaredType === "link") {
             // Share a link as a normal text message so WhatsApp renders the rich preview
             const linkBody = [renderedCaption, renderedUrl].filter((s) => String(s || "").trim()).join("\n");
-            if (linkBody.trim()) await this.sendFlowMessage(cleanPhone, linkBody, sessionKey);
+            if (linkBody.trim()) await this.sendFlowMessage(cleanPhone, linkBody, sessionKey, targetChatId);
           } else {
             const media = this.resolveMedia(renderedUrl, declaredType, renderedFilename);
             if (media) {
-              await this.sendFlowMedia(cleanPhone, media.type, media.url, renderedCaption, media.filename, sessionKey);
+              await this.sendFlowMedia(cleanPhone, media.type, media.url, renderedCaption, media.filename, sessionKey, targetChatId);
             } else {
               console.warn(`[WA Flow] send_media node '${nodeKey}' skipped — no reachable media URL (set PUBLIC_BASE_URL for uploaded files).`);
               // Don't silently drop the message: at least deliver the caption
-              if (renderedCaption.trim()) await this.sendFlowMessage(cleanPhone, renderedCaption, sessionKey);
+              if (renderedCaption.trim()) await this.sendFlowMessage(cleanPhone, renderedCaption, sessionKey, targetChatId);
             }
           }
           nodeKey = config.next_node_key;
@@ -816,7 +868,7 @@ class WaFlowEngine {
         }
 
         case "send_template": {
-          await this.sendFlowTemplate(cleanPhone, config.template_id || config.template_name, vars, sessionKey);
+          await this.sendFlowTemplate(cleanPhone, config.template_id || config.template_name, vars, sessionKey, targetChatId);
           nodeKey = config.next_node_key;
           break;
         }
@@ -829,7 +881,8 @@ class WaFlowEngine {
             this.interpolate(config.url || "", vars),
             config.header_text ? this.interpolate(config.header_text, vars) : null,
             config.footer_text ? this.interpolate(config.footer_text, vars) : null,
-            sessionKey
+            sessionKey,
+            targetChatId
           );
           nodeKey = config.next_node_key;
           break;
@@ -881,7 +934,7 @@ class WaFlowEngine {
             sections = [{ title: null, buttons: flatBtns }];
           }
 
-          await this.sendFlowInteractiveMenu(cleanPhone, renderedText, sections, renderedHeader, renderedFooter, sessionKey);
+          await this.sendFlowInteractiveMenu(cleanPhone, renderedText, sections, renderedHeader, renderedFooter, sessionKey, targetChatId);
           
           // Suspends execution — wait for user reply
           await db.promise().query(
@@ -906,7 +959,7 @@ class WaFlowEngine {
               next_node_key: b.next_node_key || b.nextNodeId || b.target_node || b.next_node
             };
           });
-          await this.sendFlowButtons(cleanPhone, renderedText, buttons, renderedHeader, renderedFooter, sessionKey);
+          await this.sendFlowButtons(cleanPhone, renderedText, buttons, renderedHeader, renderedFooter, sessionKey, targetChatId);
           
           // Suspends execution — wait for user reply
           await db.promise().query(
@@ -933,7 +986,7 @@ class WaFlowEngine {
             };
           });
           
-          await this.sendFlowList(cleanPhone, renderedText, rows, renderedButtonText, renderedTitle, sessionKey);
+          await this.sendFlowList(cleanPhone, renderedText, rows, renderedButtonText, renderedTitle, sessionKey, targetChatId);
 
           // Suspends execution — wait for user reply
           await db.promise().query(
@@ -949,7 +1002,7 @@ class WaFlowEngine {
         case "collect_date": {
           const renderedPrompt = this.interpolate(config.prompt_text || config.text || config.message || "", vars);
           if (renderedPrompt.trim()) {
-            await this.sendFlowMessage(cleanPhone, renderedPrompt, sessionKey);
+            await this.sendFlowMessage(cleanPhone, renderedPrompt, sessionKey, targetChatId);
           }
           // Suspends execution — wait for user reply
           await db.promise().query(
@@ -1043,7 +1096,7 @@ class WaFlowEngine {
             // ai_generate
             const replyText = aiResult.reply || "";
             if (replyText) {
-              await this.sendFlowMessage(cleanPhone, replyText, sessionKey);
+              await this.sendFlowMessage(cleanPhone, replyText, sessionKey, targetChatId);
             }
             vars.ai_last_reply = replyText;
             nodeKey = config.next_node_key;
@@ -1133,7 +1186,7 @@ class WaFlowEngine {
             const [targetFlows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ?", [config.target_flow_id]);
             if (targetFlows[0]) {
               await this.completeRun(runId, `jumped_to_flow_${config.target_flow_id}`);
-              return await this.startFlowRun(targetFlows[0], cleanPhone, sessionKey, vars.last_input || "");
+              return await this.startFlowRun(targetFlows[0], cleanPhone, sessionKey, vars.last_input || "", targetChatId);
             }
           }
           nodeKey = config.next_node_key;
@@ -1142,7 +1195,7 @@ class WaFlowEngine {
 
         case "handoff": {
           const noteText = config.note || "Transferring you to our support team. An agent will assist you shortly.";
-          await this.sendFlowMessage(cleanPhone, this.interpolate(noteText, vars), sessionKey);
+          await this.sendFlowMessage(cleanPhone, this.interpolate(noteText, vars), sessionKey, targetChatId);
           await db.promise().query(
             "UPDATE wa_flow_runs SET status = 'handed_off', ended_at = NOW(), end_reason = 'agent_handoff', vars = ? WHERE id = ?",
             [JSON.stringify(vars), runId]
@@ -1871,17 +1924,18 @@ class WaFlowEngine {
     );
   }
 
-  async sendFlowMessage(phone, text, sessionKey = null) {
+  async sendFlowMessage(phone, text, sessionKey = null, targetChatId = null) {
     const waLoadBalancer = require("./waLoadBalancer");
     const mdToWa = require("./mdToWa");
     let cleanPhone = String(phone || "").replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
 
     const formatted = mdToWa.toWhatsApp(text);
-    const msgId = await this.recordAndEmitBotMessage(cleanPhone, formatted, "text");
+    const msgId = await this.recordAndEmitBotMessage(cleanPhone, formatted, "text", null, sessionKey, targetChatId);
 
     try {
-      const result = await waLoadBalancer.sendTextMessage(cleanPhone, formatted, sessionKey);
+      const sendTarget = (targetChatId && targetChatId.includes("@lid")) ? targetChatId : cleanPhone;
+      const result = await waLoadBalancer.sendTextMessage(sendTarget, formatted, sessionKey);
       return result;
     } catch (e) {
       console.warn(`❌ [WA FlowEngine] sendFlowMessage error for +${cleanPhone}:`, e?.message || e);
@@ -1890,17 +1944,18 @@ class WaFlowEngine {
     }
   }
 
-  async sendFlowMedia(phone, mediaType, mediaUrl, caption, filename = "", sessionKey = null) {
+  async sendFlowMedia(phone, mediaType, mediaUrl, caption, filename = "", sessionKey = null, targetChatId = null) {
     const waLoadBalancer = require("./waLoadBalancer");
     const mdToWa = require("./mdToWa");
     let cleanPhone = String(phone || "").replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
 
     const formattedCaption = caption ? mdToWa.toWhatsApp(caption) : "";
-    const msgId = await this.recordAndEmitBotMessage(cleanPhone, formattedCaption || filename || `[Media Attachment: ${mediaType}]`, "media");
+    const msgId = await this.recordAndEmitBotMessage(cleanPhone, formattedCaption || filename || `[Media Attachment: ${mediaType}]`, "media", null, sessionKey, targetChatId);
 
     try {
-      return await waLoadBalancer.sendMediaMessage(cleanPhone, mediaType || "image", mediaUrl, formattedCaption, filename, sessionKey);
+      const sendTarget = (targetChatId && targetChatId.includes("@lid")) ? targetChatId : cleanPhone;
+      return await waLoadBalancer.sendMediaMessage(sendTarget, mediaType || "image", mediaUrl, formattedCaption, filename, sessionKey);
     } catch (e) {
       console.warn(`❌ [WA FlowEngine] sendFlowMedia error for +${cleanPhone}:`, e?.message || e);
       await this.markBotMessageFailed(msgId, cleanPhone, e?.message || "Failed to send");
@@ -1908,7 +1963,7 @@ class WaFlowEngine {
     }
   }
 
-  async sendFlowTemplate(phone, templateRef, vars = {}, sessionKey = null) {
+  async sendFlowTemplate(phone, templateRef, vars = {}, sessionKey = null, targetChatId = null) {
     const waLoadBalancer = require("./waLoadBalancer");
     const { buildTemplateBodyComponent } = require("./waAutomationService");
     let cleanPhone = String(phone || "").replace(/\D/g, "");
@@ -1927,10 +1982,11 @@ class WaFlowEngine {
 
       const bodyComponent = buildTemplateBodyComponent(tmpl.body, vars.name, vars);
       const renderedBody = this.interpolate(tmpl.body, vars);
-      const msgId = await this.recordAndEmitBotMessage(cleanPhone, renderedBody, "template");
+      const msgId = await this.recordAndEmitBotMessage(cleanPhone, renderedBody, "template", null, sessionKey, targetChatId);
 
       try {
-        return await waLoadBalancer.sendTemplateMessage(cleanPhone, tmpl.name, tmpl.language || "en", bodyComponent ? [bodyComponent] : [], sessionKey);
+        const sendTarget = (targetChatId && targetChatId.includes("@lid")) ? targetChatId : cleanPhone;
+        return await waLoadBalancer.sendTemplateMessage(sendTarget, tmpl.name, tmpl.language || "en", bodyComponent ? [bodyComponent] : [], sessionKey);
       } catch (err) {
         console.warn(`❌ [WA FlowEngine] sendFlowTemplate error for +${cleanPhone}:`, err?.message || err);
         await this.markBotMessageFailed(msgId, cleanPhone, err?.message || "Failed to send");
@@ -1947,7 +2003,7 @@ class WaFlowEngine {
    * Titles are normalized centrally so an authored "1. Our Services" reaches
    * Meta as "Our Services" — the ordinal only ever appears in the text fallback.
    */
-  async sendFlowButtons(phone, text, buttons, headerText, footerText, sessionKey = null) {
+  async sendFlowButtons(phone, text, buttons, headerText, footerText, sessionKey = null, targetChatId = null) {
     return this._dispatchInteractive({
       phone,
       body: text,
@@ -1955,6 +2011,7 @@ class WaFlowEngine {
       footer: footerText,
       items: buttons,
       sessionKey,
+      targetChatId,
       buttonText: "View Options",
       payloadType: "buttons",
       payloadExtra: { buttons },
@@ -1966,7 +2023,7 @@ class WaFlowEngine {
    * id — the customer leaves for the link — so the flow always continues
    * straight to next_node_key.
    */
-  async sendFlowCTA(phone, text, displayText, url, headerText = null, footerText = null, sessionKey = null) {
+  async sendFlowCTA(phone, text, displayText, url, headerText = null, footerText = null, sessionKey = null, targetChatId = null) {
     const waLoadBalancer = require("./waLoadBalancer");
     const mdToWa = require("./mdToWa");
 
@@ -1992,12 +2049,14 @@ class WaFlowEngine {
       fallbackText,
       "interactive",
       { type: "cta_url", header: headerText, footer: footerText, text, button_text: displayText, url },
-      sessionKey
+      sessionKey,
+      targetChatId
     );
 
     try {
+      const sendTarget = (targetChatId && targetChatId.includes("@lid")) ? targetChatId : cleanPhone;
       const res = await waLoadBalancer.sendCTAButtonMessage({
-        phone: cleanPhone,
+        phone: sendTarget,
         body: text,
         displayText,
         url,
@@ -2017,7 +2076,7 @@ class WaFlowEngine {
     }
   }
 
-  async sendFlowList(phone, text, rows, buttonText = "View Options", title = null, sessionKey = null) {
+  async sendFlowList(phone, text, rows, buttonText = "View Options", title = null, sessionKey = null, targetChatId = null) {
     return this._dispatchInteractive({
       phone,
       body: text,
@@ -2027,12 +2086,13 @@ class WaFlowEngine {
       forceList: true,
       buttonText,
       sessionKey,
+      targetChatId,
       payloadType: "list",
       payloadExtra: { title, button_text: buttonText, rows },
     });
   }
 
-  async sendFlowInteractiveMenu(phone, text, sections, headerText = null, footerText = null, sessionKey = null) {
+  async sendFlowInteractiveMenu(phone, text, sections, headerText = null, footerText = null, sessionKey = null, targetChatId = null) {
     return this._dispatchInteractive({
       phone,
       body: text,
@@ -2042,6 +2102,7 @@ class WaFlowEngine {
       sectioned: true,
       buttonText: "Select Option",
       sessionKey,
+      targetChatId,
       payloadType: "interactive_menu",
       payloadExtra: { sections },
     });
@@ -2064,6 +2125,7 @@ class WaFlowEngine {
     forceList = false,
     buttonText = "View Options",
     sessionKey = null,
+    targetChatId = null,
     payloadType,
     payloadExtra = {},
   }) {
@@ -2099,11 +2161,13 @@ class WaFlowEngine {
       fallbackText,
       "interactive",
       { type: payloadType, header, footer, text: body, ...payloadExtra },
-      sessionKey
+      sessionKey,
+      targetChatId
     );
 
     try {
-      const opts = { phone: cleanPhone, body, header, footer, fallbackText, sessionKey };
+      const sendTarget = (targetChatId && targetChatId.includes("@lid")) ? targetChatId : cleanPhone;
+      const opts = { phone: sendTarget, body, header, footer, fallbackText, sessionKey };
       const res = asList
         ? await waLoadBalancer.sendInteractiveList({ ...opts, sections, buttonText })
         : await waLoadBalancer.sendInteractiveButtons({ ...opts, buttons: flat });

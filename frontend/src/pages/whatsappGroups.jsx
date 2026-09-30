@@ -208,41 +208,41 @@ export default function WAGroups() {
   return (
     <div className="w-full pb-12">
       <WhatsAppNav />
-      <div className="flex items-center justify-between mb-6">
+      <div className="hl-commandbar">
         <div className="flex items-center gap-3">
-          <Users className="text-[#25D366]" size={28} />
-          <h1 className="text-xl font-bold text-gray-800">Contact Groups</h1>
-          <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{groups.length} groups</span>
+          <Users size={28} style={{ color: "var(--color-ink)" }} />
+          <h1 className="hl-title">Contact Groups</h1>
+          <span className="hl-badge">{groups.length} groups</span>
         </div>
-        <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 bg-[#25D366] text-white rounded-lg hover:bg-[#1ebe5d] transition text-sm">
+        <button onClick={() => setShowCreate(true)} className="hl-btn-primary">
           <Plus size={16} /> New Group
         </button>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20"><Loader2 size={32} className="animate-spin text-[#25D366]" /></div>
+        <div className="flex justify-center py-20"><Loader2 size={32} className="animate-spin" style={{ color: "var(--color-ink)" }} /></div>
       ) : groups.length === 0 ? (
-        <div className="text-center py-20 text-gray-400 bg-white rounded-xl border border-gray-200">
+        <div className="hl-card hl-empty">
           <Users size={48} className="mx-auto mb-4 opacity-50" />
-          <p className="text-lg font-medium">No groups yet</p>
+          <p className="hl-empty-title">No groups yet</p>
           <p className="text-sm">Create contact groups to organize your audience</p>
         </div>
       ) : (
         <div className="space-y-3">
           {groups.map((g) => (
-            <div key={g.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50" onClick={() => toggleExpand(g.id)}>
+            <div key={g.id} className="hl-card overflow-hidden">
+              <div className="flex items-center justify-between p-4 cursor-pointer" onClick={() => toggleExpand(g.id)}>
                 <div className="flex items-center gap-3">
-                  {expandedGroup === g.id ? <ChevronDown size={18} className="text-gray-400" /> : <ChevronRight size={18} className="text-gray-400" />}
+                  {expandedGroup === g.id ? <ChevronDown size={18} style={{ color: "var(--color-ink-2)" }} /> : <ChevronRight size={18} style={{ color: "var(--color-ink-2)" }} />}
                   <div>
-                    <h3 className="font-semibold text-gray-800">{g.name}</h3>
-                    <p className="text-xs text-gray-500">{g.contact_count || 0} contacts{g.description ? ` — ${g.description}` : ""}</p>
+                    <h3 className="font-semibold" style={{ color: "var(--color-ink)" }}>{g.name}</h3>
+                    <p className="hl-subtitle">{g.contact_count || 0} contacts{g.description ? ` — ${g.description}` : ""}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                   <button
                     onClick={() => openContactPicker(g.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] text-white rounded-lg text-xs font-semibold hover:bg-[#1ebe5d] transition shadow-sm"
+                    className="hl-btn-primary"
                     title="Add contacts from CRM"
                   >
                     <UserPlus size={14} />
@@ -255,47 +255,48 @@ export default function WAGroups() {
                       setSelectedGroupForBulk(data.contacts || []);
                       setShowBulkModal(true);
                     }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 text-white rounded-lg text-xs font-semibold hover:bg-emerald-800 transition shadow-sm"
+                    className="hl-btn-secondary"
                     title="Launch WhatsApp broadcast wizard"
                   >
                     <Send size={14} />
                     <span>Send Bulk</span>
                   </button>
-                  <button onClick={() => { setImportModal(g.id); setBulkInput(""); }} className="p-2 hover:bg-gray-100 rounded-lg" title="Manual import (paste numbers)"><Upload size={16} className="text-gray-500" /></button>
-                  <button onClick={() => handleDelete(g.id)} className="p-2 hover:bg-red-50 rounded-lg"><Trash2 size={16} className="text-red-500" /></button>
+                  <button onClick={() => { setImportModal(g.id); setBulkInput(""); }} className="hl-btn-secondary" style={{ padding: "var(--space-2xs) var(--space-xs)" }} title="Manual import (paste numbers)"><Upload size={16} /></button>
+                  <button onClick={() => handleDelete(g.id)} className="hl-btn-danger-ghost" style={{ padding: "var(--space-2xs) var(--space-xs)" }}><Trash2 size={16} /></button>
                 </div>
               </div>
 
               {expandedGroup === g.id && (
-                <div className="border-t border-gray-100 bg-gray-50 p-4">
+                <div className="p-4" style={{ borderTop: "1px solid var(--color-rule)", background: "var(--color-paper)" }}>
                   {contactsLoading ? (
-                    <div className="flex justify-center py-4"><Loader2 size={20} className="animate-spin text-gray-400" /></div>
+                    <div className="flex justify-center py-4"><Loader2 size={20} className="animate-spin" style={{ color: "var(--color-ink-2)" }} /></div>
                   ) : groupContacts.length === 0 ? (
-                    <div className="text-center py-6 text-gray-400 text-sm">No contacts in this group. Import contacts to start.</div>
+                    <div className="hl-empty">No contacts in this group. Import contacts to start.</div>
                   ) : (
                     <div className="space-y-1">
                       {groupContacts.map((c) => (
-                        <div key={c.id} className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-gray-100">
+                        <div key={c.id} className="hl-card flex items-center justify-between px-3 py-2">
                           <div>
-                            <span className="text-sm font-medium text-gray-700">{c.name || "Unknown"}</span>
-                            <span className="text-sm text-gray-500 ml-2">+{c.country_code || "91"} {c.phone}</span>
-                            {c.notes && <span className="text-xs text-gray-400 ml-2">{c.notes}</span>}
+                            <span className="text-sm font-medium" style={{ color: "var(--color-ink)" }}>{c.name || "Unknown"}</span>
+                            <span className="hl-id ml-2">+{c.country_code || "91"} {c.phone}</span>
+                            {c.notes && <span className="text-xs ml-2" style={{ color: "var(--color-ink-2)" }}>{c.notes}</span>}
                           </div>
                           <div className="flex items-center gap-1">
                             <a
                               href={`/whatsapp?phone=${c.phone}`}
-                              className="p-1 hover:bg-emerald-50 rounded text-emerald-600 transition"
+                              className="p-1 rounded transition"
+                              style={{ color: "var(--color-ink)" }}
                               title="Open in Live Chat"
                             >
                               <Send size={13} />
                             </a>
-                            <button onClick={() => handleDeleteContact(g.id, c.id)} className="p-1 hover:bg-red-50 rounded text-red-400" title="Remove from group">
+                            <button onClick={() => handleDeleteContact(g.id, c.id)} className="p-1 rounded" style={{ color: "var(--color-error)" }} title="Remove from group">
                               <Trash2 size={13} />
                             </button>
                           </div>
                         </div>
                       ))}
-                      <button onClick={() => downloadCSV(groupContacts, g.name)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mt-2 px-1">
+                      <button onClick={() => downloadCSV(groupContacts, g.name)} className="flex items-center gap-1 text-xs mt-2 px-1" style={{ color: "var(--color-ink-2)" }}>
                         <Download size={12} /> Export CSV
                       </button>
                     </div>
@@ -309,24 +310,24 @@ export default function WAGroups() {
 
       {showCreate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCreate(false)}>
-          <div className="bg-white rounded-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-800">New Contact Group</h2>
-              <button onClick={() => setShowCreate(false)}><X size={20} className="text-gray-400" /></button>
+          <div className="hl-card w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5" style={{ borderBottom: "1px solid var(--color-rule)" }}>
+              <h2 className="text-lg font-bold">New Contact Group</h2>
+              <button onClick={() => setShowCreate(false)}><X size={20} style={{ color: "var(--color-ink-2)" }} /></button>
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Group Name *</label>
-                <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Customers 2024" />
+                <label className="block text-sm font-medium mb-1">Group Name *</label>
+                <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} className="hl-input w-full" placeholder="Customers 2024" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <input type="text" value={groupDesc} onChange={e => setGroupDesc(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="All active customers" />
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <input type="text" value={groupDesc} onChange={e => setGroupDesc(e.target.value)} className="hl-input w-full" placeholder="All active customers" />
               </div>
             </div>
-            <div className="flex gap-3 p-5 border-t border-gray-100">
-              <button onClick={() => setShowCreate(false)} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleCreate} disabled={!groupName} className="flex-1 px-4 py-2.5 bg-[#25D366] text-white rounded-lg text-sm hover:bg-[#1ebe5d] disabled:opacity-50">Create</button>
+            <div className="flex gap-3 p-5" style={{ borderTop: "1px solid var(--color-rule)" }}>
+              <button onClick={() => setShowCreate(false)} className="hl-btn-secondary flex-1">Cancel</button>
+              <button onClick={handleCreate} disabled={!groupName} className="hl-btn-primary flex-1">Create</button>
             </div>
           </div>
         </div>
@@ -334,19 +335,19 @@ export default function WAGroups() {
 
       {importModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setImportModal(null)}>
-          <div className="bg-white rounded-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-800">Import Contacts</h2>
-              <button onClick={() => setImportModal(null)}><X size={20} className="text-gray-400" /></button>
+          <div className="hl-card w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5" style={{ borderBottom: "1px solid var(--color-rule)" }}>
+              <h2 className="text-lg font-bold">Import Contacts</h2>
+              <button onClick={() => setImportModal(null)}><X size={20} style={{ color: "var(--color-ink-2)" }} /></button>
             </div>
             <div className="p-5">
-              <p className="text-sm text-gray-500 mb-3">One phone number per line. Optionally add name and notes:</p>
-              <textarea value={bulkInput} onChange={e => setBulkInput(e.target.value)} rows={8} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono" placeholder="9876543210, Rajesh, VIP customer&#10;9876543211, Priya&#10;9876543212" />
-              <p className="text-xs text-gray-400 mt-1">Format: phone, name, notes (one per line)</p>
+              <p className="text-sm mb-3">One phone number per line. Optionally add name and notes:</p>
+              <textarea value={bulkInput} onChange={e => setBulkInput(e.target.value)} rows={8} className="hl-input w-full font-mono" placeholder="9876543210, Rajesh, VIP customer&#10;9876543211, Priya&#10;9876543212" />
+              <p className="text-xs mt-1">Format: phone, name, notes (one per line)</p>
             </div>
-            <div className="flex gap-3 p-5 border-t border-gray-100">
-              <button onClick={() => setImportModal(null)} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={() => handleBulkImport(importModal)} disabled={!bulkInput.trim()} className="flex-1 px-4 py-2.5 bg-[#25D366] text-white rounded-lg text-sm hover:bg-[#1ebe5d] disabled:opacity-50">Import</button>
+            <div className="flex gap-3 p-5" style={{ borderTop: "1px solid var(--color-rule)" }}>
+              <button onClick={() => setImportModal(null)} className="hl-btn-secondary flex-1">Cancel</button>
+              <button onClick={() => handleBulkImport(importModal)} disabled={!bulkInput.trim()} className="hl-btn-primary flex-1">Import</button>
             </div>
           </div>
         </div>
@@ -355,51 +356,51 @@ export default function WAGroups() {
       {/* Contact Picker Modal - Select from CRM Clients */}
       {showContactPicker && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowContactPicker(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+            <div className="flex items-center justify-between p-5 shrink-0" style={{ borderBottom: "1px solid var(--color-rule)" }}>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#25D366]/10 flex items-center justify-center">
-                  <UserPlus size={20} className="text-[#25D366]" />
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "var(--color-paper)" }}>
+                  <UserPlus size={20} style={{ color: "var(--color-ink)" }} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-gray-800">Add Contacts from CRM</h2>
-                  <p className="text-xs text-gray-500">{filteredClients.length} clients found {selectedClients.size > 0 && `— ${selectedClients.size} selected`}</p>
+                  <h2 className="text-lg font-bold">Add Contacts from CRM</h2>
+                  <p className="hl-subtitle">{filteredClients.length} clients found {selectedClients.size > 0 && `— ${selectedClients.size} selected`}</p>
                 </div>
               </div>
-              <button onClick={() => setShowContactPicker(false)} className="p-2 hover:bg-gray-100 rounded-lg transition">
-                <X size={20} className="text-gray-400" />
+              <button onClick={() => setShowContactPicker(false)} className="p-2 rounded-lg transition">
+                <X size={20} style={{ color: "var(--color-ink-2)" }} />
               </button>
             </div>
 
             {/* Search & Filter Bar */}
-            <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/50 shrink-0">
+            <div className="px-5 py-3 shrink-0" style={{ borderBottom: "1px solid var(--color-rule)", background: "var(--color-paper)" }}>
               <div className="flex items-center gap-3">
                 <div className="flex-1 relative">
-                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--color-ink-2)" }} />
                   <input
                     type="text"
                     value={clientSearch}
                     onChange={e => setClientSearch(e.target.value)}
                     placeholder="Search by name, phone, email, or company..."
-                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#25D366]/30 focus:border-[#25D366] transition bg-white"
+                    className="hl-input w-full pl-10 pr-4"
                   />
                   {clientSearch && (
-                    <button onClick={() => setClientSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded">
-                      <X size={14} className="text-gray-400" />
+                    <button onClick={() => setClientSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded">
+                      <X size={14} style={{ color: "var(--color-ink-2)" }} />
                     </button>
                   )}
                 </div>
-                <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-0.5">
+                <div className="hl-tabs">
                   <button
                     onClick={() => setClientFilter("all")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${clientFilter === "all" ? "bg-[#25D366] text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                    className={`hl-tab ${clientFilter === "all" ? "is-active" : ""}`}
                   >
                     All
                   </button>
                   <button
                     onClick={() => setClientFilter("has_phone")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${clientFilter === "has_phone" ? "bg-[#25D366] text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                    className={`hl-tab ${clientFilter === "has_phone" ? "is-active" : ""}`}
                   >
                     <Phone size={12} className="inline mr-1" />
                     Has Phone
@@ -410,27 +411,27 @@ export default function WAGroups() {
               {/* Select All / Deselect */}
               <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-2">
-                  <button onClick={selectAllFiltered} className="text-xs text-[#25D366] hover:underline font-semibold">Select all ({filteredClients.length})</button>
+                  <button onClick={selectAllFiltered} className="text-xs font-semibold hover:underline" style={{ color: "var(--color-ink)" }}>Select all ({filteredClients.length})</button>
                   {selectedClients.size > 0 && (
-                    <button onClick={deselectAll} className="text-xs text-gray-400 hover:text-gray-600 hover:underline">Clear selection</button>
+                    <button onClick={deselectAll} className="text-xs hover:underline" style={{ color: "var(--color-ink-2)" }}>Clear selection</button>
                   )}
                 </div>
-                <span className="text-[10px] text-gray-400">{filteredClients.length} of {allClients.length} clients</span>
+                <span className="text-[10px]" style={{ color: "var(--color-ink-2)" }}>{filteredClients.length} of {allClients.length} clients</span>
               </div>
             </div>
 
             {/* Client List */}
             <div className="flex-1 overflow-y-auto min-h-0">
               {clientsLoading ? (
-                <div className="flex justify-center py-12"><Loader2 size={28} className="animate-spin text-[#25D366]" /></div>
+                <div className="flex justify-center py-12"><Loader2 size={28} className="animate-spin" style={{ color: "var(--color-ink)" }} /></div>
               ) : filteredClients.length === 0 ? (
-                <div className="text-center py-12 text-gray-400">
+                <div className="hl-empty">
                   <Users size={40} className="mx-auto mb-3 opacity-40" />
-                  <p className="text-sm font-medium">No clients found</p>
+                  <p className="hl-empty-title">No clients found</p>
                   <p className="text-xs mt-1">{clientSearch ? "Try a different search term" : "No CRM contacts available"}</p>
                 </div>
               ) : (
-                <div className="divide-y divide-gray-50">
+                <div className="divide-y">
                   {filteredClients.map((client) => {
                     const isSelected = selectedClients.has(client.id);
                     const hasPhone = client.phone && client.phone.length >= 10;
@@ -438,45 +439,45 @@ export default function WAGroups() {
                       <div
                         key={client.id}
                         onClick={() => hasPhone && toggleClientSelect(client.id)}
-                        className={`flex items-center gap-3 px-5 py-3 transition cursor-pointer ${hasPhone ? "hover:bg-gray-50" : "opacity-50 cursor-not-allowed"} ${isSelected ? "bg-[#25D366]/5" : ""}`}
+                        className={`flex items-center gap-3 px-5 py-3 transition cursor-pointer ${hasPhone ? "hover:bg-[var(--color-paper)]" : "opacity-50 cursor-not-allowed"} ${isSelected ? "bg-[var(--color-accent-soft)]" : ""}`}
                       >
                         <div className="shrink-0">
                           {isSelected ? (
-                            <CheckSquare size={18} className="text-[#25D366]" />
+                            <CheckSquare size={18} style={{ color: "var(--color-ink)" }} />
                           ) : (
-                            <Square size={18} className={hasPhone ? "text-gray-300" : "text-gray-200"} />
+                            <Square size={18} style={{ color: "var(--color-ink-2)", opacity: hasPhone ? 1 : 0.5 }} />
                           )}
                         </div>
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#25D366]/20 to-emerald-100 flex items-center justify-center shrink-0">
-                          <span className="text-sm font-bold text-[#25D366]">{(client.name || "?")[0].toUpperCase()}</span>
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--color-paper)" }}>
+                          <span className="text-sm font-bold" style={{ color: "var(--color-ink)" }}>{(client.name || "?")[0].toUpperCase()}</span>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-gray-800 truncate">{client.name || "Unknown"}</span>
+                            <span className="text-sm font-semibold truncate" style={{ color: "var(--color-ink)" }}>{client.name || "Unknown"}</span>
                             {client.company && (
-                              <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded flex items-center gap-0.5 shrink-0">
+                              <span className="hl-badge shrink-0">
                                 <Building2 size={9} /> {client.company}
                               </span>
                             )}
                           </div>
                           <div className="flex items-center gap-3 mt-0.5">
                             {client.phone && (
-                              <span className="text-xs text-gray-500 flex items-center gap-1">
+                              <span className="text-xs flex items-center gap-1" style={{ color: "var(--color-ink-2)" }}>
                                 <Phone size={10} /> +{client.phone}
                               </span>
                             )}
                             {client.email && (
-                              <span className="text-xs text-gray-400 truncate">{client.email}</span>
+                              <span className="text-xs truncate" style={{ color: "var(--color-ink-2)" }}>{client.email}</span>
                             )}
                           </div>
                         </div>
                         {hasPhone && (
-                          <div className="text-[10px] text-gray-400 shrink-0">
+                          <div className="text-[10px] shrink-0" style={{ color: "var(--color-ink-2)" }}>
                             {isSelected ? "Added" : "Click to add"}
                           </div>
                         )}
                         {!hasPhone && (
-                          <span className="text-[10px] text-amber-500 bg-amber-50 px-2 py-0.5 rounded-full shrink-0">No phone</span>
+                          <span className="hl-badge hl-badge-warn shrink-0">No phone</span>
                         )}
                       </div>
                     );
@@ -486,14 +487,14 @@ export default function WAGroups() {
             </div>
 
             {/* Footer Actions */}
-            <div className="flex items-center justify-between p-5 border-t border-gray-100 bg-gray-50/50 shrink-0">
-              <button onClick={() => setShowContactPicker(false)} className="px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 hover:bg-white transition font-medium">
+            <div className="flex items-center justify-between p-5 shrink-0" style={{ borderTop: "1px solid var(--color-rule)", background: "var(--color-paper)" }}>
+              <button onClick={() => setShowContactPicker(false)} className="hl-btn-secondary">
                 Cancel
               </button>
               <button
                 onClick={addSelectedToGroup}
                 disabled={selectedClients.size === 0 || addingContacts}
-                className="flex items-center gap-2 px-5 py-2.5 bg-[#25D366] text-white rounded-xl text-sm font-bold hover:bg-[#1ebe5d] disabled:opacity-50 disabled:cursor-not-allowed transition shadow-lg shadow-[#25D366]/20"
+                className="hl-btn-primary"
               >
                 {addingContacts ? (
                   <><Loader2 size={14} className="animate-spin" /> Adding...</>

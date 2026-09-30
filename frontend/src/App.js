@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import { Agentation } from "agentation";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Login from "./auth/login";
 import WALayout from "./layout/WALayout";
@@ -64,6 +65,7 @@ export default function App() {
           </Route>
           <Route path="*" element={<Navigate to="/whatsapp" replace />} />
         </Routes>
+        {process.env.NODE_ENV === "development" && <Agentation />}
       </BrowserRouter>
     </AuthProvider>
   );

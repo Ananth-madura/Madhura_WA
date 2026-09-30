@@ -922,22 +922,48 @@ async function maybeSendWelcomeReply(targetPhoneOrJid, contactName, sessionKey, 
   }
 }
 
-async function executeAutomationSend(rule, cleanPhone, contactName, messageText, data) {
+async function executeAutomationSend(rule, cleanPhone, contactName, messageText, data, sessionKey = null, targetChatId = null) {
+  // Normalize flexible arguments if messageText is omitted and data object is passed in 4th position:
+  let actualMessageText = messageText;
+  let actualData = data;
+  let actualSessionKey = sessionKey;
+  let actualTargetChatId = targetChatId;
+
+  if (typeof messageText === "object" && messageText !== null && (!data || typeof data === "string")) {
+    actualTargetChatId = sessionKey;
+    actualSessionKey = data;
+    actualData = messageText;
+    actualMessageText = null;
+  }
+
+  if (!actualData || typeof actualData !== "object") {
+    actualData = {};
+  }
+
+  if (!actualMessageText || typeof actualMessageText !== "string") {
+    const rawTemplate = rule.message_text || rule.template_body || "Hello {name}!";
+    actualMessageText = formatMessagePlaceholders(rawTemplate, contactName, actualData);
+  } else {
+    actualMessageText = formatMessagePlaceholders(actualMessageText, contactName, actualData);
+  }
+
   const waLoadBalancer = require("./waLoadBalancer");
+  const waService = require("./whatsappService");
+  const activeSessionKey = actualSessionKey || waService.defaultKey || "708";
 
   let sentResult = null;
-  let sendError = null;
-  const chatId = `${cleanPhone}@c.us`;
+  const sendTarget = (actualTargetChatId && actualTargetChatId.includes("@lid")) ? actualTargetChatId : cleanPhone;
+  const chatId = actualTargetChatId || `${cleanPhone}@c.us`;
 
   try {
     // ── STEP 1: Main Message Send (Template, Rich Media, or Text) ──────────────
     if (rule.template_name) {
-      const bodyComponent = buildTemplateBodyComponent(rule.template_body, contactName, data);
-      sentResult = await waLoadBalancer.sendTemplateMessage(cleanPhone, rule.template_name, "en", bodyComponent ? [bodyComponent] : []);
+      const bodyComponent = buildTemplateBodyComponent(rule.template_body, contactName, actualData);
+      sentResult = await waLoadBalancer.sendTemplateMessage(sendTarget, rule.template_name, "en", bodyComponent ? [bodyComponent] : [], activeSessionKey);
     } else if (rule.media_type && rule.media_url) {
-      sentResult = await waLoadBalancer.sendMediaMessage(cleanPhone, rule.media_type, rule.media_url, messageText || "", rule.media_filename || "");
+      sentResult = await waLoadBalancer.sendMediaMessage(sendTarget, rule.media_type, rule.media_url, actualMessageText || "", rule.media_filename || "", activeSessionKey);
     } else {
-      sentResult = await waLoadBalancer.sendTextMessage(cleanPhone, messageText);
+      sentResult = await waLoadBalancer.sendTextMessage(sendTarget, actualMessageText, activeSessionKey);
     }
 
     // Increment run count
@@ -950,15 +976,23 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
     await db.promise().query(
       `INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status)
        VALUES (?, ?, ?, ?, 'sent')`,
-      [rule.id, cleanPhone, contactName || null, JSON.stringify({ ...data, step: 1 })]
+      [rule.id, cleanPhone, contactName || null, JSON.stringify({ ...actualData, step: 1 })]
     );
+
+    // Also record in wa_message_logs for CRM conversation history & UI display
+    const msgId = sentResult?.result?.id || "auto_" + Date.now();
+    await db.promise().query(
+      `INSERT INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
+       VALUES (?, ?, 'outbound', ?, ?, ?, 'delivered', NOW())`,
+      [activeSessionKey, cleanPhone, (rule.media_type && rule.media_url) ? "media" : "text", actualMessageText, msgId]
+    ).catch(() => {});
 
     // Also auto-add/update wa_contacts table if not present
     await db.promise().query(
-      `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_contacted)
-       VALUES (?, ?, '91', 'Automation Trigger', 1, NOW())
-       ON DUPLICATE KEY UPDATE name=VALUES(name), last_contacted=NOW()`,
-      [contactName || "Customer", cleanPhone.slice(-10)]
+      `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, last_contacted)
+       VALUES (?, ?, '91', 'Automation Trigger', 1, ?, NOW(), NOW())
+       ON DUPLICATE KEY UPDATE name=VALUES(name), last_message_text=VALUES(last_message_text), last_message_at=NOW(), last_contacted=NOW()`,
+      [contactName || "Customer", cleanPhone.slice(-10), actualMessageText]
     ).catch(() => {});
 
     // Emit socket event for real-time live chat updates
@@ -966,28 +1000,31 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
       const app = require("../server");
       const io = app.get && app.get("io");
       if (io) {
-        const msgId = sentResult?.result?.id || "sent_" + Date.now();
-        const ownerKey = require("./whatsappService").defaultKey;
         const livePayload = {
           phone: cleanPhone,
           chatId,
-          sessionKey: ownerKey,
+          sessionKey: activeSessionKey,
           message: {
             id: msgId,
             from: "me",
-            body: messageText,
+            body: actualMessageText,
             timestamp: Math.floor(Date.now() / 1000),
             isMe: true,
             hasMedia: !!(rule.media_type && rule.media_url),
             mediaType: rule.media_type || null,
           },
         };
-        io.to(`user:${ownerKey}`).emit("wa_message_sent", livePayload);
+        io.to(`user:${activeSessionKey}`).emit("wa_message_sent", livePayload);
         io.emit("wa_message_sent", livePayload);
+        io.emit("wa_message", livePayload);
+        if (chatId !== `${cleanPhone}@c.us`) {
+          io.emit("wa_message_sent", { ...livePayload, chatId: `${cleanPhone}@c.us` });
+          io.emit("wa_message", { ...livePayload, chatId: `${cleanPhone}@c.us` });
+        }
       }
     } catch (_) {}
 
-    console.log(`✅ [WA Automation] Step 1 sent for rule '${rule.name}' to ${cleanPhone}`);
+    console.log(`✅ [WA Automation] Step 1 sent for rule '${rule.name}' to ${cleanPhone} (session: ${activeSessionKey})`);
 
     // ── STEP 1.5: Auto Contact Group Enrollment (if configured) ─────────────
     if (rule.group_id) {
@@ -1010,7 +1047,7 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
         const [flowRows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? AND status = 'active' LIMIT 1", [rule.flow_id]);
         if (flowRows.length > 0) {
           const waFlowEngine = require("./waFlowEngine");
-          await waFlowEngine.startFlowRun(flowRows[0], cleanPhone);
+          await waFlowEngine.startFlowRun(flowRows[0], cleanPhone, activeSessionKey, "", actualTargetChatId);
           console.log(`🤖 [WA Automation] Triggered Chatbot Flow "${flowRows[0].name}" for ${cleanPhone}`);
         }
       } catch (flowErr) {
@@ -1037,17 +1074,17 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
         try {
           let followupText = "";
           if (rule.followup_message_text) {
-            followupText = formatMessagePlaceholders(rule.followup_message_text, contactName, data);
+            followupText = formatMessagePlaceholders(rule.followup_message_text, contactName, actualData);
           }
 
           let step2Result = null;
           if (rule.followup_template_name) {
-            const bodyComponent = buildTemplateBodyComponent(rule.followup_template_body, contactName, data);
-            step2Result = await waLoadBalancer.sendTemplateMessage(cleanPhone, rule.followup_template_name, "en", bodyComponent ? [bodyComponent] : []);
+            const bodyComponent = buildTemplateBodyComponent(rule.followup_template_body, contactName, actualData);
+            step2Result = await waLoadBalancer.sendTemplateMessage(sendTarget, rule.followup_template_name, "en", bodyComponent ? [bodyComponent] : [], activeSessionKey);
           } else if (rule.followup_media_type && rule.followup_media_url) {
-            step2Result = await waLoadBalancer.sendMediaMessage(cleanPhone, rule.followup_media_type, rule.followup_media_url, followupText || "", rule.followup_media_filename || "");
+            step2Result = await waLoadBalancer.sendMediaMessage(sendTarget, rule.followup_media_type, rule.followup_media_url, followupText || "", rule.followup_media_filename || "", activeSessionKey);
           } else if (followupText) {
-            step2Result = await waLoadBalancer.sendTextMessage(cleanPhone, followupText);
+            step2Result = await waLoadBalancer.sendTextMessage(sendTarget, followupText, activeSessionKey);
           }
 
           if (step2Result) {
@@ -1055,21 +1092,27 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
             await db.promise().query(
               `INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status)
                VALUES (?, ?, ?, ?, 'sent')`,
-              [rule.id, cleanPhone, contactName || null, JSON.stringify({ ...data, step: 2, sequenceDelaySec: delaySec })]
+              [rule.id, cleanPhone, contactName || null, JSON.stringify({ ...actualData, step: 2, sequenceDelaySec: delaySec })]
             );
+
+            const step2MsgId = step2Result?.result?.id || "auto_step2_" + Date.now();
+            await db.promise().query(
+              `INSERT INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
+               VALUES (?, ?, 'outbound', ?, ?, ?, 'delivered', NOW())`,
+              [activeSessionKey, cleanPhone, (rule.followup_media_type && rule.followup_media_url) ? "media" : "text", followupText || "[Attachment]", step2MsgId]
+            ).catch(() => {});
 
             // Emit live socket event for Step 2
             try {
               const app = require("../server");
               const io = app.get && app.get("io");
               if (io) {
-                const ownerKey = require("./whatsappService").defaultKey;
                 const livePayload = {
                   phone: cleanPhone,
                   chatId,
-                  sessionKey: ownerKey,
+                  sessionKey: activeSessionKey,
                   message: {
-                    id: step2Result?.result?.id || "sent_step2_" + Date.now(),
+                    id: step2MsgId,
                     from: "me",
                     body: followupText || (rule.followup_media_url ? "📎 Attachment" : ""),
                     timestamp: Math.floor(Date.now() / 1000),
@@ -1078,8 +1121,13 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
                     mediaType: rule.followup_media_type || null,
                   },
                 };
-                io.to(`user:${ownerKey}`).emit("wa_message_sent", livePayload);
+                io.to(`user:${activeSessionKey}`).emit("wa_message_sent", livePayload);
                 io.emit("wa_message_sent", livePayload);
+                io.emit("wa_message", livePayload);
+                if (chatId !== `${cleanPhone}@c.us`) {
+                  io.emit("wa_message_sent", { ...livePayload, chatId: `${cleanPhone}@c.us` });
+                  io.emit("wa_message", { ...livePayload, chatId: `${cleanPhone}@c.us` });
+                }
               }
             } catch (_) {}
           }
@@ -1096,7 +1144,7 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
     await db.promise().query(
       `INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, error)
        VALUES (?, ?, ?, ?, 'failed', ?)`,
-      [rule.id, cleanPhone, contactName || null, JSON.stringify(data), sendError]
+      [rule.id, cleanPhone, contactName || null, JSON.stringify(actualData), sendError]
     ).catch(() => {});
   }
 }

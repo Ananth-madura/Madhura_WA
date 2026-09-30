@@ -71,39 +71,41 @@ export default function Login() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(circle at 50% 20%, rgba(252, 189, 22, 0.08), transparent 45%), #202C52", padding: 16 }}>
-      <form onSubmit={submit} className="card shadow-lg animate-reveal" style={{ width: "100%", maxWidth: 400, background: "#FFFFFF", borderRadius: 14, padding: "36px 32px", border: "1px solid #E8E8E8" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#FCBD16" }}></div>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#FCBD16" }}>MADHURA CRM</span>
+    <div className="hl-reveal" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(60% 45% at 50% 12%, rgba(252, 189, 22, 0.10), transparent 70%), var(--color-shell)", padding: 16 }}>
+      <form onSubmit={submit} className="hl-card" style={{ width: "100%", maxWidth: 400, padding: "36px 32px" }}>
+        <div className="hl-wordmark" style={{ color: "var(--color-ink)", marginBottom: 6 }}>
+          <span className="hl-wordmark-mark" aria-hidden="true"></span>
+          Madhura&nbsp;<em>WhatsApp CRM</em>
         </div>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: "#202C52", marginBottom: 4 }}>Madhura Tech</h1>
-        <p style={{ fontSize: 13, color: "#667085", marginBottom: 24 }}>Sign in to your WhatsApp Corporate CRM workspace</p>
+        <h1 className="hl-title" style={{ marginBottom: 4 }}>Sign in</h1>
+        <p style={{ fontSize: 13, color: "var(--color-ink-2)", marginBottom: 24 }}>Your WhatsApp corporate workspace</p>
 
         {error && (
-          <div style={{ background: "#FEE4E2", color: "#D92D20", fontSize: 13, borderRadius: 8, padding: "10px 14px", marginBottom: 16, border: "1px solid #FECDCA" }}>{error}</div>
+          <div role="alert" style={{ background: "#FEE4E2", color: "#D92D20", fontSize: 13, borderRadius: 8, padding: "10px 14px", marginBottom: 16, border: "1px solid #FECDCA" }}>{error}</div>
         )}
 
-        <label style={{ fontSize: 12, fontWeight: 600, color: "#202C52", display: "block", marginBottom: 6 }}>Email Address</label>
+        <label htmlFor="hl-email" style={{ fontSize: 12, fontWeight: 600, color: "var(--color-ink)", display: "block", marginBottom: 6 }}>Email Address</label>
         <input
+          id="hl-email"
           type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username"
-          className="input"
+          className="hl-input"
           style={{ width: "100%", marginBottom: 16 }}
           placeholder="name@company.com"
         />
 
-        <label style={{ fontSize: 12, fontWeight: 600, color: "#202C52", display: "block", marginBottom: 6 }}>Password</label>
+        <label htmlFor="hl-password" style={{ fontSize: 12, fontWeight: 600, color: "var(--color-ink)", display: "block", marginBottom: 6 }}>Password</label>
         <input
+          id="hl-password"
           type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
-          className="input"
+          className="hl-input"
           style={{ width: "100%", marginBottom: 22 }}
           placeholder="••••••••"
         />
 
         <button
           type="submit" disabled={loading}
-          className="btn-primary"
-          style={{ width: "100%", minHeight: 44, borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: loading ? 0.7 : 1 }}
+          className="hl-btn-primary"
+          style={{ width: "100%" }}
         >
           {loading ? "Signing in…" : "Sign in to Dashboard"}
         </button>
@@ -111,14 +113,14 @@ export default function Login() {
         <button
           type="button" disabled={loading}
           onClick={demoLogin}
-          className="btn-outline"
-          style={{ width: "100%", minHeight: 42, borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 10, border: "1px solid #202C52", color: "#202C52" }}
+          className="hl-btn-secondary"
+          style={{ width: "100%", marginTop: 10 }}
         >
-          🔑 Demo Login (Admin)
+          Demo Login (Admin)
         </button>
 
-        <p style={{ fontSize: 12, color: "#98A2B3", marginTop: 20, textAlign: "center" }}>
-          Protected by enterprise-grade security & encryption
+        <p style={{ fontSize: 12, color: "var(--color-ink-2)", marginTop: 20, textAlign: "center" }}>
+          Protected by enterprise-grade security &amp; encryption
         </p>
       </form>
     </div>

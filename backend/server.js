@@ -161,6 +161,52 @@ app.post("/send-menu", async (req, res) => {
   }
 });
 
+// Test/simulate inbound message for WhatsApp flow or bot testing
+app.post("/simulate-inbound", async (req, res) => {
+  try {
+    const { phone, message, chatId, sessionKey } = req.body || {};
+    if (!phone && !chatId) return res.status(400).json({ error: "phone or chatId is required" });
+    const waFlowEngine = require("./services/waFlowEngine");
+    const handled = await waFlowEngine.dispatchInbound(
+      phone || chatId,
+      message || "",
+      null,
+      sessionKey || null,
+      null,
+      { chatId: chatId || null, isHistoric: false }
+    );
+    res.json({ success: true, handled, phone: phone || chatId, message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Test/simulate automation trigger for CRM automation testing
+app.post("/trigger-automation", async (req, res) => {
+  try {
+    const { id, phone, contact_name, chatId, sessionKey } = req.body || {};
+    if (!id || (!phone && !chatId)) return res.status(400).json({ error: "id and phone/chatId required" });
+    const db = require("./config/database");
+    const [rows] = await db.promise().query("SELECT * FROM wa_automations WHERE id = ?", [id]);
+    if (!rows.length) return res.status(404).json({ error: "Automation not found" });
+    const { executeAutomationSend } = require("./services/waAutomationService");
+    const waService = require("./services/whatsappService");
+    const cleanPhone = String(phone || chatId).replace(/\D/g, "");
+    const activeKey = sessionKey || waService.defaultKey || "708";
+    await executeAutomationSend(
+      rows[0],
+      cleanPhone,
+      contact_name || "Valued Client",
+      { invoice_no: "INV-2026-999", amount: "25,000", due_date: "05 Oct 2026", date: "30/09/2026", service: "Full AMC Service", company: "Madhura Tech" },
+      activeKey,
+      chatId || null
+    );
+    res.json({ success: true, message: `Automation ${rows[0].name} triggered for ${cleanPhone}`, rule: rows[0].name });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Ensure Runtime Directories Exist ──────────────────────────────────────────
 const fs = require("fs");
 const runtimeDirs = [
