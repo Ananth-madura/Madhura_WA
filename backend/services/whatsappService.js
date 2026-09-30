@@ -170,6 +170,7 @@ class WhatsAppService {
     this._lastSendAt = 0;
     this._initPromise = null;
     this._getQrPromise = null;
+    this._isRefreshingQr = false;
     this.lidToPhoneMap = new Map();
     this.phoneToLidMap = new Map();
   }
@@ -1412,74 +1413,75 @@ class WhatsAppService {
   // the QR code in-place using Puppeteer instead of restarting the whole browser engine!
   async refreshQr() {
     if (this.ready) return { connected: true, qr: null, message: "Already connected" };
-    this.qrCode = null;
-    this.qrCodeAt = 0;
-    this._getQrPromise = null;
-
-    if (this.client && this.client.pupPage && !this.client.pupPage.isClosed()) {
-      try {
-        console.log(`🔄 [Dynamic QR] Refreshing in-page QR for session ${this.key}...`);
-
-        // Try clicking WhatsApp Web's reload button if present (appears when QR expires)
-        const clickedReload = await this.client.pupPage.evaluate(() => {
-          const reloadBtn = document.querySelector('button[role="button"]') ||
-                            document.querySelector('div[data-ref]') ||
-                            document.querySelector('span[data-icon="refresh"]') ||
-                            document.querySelector('[data-testid="qrcode"] + div button');
-          if (reloadBtn && typeof reloadBtn.click === "function") {
-            reloadBtn.click();
-            return true;
-          }
-          return false;
-        }).catch(() => false);
-
-        if (!clickedReload) {
-          await this.client.pupPage.reload({ waitUntil: "load", timeout: 25000 }).catch(() => {});
-        }
-
-        const newQr = await this.getQr(15000).catch(() => null);
-        return {
-          connected: false,
-          qr: newQr || this.qrCode || null,
-          refreshed: true,
-          message: (newQr || this.qrCode) ? "QR Refreshed" : "QR refreshing in background",
-        };
-      } catch (err) {
-        console.warn(`⚠️ [Dynamic QR] In-page refresh failed (${err.message}), falling back to init...`);
-      }
+    if (this._isRefreshingQr) {
+      return {
+        connected: false,
+        qr: this.qrCode || null,
+        refreshed: false,
+        message: "QR refresh already in progress",
+      };
     }
-
-    // Fallback: if browser was stopped, boot it cleanly
+    this._isRefreshingQr = true;
     this.qrCode = null;
     this.qrCodeAt = 0;
     this._getQrPromise = null;
-    await this.init(false).catch(() => {});
-    const qr = await this.getQr(15000).catch(() => null);
-    return {
-      connected: this.ready,
-      qr: qr || this.qrCode || null,
-      refreshed: true,
-      message: this.ready ? "Connected" : (qr || this.qrCode) ? "QR Ready" : "Initializing WhatsApp engine...",
-    };
+
+    try {
+      if (this.client && this.client.pupPage && !this.client.pupPage.isClosed()) {
+        try {
+          console.log(`🔄 [Dynamic QR] Refreshing in-page QR for session ${this.key}...`);
+
+          // Try clicking WhatsApp Web's reload button if present (appears when QR expires)
+          const clickedReload = await this.client.pupPage.evaluate(() => {
+            const reloadBtn = document.querySelector('button[role="button"]') ||
+                              document.querySelector('div[data-ref]') ||
+                              document.querySelector('span[data-icon="refresh"]') ||
+                              document.querySelector('[data-testid="qrcode"] + div button');
+            if (reloadBtn && typeof reloadBtn.click === "function") {
+              reloadBtn.click();
+              return true;
+            }
+            return false;
+          }).catch(() => false);
+
+          if (!clickedReload) {
+            await this.client.pupPage.reload({ waitUntil: "load", timeout: 25000 }).catch(() => {});
+          }
+
+          const newQr = await this._waitForQr(15000).catch(() => null);
+          return {
+            connected: false,
+            qr: newQr || this.qrCode || null,
+            refreshed: true,
+            message: (newQr || this.qrCode) ? "QR Refreshed" : "QR refreshing in background",
+          };
+        } catch (err) {
+          console.warn(`⚠️ [Dynamic QR] In-page refresh failed (${err.message}), falling back to init...`);
+        }
+      }
+
+      // Fallback: if browser was stopped, boot it cleanly
+      await this.init(false).catch(() => {});
+      const qr = await this._waitForQr(15000).catch(() => null);
+      return {
+        connected: this.ready,
+        qr: qr || this.qrCode || null,
+        refreshed: true,
+        message: this.ready ? "Connected" : (qr || this.qrCode) ? "QR Ready" : "Initializing WhatsApp engine...",
+      };
+    } finally {
+      this._isRefreshingQr = false;
+    }
   }
 
-  async getQr(timeout = 25000) {
-    if (this.ready) return null; // already connected via a restored session — no QR needed
-    if (this.qrCode && this.qrCodeAt && (Date.now() - this.qrCodeAt < 25000)) return this.qrCode;
-
-    if (!this.client && !this.isInitializing) {
-      this.init(false).catch((err) => {
-        console.warn("⚠️ WhatsApp init error in getQr:", err?.message || err);
-      });
-    } else if (this.client && !this.ready && !this.isInitializing && !this.qrCode) {
-      this.refreshQr().catch(() => {});
+  // Purely waits for QR event or returns cached QR without triggering init or refresh
+  _waitForQr(timeout = 15000) {
+    if (this.ready) return Promise.resolve(null);
+    if (this.qrCode && this.qrCodeAt && (Date.now() - this.qrCodeAt < 25000)) {
+      return Promise.resolve(this.qrCode);
     }
 
-    if (this._getQrPromise) {
-      return this._getQrPromise;
-    }
-
-    this._getQrPromise = new Promise((resolve) => {
+    return new Promise((resolve) => {
       let resolved = false;
       const done = (val) => {
         if (resolved) return;
@@ -1488,7 +1490,6 @@ class WhatsAppService {
         clearTimeout(timeoutTimer);
         const idx = this.qrCallbacks.indexOf(onQr);
         if (idx !== -1) this.qrCallbacks.splice(idx, 1);
-        this._getQrPromise = null;
         resolve(val);
       };
 
@@ -1501,10 +1502,27 @@ class WhatsAppService {
         done(this.qrCode || null);
       }, timeout);
 
-      const onQr = (qr) => {
-        done(qr);
-      };
+      const onQr = (qr) => done(qr);
       this.qrCallbacks.push(onQr);
+    });
+  }
+
+  async getQr(timeout = 25000) {
+    if (this.ready) return null; // already connected via a restored session — no QR needed
+    if (this.qrCode && this.qrCodeAt && (Date.now() - this.qrCodeAt < 25000)) return this.qrCode;
+
+    if (!this.client && !this.isInitializing) {
+      this.init(false).catch((err) => {
+        console.warn("⚠️ WhatsApp init error in getQr:", err?.message || err);
+      });
+    }
+
+    if (this._getQrPromise) {
+      return this._getQrPromise;
+    }
+
+    this._getQrPromise = this._waitForQr(timeout).finally(() => {
+      this._getQrPromise = null;
     });
 
     return this._getQrPromise;
