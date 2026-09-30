@@ -1114,12 +1114,30 @@ input[type="button"] {
 }
 .wa-custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(32, 44, 82, 0.2) transparent;
+  scrollbar-color: rgba(32, 44, 82, 0.22) transparent;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
 
-/* WhatsApp Screen Height & Parallel Viewport Containers */
+/* WhatsApp Screen Height & Isolated Parallel Viewport Containers */
+html.wa-chat-active,
+body.wa-chat-active {
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.crm-layout-shell.wa-chat-mode {
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-height: 100vh !important;
+  max-height: 100dvh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
 .wa-h-screen {
   height: 100% !important;
   max-height: 100% !important;
@@ -1128,19 +1146,107 @@ input[type="button"] {
 .wa-max-h-screen {
   max-height: 100% !important;
 }
-.wa-parallel-pane {
+.wa-parallel-container {
   height: 100% !important;
+  max-height: 100% !important;
   min-height: 0 !important;
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
 }
+.wa-parallel-pane {
+  height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+}
 .wa-parallel-scroll {
   flex: 1 1 0% !important;
   min-height: 0 !important;
   overflow-y: auto !important;
-  overscroll-behavior: contain !important;
+  overflow-x: hidden !important;
+  overscroll-behavior-y: contain !important;
+  overscroll-behavior-x: none !important;
   -webkit-overflow-scrolling: touch !important;
+  scroll-behavior: smooth;
+}
+
+/* Dynamic Sidebar Layout Modes */
+.wa-sidebar-compact {
+  width: 76px !important;
+  min-width: 76px !important;
+  max-width: 76px !important;
+  transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.wa-sidebar-normal {
+  width: 340px !important;
+  min-width: 300px !important;
+  max-width: 380px !important;
+  transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.wa-sidebar-wide {
+  width: 440px !important;
+  min-width: 380px !important;
+  max-width: 480px !important;
+  transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Dynamic Quick Reply Speed Chips */
+.wa-speed-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 6px 12px;
+  background-color: var(--color-paper-2);
+  border-top: 1px solid var(--color-rule);
+  -webkit-overflow-scrolling: touch;
+}
+.wa-speed-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  border: 1px solid var(--color-rule);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  flex-shrink: 0;
+  user-select: none;
+}
+.wa-speed-chip:hover {
+  background-color: var(--color-accent-soft, rgba(0,0,0,0.06));
+  border-color: var(--color-accent);
+  transform: translateY(-1px);
+}
+.wa-speed-chip:active {
+  transform: translateY(0);
+}
+
+/* Sticky message day headers */
+.wa-sticky-date-chip {
+  position: sticky;
+  top: 8px;
+  z-index: 25;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  margin: 10px 0;
+  user-select: none;
+}
+.wa-sticky-date-chip > span {
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
 }
 
 /* Message bubble entrance — slide up + fade in */

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
@@ -10,13 +11,27 @@ export default function WALayout() {
 
   const isChatView = location.pathname === "/whatsapp" || location.pathname === "/whatsapp/";
 
+  useEffect(() => {
+    if (isChatView) {
+      document.documentElement.classList.add("wa-chat-active");
+      document.body.classList.add("wa-chat-active");
+    } else {
+      document.documentElement.classList.remove("wa-chat-active");
+      document.body.classList.remove("wa-chat-active");
+    }
+    return () => {
+      document.documentElement.classList.remove("wa-chat-active");
+      document.body.classList.remove("wa-chat-active");
+    };
+  }, [isChatView]);
+
   const onLogout = () => {
     logout();
     navigate("/login", { replace: true });
   };
 
   return (
-    <div className={`crm-layout-shell ${isChatView ? "h-screen max-h-screen flex flex-col overflow-hidden" : "min-h-screen"}`}>
+    <div className={`crm-layout-shell ${isChatView ? "h-screen max-h-screen flex flex-col overflow-hidden wa-chat-mode" : "min-h-screen"}`}>
       <header className="hl-shell flex items-center justify-between px-4 sm:px-6 shrink-0" style={{ height: 56, minHeight: 56 }}>
         <div className="flex items-center gap-3 min-w-0">
           <span className="hl-wordmark">

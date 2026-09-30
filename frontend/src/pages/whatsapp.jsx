@@ -55,6 +55,9 @@ import {
   CornerDownLeft,
   Phone,
   Users,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Columns,
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
@@ -131,6 +134,44 @@ const EMOJI_GROUPS = [
     label: "Business",
     emojis: ["📅", "📆", "⏰", "📞", "📱", "💬", "📩", "📄", "📎", "📷", "📍", "🏠", "🏢", "🛠️", "⚡", "🧾",
              "💳", "💰", "📊", "📈", "🚚", "🔧", "❄️", "🧯", "🔔", "🎁", "🚀", "🏆", "❌", "⚠️", "🆗", "🔴"],
+  },
+];
+
+const DEFAULT_SPEED_REPLIES = [
+  {
+    id: "sr_greet",
+    label: "⚡ Greeting",
+    text: "Hello {first_name}! Thank you for contacting Madhura Tech. How can we help you today?",
+  },
+  {
+    id: "sr_bank",
+    label: "💳 Bank Details",
+    text: "Here are our official Bank Details for RTGS / NEFT / IMPS:\nBank: HDFC Bank\nA/C Name: Madhura Technologies\nA/C No: 50200012345678\nIFSC: HDFC0001234\nBranch: Guindy, Chennai",
+  },
+  {
+    id: "sr_location",
+    label: "📍 Office Location",
+    text: "Visit us at: Madhura Tech, No. 12/4 Anna Salai, Guindy, Chennai - 600032.\nTimings: Mon-Sat 9:30 AM to 6:30 PM.",
+  },
+  {
+    id: "sr_invoice",
+    label: "🧾 Invoice Due",
+    text: "Dear {first_name}, kindly note that your invoice payment is pending. Please share the payment screenshot once completed. Thank you!",
+  },
+  {
+    id: "sr_menu",
+    label: "🤖 Self-Help Menu",
+    text: "Hello! Please reply with *MENU* to view our interactive services catalog, quotation status, and self-help options.",
+  },
+  {
+    id: "sr_callback",
+    label: "📞 Callback Request",
+    text: "We have registered a callback request with our customer support engineer. We will call you shortly on this number.",
+  },
+  {
+    id: "sr_amc",
+    label: "🛠️ AMC Service",
+    text: "Hello {first_name}, your Annual Maintenance Contract (AMC) service visit is scheduled. Our certified technician will arrive at your premises.",
   },
 ];
 
@@ -456,7 +497,22 @@ export default function WhatsAppPage() {
   const [accountBalanceLoading, setAccountBalanceLoading] = useState(false);
 
   // Lightbox Modal, Contact Info Drawer, Sidebar Filters
-  const [sidebarTab, setSidebarTab] = useState("all"); // 'all', 'unread', 'favourites', 'groups'
+  const [sidebarTab, setSidebarTab] = useState("all"); // 'all', 'unread', 'favourites', 'groups', 'bot'
+  const [sidebarMode, setSidebarMode] = useState(() => {
+    try {
+      return localStorage.getItem("wa_sidebar_mode") || "normal"; // "normal", "compact", "wide"
+    } catch {
+      return "normal";
+    }
+  });
+
+  const toggleSidebarMode = useCallback(() => {
+    setSidebarMode((prev) => {
+      const next = prev === "normal" ? "compact" : prev === "compact" ? "wide" : "normal";
+      try { localStorage.setItem("wa_sidebar_mode", next); } catch (_) {}
+      return next;
+    });
+  }, []);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [lightboxZoom, setLightboxZoom] = useState(1);
   const [lightboxRotation, setLightboxRotation] = useState(0);
@@ -2728,6 +2784,9 @@ export default function WhatsAppPage() {
   const groupChatsList = deduplicatedChats.filter((c) => isGroupChat(c));
   const unreadChatsList = deduplicatedChats.filter((c) => (c.unreadCount || 0) > 0);
   const favChatsList = deduplicatedChats.filter((c) => c.isPinned);
+  const botChatsList = deduplicatedChats.filter(
+    (c) => Boolean(c.inFlow || c.activeFlow || c.isBotActive || (activeFlowRun && (activeFlowRun.chatId === c.id || activeFlowRun.phone === c.phoneNumber)))
+  );
 
   let displayChats = [];
   const searchLower = (searchTerm || "").toLowerCase().trim();
@@ -2742,6 +2801,8 @@ export default function WhatsAppPage() {
     baseList = favChatsList;
   } else if (sidebarTab === "groups") {
     baseList = groupChatsList;
+  } else if (sidebarTab === "bot") {
+    baseList = botChatsList;
   }
 
   if (searchLower) {
@@ -3491,95 +3552,158 @@ export default function WhatsAppPage() {
       <div className="flex-1 min-h-0 flex overflow-hidden w-full relative bg-[var(--color-paper)]">
 
         {/* Chats Sidebar Column (Independent Parallel Scrolling) */}
-        <div className={`w-full md:w-80 lg:w-88 xl:w-[360px] bg-[var(--color-paper-2)] border-r border-[var(--color-rule)] flex flex-col h-full min-h-0 shrink-0 select-none ${showMobileChat ? "hidden md:flex" : "flex"}`}>
+        <div
+          className={`border-r border-[var(--color-rule)] bg-[var(--color-paper-2)] flex flex-col h-full min-h-0 shrink-0 select-none transition-all duration-200 ${
+            sidebarMode === "compact"
+              ? "wa-sidebar-compact"
+              : sidebarMode === "wide"
+              ? "wa-sidebar-wide"
+              : "w-full md:w-80 lg:w-88 xl:w-[360px]"
+          } ${showMobileChat ? "hidden md:flex" : "flex"}`}
+        >
           {/* Search Bar & Action Buttons */}
-          <div className="p-2.5 border-b border-[var(--color-rule)] flex items-center gap-2 shrink-0 bg-[var(--color-paper-2)]">
-            <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-2.5 text-[var(--color-ink-2)]" />
-              <input
-                type="text"
-                placeholder="Search or start a new chat..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="hl-input w-full pl-9 pr-7 py-1.5 text-xs rounded-lg"
-              />
-              {searchTerm && (
+          <div className="p-2.5 border-b border-[var(--color-rule)] flex items-center gap-1.5 shrink-0 bg-[var(--color-paper-2)]">
+            {sidebarMode === "compact" ? (
+              <div className="flex flex-col items-center gap-2 w-full py-1">
                 <button
                   type="button"
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-2 top-2 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] p-0.5 rounded-full"
-                  title="Clear search"
+                  onClick={toggleSidebarMode}
+                  className="hl-btn-secondary p-2 rounded-lg text-[var(--color-ink)] hover:bg-[var(--color-paper)]"
+                  title="Expand sidebar view"
                 >
-                  <X size={12} />
+                  <PanelLeftOpen size={16} />
                 </button>
-              )}
-            </div>
-            <button
-              onClick={() => setShowNewChatModal(true)}
-              className="hl-btn-secondary p-1.5 rounded-lg shrink-0"
-              title="Start new chat"
-            >
-              <Plus size={16} />
-            </button>
-            <button
-              onClick={() => fetchChats(true)}
-              className="hl-btn-secondary p-1.5 rounded-lg shrink-0"
-              title="Refresh chat list"
-            >
-              <RefreshCw size={14} className={chatsLoading ? "animate-spin text-[var(--color-ink)]" : ""} />
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setShowNewChatModal(true)}
+                  className="hl-btn-primary p-2 rounded-lg"
+                  title="Start new chat"
+                >
+                  <Plus size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fetchChats(true)}
+                  className="hl-btn-secondary p-2 rounded-lg"
+                  title="Refresh chats"
+                >
+                  <RefreshCw size={14} className={chatsLoading ? "animate-spin text-[var(--color-ink)]" : ""} />
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="relative flex-1">
+                  <Search size={14} className="absolute left-3 top-2.5 text-[var(--color-ink-2)]" />
+                  <input
+                    type="text"
+                    placeholder="Search or start a new chat..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="hl-input w-full pl-9 pr-7 py-1.5 text-xs rounded-lg"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm("")}
+                      className="absolute right-2 top-2 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] p-0.5 rounded-full"
+                      title="Clear search"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowNewChatModal(true)}
+                  className="hl-btn-secondary p-1.5 rounded-lg shrink-0"
+                  title="Start new chat"
+                >
+                  <Plus size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fetchChats(true)}
+                  className="hl-btn-secondary p-1.5 rounded-lg shrink-0"
+                  title="Refresh chat list"
+                >
+                  <RefreshCw size={14} className={chatsLoading ? "animate-spin text-[var(--color-ink)]" : ""} />
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleSidebarMode}
+                  className="hl-btn-secondary p-1.5 rounded-lg shrink-0 hidden md:flex items-center justify-center text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+                  title={`Sidebar view: ${sidebarMode} (Click to toggle Compact / Normal / Wide)`}
+                >
+                  <Columns size={15} />
+                </button>
+              </>
+            )}
           </div>
 
-          {/* Filter Capsules / Pills (All, Direct, Unread, Groups, Favourites) */}
-          <div className="hl-tabs px-3 py-1.5 flex items-center gap-1.5 shrink-0 overflow-x-auto wa-no-scrollbar border-b border-[var(--color-rule)] bg-[var(--color-paper-2)]">
-            <button
-              onClick={() => setSidebarTab("all")}
-              className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "all" ? "is-active" : ""}`}
-            >
-              <span>All</span>
-              <span className="hl-badge text-[10px] px-1.5 py-0.2 font-semibold">
-                {allChatsList.length}
-              </span>
-            </button>
-            <button
-              onClick={() => setSidebarTab("unread")}
-              className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "unread" ? "is-active" : ""}`}
-            >
-              <span>Unread</span>
-              {unreadChatsList.length > 0 && (
-                <span className="hl-badge hl-badge-error text-[10px] px-1.5 py-0.2 font-black animate-pulse">
-                  {unreadChatsList.length}
+          {/* Filter Capsules / Pills (All, Direct, Unread, Groups, Bot, Favourites) */}
+          {sidebarMode !== "compact" && (
+            <div className="hl-tabs px-3 py-1.5 flex items-center gap-1.5 shrink-0 overflow-x-auto wa-no-scrollbar border-b border-[var(--color-rule)] bg-[var(--color-paper-2)]">
+              <button
+                onClick={() => setSidebarTab("all")}
+                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "all" ? "is-active" : ""}`}
+              >
+                <span>All</span>
+                <span className="hl-badge text-[10px] px-1.5 py-0.2 font-semibold">
+                  {allChatsList.length}
                 </span>
-              )}
-            </button>
-            <button
-              onClick={() => setSidebarTab("direct")}
-              className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "direct" ? "is-active" : ""}`}
-            >
-              <span>Direct</span>
-              <span className="hl-badge text-[10px] px-1.5 py-0.2 font-semibold">
-                {directChatsList.length}
-              </span>
-            </button>
-            <button
-              onClick={() => setSidebarTab("groups")}
-              className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "groups" ? "is-active" : ""}`}
-            >
-              <span>Groups</span>
-              {groupChatsList.length > 0 && (
-                <span className={`hl-badge text-[10px] px-1.5 py-0.2 font-bold ${sidebarTab === "groups" ? "hl-badge-accent" : ""}`}>
-                  {groupChatsList.length}
+              </button>
+              <button
+                onClick={() => setSidebarTab("unread")}
+                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "unread" ? "is-active" : ""}`}
+              >
+                <span>Unread</span>
+                {unreadChatsList.length > 0 && (
+                  <span className="hl-badge hl-badge-error text-[10px] px-1.5 py-0.2 font-black animate-pulse">
+                    {unreadChatsList.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setSidebarTab("direct")}
+                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "direct" ? "is-active" : ""}`}
+              >
+                <span>Direct</span>
+                <span className="hl-badge text-[10px] px-1.5 py-0.2 font-semibold">
+                  {directChatsList.length}
                 </span>
-              )}
-            </button>
-            <button
-              onClick={() => setSidebarTab("favourites")}
-              className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "favourites" ? "is-active" : ""}`}
-            >
-              <Star size={11} className={sidebarTab === "favourites" ? "text-[var(--color-focus)] fill-[var(--color-focus)]" : ""} />
-              <span>Favourites</span>
-            </button>
-          </div>
+              </button>
+              <button
+                onClick={() => setSidebarTab("groups")}
+                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "groups" ? "is-active" : ""}`}
+              >
+                <span>Groups</span>
+                {groupChatsList.length > 0 && (
+                  <span className={`hl-badge text-[10px] px-1.5 py-0.2 font-bold ${sidebarTab === "groups" ? "hl-badge-accent" : ""}`}>
+                    {groupChatsList.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setSidebarTab("bot")}
+                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "bot" ? "is-active" : ""}`}
+                title="Chats currently in automated bot flow"
+              >
+                <span>🤖 Bot</span>
+                {botChatsList.length > 0 && (
+                  <span className="hl-badge hl-badge-warn text-[10px] px-1.5 py-0.2 font-bold">
+                    {botChatsList.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setSidebarTab("favourites")}
+                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "favourites" ? "is-active" : ""}`}
+              >
+                <Star size={11} className={sidebarTab === "favourites" ? "text-[var(--color-focus)] fill-[var(--color-focus)]" : ""} />
+                <span>Favourites</span>
+              </button>
+            </div>
+          )}
 
           {/* Chat List Items (Parallel Independent Column Scroll #1) */}
           <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-[var(--color-rule)] overscroll-contain wa-custom-scrollbar wa-parallel-scroll scroll-smooth">
@@ -3622,6 +3746,44 @@ export default function WhatsAppPage() {
                 const isActive = selectedChat?.id === chat.id;
                 const timeStr = formatChatTime(chat.timestamp || chat.lastMessage?.timestamp);
                 const hasUnread = (chat.unreadCount || 0) > 0;
+
+                if (sidebarMode === "compact") {
+                  return (
+                    <div
+                      key={chat.id}
+                      onClick={() => handleSelectChat(chat)}
+                      className={`w-full py-3 flex flex-col items-center justify-center cursor-pointer relative group transition-all duration-150 border-l-2 ${
+                        isActive
+                          ? "bg-[var(--color-paper)] border-[var(--color-accent)]"
+                          : "border-transparent hover:bg-[var(--color-paper)]/70"
+                      }`}
+                      title={`${chat.name || chat.phoneNumber || "Contact"}\n${chat.lastMessage?.body || "Open conversation"}`}
+                    >
+                      <div className="relative">
+                        <WAContactAvatar
+                          src={chat.profilePicUrl}
+                          name={chat.name}
+                          phone={chat.id}
+                          isGroup={chat.isGroup}
+                          size="md"
+                        />
+                        {isContactOnline(chat.id) && !chat.isGroup && (
+                          <span className="wa-online-dot" title="Online" />
+                        )}
+                        {hasUnread && (
+                          <span className="absolute -top-1 -right-1 bg-[var(--color-accent)] text-[var(--color-accent-ink)] font-black text-[9px] px-1.5 py-0.5 rounded-full shadow-sm animate-pulse">
+                            {chat.unreadCount}
+                          </span>
+                        )}
+                        {chat.isPinned && (
+                          <span className="absolute -bottom-1 -left-1 text-[var(--color-focus)] text-[10px] leading-none">
+                            ★
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
 
                 return (
                   <div
@@ -3801,6 +3963,30 @@ export default function WhatsAppPage() {
                         <span className="hl-badge hl-badge-success text-[10px] font-bold px-2 py-0.5 shrink-0">
                           {selectedChat.source}
                         </span>
+                      )}
+                      {crmDetails?.client ? (
+                        <span className="hl-badge hl-badge-accent text-[10px] font-bold px-2 py-0.5 shrink-0 flex items-center gap-1" title="Linked CRM Client">
+                          🏢 CRM Client
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddClientData({
+                              name: selectedChat.name && !selectedChat.name.startsWith("+") ? selectedChat.name : "",
+                              company_name: "",
+                              email: "",
+                              city: "",
+                              service: "",
+                              notes: "",
+                            });
+                            setShowAddClientForm(true);
+                          }}
+                          className="hl-badge text-[10px] font-semibold px-2 py-0.5 hover:bg-[var(--color-paper)] transition text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+                          title="Register contact in CRM as Client / Lead"
+                        >
+                          + Add to CRM
+                        </button>
                       )}
                     </div>
                     {selectedChat.isGroup ? (
@@ -4116,8 +4302,8 @@ export default function WhatsAppPage() {
                     return (
                     <React.Fragment key={msg.id || msg.timestamp}>
                     {showDayDivider && (
-                      <div className="sticky top-2 z-20 flex justify-center my-3 pointer-events-none select-none">
-                        <span className="hl-badge px-3.5 py-1 text-[11px] font-bold tracking-wide uppercase">
+                      <div className="wa-sticky-date-chip">
+                        <span className="hl-badge px-3.5 py-1 text-[11px] font-bold tracking-wide uppercase bg-[var(--color-paper-2)]/95 backdrop-blur-md shadow-xs border border-[var(--color-rule)]">
                           {formatDayDivider(msg.timestamp)}
                         </span>
                       </div>
@@ -4335,6 +4521,59 @@ export default function WhatsAppPage() {
                   </button>
                 </div>
               )}
+
+              {/* Dynamic Quick Reply Speed Bar (1-Click CRM Macros) */}
+              <div className="wa-speed-bar wa-custom-scrollbar shrink-0 select-none">
+                <span className="text-[10px] font-bold text-[var(--color-ink-2)] uppercase tracking-wider shrink-0 flex items-center gap-1 mr-1">
+                  <Zap size={11} className="text-[var(--color-accent)]" /> Quick:
+                </span>
+                {DEFAULT_SPEED_REPLIES.map((macro) => (
+                  <button
+                    key={macro.id}
+                    type="button"
+                    onClick={() => {
+                      const name = selectedChat?.name && !selectedChat.name.startsWith("+") ? selectedChat.name : "";
+                      const phone = selectedChat?.phone || selectedChat?.id?.replace(/@.*$/, "") || "";
+                      const filled = evaluateMessagePlaceholders(macro.text, {
+                        name: name || "Customer",
+                        first_name: name ? name.split(" ")[0] : "Customer",
+                        phone: phone,
+                      });
+                      setMessageInput(filled);
+                      if (textareaRef.current) {
+                        textareaRef.current.focus();
+                      }
+                    }}
+                    className="wa-speed-chip hover:shadow-xs"
+                    title={macro.text}
+                  >
+                    <span>{macro.label}</span>
+                  </button>
+                ))}
+                {quickReplies.length > 0 && quickReplies.slice(0, 6).map((qr) => (
+                  <button
+                    key={qr.id}
+                    type="button"
+                    onClick={() => {
+                      const name = selectedChat?.name && !selectedChat.name.startsWith("+") ? selectedChat.name : "";
+                      const phone = selectedChat?.phone || selectedChat?.id?.replace(/@.*$/, "") || "";
+                      const filled = evaluateMessagePlaceholders(qr.content || "", {
+                        name: name || "Customer",
+                        first_name: name ? name.split(" ")[0] : "Customer",
+                        phone: phone,
+                      });
+                      setMessageInput(filled);
+                      if (textareaRef.current) {
+                        textareaRef.current.focus();
+                      }
+                    }}
+                    className="wa-speed-chip bg-[var(--color-paper-2)] border-dashed hover:border-solid"
+                    title={qr.content}
+                  >
+                    <span>/{qr.shortcut || qr.title}</span>
+                  </button>
+                ))}
+              </div>
 
               {/* Input Area & Tool Suite */}
               <div className="relative flex items-center gap-2 p-3 border-t border-[var(--color-rule)] bg-[var(--color-paper-2)] shrink-0">
