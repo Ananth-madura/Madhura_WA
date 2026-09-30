@@ -1181,6 +1181,62 @@ class WaFlowEngine {
           break;
         }
 
+        case "trigger_automation": {
+          const { triggerAutomation } = require("./waAutomationService");
+          const trigType = config.trigger_type || config.triggerType || config.event || "new_lead";
+          await triggerAutomation(trigType, {
+            phone: cleanPhone,
+            contactName: vars.name || vars.customer_name,
+            data: { ...vars, flowId },
+            chatId: targetChatId,
+          }).catch((e) => console.warn(`[WA Flow] trigger_automation error:`, e.message));
+          nodeKey = config.next_node_key;
+          break;
+        }
+
+        case "create_task": {
+          try {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            await db.promise().query(
+              `INSERT INTO tasks (
+                project_name, task_title, client_name, project_status, project_priority,
+                created_date, due_date, task_description
+              ) VALUES (?, ?, ?, 'Pending', ?, ?, ?, ?)`,
+              [
+                config.project_name || "WhatsApp Bot Automation",
+                this.interpolate(config.task_title || "Follow-up with WhatsApp Contact", vars),
+                vars.name || vars.customer_name || `+${cleanPhone}`,
+                config.priority || "High",
+                todayStr,
+                config.due_date || todayStr,
+                this.interpolate(config.description || "Follow-up task created automatically from WhatsApp Flow Bot.", vars),
+              ]
+            );
+          } catch (tErr) {
+            console.warn(`[WA Flow] create_task error:`, tErr.message);
+          }
+          nodeKey = config.next_node_key;
+          break;
+        }
+
+        case "enroll_drip": {
+          try {
+            const dripSeqId = config.sequence_id || config.drip_id;
+            if (dripSeqId) {
+              await db.promise().query(
+                `INSERT INTO wa_drip_enrollments (sequence_id, phone, contact_name, current_step, status, enrolled_at, next_run_at)
+                 VALUES (?, ?, ?, 1, 'active', NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR))
+                 ON DUPLICATE KEY UPDATE status='active'`,
+                [dripSeqId, cleanPhone.slice(-10), vars.name || vars.customer_name || "Customer"]
+              );
+            }
+          } catch (dErr) {
+            console.warn(`[WA Flow] enroll_drip error:`, dErr.message);
+          }
+          nodeKey = config.next_node_key;
+          break;
+        }
+
         case "jump_to_flow": {
           if (config.target_flow_id) {
             const [targetFlows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ?", [config.target_flow_id]);
@@ -1240,62 +1296,87 @@ class WaFlowEngine {
 
     try {
       if (lookupType === "invoice") {
-        // Query latest client invoice
+        // Query latest client invoice from real clientinvoices table
         const [rows] = await db.promise().query(
-          `SELECT i.invoice_number, i.total_amount, i.status, i.due_date, i.issue_date, c.name as client_name
+          `SELECT i.id, i.client_company, i.invoice_duedate, i.project_names, i.invoice_date
            FROM clientinvoices i
-           LEFT JOIN clients c ON i.client_id = c.id
-           WHERE (c.phone LIKE ? OR c.mobile LIKE ?)
+           WHERE EXISTS (
+             SELECT 1 FROM clients c 
+             WHERE (c.company_name = i.client_company OR c.name = i.client_company)
+               AND (c.phone LIKE ? OR c.phone LIKE ?)
+           ) OR i.client_company LIKE ?
            ORDER BY i.id DESC LIMIT 1`,
-          [`%${last10}`, `%${last10}`]
+          [`%${last10}`, `%${cleanPhone}`, `%${last10}`]
         ).catch(() => [[]]);
 
         if (rows && rows[0]) {
           const inv = rows[0];
           results.record_found = true;
-          results.invoice_no = inv.invoice_number || `INV-${inv.id}`;
+          results.invoice_no = `INV-${inv.id}`;
           results.invoice_number = results.invoice_no;
-          results.amount = inv.total_amount || "0.00";
-          results.invoice_amount = results.amount;
-          results.payment_status = inv.status || "Pending";
-          results.due_date = inv.due_date ? new Date(inv.due_date).toLocaleDateString("en-IN") : "Upon Receipt";
+          results.due_date = inv.invoice_duedate ? new Date(inv.invoice_duedate).toLocaleDateString("en-IN") : "Upon Receipt";
+          results.project = inv.project_names || "Services";
+          results.company = inv.client_company || "";
+
+          // Check payments table for this invoice
+          const [payRows] = await db.promise().query(
+            "SELECT amount, payment_method, Transaction_ID FROM payments WHERE invoice_id = ? ORDER BY id DESC LIMIT 1",
+            [inv.id]
+          ).catch(() => [[]]);
+
+          if (payRows && payRows[0]) {
+            results.payment_status = "Paid";
+            results.amount = `₹${parseFloat(payRows[0].amount).toLocaleString("en-IN")}`;
+            results.invoice_amount = results.amount;
+            results.transaction_id = payRows[0].Transaction_ID || "";
+          } else {
+            results.payment_status = "Pending Payment";
+            results.amount = "As Detailed";
+            results.invoice_amount = results.amount;
+          }
         }
-      } else if (lookupType === "amc") {
-        // Query active AMC contract
+      } else if (lookupType === "amc" || lookupType === "contract") {
+        // Query active AMC contract from real contracts table
         const [rows] = await db.promise().query(
-          `SELECT a.contract_number, a.start_date, a.end_date, a.status, a.service_type
-           FROM amc a
-           LEFT JOIN clients c ON a.client_id = c.id
-           WHERE (c.phone LIKE ? OR c.mobile LIKE ?)
-           ORDER BY a.id DESC LIMIT 1`,
-          [`%${last10}`, `%${last10}`]
+          `SELECT c.id, c.contract_title, c.start_date, c.end_date, c.amount_value, c.client_company
+           FROM contracts c
+           WHERE c.mobile_number LIKE ? OR EXISTS (
+             SELECT 1 FROM clients cl WHERE (cl.company_name = c.client_company OR cl.name = c.client_company) AND (cl.phone LIKE ? OR cl.phone LIKE ?)
+           )
+           ORDER BY c.id DESC LIMIT 1`,
+          [`%${last10}`, `%${last10}`, `%${cleanPhone}`]
         ).catch(() => [[]]);
 
         if (rows && rows[0]) {
           const amc = rows[0];
           results.record_found = true;
-          results.amc_contract_no = amc.contract_number || `AMC-${amc.id}`;
-          results.amc_service = amc.service_type || "Comprehensive Maintenance";
-          results.amc_status = amc.status || "Active";
+          results.amc_contract_no = `AMC-${amc.id}`;
+          results.amc_service = amc.contract_title || "Comprehensive Maintenance";
+          const isActive = amc.end_date ? new Date(amc.end_date) >= new Date() : true;
+          results.amc_status = isActive ? "Active" : "Expired";
           results.amc_expiry = amc.end_date ? new Date(amc.end_date).toLocaleDateString("en-IN") : "Active";
+          results.amc_amount = amc.amount_value ? `₹${parseFloat(amc.amount_value).toLocaleString("en-IN")}` : "";
         }
       } else if (lookupType === "quotation") {
+        // Query quotations table
         const [rows] = await db.promise().query(
-          `SELECT q.quotation_number, q.total_amount, q.status, q.valid_until
+          `SELECT q.id, q.reference_no, q.grand_total, q.status, q.client_company
            FROM quotations q
-           LEFT JOIN clients c ON q.client_id = c.id
-           WHERE (c.phone LIKE ? OR c.mobile LIKE ?)
+           WHERE EXISTS (
+             SELECT 1 FROM clients cl WHERE (cl.company_name = q.client_company OR cl.name = q.client_company) AND (cl.phone LIKE ? OR cl.phone LIKE ?)
+           ) OR EXISTS (
+             SELECT 1 FROM customers cu WHERE cu.id = q.customer_id AND cu.mobile_number LIKE ?
+           )
            ORDER BY q.id DESC LIMIT 1`,
-          [`%${last10}`, `%${last10}`]
+          [`%${last10}`, `%${cleanPhone}`, `%${last10}`]
         ).catch(() => [[]]);
 
         if (rows && rows[0]) {
           const quote = rows[0];
           results.record_found = true;
-          results.quotation_no = quote.quotation_number || `QT-${quote.id}`;
-          results.quote_amount = quote.total_amount || "0.00";
-          results.quote_status = quote.status || "Draft";
-          results.valid_until = quote.valid_until ? new Date(quote.valid_until).toLocaleDateString("en-IN") : "";
+          results.quotation_no = quote.reference_no || `QT-${quote.id}`;
+          results.quote_amount = quote.grand_total ? `₹${parseFloat(quote.grand_total).toLocaleString("en-IN")}` : "0.00";
+          results.quote_status = quote.status || "Pending";
         }
       } else if (lookupType === "client") {
         const { lookupCrmDataByPhone } = require("./waAutomationService");

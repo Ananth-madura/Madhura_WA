@@ -292,6 +292,13 @@ function startServer() {
       console.warn("⚠️ WA delayed automation scheduler warning:", e.message);
     }
 
+    // Universal CRM Real-Time Event Bus & Database Change Sweep (Invoices, Quotes, AMC, Leads, Walkins)
+    try {
+      require("./services/crmEventBus").startCrmRealtimeSweep();
+    } catch (e) {
+      console.warn("⚠️ CRM Event Bus sweep warning:", e.message);
+    }
+
     // Start WhatsApp Cloud API queue worker (no Redis fallback = synchronous)
     const { startWorker } = require("./services/waQueue");
     startWorker().catch(() => {});

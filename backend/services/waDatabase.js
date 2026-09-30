@@ -687,8 +687,13 @@ async function ensureWATables() {
   await addColumnIfNotExists("wa_campaign_messages", "location_name", "VARCHAR(255) DEFAULT NULL");
   await addColumnIfNotExists("wa_campaign_messages", "location_address", "VARCHAR(500) DEFAULT NULL");
 
-  // 4. CRM reminder dedupe flags
+  // 4. CRM reminder and notification dedupe flags
   await addColumnIfNotExists("clientinvoices", "wa_payment_due_sent", "TINYINT(1) DEFAULT 0");
+  await addColumnIfNotExists("clientinvoices", "wa_notified", "TINYINT(1) DEFAULT 0");
+  await addColumnIfNotExists("quotations", "wa_notified", "TINYINT(1) DEFAULT 0");
+  await addColumnIfNotExists("contracts", "wa_notified", "TINYINT(1) DEFAULT 0");
+  await addColumnIfNotExists("walkins", "wa_notified", "TINYINT(1) DEFAULT 0");
+  await addColumnIfNotExists("payments", "wa_notified", "TINYINT(1) DEFAULT 0");
   await addColumnIfNotExists("telecalls", "wa_followup_sent_date", "DATE DEFAULT NULL");
   await addColumnIfNotExists("walkins", "wa_followup_sent_date", "DATE DEFAULT NULL");
   await addColumnIfNotExists("fields", "wa_followup_sent_date", "DATE DEFAULT NULL");

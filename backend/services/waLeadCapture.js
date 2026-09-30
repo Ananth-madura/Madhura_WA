@@ -166,6 +166,43 @@ async function captureLeadFromWhatsApp(leadData = {}) {
       }
     } catch (_) {}
 
+    // 4. Trigger CRM Event Bus & Automations for New Lead
+    if (isNew) {
+      try {
+        const crmEventBus = require("./crmEventBus");
+        crmEventBus.emit("new_lead", {
+          leadId,
+          phone: last10,
+          cleanPhone: "91" + last10,
+          contactName: customerName,
+          customerName,
+          companyName,
+          locationCity,
+          serviceName,
+          source: sourceDetail,
+          isNew: true,
+        });
+
+        const { triggerAutomation } = require("./waAutomationService");
+        triggerAutomation("new_lead", {
+          phone: last10,
+          contactName: customerName,
+          data: {
+            name: customerName,
+            service: serviceName,
+            company: companyName,
+            city: locationCity,
+            lead_id: leadId,
+            source: sourceDetail,
+          },
+        }).catch((autoErr) => {
+          console.warn("[WA LeadCapture] triggerAutomation('new_lead') error:", autoErr.message);
+        });
+      } catch (evErr) {
+        console.warn("[WA LeadCapture] Event bus error:", evErr.message);
+      }
+    }
+
     return { success: true, leadId, isNew, source: "WhatsApp" };
   } catch (err) {
     console.error("[WA LeadCapture] Error creating lead:", err.message);

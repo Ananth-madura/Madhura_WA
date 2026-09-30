@@ -148,7 +148,7 @@ async function sendInteractiveReminder({
  * Checks whether an incoming WhatsApp message is an answer to a pending interactive confirmation.
  * Returns true if consumed and processed, false otherwise.
  */
-async function handleInboundConfirmation(phone, messageText, interactiveReplyId = null, sessionKey = null) {
+async function handleInboundConfirmation(phone, messageText, interactiveReplyId = null, sessionKey = null, targetChatId = null) {
   const normalizedPhone = cleanPhone(phone);
   const last10 = normalizedPhone.slice(-10);
   const rawText = (messageText || "").trim();
@@ -339,16 +339,49 @@ async function handleInboundConfirmation(phone, messageText, interactiveReplyId 
   // 3. Send dynamic branded acknowledgment back to customer
   const waLoadBalancer = require("./waLoadBalancer");
   const mdToWa = require("./mdToWa");
-  await waLoadBalancer.sendTextMessage(normalizedPhone, mdToWa.toWhatsApp(acknowledgementText), sessionKey).catch((e) => {
+  const sendTarget = targetChatId || normalizedPhone;
+  const activeSessionKey = sessionKey || "708";
+  const sentRes = await waLoadBalancer.sendTextMessage(sendTarget, mdToWa.toWhatsApp(acknowledgementText), activeSessionKey).catch((e) => {
     console.warn(`⚠️ [WA Confirmation] Acknowledgment send warning (+${normalizedPhone}):`, e.message);
+    return null;
   });
 
-  // Log outbound acknowledgement in wa_message_logs
+  const msgId = sentRes?.result?.id || `conf_ack_${Date.now()}`;
+
+  // Log outbound acknowledgement in wa_message_logs with active session
   await queryAsync(
-    `INSERT INTO wa_message_logs (phone, direction, message_type, message_text, status, created_at)
-     VALUES (?, 'outbound', 'text', ?, 'sent', NOW())`,
-    [normalizedPhone, acknowledgementText]
+    `INSERT INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
+     VALUES (?, ?, 'outbound', 'text', ?, ?, 'delivered', NOW())`,
+    [activeSessionKey, normalizedPhone, acknowledgementText, msgId]
   ).catch(() => {});
+
+  // Emit live socket event for chat UI
+  try {
+    const app = require("../server");
+    const io = app.get && app.get("io");
+    if (io) {
+      const livePayload = {
+        phone: normalizedPhone,
+        chatId: sendTarget,
+        sessionKey: activeSessionKey,
+        message: {
+          id: msgId,
+          from: "me",
+          body: acknowledgementText,
+          timestamp: Math.floor(Date.now() / 1000),
+          isMe: true,
+          hasMedia: false,
+        },
+      };
+      io.to(`user:${activeSessionKey}`).emit("wa_message_sent", livePayload);
+      io.emit("wa_message_sent", livePayload);
+      io.emit("wa_message", livePayload);
+      if (sendTarget !== `${normalizedPhone}@c.us`) {
+        io.emit("wa_message_sent", { ...livePayload, chatId: `${normalizedPhone}@c.us` });
+        io.emit("wa_message", { ...livePayload, chatId: `${normalizedPhone}@c.us` });
+      }
+    }
+  } catch (_) {}
 
   // 4. Auto-launch linked Conversational Flow Bot (if configured on this reminder)
   if (reminder.flow_id) {
@@ -357,7 +390,7 @@ async function handleInboundConfirmation(phone, messageText, interactiveReplyId 
       if (flowRows.length > 0) {
         const waFlowEngine = require("./waFlowEngine");
         console.log(`🤖 [WA Reminder -> Flow] Starting Flow "${flowRows[0].name}" for response from +${normalizedPhone}`);
-        await waFlowEngine.startFlowRun(flowRows[0], normalizedPhone, sessionKey);
+        await waFlowEngine.startFlowRun(flowRows[0], normalizedPhone, activeSessionKey, messageText, targetChatId);
       }
     } catch (fErr) {
       console.warn(`[WA Reminder -> Flow] Failed to launch linked flow:`, fErr.message);

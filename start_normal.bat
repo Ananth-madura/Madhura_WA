@@ -171,12 +171,12 @@ echo.
 :: ---- Step 7: Launch Servers ----
 echo [7/7] Starting Application Servers...
 echo Starting BACKEND on port 5001...
-start "Whatsapp_CRM Backend" /D "%ROOT%\backend" cmd /k "npm run dev"
+start "Whatsapp_CRM Backend" /D "%ROOT%\backend" cmd /k "title Whatsapp_CRM Backend (port 5001) & color 0A & echo [Backend] Starting... & npm run dev & echo. & echo [Backend] Process exited. Press any key to restart... & pause >nul & npm run dev"
 
 ping -n 3 127.0.0.1 >nul
 
 echo Starting FRONTEND on port 3001...
-start "Whatsapp_CRM Frontend" /D "%ROOT%\frontend" cmd /k "npm start"
+start "Whatsapp_CRM Frontend" /D "%ROOT%\frontend" cmd /k "title Whatsapp_CRM Frontend (port 3001) & color 0B & echo [Frontend] Starting... & npm start & echo. & echo [Frontend] Process exited. Press any key to restart... & pause >nul & npm start"
 
 echo.
 echo Waiting for backend to become healthy [up to ~90s, first boot seeds the DB]...

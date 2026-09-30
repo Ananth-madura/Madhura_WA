@@ -297,6 +297,121 @@ router.post("/session/restart", async (req, res) => {
   }
 });
 
+// ── POST /events & /events/trigger: Universal CRM Event Ingestion ─────────────
+router.post(["/events", "/events/trigger"], async (req, res) => {
+  try {
+    const { event, event_type, type, phone, contactName, customer_name, client_name, data = {}, flow_id, flowId } = req.body || {};
+    const eventType = event || event_type || type;
+    if (!eventType) {
+      return res.status(400).json({ success: false, error: "Event name is required (e.g. invoice_created, new_lead, quotation_created, payment_received)" });
+    }
+
+    const resolvedPhone = phone || data.phone || data.mobile_number;
+    const resolvedName = contactName || customer_name || client_name || data.name || data.customer_name;
+
+    const crmEventBus = require("../services/crmEventBus");
+    const { triggerAutomation } = require("../services/waAutomationService");
+
+    // 1. Emit on CRM Event Bus
+    crmEventBus.emit(eventType, { ...data, phone: resolvedPhone, contactName: resolvedName, customerName: resolvedName });
+
+    // 2. Trigger WhatsApp Automations engine
+    let autoResult = null;
+    if (resolvedPhone) {
+      autoResult = await triggerAutomation(eventType, {
+        phone: resolvedPhone,
+        contactName: resolvedName,
+        data,
+      }).catch((e) => ({ success: false, error: e.message }));
+    }
+
+    // 3. Optional Direct Flow Bot Trigger
+    let flowResult = null;
+    const requestedFlowId = flow_id || flowId;
+    if (requestedFlowId && resolvedPhone) {
+      const waFlowEngine = require("../services/waFlowEngine");
+      const cleanPhone = String(resolvedPhone).replace(/\D/g, "");
+      const [fRows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? LIMIT 1", [requestedFlowId]);
+      if (fRows.length > 0) {
+        flowResult = await waFlowEngine.startFlowRun(fRows[0], cleanPhone, req.body?.sessionKey || null);
+      }
+    }
+
+    res.json({
+      success: true,
+      event: eventType,
+      phone: resolvedPhone,
+      contactName: resolvedName,
+      automation: autoResult,
+      flow: flowResult,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /lead: Direct Lead Capture from CRM or External Forms ───────────────
+router.post("/lead", async (req, res) => {
+  try {
+    const waLeadCapture = require("../services/waLeadCapture");
+    const { phone, name, email, company, service, city, notes, sourceDetail, assignedTo } = req.body || {};
+    if (!phone) return res.status(400).json({ success: false, error: "Phone number is required" });
+
+    const result = await waLeadCapture.captureLeadFromWhatsApp({
+      phone,
+      name,
+      email,
+      company,
+      service: service || "External CRM Lead",
+      city,
+      notes,
+      sourceDetail: sourceDetail || "External CRM API",
+      assignedTo,
+    });
+
+    res.json({ success: result.success, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /flow/trigger: Trigger Flow Bot on Demand ──────────────────────────
+router.post("/flow/trigger", async (req, res) => {
+  try {
+    const { flowId, flow_id, phone, sessionKey, initialMessage, chatId } = req.body || {};
+    const targetId = flowId || flow_id;
+    if (!targetId || !phone) return res.status(400).json({ success: false, error: "flowId and phone are required" });
+
+    let clean = String(phone).replace(/\D/g, "");
+    if (clean.length === 10) clean = "91" + clean;
+
+    const [fRows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? LIMIT 1", [targetId]);
+    if (!fRows.length) return res.status(404).json({ success: false, error: "Flow not found" });
+
+    const waFlowEngine = require("../services/waFlowEngine");
+    const result = await waFlowEngine.startFlowRun(fRows[0], clean, sessionKey || null, initialMessage || "", chatId || null);
+
+    res.json({ success: true, flow: fRows[0].name, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /automation/trigger: Trigger Automation Rule on Demand ─────────────
+router.post("/automation/trigger", async (req, res) => {
+  try {
+    const { triggerType, trigger_type, event, phone, contactName, data = {} } = req.body || {};
+    const trig = triggerType || trigger_type || event;
+    if (!trig || !phone) return res.status(400).json({ success: false, error: "triggerType and phone are required" });
+
+    const { triggerAutomation } = require("../services/waAutomationService");
+    const result = await triggerAutomation(trig, { phone, contactName, data });
+    res.json({ success: true, trigger: trig, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── POST /session/logout: Unlink / Log out WhatsApp session ─────────────────
 router.post("/session/logout", async (req, res) => {
   try {

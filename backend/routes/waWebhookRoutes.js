@@ -277,7 +277,7 @@ async function handleIncomingMessage(msg, metadata, contacts = []) {
         const [flowRows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? AND status = 'active' LIMIT 1", [campaignReply.flowId]);
         if (flowRows.length > 0) {
           console.log(`🤖 [WA Campaign -> Flow] Launching Flow "${flowRows[0].name}" for campaign reply from +${phone}`);
-          await waFlowEngine.startFlowRun(flowRows[0], phone, null);
+          await waFlowEngine.startFlowRun(flowRows[0], phone, null, messageText, `${phone}@c.us`);
           return;
         }
       } catch (fErr) {
