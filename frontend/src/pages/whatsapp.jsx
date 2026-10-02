@@ -2868,59 +2868,11 @@ export default function WhatsAppPage() {
           />
         )}
 
-        <div className="hl-commandbar hl-card flex-col sm:flex-row sm:items-center gap-3 mb-4 sm:mb-6 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[var(--color-ink)] text-[var(--color-paper-2)] flex items-center justify-center">
-              <MessageCircle size={22} />
-            </div>
-            <div>
-              <h1 className="hl-title">WhatsApp Connection Center</h1>
-              <p className="hl-subtitle">Connect via Official Meta Cloud API (No QR needed) or Scan QR Code</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            <button
-              onClick={() => setShowConfigModal(true)}
-              className="hl-btn-primary flex items-center gap-1.5"
-            >
-              <Key size={14} />
-              <span>Configure Meta API</span>
-            </button>
-            <button
-              onClick={() => fetchQr(true)}
-              disabled={qrLoading}
-              className="hl-btn-secondary flex items-center gap-1.5"
-            >
-              <RefreshCw size={14} className={qrLoading ? "animate-spin" : ""} />
-              <span>{qrLoading ? "Generating..." : "Fresh QR / Reset"}</span>
-            </button>
-          </div>
-        </div>
-
         {error && (
           <div className="hl-card mb-4 p-3 text-xs font-semibold border-[var(--color-error)] text-[var(--color-error)]">
             {error}
           </div>
         )}
-
-        {/* Quick Meta API Callout Banner */}
-        <div className="hl-card mb-6 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center shrink-0">
-              <Key size={20} />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-[var(--color-ink)]">Using Official Meta WhatsApp Cloud API?</p>
-              <p className="hl-subtitle">You don't need to scan a QR code! Connect your Phone Number ID and Access Token to open immediately.</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowConfigModal(true)}
-            className="hl-btn-secondary shrink-0"
-          >
-            Enter Meta API Keys ⚡
-          </button>
-        </div>
 
         {/* Connection Options Sub-Tabs */}
         <div className="hl-card p-6 max-w-2xl mx-auto w-full">
