@@ -206,7 +206,7 @@ export default function WAGroups() {
   };
 
   return (
-    <div className="w-full pb-12">
+    <div className="hl-page">
       <WhatsAppNav />
       <div className="hl-commandbar">
         <div className="flex items-center gap-3">
@@ -356,19 +356,19 @@ export default function WAGroups() {
       {/* Contact Picker Modal - Select from CRM Clients */}
       {showContactPicker && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowContactPicker(false)}>
-          <div className="hl-card w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-2xl max-h-[85dvh] min-h-0 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div className="flex items-center justify-between p-5 shrink-0" style={{ borderBottom: "1px solid var(--color-rule)" }}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "var(--color-paper)" }}>
+            <div className="flex items-center justify-between p-4 sm:p-5 gap-3 shrink-0" style={{ borderBottom: "1px solid var(--color-rule)" }}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "var(--color-paper)" }}>
                   <UserPlus size={20} style={{ color: "var(--color-ink)" }} />
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold">Add Contacts from CRM</h2>
+                <div className="min-w-0">
+                  <h2 className="text-base sm:text-lg font-bold truncate">Add Contacts from CRM</h2>
                   <p className="hl-subtitle">{filteredClients.length} clients found {selectedClients.size > 0 && `— ${selectedClients.size} selected`}</p>
                 </div>
               </div>
-              <button onClick={() => setShowContactPicker(false)} className="p-2 rounded-lg transition">
+              <button onClick={() => setShowContactPicker(false)} className="p-2 rounded-lg transition shrink-0">
                 <X size={20} style={{ color: "var(--color-ink-2)" }} />
               </button>
             </div>

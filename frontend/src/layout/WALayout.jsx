@@ -31,24 +31,47 @@ export default function WALayout() {
   };
 
   return (
-    <div className={`crm-layout-shell ${isChatView ? "h-screen max-h-screen flex flex-col overflow-hidden wa-chat-mode" : "min-h-screen"}`}>
-      <header className="hl-shell flex items-center justify-between px-4 sm:px-6 shrink-0" style={{ height: 56, minHeight: 56 }}>
-        <div className="flex items-center gap-3 min-w-0">
+    <div
+      className={
+        isChatView
+          ? "crm-layout-shell wa-chat-mode wa-dvh flex flex-col overflow-hidden"
+          : "crm-layout-shell wa-min-dvh flex flex-col"
+      }
+    >
+      <header
+        className="hl-shell hl-safe-top flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 shrink-0"
+        style={{ minHeight: 56 }}
+      >
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <span className="hl-wordmark">
             <span className="hl-wordmark-mark" aria-hidden="true"></span>
-            Madhura&nbsp;<em>WhatsApp CRM</em>
+            <span className="truncate">
+              Madhura&nbsp;<em>WhatsApp CRM</em>
+            </span>
           </span>
           {user && (
-            <span className="hl-shell-meta hidden sm:inline-flex truncate">
+            <span className="hl-shell-meta hidden md:inline-flex truncate">
               {user.name || user.email} · {user.role}
             </span>
           )}
         </div>
-        <button onClick={onLogout} className="hl-logout" title="Sign out of CRM">
+        <button onClick={onLogout} className="hl-logout shrink-0" title="Sign out of CRM">
           Logout
         </button>
       </header>
-      <main className={`flex-1 min-h-0 ${isChatView ? "p-1.5 sm:p-2.5 overflow-hidden flex flex-col" : "p-3 sm:p-5 overflow-y-auto"}`}>
+
+      {/*
+        Chat view: main is a fixed-height flex column and every pane owns
+        its own scroll axis (the page never scrolls).
+        All other views: main is the single document scroller.
+      */}
+      <main
+        className={
+          isChatView
+            ? "flex-1 min-h-0 w-full min-w-0 p-1.5 sm:p-2.5 overflow-hidden flex flex-col"
+            : "flex-1 min-h-0 w-full min-w-0 p-3 sm:p-4 lg:p-5 overflow-y-auto overflow-x-hidden wa-scroll"
+        }
+      >
         <Outlet />
       </main>
     </div>

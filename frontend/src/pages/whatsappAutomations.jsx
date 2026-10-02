@@ -402,17 +402,17 @@ export default function WhatsAppAutomations() {
   };
 
   return (
-    <div className="w-full pb-12 min-h-screen">
+    <div className="hl-page">
       <WhatsAppNav />
 
       {/* Header Banner */}
-      <div className="hl-commandbar hl-card flex-col md:flex-row md:items-center gap-4 mb-6 p-5">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 flex items-center justify-center">
+      <div className="hl-commandbar hl-card flex-col md:flex-row md:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 p-4 sm:p-5">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="w-12 h-12 flex items-center justify-center shrink-0">
             <Zap size={26} />
           </div>
-          <div>
-            <div className="flex items-center gap-2.5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="hl-title">WhatsApp Event Automations</h1>
               <span className="hl-badge hl-badge-accent">
                 {automations.length} Active Rules
@@ -469,9 +469,9 @@ export default function WhatsAppAutomations() {
       </div>
 
       {/* Metrics Summary Row */}
-      <div className="hl-kpis grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <div className="hl-kpi flex items-center gap-3 p-4">
-          <div className="w-10 h-10 flex items-center justify-center">
+      <div className="hl-kpis mb-6">
+        <div className="hl-kpi flex items-center gap-3 p-3 sm:p-4 min-w-0">
+          <div className="w-10 h-10 flex items-center justify-center shrink-0">
             <Zap size={20} />
           </div>
           <div>
@@ -480,8 +480,8 @@ export default function WhatsAppAutomations() {
           </div>
         </div>
 
-        <div className="hl-kpi flex items-center gap-3 p-4">
-          <div className="w-10 h-10 flex items-center justify-center">
+        <div className="hl-kpi flex items-center gap-3 p-3 sm:p-4 min-w-0">
+          <div className="w-10 h-10 flex items-center justify-center shrink-0">
             <ShieldCheck size={20} />
           </div>
           <div>
@@ -490,8 +490,8 @@ export default function WhatsAppAutomations() {
           </div>
         </div>
 
-        <div className="hl-kpi flex items-center gap-3 p-4">
-          <div className="w-10 h-10 flex items-center justify-center">
+        <div className="hl-kpi flex items-center gap-3 p-3 sm:p-4 min-w-0">
+          <div className="w-10 h-10 flex items-center justify-center shrink-0">
             <Send size={20} />
           </div>
           <div>
@@ -500,8 +500,8 @@ export default function WhatsAppAutomations() {
           </div>
         </div>
 
-        <div className="hl-kpi flex items-center gap-3 p-4">
-          <div className="w-10 h-10 flex items-center justify-center">
+        <div className="hl-kpi flex items-center gap-3 p-3 sm:p-4 min-w-0">
+          <div className="w-10 h-10 flex items-center justify-center shrink-0">
             <CheckCircle2 size={20} />
           </div>
           <div>
@@ -513,18 +513,18 @@ export default function WhatsAppAutomations() {
 
       {/* Educational Explainer Banner */}
       {showExplainer && (
-        <div className="hl-card mb-6 p-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 pointer-events-none">
+        <div className="hl-card mb-4 sm:mb-6 p-4 sm:p-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 pointer-events-none hidden sm:block">
             <Cpu size={140} />
           </div>
 
-          <div className="flex items-start justify-between gap-4 relative z-10 mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 flex items-center justify-center">
+          <div className="flex items-start justify-between gap-3 sm:gap-4 relative z-10 mb-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 flex items-center justify-center shrink-0">
                 <Sparkles size={22} />
               </div>
-              <div>
-                <h2 className="hl-title flex items-center gap-2">
+              <div className="min-w-0">
+                <h2 className="hl-title flex items-center gap-2 flex-wrap">
                   <span>How WhatsApp Automations Work</span>
                   <span className="hl-badge hl-badge-success">
                     ⚡ 100% Hands-Off Background Engine
@@ -546,22 +546,22 @@ export default function WhatsAppAutomations() {
           </div>
 
           {/* 3 Module Architecture Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 relative z-10">
-            <div className="hl-card p-4 space-y-2">
-              <div className="flex items-center justify-between hl-section-label">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-3.5 relative z-10">
+            <div className="hl-card p-4 space-y-2 min-w-0">
+              <div className="flex items-center justify-between hl-section-label gap-2 flex-wrap">
                 <span>⚡ 1. CRM Automations</span>
-                <span className="hl-badge hl-badge-accent">Set & Forget</span>
+                <span className="hl-badge hl-badge-accent">Set &amp; Forget</span>
               </div>
               <p className="hl-subtitle">
                 Triggered by <strong>CRM Database Events</strong> (Invoices created, payments received, lead added, AMC expiry). Sends 1-to-1 instant updates in &lt; 2s.
               </p>
               <div className="hl-id p-2">
-                New Invoice ➔ Auto Send PDF & Pay Link
+                New Invoice ➔ Auto Send PDF &amp; Pay Link
               </div>
             </div>
 
-            <div className="hl-card p-4 space-y-2">
-              <div className="flex items-center justify-between hl-section-label">
+            <div className="hl-card p-4 space-y-2 min-w-0">
+              <div className="flex items-center justify-between hl-section-label gap-2 flex-wrap">
                 <span>📢 2. Bulk Campaigns</span>
                 <span className="hl-badge hl-badge-info">1-to-Many Blast</span>
               </div>
@@ -573,8 +573,8 @@ export default function WhatsAppAutomations() {
               </div>
             </div>
 
-            <div className="hl-card p-4 space-y-2">
-              <div className="flex items-center justify-between hl-section-label">
+            <div className="hl-card p-4 space-y-2 min-w-0">
+              <div className="flex items-center justify-between hl-section-label gap-2 flex-wrap">
                 <span>🔀 3. Chatbot Flows</span>
                 <span className="hl-badge hl-badge-success">Interactive Bot</span>
               </div>
@@ -1130,7 +1130,7 @@ export default function WhatsAppAutomations() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="hl-table w-full text-left">
+              <table className="hl-table w-full min-w-[640px] text-left">
                 <thead>
                   <tr className="border-b">
                     <th className="py-2.5 px-3">Rule Name</th>
@@ -1184,7 +1184,7 @@ export default function WhatsAppAutomations() {
       {/* ── MODAL: Create / Edit Automation ── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3" onClick={() => setShowModal(false)}>
-          <div className="hl-card w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-3xl max-h-[92dvh] min-h-0 flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 flex items-center justify-center">
@@ -1202,7 +1202,7 @@ export default function WhatsAppAutomations() {
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-5 flex-1">
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1 min-h-0 wa-custom-scrollbar overscroll-contain">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="hl-section-label block mb-1">Rule Name *</label>
@@ -1570,7 +1570,7 @@ export default function WhatsAppAutomations() {
       {/* ── MODAL: CRM Trigger Simulator & Test Runner ── */}
       {showSimulateModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowSimulateModal(false)}>
-          <div className="hl-card w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-2xl max-h-[90dvh] overflow-y-auto p-4 sm:p-6 wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5 border-b pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 flex items-center justify-center">

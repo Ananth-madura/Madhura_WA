@@ -273,7 +273,7 @@ export default function WACampaigns() {
   const f = form;
 
   return (
-    <div className="w-full pb-10">
+    <div className="hl-page">
       <WhatsAppNav />
 
       {/* Header Banner */}
@@ -564,7 +564,7 @@ export default function WACampaigns() {
       {/* Custom Create Campaign Modal */}
       {showCreate && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowCreate(false)}>
-          <div className="hl-card w-full max-w-2xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-2xl max-h-[92dvh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 z-10" style={{ borderColor: "var(--color-rule)", background: "var(--color-paper-2)" }}>
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl flex items-center justify-center font-bold" style={{ background: "var(--color-ink)", color: "var(--color-paper-2)" }}>
@@ -591,7 +591,7 @@ export default function WACampaigns() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="hl-section-label block mb-1">Target Contact Group</label>
                   <select
@@ -648,7 +648,7 @@ export default function WACampaigns() {
               {/* Media Settings */}
               {f.type === "media" && (
                 <div className="hl-card p-4 space-y-3">
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="hl-section-label block mb-1">Media Type</label>
                       <select
@@ -663,7 +663,7 @@ export default function WACampaigns() {
                         <option value="excel">📊 Excel / Spreadsheet (XLSX, CSV)</option>
                       </select>
                     </div>
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <label className="hl-section-label block mb-1">Media URL or Hosted Link</label>
                       <input
                         type="text"
@@ -779,7 +779,7 @@ export default function WACampaigns() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="hl-kpis">
                   <button
                     type="button"
                     onClick={() => setForm(prev => ({ ...prev, random_delay_min: 7, random_delay_max: 17 }))}
@@ -855,7 +855,7 @@ export default function WACampaigns() {
                   {/* Working Hours */}
                   <div>
                     <p className="hl-section-label mb-2 flex items-center gap-1.5"><Clock size={13} /> Active Business Hours</p>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label className="hl-section-label block mb-1">Start Time</label>
                         <input type="time" value={f.start_time} onChange={e => setForm({ ...f, start_time: e.target.value })}
@@ -922,7 +922,7 @@ export default function WACampaigns() {
       {/* Live Campaign Queue Inspector & Delivery Drawer */}
       {campaignDetail && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setCampaignDetail(null)}>
-          <div className="hl-card w-full max-w-4xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-4xl max-h-[92dvh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 z-10" style={{ borderColor: "var(--color-rule)", background: "var(--color-paper-2)" }}>
               <div>
                 <div className="flex items-center gap-2">
@@ -1025,7 +1025,7 @@ export default function WACampaigns() {
                   </div>
 
                   <div className="max-h-72 overflow-y-auto overflow-x-auto">
-                    <table className="hl-table">
+                    <table className="hl-table min-w-[520px]">
                       <thead className="sticky top-0">
                         <tr>
                           <th>Recipient</th>

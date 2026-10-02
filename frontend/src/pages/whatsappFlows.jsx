@@ -1486,7 +1486,7 @@ export default function WhatsAppFlows() {
     return (
       <div
         key={node.node_key}
-        onMouseDown={(e) => handleNodeMouseDown(node.node_key, e)}
+        onPointerDown={(e) => handleNodeMouseDown(node.node_key, e)}
         onClick={(e) => {
           e.stopPropagation();
           if (connectingFrom && connectingFrom.nodeKey !== node.node_key) {
@@ -1497,7 +1497,7 @@ export default function WhatsAppFlows() {
             setActiveInspectorTab("config");
           }
         }}
-        onMouseUp={(e) => {
+        onPointerUp={(e) => {
           if (connectingFrom && connectingFrom.nodeKey !== node.node_key) {
             completeConnection(node.node_key, e);
           }
@@ -1527,8 +1527,8 @@ export default function WhatsAppFlows() {
         {node.node_key !== "start" && (
           <div
             onClick={(e) => completeConnection(node.node_key, e)}
-            onMouseUp={(e) => completeConnection(node.node_key, e)}
-            className={`absolute -left-3.5 top-10 w-7 h-7 rounded-full bg-white border-2 flex items-center justify-center shadow-md transition-all z-20 cursor-pointer ${
+            onPointerUp={(e) => completeConnection(node.node_key, e)}
+            className={`absolute -left-3.5 top-10 w-7 h-7 rounded-full bg-white border-2 flex items-center justify-center shadow-md transition-all z-20 cursor-pointer touch-none ${
               isConnectingTarget
                 ? "border-emerald-500 bg-emerald-100 scale-125 ring-4 ring-emerald-400/50"
                 : "border-slate-300 hover:border-emerald-500 hover:scale-125"
@@ -1597,7 +1597,7 @@ export default function WhatsAppFlows() {
               <div className="flex items-center justify-between pt-1 text-[11px] text-slate-600 font-semibold">
                 <span>Start Flow ➔</span>
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
                   className="w-5 h-5 rounded-full bg-amber-500 hover:bg-amber-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shadow-sm shrink-0"
                   title="Drag or click to connect next step"
                 >
@@ -1630,7 +1630,7 @@ export default function WhatsAppFlows() {
                         >
                           <span className="truncate">{b.label || b.title || `Option ${bIdx + 1}`}</span>
                           <div
-                            onMouseDown={(e) => startConnecting(node.node_key, b.id || `btn_${bIdx}`, "button", { sectionIdx: sIdx, buttonIdx: bIdx }, e)}
+                            onPointerDown={(e) => startConnecting(node.node_key, b.id || `btn_${bIdx}`, "button", { sectionIdx: sIdx, buttonIdx: bIdx }, e)}
                             className="w-4 h-4 rounded-full bg-emerald-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition-transform shrink-0"
                             title="Drag or click to connect target node"
                           >
@@ -1650,7 +1650,7 @@ export default function WhatsAppFlows() {
                     >
                       <span className="truncate">{b.label || b.title || `Option ${bIdx + 1}`}</span>
                       <div
-                        onMouseDown={(e) => startConnecting(node.node_key, b.id || `btn_${bIdx}`, "button", { buttonIdx: bIdx }, e)}
+                        onPointerDown={(e) => startConnecting(node.node_key, b.id || `btn_${bIdx}`, "button", { buttonIdx: bIdx }, e)}
                         className="w-4 h-4 rounded-full bg-emerald-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 shrink-0"
                         title="Drag or click to connect target node"
                       >
@@ -1682,7 +1682,7 @@ export default function WhatsAppFlows() {
                   >
                     <span className="truncate">{b.title || b.label || `Option ${bIdx + 1}`}</span>
                     <div
-                      onMouseDown={(e) => startConnecting(node.node_key, b.reply_id || b.id || `btn_${bIdx}`, "button", { buttonIdx: bIdx }, e)}
+                      onPointerDown={(e) => startConnecting(node.node_key, b.reply_id || b.id || `btn_${bIdx}`, "button", { buttonIdx: bIdx }, e)}
                       className="w-4 h-4 rounded-full bg-teal-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
                       title="Drag or click to connect target node"
                     >
@@ -1715,7 +1715,7 @@ export default function WhatsAppFlows() {
                       {r.description && <span className="block text-[9px] text-cyan-700 font-normal truncate">{r.description}</span>}
                     </div>
                     <div
-                      onMouseDown={(e) => startConnecting(node.node_key, r.id || r.reply_id || `row_${rIdx}`, "button", { buttonIdx: rIdx }, e)}
+                      onPointerDown={(e) => startConnecting(node.node_key, r.id || r.reply_id || `row_${rIdx}`, "button", { buttonIdx: rIdx }, e)}
                       className="w-4 h-4 rounded-full bg-cyan-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
                       title="Drag or click to connect target node"
                     >
@@ -1736,7 +1736,7 @@ export default function WhatsAppFlows() {
               <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
                 <span>Next Step</span>
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
                   className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125"
                   title="Connect next step"
                 >
@@ -1762,7 +1762,7 @@ export default function WhatsAppFlows() {
               <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
                 <span>Next Step</span>
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
                   className="w-4 h-4 rounded-full bg-indigo-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
                   title="Connect next step"
                 >
@@ -1781,7 +1781,7 @@ export default function WhatsAppFlows() {
               <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
                 <span>Next Step</span>
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
                   className="w-4 h-4 rounded-full bg-lime-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
                   title="Connect next step"
                 >
@@ -1799,7 +1799,7 @@ export default function WhatsAppFlows() {
               </div>
               <div className="grid grid-cols-2 gap-1.5">
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "true", "true", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "true", "true", {}, e)}
                   className="px-2 py-1 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px] flex items-center justify-between cursor-crosshair hover:bg-emerald-200"
                   title="Connect YES outcome"
                 >
@@ -1807,7 +1807,7 @@ export default function WhatsAppFlows() {
                   <ChevronRight size={12} />
                 </div>
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "false", "false", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "false", "false", {}, e)}
                   className="px-2 py-1 bg-amber-100 text-amber-800 rounded font-bold text-[10px] flex items-center justify-between cursor-crosshair hover:bg-amber-200"
                   title="Connect NO outcome"
                 >
@@ -1833,7 +1833,7 @@ export default function WhatsAppFlows() {
                   >
                     <span className="truncate uppercase">{intent}</span>
                     <div
-                      onMouseDown={(e) => startConnecting(node.node_key, `intent_${intent}`, "intent", { intentKey: intent }, e)}
+                      onPointerDown={(e) => startConnecting(node.node_key, `intent_${intent}`, "intent", { intentKey: intent }, e)}
                       className="w-3.5 h-3.5 rounded-full bg-fuchsia-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
                       title={`Connect branch: ${intent}`}
                     >
@@ -1860,7 +1860,7 @@ export default function WhatsAppFlows() {
               <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
                 <span>Next Step</span>
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
                   className="w-4 h-4 rounded-full bg-fuchsia-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
                   title="Connect next step"
                 >
@@ -1880,7 +1880,7 @@ export default function WhatsAppFlows() {
               <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
                 <span>Continue</span>
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
                   className="w-4 h-4 rounded-full bg-sky-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125"
                   title="Connect next step"
                 >
@@ -1899,7 +1899,7 @@ export default function WhatsAppFlows() {
               <div className="flex items-center justify-between text-[11px] text-purple-700">
                 <span>Save to: <code>vars.{node.config?.var_key || "input"}</code></span>
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
                   className="w-4 h-4 rounded-full bg-purple-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125"
                   title="Connect next step"
                 >
@@ -1924,7 +1924,7 @@ export default function WhatsAppFlows() {
               <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
                 <span>Next Step</span>
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
                   className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
                   title="Connect next step"
                 >
@@ -1944,7 +1944,7 @@ export default function WhatsAppFlows() {
               <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
                 <span>Next Step</span>
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
                   className="w-4 h-4 rounded-full bg-orange-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
                   title="Connect next step"
                 >
@@ -1969,7 +1969,7 @@ export default function WhatsAppFlows() {
               <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
                 <span>Next Step</span>
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
                   className="w-4 h-4 rounded-full bg-violet-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
                   title="Connect next step"
                 >
@@ -1994,7 +1994,7 @@ export default function WhatsAppFlows() {
               <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
                 <span>Next Step</span>
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
                   className="w-4 h-4 rounded-full bg-slate-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
                   title="Connect next step"
                 >
@@ -2029,7 +2029,7 @@ export default function WhatsAppFlows() {
               <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
                 <span>Next Step</span>
                 <div
-                  onMouseDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
+                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
                   className="w-4 h-4 rounded-full bg-slate-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
                   title="Connect next step"
                 >
@@ -2927,7 +2927,7 @@ export default function WhatsAppFlows() {
         {/* ── API WEBHOOK REST CALL CONFIGURATION ────────────────────── */}
         {selectedNode.node_type === "api_webhook" && (
           <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">Method</label>
                 <select
@@ -2939,7 +2939,7 @@ export default function WhatsAppFlows() {
                   <option value="POST">POST</option>
                 </select>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-bold text-slate-700 block mb-1">Endpoint URL</label>
                 <input
                   type="text"
@@ -3219,9 +3219,17 @@ export default function WhatsAppFlows() {
   // ── Render True-to-Life WhatsApp Smartphone Simulator ──────────────────────
   const renderWhatsAppPhoneSimulator = () => {
     return (
-      <div className={`w-[340px] h-[580px] rounded-[40px] p-3 shadow-2xl flex flex-col border-[6px] transition-colors shrink-0 relative overflow-hidden select-none ${
-        simDarkTheme ? "bg-[#0b141a] border-[#1f2c34] text-white" : "bg-[#efeae2] border-slate-800 text-slate-900"
-      }`}>
+      // Dimensions clamp against the viewport so the device frame always
+      // fits the inspector panel and the page on a 320px phone.
+      <div
+        style={{
+          width: "min(340px, 100%)",
+          height: "min(580px, calc(100dvh - 9rem))",
+        }}
+        className={`rounded-[40px] p-3 shadow-2xl flex flex-col border-[6px] transition-colors shrink-0 relative overflow-hidden select-none ${
+          simDarkTheme ? "bg-[#0b141a] border-[#1f2c34] text-white" : "bg-[#efeae2] border-slate-800 text-slate-900"
+        }`}
+      >
         {/* Smartphone Camera Notch */}
         <div className="absolute top-4 left-1/2 -translate-x-1/2 w-24 h-4 bg-[#1f2c34] rounded-full z-30 flex items-center justify-center">
           <div className="w-2.5 h-2.5 rounded-full bg-black/60" />
@@ -3264,7 +3272,7 @@ export default function WhatsAppFlows() {
         </div>
 
         {/* WhatsApp Chat Area Background Pattern */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0 relative z-10 text-xs font-sans">
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3 relative z-10 text-xs font-sans">
           {/* Encryption pill */}
           <div className="text-center my-1">
             <span className={`px-2.5 py-1 rounded-md text-[9px] font-medium inline-flex items-center gap-1 shadow-sm ${
@@ -3515,8 +3523,12 @@ export default function WhatsAppFlows() {
           left: 0,
           right: 0,
           bottom: 0,
-          width: "100vw",
-          height: "100vh",
+          // Never 100vw/100vh: both include the scrollbar gutter and the
+          // mobile URL bar, which pushes a horizontal/vertical scrollbar
+          // onto an overlay that is meant to be chrome-free.
+          width: "100%",
+          maxWidth: "100%",
+          height: "100dvh",
           zIndex: 99999,
           margin: 0,
           padding: 0
@@ -3524,7 +3536,7 @@ export default function WhatsAppFlows() {
         className="bg-slate-900 text-slate-100 flex flex-col font-sans select-none overflow-hidden"
       >
         {/* Top Studio Action Bar */}
-        <div className="h-14 w-full bg-slate-950 border-b border-slate-800 px-3 sm:px-4 flex items-center justify-between shrink-0 z-30 relative gap-2">
+        <div className="h-14 w-full min-w-0 bg-slate-950 border-b border-slate-800 px-2 sm:px-4 flex items-center justify-between shrink-0 z-30 relative gap-2 overflow-x-auto wa-no-scrollbar">
           {/* Left: Exit + Title + Trigger Info + Blocks Toggle */}
           <div className="flex items-center gap-2.5 shrink-0 min-w-0">
             <button
@@ -3746,16 +3758,26 @@ export default function WhatsAppFlows() {
         </div>
 
         {/* Studio Workspace Layout */}
-        <div className="flex-1 flex w-full min-h-0 relative overflow-hidden">
+        <div className="flex-1 flex w-full min-w-0 min-h-0 relative overflow-hidden">
+          {/* Mobile scrim: closes the palette/inspector drawers on tap */}
+          {showPalette && (
+            <button
+              type="button"
+              aria-label="Close component palette"
+              onClick={() => setShowPalette(false)}
+              className="lg:hidden absolute inset-0 z-10 bg-slate-950/70 backdrop-blur-[2px]"
+            />
+          )}
+
           {/* Left Component Palette Sidebar (Collapsible) */}
           {showPalette && (
-            <div className="w-72 bg-slate-950 border-r border-slate-800 flex flex-col shrink-0 z-20 select-none transition-all duration-150">
-              <div className="p-3 border-b border-slate-800 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-extrabold text-slate-300 uppercase tracking-wider">
+            <div className="absolute lg:static inset-y-0 left-0 z-20 w-[min(18rem,86vw)] lg:w-72 max-w-full bg-slate-950 border-r border-slate-800 flex flex-col h-full min-h-0 shrink-0 select-none shadow-2xl lg:shadow-none transition-all duration-150">
+              <div className="p-3 border-b border-slate-800 flex items-center justify-between gap-2 shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[11px] font-extrabold text-slate-300 uppercase tracking-wider truncate">
                     Component Palette
                   </span>
-                  <span className="text-[9px] px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-md font-bold">
+                  <span className="text-[9px] px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-md font-bold shrink-0">
                     Click to add
                   </span>
                 </div>
@@ -3790,7 +3812,7 @@ export default function WhatsAppFlows() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+              <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2 wa-custom-scrollbar">
                 {filteredPaletteCategories.map(cat => (
                   <div key={cat.id} className="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-900/40">
                     <button
@@ -3833,10 +3855,12 @@ export default function WhatsAppFlows() {
           {/* ── 2D Canvas Graph Area ───────────────────────────────── */}
           <div
             ref={canvasRef}
-            onMouseDown={handleCanvasMouseDown}
-            onMouseMove={handleCanvasMouseMove}
-            onMouseUp={handleCanvasMouseUp}
-            className="flex-1 min-w-0 h-full bg-[#090d16] relative overflow-hidden cursor-crosshair canvas-grid"
+            onPointerDown={handleCanvasMouseDown}
+            onPointerMove={handleCanvasMouseMove}
+            onPointerUp={handleCanvasMouseUp}
+            onPointerCancel={handleCanvasMouseUp}
+            onPointerLeave={handleCanvasMouseUp}
+            className="flex-1 min-w-0 h-full bg-[#090d16] relative overflow-hidden cursor-crosshair canvas-grid touch-none select-none"
             style={{
               backgroundImage: "radial-gradient(#1e293b 1.5px, transparent 1.5px)",
               backgroundSize: `${24 * zoom}px ${24 * zoom}px`
@@ -4010,9 +4034,9 @@ export default function WhatsAppFlows() {
             </div>
           </div>
 
-          {/* Right Node Inspector / WhatsApp Simulator Panel (Dockable & Collapsible) */}
+          {/* Right Node Inspector / WhatsApp Simulator Panel (Dockable &Collapsible) */}
           {showRightPanel && (
-            <div className="w-[420px] max-w-[92vw] shrink-0 h-full bg-slate-950 border-l border-slate-800 flex flex-col z-30 select-none shadow-2xl animate-in slide-in-from-right duration-150">
+            <div className="absolute xl:static inset-y-0 right-0 z-30 w-full sm:w-[26rem] sm:max-w-full xl:w-[420px] max-w-full h-full min-h-0 bg-slate-950 border-l border-slate-800 flex flex-col shrink-0 select-none shadow-2xl animate-in slide-in-from-right duration-150">
               {/* Inspector Top Tabs + Close ✕ */}
               <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/80 p-1.5">
                 <div className="flex items-center gap-1 flex-1">
@@ -4055,11 +4079,11 @@ export default function WhatsAppFlows() {
               </div>
 
               {/* Tab Contents */}
-              <div className="flex-1 overflow-y-auto min-h-0 bg-white text-slate-900 w-full">
+              <div className="flex-1 overflow-y-auto min-h-0 bg-white text-slate-900 w-full min-w-0 wa-custom-scrollbar">
                 {activeInspectorTab === "config" && renderNodeInspector()}
 
                 {activeInspectorTab === "preview" && (
-                  <div className="p-4 flex items-center justify-center bg-slate-900 min-h-full">
+                  <div className="p-3 sm:p-4 flex items-center justify-center bg-slate-900 min-h-full">
                     {renderWhatsAppPhoneSimulator()}
                   </div>
                 )}
@@ -4107,7 +4131,7 @@ export default function WhatsAppFlows() {
         {/* ── FLOW VERSIONS MODAL ────────────────────────────────────── */}
         {showVersionsModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowVersionsModal(false)}>
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl text-slate-100" onClick={e => e.stopPropagation()}>
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-4 sm:p-6 space-y-4 shadow-2xl text-slate-100 max-h-[92dvh] overflow-y-auto wa-custom-scrollbar" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div className="flex items-center gap-2">
                   <Layers className="text-emerald-400" size={18} />
@@ -4182,12 +4206,12 @@ export default function WhatsAppFlows() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans">
+    <div className="hl-page bg-slate-50 font-sans">
       <WhatsAppNav />
 
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+      <div className="max-w-7xl mx-auto w-full min-w-0 px-3 sm:px-4 lg:px-6 py-5 sm:py-8 space-y-6">
         {/* Header Hero Banner */}
-        <div className="bg-gradient-to-r from-[#0b141a] via-[#111b21] to-[#005c4b] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="bg-gradient-to-r from-[#0b141a] via-[#111b21] to-[#005c4b] rounded-3xl p-5 sm:p-6 lg:p-8 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-5 lg:gap-6">
           <div className="space-y-2 max-w-2xl relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/20 text-emerald-300 text-xs font-extrabold rounded-full border border-emerald-500/30">
               <Sparkles size={14} /> WhatsApp Visual Conversational Platform
@@ -4219,11 +4243,11 @@ export default function WhatsAppFlows() {
         </div>
 
         {/* View Tabs & Search Toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-1 sm:gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-full sm:w-auto overflow-x-auto wa-no-scrollbar">
             <button
               onClick={() => setActiveTab("flows")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+              className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === "flows" ? "bg-emerald-50 text-emerald-800 shadow-sm" : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -4232,7 +4256,7 @@ export default function WhatsAppFlows() {
             </button>
             <button
               onClick={() => setActiveTab("runs")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+              className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === "runs" ? "bg-emerald-50 text-emerald-800 shadow-sm" : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -4242,7 +4266,7 @@ export default function WhatsAppFlows() {
           </div>
 
           {activeTab === "flows" && (
-            <div className="relative min-w-[280px]">
+            <div className="relative w-full sm:w-72 sm:min-w-0">
               <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
@@ -4290,7 +4314,7 @@ export default function WhatsAppFlows() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 {filteredFlows.map((flow) => {
                   const isActive = flow.status === "active";
                   return (
@@ -4379,15 +4403,15 @@ export default function WhatsAppFlows() {
         {/* ── LIVE AUDIT RUNS TAB ──────────────────────────────────── */}
         {activeTab === "runs" && (
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900">Recent Conversational Session Executions</h3>
-              <button onClick={fetchRuns} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-slate-900 min-w-0">Recent Conversational Session Executions</h3>
+              <button onClick={fetchRuns} className="p-2 text-slate-400 hover:text-slate-700 rounded-lg shrink-0">
                 <RefreshCw size={14} />
               </button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
+            <div className="overflow-x-auto wa-custom-scrollbar">
+              <table className="w-full min-w-[640px] text-xs text-left">
                 <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-100 uppercase text-[10px]">
                   <tr>
                     <th className="p-3">Customer</th>
@@ -4444,16 +4468,16 @@ export default function WhatsAppFlows() {
         {/* ── FLOW ANALYTICS MODAL ──────────────────────────────────── */}
         {showAnalyticsModal && selectedAnalyticsFlow && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowAnalyticsModal(false)}>
-            <div className="bg-white rounded-3xl w-full max-w-2xl p-6 space-y-6 shadow-2xl border border-slate-100" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between border-b pb-3">
-                <div className="flex items-center gap-2">
-                  <BarChart2 className="text-emerald-600" size={20} />
-                  <div>
-                    <h3 className="font-bold text-base text-slate-900">Flow Performance &amp; Conversion Funnel</h3>
-                    <p className="text-xs text-slate-500">{selectedAnalyticsFlow.name}</p>
+            <div className="bg-white rounded-3xl w-full max-w-2xl p-4 sm:p-6 space-y-6 shadow-2xl border border-slate-100 max-h-[92dvh] overflow-y-auto wa-custom-scrollbar" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between gap-3 border-b pb-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <BarChart2 className="text-emerald-600 shrink-0" size={20} />
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-base text-slate-900 truncate">Flow Performance &amp; Conversion Funnel</h3>
+                    <p className="text-xs text-slate-500 truncate">{selectedAnalyticsFlow.name}</p>
                   </div>
                 </div>
-                <button onClick={() => setShowAnalyticsModal(false)} className="text-slate-400 hover:text-slate-600">
+                <button onClick={() => setShowAnalyticsModal(false)} className="text-slate-400 hover:text-slate-600 shrink-0 p-1">
                   <X size={18} />
                 </button>
               </div>
@@ -4463,7 +4487,7 @@ export default function WhatsAppFlows() {
               ) : (
                 <div className="space-y-6">
                   {/* Summary Metric Cards */}
-                  <div className="grid grid-cols-4 gap-3 text-center">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-center">
                     <div className="p-3 bg-slate-50 rounded-2xl border">
                       <div className="text-lg font-extrabold text-slate-900">{analyticsData?.totalRuns || 0}</div>
                       <div className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Total Runs</div>

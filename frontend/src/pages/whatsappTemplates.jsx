@@ -194,11 +194,11 @@ export default function WATemplates() {
   });
 
   return (
-    <div className="w-full pb-10">
+    <div className="hl-page">
       <WhatsAppNav />
 
       {/* Header Banner */}
-      <div className="hl-commandbar flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="hl-commandbar flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         <div>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 flex items-center justify-center" style={{ background: "var(--color-paper)", color: "var(--color-ink)", border: "1px solid var(--color-rule)", borderRadius: "var(--radius-input)" }}>
@@ -430,7 +430,7 @@ export default function WATemplates() {
       {/* Create / Edit Template Modal with Live WhatsApp Bubble Preview */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
-          <div className="hl-card w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-4xl max-h-[92dvh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ borderBottom: "1px solid var(--color-rule)" }}>
               <div className="flex items-center gap-2.5">
@@ -448,7 +448,7 @@ export default function WATemplates() {
             </div>
 
             {/* Modal Body: 2 Columns (Editor + Live Preview) */}
-            <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 wa-custom-scrollbar">
               {/* Left Column: Form Editor (7 cols) */}
               <div className="lg:col-span-7 space-y-4">
                 <div>

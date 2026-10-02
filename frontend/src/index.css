@@ -156,6 +156,9 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   box-sizing: border-box;
+  height: 100%;
+  /* iOS: never let the rubber-band reveal white space behind the app */
+  overscroll-behavior-y: none;
 }
 
 *, *::before, *::after {
@@ -170,6 +173,34 @@ body {
   background-color: var(--color-surface);
   color: var(--color-text);
   -webkit-tap-highlight-color: transparent;
+  min-height: 100%;
+  /* Long words, URLs and phone numbers must wrap instead of forcing a
+     horizontal scrollbar on the whole document. */
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Images / media / embeds never exceed their column */
+img,
+video,
+canvas,
+svg,
+iframe {
+  max-width: 100%;
+}
+
+/* The React root owns the full viewport box so every page can measure
+   itself against the real visual viewport (dvh) rather than the layout one. */
+#root {
+  min-height: 100dvh;
+  isolation: isolate;
+}
+
+/* Anything that is a media bubble / attachment preview must be able to shrink
+   inside a flex or grid track on a 320px-wide phone. */
+img,
+video {
+  height: auto;
 }
 
 code {
@@ -1018,19 +1049,67 @@ body.modal-open {
    RESPONSIVE LAYOUT & MOBILE BREAKPOINTS
    ═══════════════════════════════════════════════════════════════ */
 
+/* ── Coarse pointers: comfortable tap targets, no iOS zoom-on-focus ── */
 @media (hover: none) and (pointer: coarse) {
-  button, a, select, input[type="submit"], input[type="button"] {
+  button,
+  a,
+  select,
+  input[type="submit"],
+  input[type="button"],
+  [role="button"] {
     min-height: 44px;
   }
-  input, select, textarea {
+  input,
+  select,
+  textarea {
+    /* Anything under 16px makes iOS Safari zoom the page on focus */
     font-size: 16px !important;
   }
 }
 
-@media (max-width: 639px) {
-  [style*="min-width"] { min-width: 0 !important; }
+/* ── Scroll containers ──────────────────────────────────────────
+   Every scrollable region opts in via these classes so momentum
+   scrolling and scroll chaining behave identically on iOS/Android. */
+.wa-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.wa-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.wa-scroll-both {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
 
-  div[class*="fixed"][class*="inset-0"] > div,
+/* Modal / sheet panels must always be able to reach the bottom of their
+   content on a short viewport, and must never exceed the visual viewport. */
+.wa-panel {
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* ── Small phones (≤ 639px) ────────────────────────────────────── */
+@media (max-width: 639px) {
+  /* Inline min-widths are the single biggest source of horizontal
+     overflow on phones; neutralise them inside the viewport. */
+  [style*="min-width"] {
+    min-width: 0 !important;
+  }
+
+  /* Modals and full-screen overlays become true full-screen sheets.
+     `inset-0` containers with a single child panel get the treatment;
+     flex/column overlays (lightbox, studio) opt out via .wa-fullscreen-passthrough. */
+  div[class*="fixed"][class*="inset-0"] > div:not(.wa-fullscreen-passthrough),
   .overlay.show > div {
     width: 100% !important;
     max-width: 100% !important;
@@ -1041,25 +1120,125 @@ body.modal-open {
     max-height: 100dvh !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     padding: var(--space-4) !important;
     top: 0 !important;
   }
 
-  .grid-cols-4, .grid-cols-3 { grid-template-columns: 1fr !important; }
-  .grid-cols-4 > .col-span-3, .grid-cols-3 > .col-span-2 { grid-column: span 1 !important; }
-  .card, .card-elevated, .card-feature { padding: 16px !important; }
+  /* Grids that would produce sub-240px tracks collapse to one column. */
+  .grid-cols-4,
+  .grid-cols-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .grid-cols-4 > .col-span-3,
+  .grid-cols-3 > .col-span-2 {
+    grid-column: span 2 !important;
+  }
+  .grid-cols-2 > .col-span-2 {
+    grid-column: span 2 !important;
+  }
+
+  .card,
+  .card-elevated,
+  .card-feature {
+    padding: 16px !important;
+  }
+
+  /* Table cells: tighter type and padding so 6+ column tables survive 360px. */
+  .hl-table {
+    font-size: 12px;
+  }
+  .hl-table thead th,
+  .hl-table tbody td {
+    padding: 0.5rem 0.625rem;
+  }
+
+  /* Horizontal scrollers must be reachable and scrollable by touch. */
+  .hl-tabs {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: var(--space-sm);
+  }
+
+  /* Element-plus style overlays (defensive: third-party markup) */
+  .el-overlay,
+  .el-dialog {
+    max-width: 100vw !important;
+  }
+  .el-dialog {
+    width: 100% !important;
+    margin: var(--space-4) auto !important;
+  }
 }
 
+/* ── Very small phones (≤ 380px) ───────────────────────────────── */
+@media (max-width: 380px) {
+  .hl-tab {
+    padding: 0.5rem 0.625rem;
+    font-size: 12px;
+  }
+  .hl-kpi {
+    padding: var(--space-2xs);
+  }
+  .hl-kpi-num {
+    font-size: var(--text-lg);
+  }
+}
+
+/* ── Tablets (640–1023px) ─────────────────────────────────────── */
 @media (min-width: 640px) and (max-width: 1023px) {
-  table { font-size: 13px; }
-  table th, table td { padding: 8px 12px !important; }
-  .card, .card-elevated, .card-feature { padding: 20px !important; }
+  table {
+    font-size: 13px;
+  }
+  table th,
+  table td {
+    padding: 8px 12px !important;
+  }
+  .card,
+  .card-elevated,
+  .card-feature {
+    padding: 20px !important;
+  }
 }
 
+/* ── Desktop (≥ 1024px) ───────────────────────────────────────── */
 @media (min-width: 1024px) {
-  table th, table td { padding: 12px 18px; }
-  .overlay.show > div { max-width: 800px !important; }
-  div[class*="fixed"][class*="inset-0"] > div { max-width: 700px !important; }
+  table th,
+  table td {
+    padding: 12px 18px;
+  }
+  .overlay.show > div {
+    max-width: 800px !important;
+  }
+  div[class*="fixed"][class*="inset-0"] > div {
+    max-width: 700px !important;
+  }
+}
+
+/* ── Landscape phones: vertical space is the scarce resource ───── */
+@media (max-height: 480px) and (orientation: landscape) {
+  .hl-commandbar {
+    margin-bottom: var(--space-2xs);
+  }
+  .hl-empty {
+    padding: var(--space-sm) var(--space-xs);
+  }
+  div[class*="fixed"][class*="inset-0"] > div,
+  .overlay.show > div {
+    max-height: 100dvh !important;
+  }
+}
+
+/* ── Short viewports generally: modals never exceed the screen ── */
+@media (max-height: 700px) {
+  .wa-panel,
+  div[class*="max-h-[92vh]"],
+  div[class*="max-h-[90vh]"],
+  div[class*="max-h-[85vh]"],
+  div[class*="max-h-[72vh]"],
+  div[class*="max-h-[65vh]"] {
+    max-height: calc(100dvh - 1.5rem) !important;
+  }
 }
 
 /* iOS normalization */
@@ -1093,6 +1272,21 @@ input[type="button"] {
   }
 }
 
+/* Notched devices: the fixed shell header must clear the status bar, and
+   bottom-anchored composers/sheets must clear the home indicator. */
+@supports (padding: max(0px)) {
+  .wa-safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .wa-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .wa-safe-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════
    WHATSAPP CHAT — UI ANIMATIONS & UTILITIES
    ═══════════════════════════════════════════════════════════════ */
@@ -1120,6 +1314,10 @@ input[type="button"] {
 }
 
 /* WhatsApp Screen Height & Isolated Parallel Viewport Containers */
+
+/* The chat view is an app shell, not a document: the page itself never
+   scrolls, each pane owns its own scroll axis. `dvh` (with a `vh`
+   fallback) keeps the composer above the mobile browser chrome. */
 html.wa-chat-active,
 body.wa-chat-active {
   height: 100% !important;
@@ -1127,6 +1325,7 @@ body.wa-chat-active {
   overflow: hidden !important;
   margin: 0 !important;
   padding: 0 !important;
+  overscroll-behavior: none !important;
 }
 
 .crm-layout-shell.wa-chat-mode {
@@ -1136,6 +1335,12 @@ body.wa-chat-active {
   max-height: 100dvh !important;
   min-height: 0 !important;
   overflow: hidden !important;
+}
+
+/* Non-chat pages: the shell is a normal scrolling document. */
+.crm-layout-shell:not(.wa-chat-mode) {
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .wa-h-screen {
@@ -1363,7 +1568,14 @@ body.wa-chat-active {
   --radius-card: 14px; --radius-pill: 999px; --radius-input: 10px;
 }
 
-html, body { overflow-x: clip; }
+/* Horizontal overflow is clipped at the document edge, but the clip must not
+   disable vertical scrolling inside nested panes. */
+html,
+body {
+  overflow-x: hidden;
+  overflow-x: clip;
+  max-width: 100%;
+}
 
 /* Workbench command bar: title left, actions right */
 .hl-commandbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-bottom: var(--space-sm); flex-wrap: wrap; }
@@ -1374,8 +1586,14 @@ html, body { overflow-x: clip; }
 /* KPI strip */
 .hl-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: var(--space-xs); margin-bottom: var(--space-sm); }
 .hl-kpi { background: var(--color-paper-2); border: 1px solid var(--color-rule); border-radius: var(--radius-card); padding: var(--space-xs) var(--space-sm); min-width: 0; }
-.hl-kpi-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hl-kpi-num { font-family: var(--font-display); font-weight: 700; font-size: var(--text-xl); color: var(--color-ink); line-height: 1.25; font-variant-numeric: tabular-nums; }
+.hl-kpi-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-ink-2); min-width: 0; overflow-wrap: anywhere; }
+.hl-kpi-num { font-family: var(--font-display); font-weight: 700; font-size: var(--text-xl); color: var(--color-ink); line-height: 1.25; font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+/* KPI tiles must stay one-per-row until there is genuinely room for two. */
+.hl-kpi > * { min-width: 0; }
+@media (max-width: 639px) {
+  .hl-kpis { grid-template-columns: 1fr 1fr; gap: var(--space-2xs); }
+  .hl-kpi { padding: var(--space-2xs) var(--space-xs); }
+}
 
 /* Cards */
 .hl-card { background: var(--color-paper-2); border: 1px solid var(--color-rule); border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
@@ -1409,8 +1627,36 @@ html, body { overflow-x: clip; }
 .hl-id { font-family: var(--font-mono, monospace); font-size: 12px; color: var(--color-ink-2); }
 
 /* Badges */
-.hl-badge { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 12px; font-weight: 600; padding: 0.2rem 0.625rem; border-radius: var(--radius-pill); border: 1px solid var(--color-rule); color: var(--color-ink-2); background: var(--color-paper); white-space: nowrap; }
-.hl-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.hl-badge { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 12px; font-weight: 600; padding: 0.2rem 0.625rem; border-radius: var(--radius-pill); border: 1px solid var(--color-rule); color: var(--color-ink-2); background: var(--color-paper); white-space: nowrap; max-width: 100%; min-width: 0; }
+.hl-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+/* Long status pills wrap on a phone instead of pushing the card wide. */
+@media (max-width: 639px) {
+  .hl-badge {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  /* …except inside a header/toolbar, where wrapping costs vertical space
+     that the message thread needs. Those become scroll strips instead. */
+  .hl-card > .hl-tabs .hl-badge,
+  [class*="overflow-x-auto"] .hl-badge {
+    white-space: nowrap;
+  }
+}
+
+/* Responsive visibility helpers.
+   `.hl-badge` and friends set `display: inline-flex`, which is declared after
+   Tailwind's utility layer and therefore beats `.hidden` at equal specificity.
+   These opt-outs restore the utility's intent for responsive call sites. */
+.hl-badge.hidden,
+.hl-btn-primary.hidden,
+.hl-btn-secondary.hidden,
+.hl-btn-danger-ghost.hidden,
+.hl-tabs.hidden,
+.hl-card.hidden,
+input.hidden,
+select.hidden {
+  display: none !important;
+}
 .hl-badge-success { color: var(--color-success); border-color: var(--color-success); background: var(--color-paper-2); }
 .hl-badge-warn { color: var(--color-focus); border-color: var(--color-focus); background: var(--color-paper-2); }
 .hl-badge-error { color: var(--color-error); border-color: var(--color-error); background: var(--color-paper-2); }
@@ -1418,8 +1664,49 @@ html, body { overflow-x: clip; }
 .hl-badge-accent { color: var(--color-accent-ink); border-color: var(--color-focus); background: var(--color-accent); }
 
 /* Tabs — yellow underline marks active, nothing else */
-.hl-tabs { display: flex; align-items: center; gap: var(--space-2xs); border-bottom: 1px solid var(--color-rule); overflow-x: auto; }
-.hl-tab { position: relative; padding: 0.625rem 0.875rem; font-size: var(--text-sm); font-weight: 500; color: var(--color-ink-2); background: none; border: none; cursor: pointer; white-space: nowrap; }
+.hl-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  border-bottom: 1px solid var(--color-rule);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  /* Tabs must never be squeezed by the flex parent */
+  flex-wrap: nowrap;
+  max-width: 100%;
+}
+.hl-tabs::-webkit-scrollbar { display: none; height: 0; }
+.hl-tab {
+  position: relative;
+  padding: 0.625rem 0.875rem;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-ink-2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  touch-action: manipulation;
+}
+/* Chip-style buttons that carry a long label ("GPT-4o Mini (OpenAI Flagship
+   Speed)", "Upload Document (.pdf/.docx/…)") must wrap on a phone instead
+   of pushing the card past the viewport edge. */
+@media (max-width: 639px) {
+  .hl-btn-primary,
+  .hl-btn-secondary,
+  .hl-btn-danger-ghost {
+    white-space: normal;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+}
 .hl-tab:hover { color: var(--color-ink); }
 .hl-tab.is-active { color: var(--color-ink); font-weight: 600; }
 .hl-tab.is-active::after { content: ""; position: absolute; left: 0.5rem; right: 0.5rem; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: var(--color-accent); }
@@ -1430,12 +1717,20 @@ html, body { overflow-x: clip; }
 
 /* Shell — deep navy slab, yellow hairline, quiet type */
 .hl-shell { background: var(--color-shell); border-bottom: 2px solid var(--color-accent); }
-.hl-wordmark { display: flex; align-items: center; gap: 0.625rem; font-family: var(--font-display); font-weight: 700; letter-spacing: -0.01em; color: var(--color-paper-2); font-size: 1.05rem; white-space: nowrap; }
+.hl-wordmark { display: flex; align-items: center; gap: 0.625rem; font-family: var(--font-display); font-weight: 700; letter-spacing: -0.01em; color: var(--color-paper-2); font-size: clamp(0.9rem, 2.6vw, 1.05rem); min-width: 0; }
+.hl-wordmark > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .hl-wordmark-mark { width: 12px; height: 12px; border-radius: 3px; background: var(--color-accent); flex: none; }
 .hl-wordmark em { font-style: normal; color: var(--color-accent); }
+/* Below `sm` there is not enough room for the full lockup next to Logout. */
+@media (max-width: 639px) {
+  .hl-wordmark em { display: none; }
+}
 .hl-shell-meta { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 12px; font-weight: 500; color: var(--color-paper-2); background: var(--color-shell-2); border: 1px solid var(--color-shell-2); border-radius: var(--radius-pill); padding: 0.25rem 0.75rem; max-width: 100%; }
-.hl-logout { font-size: var(--text-sm); font-weight: 600; color: var(--color-paper-2); background: transparent; border: 1px solid var(--color-shell-2); border-radius: var(--radius-input); padding: 0.5rem 1rem; cursor: pointer; transition: border-color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out); white-space: nowrap; }
+.hl-logout { font-size: var(--text-sm); font-weight: 600; color: var(--color-paper-2); background: transparent; border: 1px solid var(--color-shell-2); border-radius: var(--radius-input); padding: 0.5rem 1rem; cursor: pointer; transition: border-color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out); white-space: nowrap; flex: none; }
 .hl-logout:hover { border-color: var(--color-accent); }
+@media (max-width: 400px) {
+  .hl-logout { padding: 0.5rem 0.75rem; font-size: var(--text-xs); }
+}
 
 /* List reveal — fade + 8px rise, tight stagger */
 @keyframes hl-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
@@ -1443,4 +1738,235 @@ html, body { overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) {
   .hl-reveal { animation-duration: 150ms; }
   .hl-reveal, .hl-btn-primary, .hl-btn-secondary { transform: none !important; transition: opacity 150ms; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE UTILITY LAYER
+   Applied last so it wins over component defaults without !important
+   fights. Everything here is width-agnostic: no fixed px, no 100vw.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Page root: fills its scroll parent and never forces the viewport wider
+   than it is. `min-width: 0` lets children shrink inside flex/grid. */
+.hl-page {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Scrollable table region: the table keeps its natural width and the
+   wrapper scrolls, so no column is ever crushed on a phone. */
+.hl-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.hl-table-wrap > .hl-table {
+  min-width: 560px;
+}
+@media (max-width: 639px) {
+  .hl-table-wrap > .hl-table {
+    min-width: 480px;
+  }
+}
+
+/* Flex rows that must become stacks on narrow screens instead of
+   overflowing. Children are allowed to shrink and wrap. */
+.hl-stack {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+}
+.hl-stack > * {
+  min-width: 0;
+}
+
+/* Buttons never shrink below their label; the row wraps instead. */
+.hl-btn-primary,
+.hl-btn-secondary,
+.hl-btn-danger-ghost,
+.hl-logout,
+.hl-tab {
+  flex-shrink: 0;
+  max-width: 100%;
+  touch-action: manipulation;
+}
+
+/* Inputs/selects fill their container on phones so tap targets are wide
+   enough and labels never get orphaned next to a tiny field. */
+.hl-input,
+.hl-select,
+.hl-input:focus,
+.hl-select:focus {
+  max-width: 100%;
+}
+/* Long model ids / URLs / tokens typed into a field must never widen it. */
+input,
+select,
+textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+input[type="text"],
+input[type="url"],
+input[type="search"],
+input[type="email"],
+input[type="tel"],
+input[type="password"],
+input[type="number"] {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 639px) {
+  .hl-field {
+    width: 100%;
+    max-width: 100%;
+  }
+  .hl-field > .hl-input,
+  .hl-field > .hl-select {
+    width: 100%;
+  }
+}
+
+/* Modal panels: capped to the visual viewport, scrollable, and
+   padded for notches. `dvh` keeps them clear of mobile browser chrome. */
+.hl-modal-panel {
+  width: 100%;
+  max-width: min(100%, 56rem);
+  max-height: 92vh;
+  max-height: 92dvh;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+@media (max-width: 639px) {
+  .hl-modal-panel {
+    max-width: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+}
+
+/* Chrome-independent viewport helpers (replaces vh/h-screen in JSX). */
+.wa-dvh {
+  height: 100vh;
+  height: 100dvh;
+}
+.wa-min-dvh {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.wa-max-dvh {
+  max-height: 100vh;
+  max-height: 100dvh;
+}
+
+/* Bottom-anchored composer / action bars clear the iOS home indicator. */
+@media (max-width: 1023px) {
+  .wa-composer-safe {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* Long unbroken strings (URLs, tokens, phone numbers, JSON) must wrap. */
+.hl-break {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+}
+pre,
+code {
+  overflow-wrap: anywhere;
+}
+pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Safety net: a flex or grid child defaults to min-width:auto, which refuses
+   to shrink below its content. On a 320px phone that is the single most
+   common cause of horizontally clipped (and therefore unreachable) UI.
+   Zero opt-outs needed — long strings wrap via overflow-wrap instead. */
+.hl-page > *,
+.hl-page .hl-card,
+.hl-card > *,
+.hl-commandbar > *,
+main > * {
+  min-width: 0;
+}
+.hl-card img,
+.hl-card video,
+.hl-card svg {
+  max-width: 100%;
+}
+
+/* Recharts / any injected responsive chart container */
+.recharts-wrapper,
+.recharts-surface {
+  max-width: 100%;
+}
+.recharts-responsive-container {
+  min-width: 0 !important;
+}
+
+/* Keyboard focus must be visible on every interactive element, including
+   ones that only get styled on :focus via Tailwind. */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Coarse pointers: no hover-dependent affordances, no text selection
+   glitches on buttons. */
+@media (hover: none) {
+  .hl-btn-primary:hover,
+  .hl-btn-secondary:hover,
+  .hl-logout:hover {
+    transform: none;
+  }
+}
+
+/* Landscape phones have almost no vertical room; modals and sheets must
+   scroll rather than clip their footers. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .hl-modal-panel {
+    max-height: 100dvh;
+  }
+  .hl-commandbar {
+    margin-bottom: var(--space-2xs);
+  }
+}
+
+/* ── Short viewports (SE, mini phones, landscape) ────────────────
+   The chat view is an app shell with a fixed budget. Every chrome row
+   below the shell header is optional context, so below 620px of height
+   they collapse to icon-only strips and the thread keeps the space. */
+@media (max-height: 620px) {
+  /* Quick-reply chip bar becomes a single slim strip */
+  .wa-speed-bar {
+    padding: 4px 8px;
+  }
+  /* Composer rows stay one line: tools and input share the row */
+  .wa-composer {
+    flex-wrap: nowrap;
+  }
+  .wa-composer-tool {
+    flex: 0 0 auto;
+  }
+  .wa-composer-input {
+    flex: 1 1 auto;
+    min-width: 6rem;
+    basis: 6rem;
+  }
+  .hl-tab {
+    min-height: 38px;
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+  }
 }

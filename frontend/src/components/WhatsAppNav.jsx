@@ -226,12 +226,37 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
   const isChatView = location.pathname === "/whatsapp" || location.pathname === "/whatsapp/";
 
   return (
-    <div className="hl-card hl-reveal" style={{ marginBottom: isChatView ? 6 : 12, padding: isChatView ? "6px 8px" : 8 }}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {/* Top Tabs */}
-        <div className="hl-tabs" style={{ borderBottom: "none", flex: "1 1 auto", minWidth: 0 }}>
+    <div
+      className="hl-card hl-reveal w-full min-w-0"
+      style={{
+        marginBottom: isChatView ? 4 : 12,
+        padding: isChatView ? "4px 6px" : 8,
+      }}
+    >
+      {/*
+          Chat view on a phone has very little vertical budget, so the whole
+          navigation collapses into ONE horizontally scrollable strip instead
+          of stacking tabs over actions. Document pages keep the two-row
+          layout because they are not height-constrained.
+        */}
+      <div
+        className={
+          isChatView
+            ? "flex items-center gap-1.5 overflow-x-auto wa-no-scrollbar -mx-1 px-1"
+            : "flex flex-col lg:flex-row lg:flex-wrap lg:items-center lg:justify-between gap-2"
+        }
+      >
+        {/* Top Tabs — one horizontally scrollable strip at every width */}
+        <div
+          className={
+            isChatView
+              ? "hl-tabs w-auto shrink-0"
+              : "hl-tabs w-full lg:w-auto lg:flex-1"
+          }
+          style={{ borderBottom: "none", minWidth: 0 }}
+        >
           <button
-            onClick={() => navigate("/dashboard")}
+            onClick={() => window.location.assign("https://crm.madhuratech.com")}
             className="hl-tab"
             style={{ fontWeight: 600 }}
             title="Return to CRM Dashboard"
@@ -266,8 +291,15 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
           })}
         </div>
 
-        {/* Action & Config Buttons */}
-        <div className="flex items-center gap-2 ml-auto pr-1">
+        {/* Action & Config Buttons — icon-only below sm, full labels above */}
+        <div
+          className={
+            isChatView
+              ? "flex items-center gap-1.5 shrink-0 pl-2 border-l"
+              : "flex items-center gap-2 lg:ml-auto lg:pr-1 flex-wrap"
+          }
+          style={isChatView ? { borderColor: "var(--color-rule)" } : undefined}
+        >
           {status?.cloud?.configured || status?.isCloud ? (
             <span className="hl-badge hl-badge-info hidden sm:inline-flex">
               <span>Meta API: {status?.phone ? `+${status.phone}` : "Active"}</span>
@@ -286,7 +318,7 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
             <button
               onClick={onAccountBalance}
               className="hl-btn-secondary"
-              style={{ padding: "0.5rem 0.75rem", fontSize: 12 }}
+              style={{ padding: isChatView ? "0.4rem 0.55rem" : "0.5rem 0.75rem", fontSize: 12, minHeight: isChatView ? 36 : 42 }}
               title="View WhatsApp Engine & Messaging Quota Balance"
             >
               <CreditCard size={14} />
@@ -299,7 +331,7 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
               onClick={onSyncWhatsApp}
               disabled={isSyncing}
               className="hl-btn-secondary"
-              style={{ padding: "0.5rem 0.75rem", fontSize: 12 }}
+              style={{ padding: isChatView ? "0.4rem 0.55rem" : "0.5rem 0.75rem", fontSize: 12, minHeight: isChatView ? 36 : 42 }}
               title="Sync Contacts & Chat History"
             >
               <RefreshCw size={14} className={isSyncing ? "animate-spin" : undefined} />
@@ -311,7 +343,7 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
             <button
               onClick={onLogout}
               className="hl-btn-danger-ghost"
-              style={{ padding: "0.5rem 0.75rem", fontSize: 12 }}
+              style={{ padding: isChatView ? "0.4rem 0.55rem" : "0.5rem 0.75rem", fontSize: 12, minHeight: isChatView ? 36 : 42 }}
               title="Disconnect WhatsApp Session"
             >
               <LogOut size={14} />
@@ -322,7 +354,7 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
           <button
             onClick={() => setShowConfig(true)}
             className="hl-btn-secondary"
-            style={{ padding: "0.5rem 0.75rem", fontSize: 12 }}
+            style={{ padding: isChatView ? "0.4rem 0.55rem" : "0.5rem 0.75rem", fontSize: 12, minHeight: isChatView ? 36 : 42 }}
             title="Configure Meta Cloud API"
           >
             <Settings size={14} />
@@ -343,7 +375,7 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
       {/* Test Send Modal */}
       {showTestModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="hl-card p-6 max-w-md w-full relative">
+          <div className="hl-card p-4 sm:p-6 max-w-md w-full relative max-h-[92dvh] overflow-y-auto wa-custom-scrollbar overscroll-contain">
             <button onClick={() => setShowTestModal(false)} className="absolute top-4 right-4" style={{ color: "var(--color-ink-2)" }}>
               <X size={20} />
             </button>

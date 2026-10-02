@@ -899,7 +899,7 @@ export default function WhatsAppInteractiveReminders() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="hl-table w-full text-left border-collapse">
+                <table className="hl-table w-full min-w-[520px] text-left border-collapse">
                   <thead>
                     <tr className="bg-[var(--color-paper)] border-b border-[var(--color-rule)] font-bold uppercase text-[10px]">
                       <th className="py-3 px-4 w-10">
@@ -1063,7 +1063,7 @@ export default function WhatsAppInteractiveReminders() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="hl-table w-full text-left border-collapse">
+                <table className="hl-table w-full min-w-[520px] text-left border-collapse">
                   <thead>
                     <tr className="bg-[var(--color-paper)] border-b border-[var(--color-rule)] font-bold uppercase text-[10px]">
                       <th className="py-3 px-4">Recipient</th>
@@ -1288,7 +1288,7 @@ export default function WhatsAppInteractiveReminders() {
       ────────────────────────────────────────────────────────────────────────── */}
       {showSendModal && (
         <div className="fixed inset-0 bg-[var(--color-shell)]/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-          <div className="hl-card bg-[var(--color-paper-2)] rounded-3xl max-w-5xl w-full p-5 sm:p-7 shadow-2xl border border-[var(--color-rule)] text-xs space-y-5 max-h-[92vh] overflow-y-auto">
+          <div className="hl-card bg-[var(--color-paper-2)] rounded-3xl max-w-5xl w-full p-5 sm:p-7 shadow-2xl border border-[var(--color-rule)] text-xs space-y-5 max-h-[92dvh] overflow-y-auto">
             {/* Modal Header */}
             <div className="hl-commandbar flex items-center justify-between border-b border-[var(--color-rule)] pb-3">
               <div>
@@ -1704,7 +1704,7 @@ export default function WhatsAppInteractiveReminders() {
       ────────────────────────────────────────────────────────────────────────── */}
       {showSettingsModal && (
         <div className="fixed inset-0 bg-[var(--color-shell)]/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="hl-card bg-[var(--color-paper-2)] rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-[var(--color-rule)] text-xs space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="hl-card bg-[var(--color-paper-2)] rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-[var(--color-rule)] text-xs space-y-4 max-h-[90dvh] overflow-y-auto">
             <div className="hl-commandbar flex items-center justify-between border-b border-[var(--color-rule)] pb-3">
               <div>
                 <h3 className="hl-title font-bold text-[var(--color-ink)] text-base flex items-center gap-2">

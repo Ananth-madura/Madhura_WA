@@ -272,7 +272,7 @@ export default function WhatsAppCampaignWizard({ isOpen, onClose, onSuccess, ini
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-shell)]/60 p-4 backdrop-blur-sm">
-      <div className="hl-card bg-[var(--color-paper-2)] rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col border border-[var(--color-rule)]">
+      <div className="hl-card bg-[var(--color-paper-2)] rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92dvh] overflow-hidden flex flex-col border border-[var(--color-rule)]">
         {/* Header */}
         <div className="hl-commandbar flex items-center justify-between px-6 py-4 border-b border-[var(--color-rule)] shrink-0">
           <div className="flex items-center gap-3">
@@ -311,7 +311,7 @@ export default function WhatsAppCampaignWizard({ isOpen, onClose, onSuccess, ini
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 wa-custom-scrollbar">
           {/* STEP 1: Contacts */}
           {step === 1 && (
             <div className="space-y-4">

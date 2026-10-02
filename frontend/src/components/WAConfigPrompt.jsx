@@ -100,9 +100,9 @@ export default function WAConfigPrompt({ onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-[var(--color-shell)]/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
-      <div className="hl-card bg-[var(--color-paper-2)] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-[var(--color-rule)] max-h-[92vh] flex flex-col">
-        <div className="hl-commandbar bg-[var(--color-shell)] px-6 py-5 relative text-[var(--color-paper-2)] shrink-0">
+    <div className="fixed inset-0 bg-[var(--color-shell)]/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-3 sm:p-4">
+      <div className="hl-card bg-[var(--color-paper-2)] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-[var(--color-rule)] max-h-[92dvh] flex flex-col">
+        <div className="hl-commandbar bg-[var(--color-shell)] px-4 sm:px-6 py-4 sm:py-5 relative text-[var(--color-paper-2)] shrink-0">
           <button type="button" onClick={handleSnooze} className="absolute top-4 right-4 p-1 rounded-full bg-[var(--color-shell-2)] hover:bg-[var(--color-ink-2)] text-[var(--color-paper-2)] transition-colors">
             <X size={18} />
           </button>
@@ -117,7 +117,7 @@ export default function WAConfigPrompt({ onClose }) {
           </div>
         </div>
 
-        <div className="overflow-y-auto p-6 space-y-4 flex-1">
+        <div className="overflow-y-auto p-4 sm:p-6 space-y-4 flex-1 min-h-0 wa-custom-scrollbar overscroll-contain">
           {message.text && (
             <div className={`p-3 rounded-xl flex items-start gap-2.5 text-sm hl-badge ${
               message.type === "error" ? "hl-badge-error" : "hl-badge-success"

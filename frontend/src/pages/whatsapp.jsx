@@ -322,9 +322,9 @@ function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimety
     if (media.mimetype?.startsWith("audio/") || media.mimetype?.includes("ogg") || ["mp3", "ogg", "wav", "m4a", "aac"].includes(fileExt)) {
       return (
         <div className="py-1 space-y-1">
-          <audio src={src} controls className="max-w-[270px] h-9 rounded-lg" />
+          <audio src={src} controls className="w-[270px] max-w-[min(270px,60vw)] h-9 rounded-lg" />
           <div className="hl-section-label flex items-center justify-between text-[11px] font-bold text-[var(--color-ink)] px-1">
-            <span className="hl-id text-[var(--color-ink-2)] text-[10px] truncate max-w-[160px]">{rawFilename}</span>
+            <span className="hl-id text-[var(--color-ink-2)] text-[10px] truncate max-w-[min(160px,40vw)]">{rawFilename}</span>
             <a href={src} download={rawFilename} target="_blank" rel="noreferrer" className="hover:underline">
               Download ⬇️
             </a>
@@ -335,9 +335,9 @@ function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimety
     if (media.mimetype?.startsWith("video/") || ["mp4", "mov", "webm", "3gp", "mkv"].includes(fileExt)) {
       return (
         <div className="space-y-1.5">
-          <video src={src} controls className="max-w-[290px] max-h-[340px] rounded-xl shadow-md border border-[var(--color-rule)]" />
+          <video src={src} controls className="w-[290px] max-w-[min(290px,62vw)] max-h-[340px] max-h-[38dvh] rounded-xl shadow-md border border-[var(--color-rule)]" />
           <div className="hl-section-label flex items-center justify-between text-[11px] font-bold text-[var(--color-ink)] px-1">
-            <span className="hl-id text-[var(--color-ink-2)] text-[10px] truncate max-w-[180px]">{rawFilename}</span>
+            <span className="hl-id text-[var(--color-ink-2)] text-[10px] truncate max-w-[min(180px,45vw)]">{rawFilename}</span>
             <a href={src} download={rawFilename} target="_blank" rel="noreferrer" className="hover:underline">
               Download ⬇️
             </a>
@@ -352,7 +352,7 @@ function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimety
           <img
             src={src}
             alt={rawFilename}
-            className="max-w-[320px] max-h-[360px] object-cover rounded-xl shadow-md cursor-pointer hover:opacity-95 transition border border-[var(--color-rule)]"
+            className="w-[320px] max-w-[min(320px,66vw)] max-h-[360px] max-h-[40dvh] object-cover rounded-xl shadow-md cursor-pointer hover:opacity-95 transition border border-[var(--color-rule)]"
             onClick={handleView}
           />
           <div className="hl-section-label flex items-center justify-between text-xs font-bold text-[var(--color-ink)] pt-1 px-1">
@@ -370,7 +370,7 @@ function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimety
 
   // Document attachment card (PDF, Excel .xlsx/.csv, Word doc, PowerPoint, Zip, etc.)
   return (
-    <div className={`hl-card rounded-xl p-3 space-y-2.5 min-w-[240px] max-w-[330px] ${isMe ? "bg-[var(--color-accent-soft)] text-[var(--color-ink)]" : "bg-[var(--color-paper-2)] text-[var(--color-ink)]"}`}>
+    <div className={`hl-card rounded-xl p-3 space-y-2.5 w-full min-w-0 max-w-[min(330px,72vw)] ${isMe ? "bg-[var(--color-accent-soft)] text-[var(--color-ink)]" : "bg-[var(--color-paper-2)] text-[var(--color-ink)]"}`}>
       <div className="flex items-center gap-3">
         <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-black text-xs uppercase shrink-0 border ${getBadgeStyle(fileExt)}`}>
           {fileExt.slice(0, 4)}
@@ -455,6 +455,7 @@ export default function WhatsAppPage() {
   const [qrLoading, setQrLoading] = useState(false);
   const hasLoadedChatsOnce = useRef(false);
   const hasTriggeredQrFetch = useRef(false);
+  const qrPollTimerRef = useRef(null);
   const [chats, setChats] = useState(() => {
     try {
       const saved = sessionStorage.getItem("wa_cached_chats");
@@ -784,10 +785,12 @@ export default function WhatsAppPage() {
       });
 
       if (flat.connected) {
-        setQrCode((prev) => (prev ? null : prev));
-        setQrDataUrl((prev) => (prev ? null : prev));
+        if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+        setQrCode(null);
+        setQrDataUrl(null);
         setQrLoading(false);
       } else if (serverQr) {
+        if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
         setQrCode((prev) => (prev === serverQr ? prev : serverQr));
         if (raw.qrDataUrl || raw.web?.qrDataUrl) {
           const dUrl = raw.qrDataUrl || raw.web?.qrDataUrl;
@@ -805,6 +808,7 @@ export default function WhatsAppPage() {
   }, []);
 
   const fetchQr = useCallback(async (force = false) => {
+    if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
     setQrLoading(true);
     setError(null);
     try {
@@ -813,18 +817,30 @@ export default function WhatsAppPage() {
       const endpoint = force ? "/api/whatsapp/qr?refresh=true" : "/api/whatsapp/qr";
       let res;
       try {
-        res = await axios.get(`${API}${endpoint}`, { headers, timeout: 20000 });
+        res = await axios.get(`${API}${endpoint}`, { headers, timeout: 25000 });
       } catch (e1) {
-        res = await axios.get(endpoint, { headers, timeout: 20000 });
+        res = await axios.get(endpoint, { headers, timeout: 25000 });
       }
-      if (res.data && res.data.qr) {
+      if (res.data && res.data.connected) {
+        if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+        setQrCode(null);
+        setQrDataUrl(null);
+        setQrLoading(false);
+        fetchStatus();
+      } else if (res.data && res.data.qr) {
+        if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
         setQrCode(res.data.qr);
         if (res.data.qrDataUrl) setQrDataUrl(res.data.qrDataUrl);
-        setStatus((s) => ({ ...s, hasQr: true }));
+        setStatus((s) => ({ ...s, hasQr: true, connected: false }));
         setQrLoading(false);
+        setError(null);
       } else if (res.data && res.data.initializing) {
-        // Still initializing in background — keep spinner, websocket and status polling will pick it up
+        // Still initializing in background — keep spinner and actively re-check in 2.5s
         setQrLoading(true);
+        if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+        qrPollTimerRef.current = setTimeout(() => {
+          fetchQr(false);
+        }, 2500);
       } else if (res.data && res.data.error) {
         setError(res.data.error);
         setQrLoading(false);
@@ -835,10 +851,13 @@ export default function WhatsAppPage() {
         setQrLoading(false);
       }
     } catch (err) {
-      if (err.response?.status === 504 || err.code === "ECONNABORTED") {
-        console.warn("ℹ️ WhatsApp QR generation in progress in background...");
-        // Keep loading state alive for WebSocket wa_qr or status polling
+      if (err.response?.status === 504 || err.code === "ECONNABORTED" || (err.message && err.message.includes("timeout"))) {
+        console.warn("ℹ️ WhatsApp QR generation in progress in background, re-checking...");
         setQrLoading(true);
+        if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+        qrPollTimerRef.current = setTimeout(() => {
+          fetchQr(false);
+        }, 3000);
       } else {
         const msg = err.response?.data?.error || err.message || "Failed to generate QR code. Please click Fresh QR / Reset.";
         setError(msg);
@@ -2192,14 +2211,13 @@ export default function WhatsAppPage() {
     return () => clearInterval(interval);
   }, [fetchStatus, status.connected]);
 
-  // Auto-fetch QR code once on mount if not connected and no QR yet
+  // Auto-fetch QR code if not connected and no QR yet
   useEffect(() => {
     if (status.connected) {
       hasTriggeredQrFetch.current = false;
       return;
     }
-    if (!status.connected && !qrCode && !qrLoading && connectMode === "qr" && !hasTriggeredQrFetch.current) {
-      hasTriggeredQrFetch.current = true;
+    if (!status.connected && !qrCode && !qrLoading && connectMode === "qr") {
       fetchQr();
     }
   }, [status.connected, qrCode, qrLoading, connectMode, fetchQr]);
@@ -2416,7 +2434,9 @@ export default function WhatsAppPage() {
     socket.on("wa_agent_handoff", handleHandoffAlert);
 
     const handleWaReady = (data) => {
+      if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
       setQrCode(null);
+      setQrDataUrl(null);
       setQrLoading(false);
       setError(null);
       setStatus((s) => ({
@@ -2437,6 +2457,7 @@ export default function WhatsAppPage() {
     };
 
     const handleWaQr = (data) => {
+      if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
       const qrVal = data?.qr || data?.message?.qr || (typeof data === "string" ? data : null);
       if (qrVal) {
         setQrCode(qrVal);
@@ -2820,7 +2841,7 @@ export default function WhatsAppPage() {
 
   if (initialChecking) {
     return (
-      <div className="w-full flex-1 flex flex-col min-h-screen items-center justify-center bg-[var(--color-paper-2)] text-[var(--color-ink-2)]">
+      <div className="hl-page w-full flex-1 flex flex-col min-h-0 items-center justify-center bg-[var(--color-paper-2)] text-[var(--color-ink-2)]">
         <div className="flex flex-col items-center gap-4">
           <div className="w-16 h-16 rounded-2xl bg-[var(--color-paper)] border border-[var(--color-rule)] flex items-center justify-center text-[var(--color-ink)] animate-pulse">
             <MessageCircle size={36} className="text-[var(--color-ink)]" />
@@ -2836,7 +2857,7 @@ export default function WhatsAppPage() {
 
   if (!status.connected) {
     return (
-      <div className="w-full flex-1 flex flex-col min-h-screen p-3 md:p-5 bg-[var(--color-paper)] text-[var(--color-ink)] pb-16">
+      <div className="hl-page w-full flex-1 flex flex-col min-h-0 overflow-y-auto wa-scroll bg-[var(--color-paper)] text-[var(--color-ink)]">
         <WhatsAppNav />
         {showConfigModal && (
           <WAConfigPrompt
@@ -2847,7 +2868,7 @@ export default function WhatsAppPage() {
           />
         )}
 
-        <div className="hl-commandbar hl-card flex-col sm:flex-row sm:items-center gap-3 mb-6 p-4">
+        <div className="hl-commandbar hl-card flex-col sm:flex-row sm:items-center gap-3 mb-4 sm:mb-6 p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[var(--color-ink)] text-[var(--color-paper-2)] flex items-center justify-center">
               <MessageCircle size={22} />
@@ -2857,7 +2878,7 @@ export default function WhatsAppPage() {
               <p className="hl-subtitle">Connect via Official Meta Cloud API (No QR needed) or Scan QR Code</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <button
               onClick={() => setShowConfigModal(true)}
               className="hl-btn-primary flex items-center gap-1.5"
@@ -2927,31 +2948,47 @@ export default function WhatsAppPage() {
           {/* Mode 1: QR Code Scan */}
           {connectMode === "qr" && (
             <div className="flex flex-col items-center justify-center text-center py-4">
-              {qrLoading ? (
-                <div className="py-10 text-center">
+              {qrLoading && !qrCode ? (
+                <div className="py-10 text-center max-w-sm mx-auto">
                   <Loader2 size={44} className="animate-spin text-[var(--color-ink)] mx-auto mb-4" />
                   <p className="hl-empty-title">Generating WhatsApp QR Code...</p>
-                  <p className="hl-subtitle mt-1">Please wait a few seconds</p>
+                  <p className="hl-subtitle mt-1 mb-5">Starting WhatsApp browser engine. If this takes more than a few seconds, click Force Fresh below.</p>
+                  <button
+                    onClick={() => fetchQr(true)}
+                    className="hl-btn-secondary text-xs px-3 py-1.5"
+                  >
+                    Force Fresh QR Code 🔄
+                  </button>
                 </div>
               ) : qrCode ? (
                 <div>
-                  <div className="hl-card p-4 inline-block mb-4">
+                  <div className="hl-card p-4 inline-block mb-4 shadow-md bg-white border-2 border-[var(--color-rule)]">
                     {qrDataUrl ? (
-                      <img src={qrDataUrl} alt="WhatsApp Web QR Code" className="w-[240px] h-[240px] object-contain" />
+                      <img src={qrDataUrl} alt="WhatsApp Web QR Code" className="w-[240px] h-[240px] object-contain mx-auto" />
                     ) : (
-                      <QRCodeSVG value={qrCode} size={240} level="M" />
+                      <QRCodeSVG value={qrCode} size={240} level="M" className="mx-auto" />
                     )}
                   </div>
                   <h3 className="hl-empty-title mb-1">Scan with your WhatsApp App</h3>
                   <p className="hl-subtitle max-w-md mx-auto mb-4">
-                    Open WhatsApp on your phone → Settings / Menu → <strong>Linked Devices</strong> → <strong>Link a Device</strong> and scan this code.
+                    Open WhatsApp on your phone → Settings / Menu (⋮) → <strong>Linked Devices</strong> → <strong>Link a Device</strong> and point your camera here.
                   </p>
-                  <button
-                    onClick={() => fetchQr(true)}
-                    className="hl-btn-secondary px-4 py-2 text-xs font-semibold transition"
-                  >
-                    Refresh QR Code
-                  </button>
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <button
+                      onClick={() => fetchQr(true)}
+                      disabled={qrLoading}
+                      className="hl-btn-secondary px-4 py-2 text-xs font-semibold transition flex items-center gap-2"
+                    >
+                      <RefreshCw size={14} className={qrLoading ? "animate-spin" : ""} />
+                      <span>{qrLoading ? "Refreshing..." : "Refresh QR Code"}</span>
+                    </button>
+                    <button
+                      onClick={() => fetchStatus()}
+                      className="hl-btn-primary px-4 py-2 text-xs font-semibold transition"
+                    >
+                      I Scanned It → Check Login ⚡
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="py-6 text-center">
@@ -3522,9 +3559,11 @@ export default function WhatsAppPage() {
         </div>
       )}
 
-      {/* Sound & Notification Toggles Bar */}
-      <div className="flex items-center justify-end gap-1.5 px-3 py-1 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] shrink-0">
+      {/* Sound & Notification Toggles Bar — slim on mobile so it does not consume a
+          whole extra row of a short viewport */}
+      <div className="flex items-center justify-end gap-1.5 px-2 sm:px-3 py-0.5 sm:py-1 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] shrink-0">
         <button
+          type="button"
           onClick={() => setSoundEnabled((v) => !v)}
           className={`hl-badge flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold transition ${soundEnabled ? "hl-badge-accent" : ""}`}
           title={soundEnabled ? "Mute notification sounds" : "Unmute notification sounds"}
@@ -3533,6 +3572,7 @@ export default function WhatsAppPage() {
           <span className="hidden sm:inline">{soundEnabled ? "Sound On" : "Muted"}</span>
         </button>
         <button
+          type="button"
           onClick={() => {
             if (desktopNotifs) {
               setDesktopNotifs(false);
@@ -3558,7 +3598,7 @@ export default function WhatsAppPage() {
               ? "wa-sidebar-compact"
               : sidebarMode === "wide"
               ? "wa-sidebar-wide"
-              : "w-full md:w-80 lg:w-88 xl:w-[360px]"
+              : "w-full md:w-80 lg:w-[21rem] xl:w-[360px]"
           } ${showMobileChat ? "hidden md:flex" : "flex"}`}
         >
           {/* Search Bar & Action Buttons */}
@@ -3920,10 +3960,11 @@ export default function WhatsAppPage() {
             </div>
           ) : (
             <>
-              {/* Active Chat Header */}
-              <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[var(--color-rule)] bg-[var(--color-paper-2)] shrink-0">
-                <div className="flex items-center gap-3 min-w-0">
-                  <button onClick={() => setShowMobileChat(false)} className="md:hidden p-1 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] rounded">
+              {/* Active Chat Header — the action cluster scrolls horizontally so it can
+                  never be clipped, at any width or orientation. */}
+              <div className="flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 border-b border-[var(--color-rule)] bg-[var(--color-paper-2)] shrink-0 min-w-0">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                  <button onClick={() => setShowMobileChat(false)} className="md:hidden p-1 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] rounded shrink-0">
                     <ChevronLeft size={20} />
                   </button>
                   <div
@@ -3931,7 +3972,7 @@ export default function WhatsAppPage() {
                       fetchContactCrmDetails(selectedChat.id);
                       setShowContactInfoDrawer(true);
                     }}
-                    className="cursor-pointer"
+                    className="cursor-pointer shrink-0"
                   >
                     <WAContactAvatar
                       src={selectedChat.profilePicUrl}
@@ -3947,10 +3988,13 @@ export default function WhatsAppPage() {
                       fetchContactCrmDetails(selectedChat.id);
                       setShowContactInfoDrawer(true);
                     }}
-                    className="cursor-pointer group min-w-0"
+                    className="cursor-pointer group min-w-0 flex-1"
                   >
-                    <div className="flex items-center gap-2">
-                      <p className="font-bold text-[var(--color-ink)] text-sm transition truncate">
+                    {/* Identity line: name + phone, one truncating line each.
+                        The "+Add to CRM" affordance moves to the action strip
+                        below `lg` so it cannot crowd out the contact name. */}
+                    <div className="flex items-center gap-2 min-w-0 w-full">
+                      <p className="font-bold text-[var(--color-ink)] text-sm transition truncate min-w-0 flex-1">
                         {(() => {
                           const n = selectedChat.name || "";
                           if (n.replace(/\D/g, "").length >= 13 || n.includes("@lid")) {
@@ -3960,12 +4004,12 @@ export default function WhatsAppPage() {
                         })()}
                       </p>
                       {selectedChat.source && (
-                        <span className="hl-badge hl-badge-success text-[10px] font-bold px-2 py-0.5 shrink-0">
+                        <span className="hl-badge hl-badge-success text-[10px] font-bold px-2 py-0.5 shrink-0 whitespace-nowrap hidden sm:inline-flex">
                           {selectedChat.source}
                         </span>
                       )}
                       {crmDetails?.client ? (
-                        <span className="hl-badge hl-badge-accent text-[10px] font-bold px-2 py-0.5 shrink-0 flex items-center gap-1" title="Linked CRM Client">
+                        <span className="hl-badge hl-badge-accent text-[10px] font-bold px-2 py-0.5 shrink-0 flex items-center gap-1 whitespace-nowrap hidden md:inline-flex" title="Linked CRM Client">
                           🏢 CRM Client
                         </span>
                       ) : (
@@ -3982,7 +4026,7 @@ export default function WhatsAppPage() {
                             });
                             setShowAddClientForm(true);
                           }}
-                          className="hl-badge text-[10px] font-semibold px-2 py-0.5 hover:bg-[var(--color-paper)] transition text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+                          className="hl-badge text-[10px] font-semibold px-2 py-0.5 hover:bg-[var(--color-paper)] transition text-[var(--color-ink-2)] hover:text-[var(--color-ink)] shrink-0 whitespace-nowrap hidden lg:inline-flex"
                           title="Register contact in CRM as Client / Lead"
                         >
                           + Add to CRM
@@ -3990,15 +4034,15 @@ export default function WhatsAppPage() {
                       )}
                     </div>
                     {selectedChat.isGroup ? (
-                      <p className="text-xs text-[var(--color-ink-2)]">Group Chat</p>
+                      <p className="text-xs text-[var(--color-ink-2)] truncate">Group Chat</p>
                     ) : contactTyping ? (
-                      <p className="hl-badge hl-badge-success text-xs font-semibold animate-pulse">typing...</p>
+                      <p className="hl-badge hl-badge-success text-xs font-semibold animate-pulse shrink-0">typing...</p>
                     ) : isContactOnline(selectedChat.id) ? (
-                      <p className="hl-badge hl-badge-success text-xs font-medium flex items-center gap-1">
+                      <p className="hl-badge hl-badge-success text-xs font-medium flex items-center gap-1 shrink-0">
                         <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] inline-block"></span> online
                       </p>
                     ) : (
-                      <p className="text-xs text-[var(--color-ink-2)]">
+                      <p className="text-xs text-[var(--color-ink-2)] truncate">
                         {selectedChat.formattedPhone ||
                           formatPhoneNumber(selectedChat.phoneNumber || selectedChat.id) ||
                           (selectedChat.id?.includes("@lid") ? "WhatsApp Contact" : `+${selectedChat.id?.replace(/\D/g, "")}`)}
@@ -4007,7 +4051,12 @@ export default function WhatsAppPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 sm:gap-2">
+                {/*
+                  Action cluster. It is capped at 50% below `md` so it can never
+                  squeeze the contact identity into a one-character-wide column
+                  (which is what forces the header to grow vertically).
+                */}
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 max-w-[50%] md:max-w-none overflow-x-auto wa-no-scrollbar">
                   {/* Bot paused indicator — the bot mutes itself for 24h once an
                       agent replies by hand, so make that visible and undoable. */}
                   {botStatus?.paused && !selectedChat.isGroup && (
@@ -4034,6 +4083,30 @@ export default function WhatsAppPage() {
                         {botResuming ? "..." : "Let bot reply"}
                       </button>
                     </div>
+                  )}
+
+                  {/* Register in CRM — inline in the action strip below `lg`, where the
+                      identity line above no longer has room for it. */}
+                  {!crmDetails?.client && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddClientData({
+                          name: selectedChat.name && !selectedChat.name.startsWith("+") ? selectedChat.name : "",
+                          company_name: "",
+                          email: "",
+                          city: "",
+                          service: "",
+                          notes: "",
+                        });
+                        setShowAddClientForm(true);
+                      }}
+                      className="hl-badge px-2.5 py-1.5 text-xs font-semibold shrink-0 whitespace-nowrap lg:hidden"
+                      title="Register contact in CRM as Client / Lead"
+                    >
+                      <UserPlus size={14} />
+                      <span className="sr-only">Add to CRM</span>
+                    </button>
                   )}
 
                   {/* Trigger Chatbot Flow Button */}
@@ -4116,17 +4189,21 @@ export default function WhatsAppPage() {
                 </div>
               </div>
 
-              {/* Shared Team Inbox Collaboration & Ticket Status Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] text-xs shrink-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {/* Ticket Status Selector */}
-                  <div className="flex items-center gap-1">
-                    <span className="hl-section-label text-[11px] font-bold text-[var(--color-ink-2)] uppercase tracking-wider">Status:</span>
+              {/* Shared Team Inbox Collaboration & Ticket Status Bar.
+                  On a phone this bar must never wrap into three rows — it eats
+                  the thread's height. Below `md` the two clusters become
+                  independently scrollable strips on a single line. */}
+              <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] text-xs shrink-0 min-w-0 overflow-hidden">
+                <div className="flex items-center gap-2 min-w-0 flex-1 md:flex-none overflow-x-auto wa-no-scrollbar">
+                  {/* Ticket Status Selector — scrolls rather than clipping or wrapping */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="hl-section-label text-[11px] font-bold text-[var(--color-ink-2)] uppercase tracking-wider shrink-0">Status:</span>
                     {["open", "pending", "resolved", "spam"].map((st) => (
                       <button
                         key={st}
+                        type="button"
                         onClick={() => handleUpdateTicketStatus(st)}
-                        className={`hl-badge px-2.5 py-0.5 text-[10px] font-extrabold uppercase transition ${
+                        className={`hl-badge px-2.5 py-0.5 text-[10px] font-extrabold uppercase transition shrink-0 ${
                           ticketStatus === st
                             ? st === "open"
                               ? "hl-badge-success"
@@ -4144,8 +4221,8 @@ export default function WhatsAppPage() {
                   </div>
 
                   {/* Agent Assignment Selector */}
-                  <div className="flex items-center gap-1.5 ml-2 border-l border-[var(--color-rule)] pl-2">
-                    <span className="text-[11px] font-bold text-[var(--color-ink-2)]">Agent:</span>
+                  <div className="flex items-center gap-1.5 border-l border-[var(--color-rule)] pl-2 shrink-0">
+                    <span className="text-[11px] font-bold text-[var(--color-ink-2)] shrink-0">Agent:</span>
                     <select
                       value={assignedAgentName}
                       onChange={(e) => {
@@ -4167,9 +4244,10 @@ export default function WhatsAppPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2 shrink-0 max-w-[45%] md:max-w-none overflow-x-auto wa-no-scrollbar">
                   {/* Launch Chatbot Flow Button */}
                   <button
+                    type="button"
                     onClick={() => {
                       fetchFlows();
                       setShowFlowModal(true);
@@ -4523,7 +4601,7 @@ export default function WhatsAppPage() {
               )}
 
               {/* Dynamic Quick Reply Speed Bar (1-Click CRM Macros) */}
-              <div className="wa-speed-bar wa-custom-scrollbar shrink-0 select-none">
+              <div className="wa-speed-bar wa-custom-scrollbar shrink-0 select-none max-h-9 overflow-y-auto">
                 <span className="text-[10px] font-bold text-[var(--color-ink-2)] uppercase tracking-wider shrink-0 flex items-center gap-1 mr-1">
                   <Zap size={11} className="text-[var(--color-accent)]" /> Quick:
                 </span>
@@ -4575,8 +4653,9 @@ export default function WhatsAppPage() {
                 ))}
               </div>
 
-              {/* Input Area & Tool Suite */}
-              <div className="relative flex items-center gap-2 p-3 border-t border-[var(--color-rule)] bg-[var(--color-paper-2)] shrink-0">
+              {/* Input Area & Tool Suite — wraps to two rows on narrow screens so the
+                  textarea always keeps a usable width */}
+              <div className="relative wa-composer flex flex-wrap items-center gap-2 p-2 sm:p-3 border-t border-[var(--color-rule)] bg-[var(--color-paper-2)] shrink-0 wa-composer-safe">
                 {/* Hidden File Inputs for Different Media Types */}
                 <input
                   id="wa-doc-upload-input"
@@ -4618,7 +4697,7 @@ export default function WhatsAppPage() {
                       className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-xs"
                       onClick={() => setShowAttachMenu(false)}
                     />
-                    <div className="hl-card fixed inset-x-0 bottom-0 z-50 md:absolute md:inset-x-auto md:bottom-full md:left-3 md:mb-3 md:w-72 p-3 md:p-2 wa-bottom-sheet max-h-[75vh] overflow-y-auto">
+                    <div className="hl-card fixed inset-x-0 bottom-0 z-50 md:absolute md:inset-x-auto md:bottom-full md:left-3 md:mb-3 md:w-72 p-3 md:p-2 wa-bottom-sheet wa-composer-safe max-h-[75dvh] overflow-y-auto overscroll-contain">
                       <div className="wa-swipe-indicator md:hidden" />
                       <div className="px-3 py-2 border-b border-[var(--color-rule)] flex items-center justify-between text-xs font-bold text-[var(--color-ink)]">
                         <span className="flex items-center gap-1.5"><Paperclip size={14} /> Share Media & Quick Tools</span>
@@ -4859,7 +4938,7 @@ export default function WhatsAppPage() {
 
                 {/* Slash commands quick-replies popup */}
                 {messageInput.startsWith("/") && (
-                  <div className="hl-card absolute bottom-full left-3 mb-2 w-80 max-h-60 overflow-y-auto z-30 p-2 space-y-1">
+                  <div className="hl-card absolute bottom-full left-0 right-0 sm:left-3 sm:right-auto mb-2 w-full sm:w-80 sm:max-w-[calc(100vw-1.5rem)] max-h-60 overflow-y-auto z-30 p-2 space-y-1">
                     <div className="hl-section-label px-2 py-1 text-[10px] uppercase font-bold text-[var(--color-ink)]">Quick Replies (Click to insert)</div>
                     {quickReplies
                       .filter((qr) => qr.shortcut?.toLowerCase().includes(messageInput.slice(1).toLowerCase()) || qr.title?.toLowerCase().includes(messageInput.slice(1).toLowerCase()))
@@ -4890,7 +4969,7 @@ export default function WhatsAppPage() {
 
                 {/* Message Template Picker Modal Popup */}
                 {showTemplatePicker && (
-                  <div className="hl-card absolute bottom-full left-3 mb-2 max-h-80 overflow-y-auto z-30">
+                  <div className="hl-card absolute bottom-full left-0 right-0 sm:left-3 sm:right-auto mb-2 max-h-80 overflow-y-auto z-30 w-full sm:w-auto sm:min-w-[22rem] sm:max-w-[calc(100vw-1.5rem)]">
                     <div className="px-3 py-2 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] text-xs font-bold text-[var(--color-ink)] flex items-center justify-between">
                       <span>Insert Message Template</span>
                       <div className="flex items-center gap-2">
@@ -4952,7 +5031,7 @@ export default function WhatsAppPage() {
                 <button
                   type="button"
                   onClick={() => setShowAttachMenu((v) => !v)}
-                  className={`hl-btn-secondary p-2.5 rounded-full transition shrink-0 ${showAttachMenu ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)]" : ""}`}
+                  className={`hl-btn-secondary wa-composer-tool p-2.5 rounded-full transition shrink-0 ${showAttachMenu ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)]" : ""}`}
                   title="Share document, photo, video, audio, trigger flows or inquiry menu"
                 >
                   {mediaSending ? <Loader2 size={18} className="animate-spin text-[var(--color-ink)]" /> : <Paperclip size={18} />}
@@ -4962,7 +5041,7 @@ export default function WhatsAppPage() {
                 <button
                   type="button"
                   onClick={() => setShowTemplatePicker((v) => !v)}
-                  className="hl-btn-secondary p-2.5 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] rounded-full transition shrink-0"
+                  className="hl-btn-secondary wa-composer-tool p-2.5 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] rounded-full transition shrink-0"
                   title="Insert a saved template"
                 >
                   <FileText size={18} />
@@ -4972,7 +5051,7 @@ export default function WhatsAppPage() {
                 <button
                   type="button"
                   onClick={() => setShowFlowModal(true)}
-                  className="hl-btn-secondary p-2.5 text-[var(--color-ink)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] rounded-full transition shrink-0"
+                  className="hl-btn-secondary wa-composer-tool p-2.5 text-[var(--color-ink)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] rounded-full transition shrink-0"
                   title="Trigger Chatbot Flow"
                 >
                   <Zap size={18} />
@@ -4982,7 +5061,7 @@ export default function WhatsAppPage() {
                 <button
                   type="button"
                   onClick={() => setShowOptionsModal(true)}
-                  className="hl-btn-secondary p-2.5 text-[var(--color-ink)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] rounded-full transition shrink-0"
+                  className="hl-btn-secondary wa-composer-tool p-2.5 text-[var(--color-ink)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] rounded-full transition shrink-0"
                   title="Send WhatsApp Interactive Buttons & Flow Menu (Call, Links, Quick Replies)"
                 >
                   <ListOrdered size={18} />
@@ -4993,7 +5072,7 @@ export default function WhatsAppPage() {
                   <button
                     type="button"
                     onClick={() => setShowEmojiPicker((v) => !v)}
-                    className={`hl-btn-secondary p-2 rounded-full transition ${showEmojiPicker ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)]" : ""}`}
+                    className={`hl-btn-secondary wa-composer-tool p-2 rounded-full transition shrink-0 ${showEmojiPicker ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)] border-[var(--color-accent)]" : ""}`}
                     title="Emoji"
                   >
                     <Smile size={21} />
@@ -5002,7 +5081,7 @@ export default function WhatsAppPage() {
                   {showEmojiPicker && (
                     <>
                       <div className="fixed inset-0 z-30" onClick={() => setShowEmojiPicker(false)} />
-                      <div className="hl-card absolute bottom-12 left-0 z-40 w-80 max-h-72 flex flex-col p-2.5">
+                      <div className="hl-card absolute bottom-12 left-0 right-0 sm:right-auto z-40 w-full sm:w-80 max-w-full sm:max-w-[calc(100vw-1.5rem)] max-h-[min(18rem,60dvh)] flex flex-col p-2.5">
                         {/* Search Bar in Emoji Picker */}
                         <div className="mb-2 relative">
                           <Search size={13} className="absolute left-2.5 top-2 text-[var(--color-ink-2)]" />
@@ -5020,7 +5099,7 @@ export default function WhatsAppPage() {
                           )}
                         </div>
 
-                        <div className="flex-1 overflow-y-auto wa-custom-scrollbar pr-1">
+                        <div className="flex-1 min-h-0 overflow-y-auto wa-custom-scrollbar pr-1">
                           {/* Recently Used Emojis */}
                           {!emojiSearch && recentEmojis.length > 0 && (
                             <div className="mb-2">
@@ -5077,7 +5156,7 @@ export default function WhatsAppPage() {
 
                 {/* Message Input Box — replaced by the recording bar while recording */}
                 {recording ? (
-                  <div className="hl-card flex-1 flex items-center gap-3 px-4 py-2.5">
+                  <div className="hl-card wa-composer-input flex-1 min-w-[8rem] basis-[10rem] flex items-center gap-3 px-4 py-2.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-[var(--color-error)] animate-pulse shrink-0" />
                     <span className="hl-id text-sm tabular-nums">
                       {String(Math.floor(recordSecs / 60)).padStart(2, "0")}:{String(recordSecs % 60).padStart(2, "0")}
@@ -5103,7 +5182,7 @@ export default function WhatsAppPage() {
                     }}
                     onKeyDown={handleKeyDown}
                     placeholder={`Message ${selectedChat.name}... (Type / for quick replies, Shift+Enter for new line)`}
-                    className="hl-input flex-1 px-4 py-2 rounded-2xl text-sm wa-auto-textarea leading-relaxed max-h-32 transition-[height] duration-75"
+                    className="hl-card wa-composer-input flex-1 min-w-[8rem] basis-[10rem] px-4 py-2 rounded-2xl text-sm wa-auto-textarea leading-relaxed max-h-32 transition-[height] duration-75"
                     disabled={sending}
                   />
                 )}
@@ -5138,7 +5217,7 @@ export default function WhatsAppPage() {
 
         {/* Desktop Docked 3rd Parallel Column: Contact CRM Profile or Team Notes */}
         {selectedChat && (showContactInfoDrawer || showNotesDrawer) && (
-          <aside className="hidden xl:flex w-88 xl:w-96 shrink-0 h-full border-l border-[var(--color-rule)] bg-[var(--color-paper-2)] flex-col min-h-0 wa-parallel-pane overflow-hidden animate-fadeIn">
+          <aside className="hidden xl:flex w-[22rem] xl:w-96 max-w-full shrink-0 h-full border-l border-[var(--color-rule)] bg-[var(--color-paper-2)] flex-col min-h-0 wa-parallel-pane overflow-hidden animate-fadeIn">
             {showContactInfoDrawer && renderContactInfoContent(true)}
             {showNotesDrawer && renderNotesContent(true)}
           </aside>
@@ -5148,7 +5227,7 @@ export default function WhatsAppPage() {
       {/* New Direct Chat & CRM Contact Picker Modal */}
       {showNewChatModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowNewChatModal(false)}>
-          <div className="hl-card w-full max-w-md p-6 relative" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-md p-4 sm:p-6 relative max-h-[92dvh] overflow-y-auto wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setShowNewChatModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
@@ -5222,7 +5301,7 @@ export default function WhatsAppPage() {
       {/* Slide-over Contact Profile Drawer (Mobile & Tablet) */}
       {showContactInfoDrawer && selectedChat && (
         <div className="xl:hidden fixed inset-0 bg-black/40 z-50 flex justify-end backdrop-blur-sm animate-fadeIn" onClick={() => setShowContactInfoDrawer(false)}>
-          <div className="hl-card w-full max-w-sm h-full overflow-hidden relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card wa-fullscreen-passthrough w-full max-w-sm sm:max-w-sm h-full overflow-hidden relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
             {renderContactInfoContent(false)}
           </div>
         </div>
@@ -5231,7 +5310,7 @@ export default function WhatsAppPage() {
       {/* Trigger Chatbot Flow Modal */}
       {showFlowModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowFlowModal(false)}>
-          <div className="hl-card w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-lg p-4 sm:p-6 relative max-h-[92dvh] overflow-y-auto wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setShowFlowModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
@@ -5320,7 +5399,7 @@ export default function WhatsAppPage() {
       {/* Send Inquiry Options / Interactive Buttons Modal */}
       {showOptionsModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowOptionsModal(false)}>
-          <div className="hl-card w-full max-w-xl p-5 md:p-6 relative max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-xl p-4 sm:p-5 md:p-6 relative max-h-[92dvh] min-h-0 flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setShowOptionsModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] p-1 rounded-lg hover:bg-[var(--color-paper)] transition">
               <X size={20} />
             </button>
@@ -5341,7 +5420,7 @@ export default function WhatsAppPage() {
             </div>
 
             {/* Scrollable Body */}
-            <div className="space-y-4 overflow-y-auto wa-custom-scrollbar pr-1 flex-1">
+            <div className="space-y-4 overflow-y-auto wa-custom-scrollbar pr-1 flex-1 min-h-0">
               {/* Optional Flow Bot Selector */}
               <div className="hl-card p-3 bg-[var(--color-paper-2)] rounded-xl border border-[var(--color-rule)]">
                 <div className="flex items-center justify-between mb-1.5">
@@ -5603,7 +5682,7 @@ export default function WhatsAppPage() {
       {/* WhatsApp Payment Request Modal */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowPaymentModal(false)}>
-          <div className="hl-card w-full max-w-md p-6 relative" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-md p-4 sm:p-6 relative max-h-[92dvh] overflow-y-auto wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setShowPaymentModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
@@ -5678,7 +5757,7 @@ export default function WhatsAppPage() {
       {/* Drip Sequence Enrollment Modal */}
       {showDripModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowDripModal(false)}>
-          <div className="hl-card w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-lg p-4 sm:p-6 relative max-h-[92dvh] overflow-y-auto wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setShowDripModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
@@ -5767,7 +5846,7 @@ export default function WhatsAppPage() {
       {/* Shared Team Inbox Internal Notes Slide-over Drawer (Mobile & Tablet) */}
       {showNotesDrawer && (
         <div className="xl:hidden fixed inset-0 bg-black/50 z-50 flex justify-end backdrop-blur-xs animate-fadeIn" onClick={() => setShowNotesDrawer(false)}>
-          <div className="hl-card w-full max-w-sm border-l h-full overflow-hidden relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card wa-fullscreen-passthrough w-full max-w-sm sm:max-w-sm border-l h-full overflow-hidden relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
             {renderNotesContent(false)}
           </div>
         </div>
@@ -5776,7 +5855,7 @@ export default function WhatsAppPage() {
       {/* Account Messaging Quota Balance Modal */}
       {showAccountBalanceModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowAccountBalanceModal(false)}>
-          <div className="hl-card w-full max-w-md p-6 relative" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-md p-4 sm:p-6 relative max-h-[92dvh] overflow-y-auto wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setShowAccountBalanceModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
@@ -5860,7 +5939,7 @@ export default function WhatsAppPage() {
       {/* Create New Template Modal */}
       {showCreateTemplateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowCreateTemplateModal(false)}>
-          <div className="hl-card w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-lg p-4 sm:p-6 relative max-h-[92dvh] overflow-y-auto wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setShowCreateTemplateModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
@@ -5953,7 +6032,7 @@ export default function WhatsAppPage() {
       {/* Send Interactive Reminder Modal */}
       {showReminderModal && selectedChat && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowReminderModal(false)}>
-          <div className="hl-card w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-lg p-4 sm:p-6 relative max-h-[92dvh] overflow-y-auto wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setShowReminderModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
@@ -5970,7 +6049,7 @@ export default function WhatsAppPage() {
               </div>
             </div>
 
-            <div className="space-y-4 max-h-[72vh] overflow-y-auto pr-1">
+            <div className="space-y-4 max-h-[72dvh] overflow-y-auto pr-1">
               <div>
                 <label className="hl-section-label block text-xs font-bold text-[var(--color-ink-2)] uppercase mb-1.5">Reminder Category</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -6090,7 +6169,7 @@ export default function WhatsAppPage() {
       {/* Add Contact to Campaign Group Modal */}
       {showAddToGroupModal && selectedChat && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowAddToGroupModal(false)}>
-          <div className="hl-card w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-lg p-4 sm:p-6 relative max-h-[92dvh] overflow-y-auto wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setShowAddToGroupModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
@@ -6107,7 +6186,7 @@ export default function WhatsAppPage() {
               </div>
             </div>
 
-            <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+            <div className="space-y-4 max-h-[65dvh] overflow-y-auto pr-1">
               <div>
                 <p className="hl-section-label text-xs font-bold text-[var(--color-ink-2)] uppercase mb-2">Select Target Group(s):</p>
                 {groupsLoading ? (
@@ -6211,7 +6290,7 @@ export default function WhatsAppPage() {
       {/* Trigger CRM Automation Modal */}
       {showAutomationModal && selectedChat && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowAutomationModal(false)}>
-          <div className="hl-card w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
+          <div className="hl-card w-full max-w-lg p-4 sm:p-6 relative max-h-[92dvh] overflow-y-auto wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setShowAutomationModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
               <X size={20} />
             </button>
@@ -6228,7 +6307,7 @@ export default function WhatsAppPage() {
               </div>
             </div>
 
-            <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[65dvh] overflow-y-auto pr-1">
               <p className="hl-section-label text-xs font-bold text-[var(--color-ink-2)] uppercase">Select Active Automation Rule:</p>
               {automationsLoading ? (
                 <div className="hl-empty py-8 text-center text-xs text-[var(--color-ink-2)]">
@@ -6388,7 +6467,7 @@ export default function WhatsAppPage() {
 
       {/* Fullscreen Photo Lightbox Modal with Zoom, Rotate, & Keyboard Controls */}
       {lightboxImage && (
-        <div className="fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-between p-4 backdrop-blur-md select-none wa-lightbox-enter">
+        <div className="wa-fullscreen-passthrough fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-between p-3 sm:p-4 backdrop-blur-md select-none wa-lightbox-enter">
           {/* Top Lightbox Toolbar */}
           <div className="w-full flex items-center justify-between z-10 px-2 py-1 max-w-5xl">
             <div className="flex items-center gap-2">
@@ -6443,11 +6522,11 @@ export default function WhatsAppPage() {
           </div>
 
           {/* Central Image Viewport */}
-          <div className="flex-1 w-full flex items-center justify-center overflow-hidden my-2">
+          <div className="flex-1 min-h-0 w-full min-w-0 flex items-center justify-center overflow-hidden my-2">
             <img
               src={lightboxImage.src}
               alt="Preview"
-              className="max-w-[90vw] max-h-[78vh] object-contain transition-transform duration-200 shadow-2xl rounded-lg"
+              className="max-w-full max-h-full object-contain transition-transform duration-200 shadow-2xl rounded-lg"
               style={{
                 transform: `scale(${lightboxZoom}) rotate(${lightboxRotation}deg)`,
               }}

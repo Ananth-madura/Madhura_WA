@@ -32,11 +32,9 @@ const s = (req) => {
   const reqKey = req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id;
   if (reqKey) {
     const target = mgr.get(reqKey);
-    // Explicit fallback allowed only when requested (e.g. system broadcast or shared fallback)
-    if (!target.ready && (req.query?.fallback === "true" || req.headers["x-allow-fallback"] === "true")) {
-      const readySession = mgr.all().find((ses) => ses.ready);
-      if (readySession) return readySession;
-    }
+    if (target.ready) return target;
+    const readySession = mgr.all().find((ses) => ses.ready);
+    if (readySession) return readySession;
     return target;
   }
   return mgr.default();
@@ -45,7 +43,11 @@ const s = (req) => {
 // Specifically for auth/lifecycle routes (QR, pairing, logout, reset) - isolated per user
 const userSession = (req) => {
   const reqKey = req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || mgr.defaultKey;
-  return mgr.get(reqKey);
+  const target = mgr.get(reqKey);
+  if (target.ready || target.qrCode || target.isInitializing) return target;
+  const activeSession = mgr.all().find((ses) => ses.ready || ses.qrCode || ses.isInitializing);
+  if (activeSession) return activeSession;
+  return target;
 };
 
 const { configureForUser } = require("../services/waConfigHelper");
@@ -77,7 +79,20 @@ router.get("/unified-status", async (req, res) => {
   if (req.user?.id) {
     await configureForUser(req.user.id).catch(() => {});
   }
-  res.json(await s(req).getUnifiedStatus());
+  const session = userSession(req);
+  const unified = await session.getUnifiedStatus();
+  const currentQr = session.qrCode || unified.qr || unified.web?.qr || null;
+  if (currentQr) {
+    unified.qr = currentQr;
+    unified.hasQr = true;
+    unified.qrDataUrl = await toDataUrl(currentQr);
+    if (unified.web) {
+      unified.web.qr = currentQr;
+      unified.web.hasQr = true;
+      unified.web.qrDataUrl = unified.qrDataUrl;
+    }
+  }
+  res.json(unified);
 });
 
 router.get("/account", async (req, res) => {

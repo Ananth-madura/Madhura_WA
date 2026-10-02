@@ -188,11 +188,11 @@ export default function WAAnalytics() {
   const funnelReplied = d.replied || 0;
 
   return (
-    <div className="w-full pb-12 min-h-screen bg-[var(--color-paper)]">
+    <div className="hl-page bg-[var(--color-paper)]">
       <WhatsAppNav />
 
       {/* Header Banner */}
-      <div className="hl-commandbar hl-card flex-col md:flex-row p-5">
+      <div className="hl-commandbar hl-card flex-col md:flex-row md:items-center gap-3 p-4 sm:p-5">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "var(--color-ink)", color: "var(--color-paper-2)" }}>
             <BarChart3 size={26} />
@@ -364,7 +364,7 @@ export default function WAAnalytics() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="hl-kpis">
                   {/* Step 1: Sent */}
                   <div className="rounded-2xl p-4 border" style={{ background: "var(--color-shell-2)", borderColor: "var(--color-shell-2)", color: "var(--color-paper-2)" }}>
                     <span className="hl-section-label" style={{ color: "var(--color-accent)" }}>Step 1 • Dispatched</span>
@@ -527,7 +527,7 @@ export default function WAAnalytics() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="hl-kpis">
                   <div className="hl-card p-4">
                     <div className="flex justify-between items-center mb-1">
                       <span className="hl-section-label">Marketing Tier</span>
@@ -592,7 +592,7 @@ export default function WAAnalytics() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="hl-table">
+                <table className="hl-table min-w-[520px]">
                   <thead>
                     <tr>
                       <th className="px-4 py-3 text-left">Campaign Name</th>
@@ -679,7 +679,7 @@ export default function WAAnalytics() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="hl-table">
+                <table className="hl-table min-w-[520px]">
                   <thead>
                     <tr>
                       <th className="px-4 py-3 text-left">Automation Rule Name</th>
@@ -759,7 +759,7 @@ export default function WAAnalytics() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="hl-table">
+                <table className="hl-table min-w-[520px]">
                   <thead>
                     <tr>
                       <th className="px-4 py-3 text-left">Flow Name</th>
@@ -865,7 +865,7 @@ export default function WAAnalytics() {
               </div>
 
               <div className="overflow-x-auto border border-[var(--color-rule)] rounded-[var(--radius-card)]">
-                <table className="hl-table">
+                <table className="hl-table min-w-[520px]">
                   <thead>
                     <tr>
                       <th className="px-4 py-2.5 text-left">Phone Number</th>

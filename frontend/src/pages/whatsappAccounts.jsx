@@ -700,17 +700,17 @@ export default function WhatsAppAccounts() {
   };
 
   return (
-    <div className="w-full pb-16 min-h-screen">
+    <div className="hl-page">
       <WhatsAppNav />
 
       {/* Hero Header & Real-Time Status Hub */}
-      <div className="hl-card p-5 border mb-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-          <div className="flex items-start sm:items-center gap-4">
-            <div className="w-13 h-13 rounded-2xl flex items-center justify-center shrink-0">
-              <Bot size={28} />
+      <div className="hl-card p-4 sm:p-5 border mb-4 sm:mb-6 min-w-0">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-5 min-w-0">
+          <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0">
+              <Bot size={26} />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2.5">
                 <h1 className="hl-title">WhatsApp Settings & Control Hub</h1>
                 <span className={`hl-badge flex items-center gap-1.5 ${
@@ -757,7 +757,7 @@ export default function WhatsAppAccounts() {
         </div>
 
         {/* Live Metrics Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-4 border-t hl-kpis">
+        <div className="hl-kpis mt-5 pt-4 border-t">
           <div className="hl-kpi p-3 flex items-center gap-3 border">
             <div className="p-2 rounded-lg">
               <MessageSquare size={16} />
@@ -889,11 +889,11 @@ export default function WhatsAppAccounts() {
               TAB 1: AI INTELLIGENCE & API KEYS MASTER ENGINE
              ══════════════════════════════════════════════════════════════════════ */}
           {activeTab === "ai" && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 min-w-0">
               {/* Left Column (2 cols): AI Settings Form & Knowledge Base */}
-              <div className="lg:col-span-2 space-y-6">
+              <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
                 {/* 1. API Key & Provider Card */}
-                <div className="hl-card border p-6">
+                <div className="hl-card border p-4 sm:p-6 min-w-0">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-5 border-b">
                     <div>
                       <h2 className="font-black text-base flex items-center gap-2">
@@ -922,7 +922,7 @@ export default function WhatsAppAccounts() {
                     </div>
                   </div>
 
-                  <div className="space-y-4 text-xs">
+                  <div className="space-y-4 text-xs min-w-0">
                     {/* Provider & Model Selector */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
@@ -989,9 +989,9 @@ export default function WhatsAppAccounts() {
                     )}
 
                     {/* API Key Input & Real-Time Validator */}
-                    <div className="hl-card p-4 border space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="hl-section-label flex items-center gap-1.5">
+                    <div className="hl-card p-4 border space-y-3 min-w-0">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <label className="hl-section-label flex items-center gap-1.5 flex-wrap min-w-0">
                           <span>API Secret Key</span>
                           {hasApiKey && <span className="font-normal">({maskedApiKey} saved)</span>}
                         </label>
@@ -1002,7 +1002,7 @@ export default function WhatsAppAccounts() {
                         )}
                       </div>
 
-                      <div className="relative">
+                      <div className="relative min-w-0">
                         <input
                           type={showApiKey ? "text" : "password"}
                           value={aiForm.api_key}
@@ -1038,8 +1038,8 @@ export default function WhatsAppAccounts() {
                         </div>
                       )}
 
-                      <div className="flex items-center justify-between pt-1">
-                        <p className="text-[11px]">
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <p className="text-[11px] min-w-0 flex-1">
                           Keys are AES-256 encrypted at rest before storing in database.
                         </p>
                         <button
@@ -1188,7 +1188,7 @@ export default function WhatsAppAccounts() {
                   </div>
 
                   {/* Working Hours Filter */}
-                  <div className="hl-card p-4 border space-y-3">
+                  <div className="hl-card p-4 border space-y-3 min-w-0">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-bold text-xs flex items-center gap-1.5">
@@ -1232,7 +1232,7 @@ export default function WhatsAppAccounts() {
                   </div>
 
                   {/* CRM Tools & Lead Capture Toggles */}
-                  <div className="hl-card p-4 border space-y-3">
+                  <div className="hl-card p-4 border space-y-3 min-w-0">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-bold text-xs flex items-center gap-1.5">
@@ -1690,9 +1690,9 @@ export default function WhatsAppAccounts() {
               TAB 3: META CLOUD API (OFFICIAL INTEGRATION)
              ══════════════════════════════════════════════════════════════════════ */}
           {activeTab === "meta" && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 space-y-6">
-                <div className="hl-card border p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 min-w-0">
+              <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
+                <div className="hl-card border p-4 sm:p-6 min-w-0">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b">
                     <div>
                       <h2 className="font-black text-base flex items-center gap-2">
@@ -2106,7 +2106,7 @@ export default function WhatsAppAccounts() {
                     </span>
                   </div>
 
-                  <div className="space-y-4 text-xs">
+                  <div className="space-y-4 text-xs min-w-0">
                     <div>
                       <label className="hl-section-label block mb-1">Base API URL</label>
                       <div className="flex items-center gap-2">
@@ -2195,7 +2195,7 @@ export default function WhatsAppAccounts() {
                     Whenever a customer sends a message or a delivery tick updates, this WhatsApp engine posts a JSON payload to your CRM's webhook endpoint instantly.
                   </p>
 
-                  <div className="space-y-4 text-xs">
+                  <div className="space-y-4 text-xs min-w-0">
                     <div>
                       <label className="hl-section-label block mb-1">Your External CRM Webhook URL</label>
                       <input
@@ -2387,7 +2387,7 @@ print_r($res);
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="hl-table w-full">
+                    <table className="hl-table w-full min-w-[560px]">
                       <thead>
                         <tr className="border-b uppercase text-[10px] font-bold">
                           <th className="py-2 px-3">Event Type</th>
