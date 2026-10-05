@@ -169,6 +169,9 @@ async function captureLeadFromWhatsApp(leadData = {}) {
     // 4. Trigger CRM Event Bus & Automations for New Lead
     if (isNew) {
       try {
+        // The event bus owns this. Its `new_lead` listener is what calls
+        // triggerAutomation("new_lead") — calling it here as well meant every
+        // first-time contact's welcome/automation fired TWICE.
         const crmEventBus = require("./crmEventBus");
         crmEventBus.emit("new_lead", {
           leadId,
@@ -181,22 +184,6 @@ async function captureLeadFromWhatsApp(leadData = {}) {
           serviceName,
           source: sourceDetail,
           isNew: true,
-        });
-
-        const { triggerAutomation } = require("./waAutomationService");
-        triggerAutomation("new_lead", {
-          phone: last10,
-          contactName: customerName,
-          data: {
-            name: customerName,
-            service: serviceName,
-            company: companyName,
-            city: locationCity,
-            lead_id: leadId,
-            source: sourceDetail,
-          },
-        }).catch((autoErr) => {
-          console.warn("[WA LeadCapture] triggerAutomation('new_lead') error:", autoErr.message);
         });
       } catch (evErr) {
         console.warn("[WA LeadCapture] Event bus error:", evErr.message);

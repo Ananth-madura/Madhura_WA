@@ -191,6 +191,18 @@ function MessageTicks({ status, className = "" }) {
   if (status === "failed" || status === "error") {
     return <span className={`hl-badge hl-badge-error font-bold ${className}`} title="Failed to send">!</span>;
   }
+  // WhatsApp accepted the message but never confirmed it. Deliberately NOT a
+  // tick: showing "sent" here would invite the operator to resend and duplicate.
+  if (status === "unknown") {
+    return (
+      <span
+        className={`hl-badge font-bold ${className}`}
+        title="Delivery could not be confirmed — it may already have been sent. Check before resending."
+      >
+        ?
+      </span>
+    );
+  }
   if (status === "pending" || status === "queued" || status === "sending") {
     return (
       <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 ${className}`} fill="none" stroke="currentColor" strokeWidth="1.5" aria-label="Pending">
@@ -475,6 +487,11 @@ export default function WhatsAppPage() {
   const [chatsLoading, setChatsLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  // Ref, not just state: `sending` only updates on the next render, so an
+  // Enter-then-click (or a double-click) inside the same tick still saw
+  // sending === false and fired a second POST. This flips synchronously.
+  const sendInFlightRef = useRef(false);
+  const [deliveryWarning, setDeliveryWarning] = useState(null);
   const [error, setError] = useState(null);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -489,6 +506,7 @@ export default function WhatsAppPage() {
   const [locationSending, setLocationSending] = useState(false);
   const [accountDetails, setAccountDetails] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  
 
   // Performance & On-Demand Balance States
   const [msgLimit, setMsgLimit] = useState(10);
@@ -767,6 +785,10 @@ export default function WhatsAppPage() {
         hasQr: Boolean(raw.web?.hasQr || serverQr),
         cloud: raw.cloud || null,
         web: raw.web || null,
+        // Which session the server will actually send from, and whether that is
+        // the one this operator is logged in as.
+        senderSessionKey: raw.senderSessionKey || null,
+        sendingAsAnotherUser: Boolean(raw.sendingAsAnotherUser),
       };
 
       setStatus((prev) => {
@@ -777,7 +799,9 @@ export default function WhatsAppPage() {
           prev.isCloud === isCloud &&
           prev.isWeb === isWeb &&
           prev.hasQr === Boolean(raw.web?.hasQr || serverQr) &&
-          prev.activeEngine === flat.activeEngine
+          prev.activeEngine === flat.activeEngine &&
+          prev.sendingAsAnotherUser === flat.sendingAsAnotherUser &&
+          prev.senderSessionKey === flat.senderSessionKey
         ) {
           return prev;
         }
@@ -1058,7 +1082,15 @@ export default function WhatsAppPage() {
 
   const handleSend = async () => {
     if (!messageInput.trim() || !selectedChat) return;
+    // Hard stop on a second send while one is open. Without this the button
+    // re-enabled instantly (the input is cleared below) and a double-click or
+    // Enter-then-click put the same text in front of the customer twice.
+    if (sendInFlightRef.current) return;
+
     const textToSend = messageInput.trim();
+    sendInFlightRef.current = true;
+    setSending(true);
+    setDeliveryWarning(null);
     setMessageInput("");
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -1066,9 +1098,13 @@ export default function WhatsAppPage() {
     setError(null);
 
     // Instant Optimistic UI update: push message immediately to chat thread
-    const tempId = "temp_" + Date.now();
+    const tempId = "temp_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+    // Stable across retries of THIS send so the server can recognise a repeat
+    // and replay the original result instead of delivering a second copy.
+    const idempotencyKey = `ui_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     const tempMsg = {
       id: tempId,
+      idempotencyKey,
       from: "me",
       body: textToSend,
       timestamp: Math.floor(Date.now() / 1000),
@@ -1102,33 +1138,52 @@ export default function WhatsAppPage() {
     try {
       const token = localStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      let res;
-      try {
-        res = await axios.post(`${API}/api/whatsapp/send`, {
+      // Single request. The old code caught ANY error and re-POSTed to a second
+      // URL — including a 500 returned after the server had already delivered,
+      // which is a guaranteed duplicate.
+      const res = await axios.post(
+        `${API}/api/whatsapp/send`,
+        {
           chatId: selectedChat.id,
           message: textToSend,
           quotedMessageId: quotedId,
           replyToMessageId: quotedId,
-        }, { headers });
-      } catch (e1) {
-        res = await axios.post(`/api/whatsapp/send`, {
-          chatId: selectedChat.id,
-          message: textToSend,
-          quotedMessageId: quotedId,
-          replyToMessageId: quotedId,
-        }, { headers });
-      }
+          idempotencyKey,
+        },
+        { headers }
+      );
 
       // Mark message as delivered/sent in thread
       const realId = res.data?.id || res.data?.result?.id || tempId;
-      setMessages((prev) => prev.map((m) => m.id === tempId ? { ...m, id: realId, status: "sent", quotedMsg: quotedText ? { body: quotedText } : null } : m));
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempId || m.idempotencyKey === idempotencyKey
+            ? { ...m, id: realId, status: "sent", quotedMsg: quotedText ? { body: quotedText } : null }
+            : m
+        )
+      );
 
       // Replying by hand pauses the bot server-side — surface that immediately.
       fetchBotStatus(selectedChat.id);
     } catch (err) {
-      const msg = err.response?.data?.error || err.message || "Failed to send message";
-      setError(`Failed to send message: ${msg}`);
-      setMessages((prev) => prev.map((m) => m.id === tempId ? { ...m, status: "failed" } : m));
+      const payload = err.response?.data;
+      // 504 + deliveryUnknown: WhatsApp got the message but never confirmed.
+      // It may be on the customer's phone. Say so and make no further attempt.
+      if (payload?.deliveryUnknown) {
+        setDeliveryWarning(payload.error || "Delivery could not be confirmed.");
+        setMessages((prev) =>
+          prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "unknown" } : m))
+        );
+      } else {
+        const msg = payload?.error || err.message || "Failed to send message";
+        setError(`Failed to send message: ${msg}`);
+        setMessages((prev) =>
+          prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "failed" } : m))
+        );
+      }
+    } finally {
+      sendInFlightRef.current = false;
+      setSending(false);
     }
   };
 
@@ -1364,11 +1419,17 @@ export default function WhatsAppPage() {
     if (!textToSend || !selectedChat) return;
     const cleanText = String(textToSend).trim();
     if (!cleanText) return;
+    if (sendInFlightRef.current) return;
 
+    sendInFlightRef.current = true;
+    setSending(true);
+    setDeliveryWarning(null);
     setError(null);
-    const tempId = "temp_" + Date.now();
+    const tempId = "temp_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+    const idempotencyKey = `ui_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     const tempMsg = {
       id: tempId,
+      idempotencyKey,
       from: "me",
       body: cleanText,
       timestamp: Math.floor(Date.now() / 1000),
@@ -1397,23 +1458,35 @@ export default function WhatsAppPage() {
     try {
       const token = localStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      let res;
-      try {
-        res = await axios.post(`${API}/api/whatsapp/send`, {
-          chatId: selectedChat.id,
-          message: cleanText,
-        }, { headers });
-      } catch (e1) {
-        res = await axios.post(`/api/whatsapp/send`, {
-          chatId: selectedChat.id,
-          message: cleanText,
-        }, { headers });
-      }
+      // No second-URL retry: see handleSend.
+      const res = await axios.post(
+        `${API}/api/whatsapp/send`,
+        { chatId: selectedChat.id, message: cleanText, idempotencyKey },
+        { headers }
+      );
 
       const realId = res.data?.id || res.data?.result?.id || tempId;
-      setMessages((prev) => prev.map((m) => m.id === tempId ? { ...m, id: realId, status: "sent" } : m));
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.idempotencyKey === idempotencyKey ? { ...m, id: realId, status: "sent" } : m
+        )
+      );
     } catch (err) {
-      console.warn("handleSendDirect error:", err.message);
+      const payload = err.response?.data;
+      if (payload?.deliveryUnknown) {
+        setDeliveryWarning(payload.error || "Delivery could not be confirmed.");
+        setMessages((prev) =>
+          prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "unknown" } : m))
+        );
+      } else {
+        console.warn("handleSendDirect error:", err.message);
+        setMessages((prev) =>
+          prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "failed" } : m))
+        );
+      }
+    } finally {
+      sendInFlightRef.current = false;
+      setSending(false);
     }
   };
 
@@ -1519,27 +1592,33 @@ export default function WhatsAppPage() {
       }
 
       const mediaType = uploaded.media_type || customMediaType || "document";
-      let res;
-      try {
-        res = await axios.post(`${API}/api/whatsapp/send-media`, {
+      // One send attempt only. Re-POSTing to a second URL after the first may
+      // already have delivered sent the same attachment twice.
+      const idempotencyKey = `ui_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const res = await axios.post(
+        `${API}/api/whatsapp/send-media`,
+        {
           chatId: selectedChat.id,
           mediaUrl: uploaded.url,
           mediaType,
           filename: uploaded.filename || file.name,
-        }, { headers, timeout: 60000 });
-      } catch (e1) {
-        res = await axios.post(`/api/whatsapp/send-media`, {
-          chatId: selectedChat.id,
-          mediaUrl: uploaded.url,
-          mediaType,
-          filename: uploaded.filename || file.name,
-        }, { headers, timeout: 60000 });
-      }
+          idempotencyKey,
+        },
+        { headers, timeout: 60000 }
+      );
 
       const realId = res.data?.id || tempId;
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, id: realId, mediaUrl: uploaded.url, status: "sent" } : m)));
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempId ? { ...m, id: realId, mediaUrl: uploaded.url, status: "sent" } : m
+        )
+      );
     } catch (err) {
-      const errMsg = err.response?.data?.error || err.message || "Failed to send attachment";
+      const payload = err.response?.data;
+      if (payload?.deliveryUnknown) {
+        setDeliveryWarning(payload.error || "Attachment delivery could not be confirmed.");
+      }
+      const errMsg = payload?.error || err.message || "Failed to send attachment";
       setError(`Attachment error: ${errMsg}`);
       setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, status: "failed" } : m)));
     }
@@ -2137,15 +2216,21 @@ export default function WhatsAppPage() {
       try {
         const token = localStorage.getItem("token");
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        let res;
-        try {
-          res = await axios.post(`${API}/api/whatsapp/send`, { chatId, message: newChatMessage.trim() }, { headers });
-        } catch (e1) {
-          res = await axios.post(`/api/whatsapp/send`, { chatId, message: newChatMessage.trim() }, { headers });
-        }
+        // Single attempt — no second-URL retry (see handleSend).
+        const idempotencyKey = `ui_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        await axios.post(
+          `${API}/api/whatsapp/send`,
+          { chatId, message: newChatMessage.trim(), idempotencyKey },
+          { headers }
+        );
         setNewChatMessage("");
       } catch (err) {
-        alert("Chat created, but message failed to send: " + (err.response?.data?.error || err.message));
+        const payload = err.response?.data;
+        alert(
+          payload?.deliveryUnknown
+            ? "Chat created, but delivery of the message could not be confirmed. Check the chat before resending."
+            : "Chat created, but message failed to send: " + (payload?.error || err.message)
+        );
       }
       setNewChatLoading(false);
     }
@@ -2154,33 +2239,6 @@ export default function WhatsAppPage() {
     setNewChatPhone("");
     setNewChatName("");
     await fetchMessages(chatId);
-  };
-
-  const handleLogout = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        `${API}/api/whatsapp/logout`,
-        { purge: true },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-    } catch { }
-    try {
-      sessionStorage.removeItem("wa_cached_status");
-      sessionStorage.removeItem("wa_cached_chats");
-      sessionStorage.removeItem("wa_active_chat");
-      localStorage.removeItem("wa_cached_status");
-      localStorage.removeItem("wa_cached_chats");
-      localStorage.removeItem("wa_active_chat");
-    } catch (_) {}
-    messagesCacheRef.current = {};
-    setStatus({ connected: false, initializing: false, hasQr: false });
-    setQrCode(null);
-    setChats([]);
-    setSelectedChat(null);
-    setMessages([]);
-    setAccountDetails(null);
-    fetchQr(true);
   };
 
   const handleRefresh = () => {
@@ -2773,6 +2831,9 @@ export default function WhatsAppPage() {
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      // handleSend guards too, but stopping here keeps Enter+click in the same
+      // tick from even reaching it.
+      if (sendInFlightRef.current) return;
       handleSend();
     }
     // Shift+Enter creates a new line naturally in textarea
@@ -3496,19 +3557,29 @@ export default function WhatsAppPage() {
         <WhatsAppNav
           onAccountBalance={fetchAccountBalance}
           onSyncWhatsApp={handleSyncWhatsApp}
-          onLogout={handleLogout}
           isSyncing={syncing}
           statusPhone={status.phone}
         />
       </div>
 
+{deliveryWarning && (
+              <div className="p-2.5 text-xs font-semibold flex items-start justify-between gap-3 shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-brand-orange)] text-[var(--color-ink)]">
+                <span>
+                  <strong className="block">Delivery not confirmed</strong>
+                  {deliveryWarning} Check the chat before sending again — the message may already have been delivered.
+                </span>
+                <button onClick={() => setDeliveryWarning(null)} className="shrink-0 hover:opacity-80">
+                  <X size={14} />
+                </button>
+              </div>
+            )}
       {error && (
-        <div className="p-2.5 text-xs font-semibold flex items-center justify-between shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-error)] text-[var(--color-error)]">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-[var(--color-error)] hover:opacity-80">
-            <X size={14} />
-          </button>
-        </div>
+              <div className="p-2.5 text-xs font-semibold flex items-center justify-between shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-error)] text-[var(--color-error)]">
+                <span>{error}</span>
+                <button onClick={() => setError(null)} className="text-[var(--color-error)] hover:opacity-80">
+                  <X size={14} />
+                </button>
+              </div>
       )}
 
       {/* Sound & Notification Toggles Bar — slim on mobile so it does not consume a
@@ -3955,6 +4026,18 @@ export default function WhatsAppPage() {
                           return n || selectedChat.formattedPhone || "WhatsApp Contact";
                         })()}
                       </p>
+                      {/* Which number this conversation is actually sent from.
+                          A send used to leave from whichever session happened to
+                          be connected, so seeing it here is what makes that
+                          class of mistake visible instead of silent. */}
+                      {status.phone && (
+                        <span
+                          className="hl-badge text-[10px] font-bold px-2 py-0.5 shrink-0 whitespace-nowrap hidden sm:inline-flex"
+                          title={`Messages in this chat are sent from ${status.phone} via ${status.activeEngine}`}
+                        >
+                          ⤴ {status.phone}
+                        </span>
+                      )}
                       {selectedChat.source && (
                         <span className="hl-badge hl-badge-success text-[10px] font-bold px-2 py-0.5 shrink-0 whitespace-nowrap hidden sm:inline-flex">
                           {selectedChat.source}

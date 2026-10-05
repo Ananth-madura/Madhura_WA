@@ -7,6 +7,7 @@ const fs = require("fs");
 const { verifyToken: auth } = require("../middleware/authMiddleware");
 const wa = require("../services/whatsappCloudApi");
 const { configureForUser, resetToEnvConfig } = require("../services/waConfigHelper");
+const { campaignLaunchLimiter } = require("../middleware/waRateLimiter");
 
 const mediaDir = path.join(__dirname, "..", "uploads", "wa-media");
 fs.mkdirSync(mediaDir, { recursive: true });
@@ -18,6 +19,8 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024 }, // 20MB — Meta's own cap for images/video
 });
 
+// Bulk-send caps live in one place so every send surface shares them.
+const { checkBlastSize } = require("../services/waBlastGuard");
 // ── List campaigns ────────────────────────────────────────────────────────────
 router.get("/", auth, async (req, res) => {
   try {
@@ -362,9 +365,14 @@ router.delete("/:id", auth, async (req, res) => {
 });
 
 // ── Start campaign ────────────────────────────────────────────────────────────
-router.post("/:id/start", auth, async (req, res) => {
+router.post("/:id/start", auth, campaignLaunchLimiter, async (req, res) => {
   try {
-    const [campaigns] = await db.promise().query("SELECT * FROM wa_campaigns WHERE id = ?", [req.params.id]);
+    // Scope the lookup to this user. Without it any authenticated user could
+    // name any campaign id and start someone else's blast from their own number.
+    const [campaigns] = await db.promise().query(
+      "SELECT * FROM wa_campaigns WHERE id = ? AND (created_by IS NULL OR created_by = ? OR session_key = ? OR session_key = '')",
+      [req.params.id, String(req.user?.id || ""), String(req.user?.id || "")]
+    );
     if (!campaigns.length) return res.status(404).json({ error: "Campaign not found" });
     const campaign = campaigns[0];
 
@@ -429,8 +437,33 @@ router.post("/:id/start", auth, async (req, res) => {
       return res.status(400).json({ error: "No eligible contacts after applying filters" });
     }
 
+    // ── Never re-queue somebody who already received this ─────────────────────
+    // The old code deleted only `queued` rows and then inserted a fresh row for
+    // EVERY group contact, so pressing Start a second time re-sent the campaign
+    // to everyone already reached. Anyone this campaign already delivered to is
+    // now skipped, which also makes Start idempotent.
+    const [alreadySentRows] = await db.promise().query(
+      "SELECT DISTINCT phone FROM wa_campaign_messages WHERE campaign_id = ? AND status IN ('sent','delivered','read','skipped')",
+      [campaign.id]
+    );
+    const alreadySent = new Set((alreadySentRows || []).map((r) => String(r.phone).replace(/\D/g, "").slice(-10)));
+    const freshContacts = finalContacts.filter(
+      (c) => !alreadySent.has(String(c.phone || "").replace(/\D/g, "").slice(-10))
+    );
+    const skippedAlreadySent = finalContacts.length - freshContacts.length;
+
+    if (!freshContacts.length) {
+      return res.status(400).json({
+        error: `All ${skippedAlreadySent} recipient(s) in this campaign have already been messaged. Nothing was queued.`,
+        skippedAlreadySent,
+      });
+    }
+
+    const blastError = checkBlastSize(freshContacts.length, req.body?.confirm_count);
+    if (blastError) return res.status(400).json({ error: blastError });
+
     // Insert queued messages
-    const messageList = finalContacts.map(c => {
+    const messageList = freshContacts.map(c => {
       const phone = (c.country_code || "91") + c.phone.replace(/^0+/, "");
       return [
         campaign.id, phone, c.name, campaign.message_text, templateName,
@@ -446,15 +479,16 @@ router.post("/:id/start", auth, async (req, res) => {
     );
 
     await db.promise().query(
-      `INSERT INTO wa_campaign_messages (campaign_id, phone, contact_name, message_text, template_name, template_components, media_type, media_url, status) VALUES ?`,
+      `INSERT IGNORE INTO wa_campaign_messages (campaign_id, phone, contact_name, message_text, template_name, template_components, media_type, media_url, status) VALUES ?`,
       [messageList]
     );
 
-    // Update campaign totals. session_key binds the run to the launching user's
-    // number — COALESCE keeps a key already chosen at creation time.
+    // Bind the run to the launching user's number. COALESCE kept whatever key
+    // was set at creation time, so user B starting user A's campaign sent it
+    // from A's number.
     await db.promise().query(
-      "UPDATE wa_campaigns SET status='running', started_at=NOW(), total_contacts=?, sent_count=0, failed_count=0, delivered_count=0, read_count=0, session_key=COALESCE(session_key, ?) WHERE id=?",
-      [finalContacts.length, String(req.user?.id || ""), campaign.id]
+      "UPDATE wa_campaigns SET status='running', started_at=NOW(), total_contacts=?, sent_count=0, failed_count=0, delivered_count=0, read_count=0, session_key=? WHERE id=?",
+      [freshContacts.length, String(req.user?.id || ""), campaign.id]
     );
 
     // Launch the safe campaign engine (non-blocking)
@@ -462,7 +496,12 @@ router.post("/:id/start", auth, async (req, res) => {
     startCampaignEngine(campaign.id);
 
     const [updated] = await db.promise().query("SELECT * FROM wa_campaigns WHERE id = ?", [campaign.id]);
-    res.json({ success: true, campaign: updated[0], totalMessages: finalContacts.length });
+    res.json({
+      success: true,
+      campaign: updated[0],
+      totalMessages: freshContacts.length,
+      skippedAlreadySent,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -595,13 +634,17 @@ router.get("/:id/queue", auth, async (req, res) => {
 });
 
 // ── Direct/quick broadcast (legacy) ───────────────────────────────────────────
-router.post("/create-direct", auth, async (req, res) => {
+router.post("/create-direct", auth, campaignLaunchLimiter, async (req, res) => {
   try {
     const { name, message_text, contacts, delay_seconds = 10 } = req.body;
     if (!name || !message_text) return res.status(400).json({ error: "name and message_text required" });
     if (!contacts || !Array.isArray(contacts) || !contacts.length) {
       return res.status(400).json({ error: "No contacts provided" });
     }
+    // This route creates the group, queues everyone and starts the engine inside
+    // a single request. Guard the size before any of that happens.
+    const blastError = checkBlastSize(contacts.length, req.body?.confirm_count);
+    if (blastError) return res.status(400).json({ error: blastError });
 
     const userConfigLoaded = await configureForUser(req.user.id);
     // A linked WhatsApp Web session is a perfectly good campaign engine — the
@@ -693,7 +736,7 @@ router.post("/upload-media", auth, upload.single("file"), async (req, res) => {
 });
 
 // ── Wizard broadcast: contacts + message (text/template/media) + optional location ─
-router.post("/create-wizard", auth, async (req, res) => {
+router.post("/create-wizard", auth, campaignLaunchLimiter, async (req, res) => {
   try {
     const tenantId = req.user?.tenant_id || 1;
     const {
@@ -721,6 +764,11 @@ router.post("/create-wizard", auth, async (req, res) => {
     if (!message_text && !template_id && !media_url && !location) {
       return res.status(400).json({ error: "Provide a message text, template, media, or location" });
     }
+    // This is the endpoint the campaign wizard calls, and it starts the engine
+    // in the same request — so the recipient count has to be acknowledged before
+    // anything is queued. See checkBlastSize.
+    const blastError = checkBlastSize(contacts.length, req.body?.confirm_count);
+    if (blastError) return res.status(400).json({ error: blastError });
 
     const userConfigLoaded = await configureForUser(req.user.id);
     const webReady = require("../services/whatsappService").get(req.user.id).ready;

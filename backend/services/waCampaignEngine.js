@@ -189,11 +189,18 @@ async function sendOneCampaignMessage(msgRow, sessionKey, poolId = null, routing
     media_type, media_url,
   } = msgRow;
 
-  // Mark as sending
-  await db.promise().query(
-    "UPDATE wa_campaign_messages SET status='sending', attempts=attempts+1 WHERE id=?",
-    [msgId]
-  );
+// Claim the row before sending, and only proceed if this call is the one that
+// claimed it. The old UPDATE had no status guard, so two engine loops (Start
+// while a previous run is still winding down, /resume during a run, or a manual
+// /retry-failed) could both pick the same queued row and both send it.
+const [claim] = await db.promise().query(
+  "UPDATE wa_campaign_messages SET status='sending', attempts=attempts+1 WHERE id=? AND status='queued'",
+  [msgId]
+);
+if (!claim.affectedRows) {
+  console.log(`♻️ [WA Campaign] Message row ${msgId} was already claimed by another runner — skipping.`);
+  return { skipped: true, reason: "already_claimed" };
+}
 
   let result;
   let waMessageId;
@@ -350,7 +357,22 @@ async function runCampaign(campaignId) {
   // Bounds the retry-backoff wait so a row stuck in 'sending' (process died
   // mid-send) can't hold the loop open forever.
   const MAX_IDLE_WAITS = 60;
-  const seenPhones = new Set();
+  // Seed from what this campaign has already delivered rather than starting
+  // empty. It used to be a fresh Set per run, so a restart mid-campaign (or a
+  // /resume after one) forgot every number it had already messaged and could
+  // send them a second copy.
+  const seenPhones = new Set(
+    (
+      await db.promise()
+        .query(
+          "SELECT phone FROM wa_campaign_messages WHERE campaign_id = ? AND status IN ('sent','delivered','read','skipped')",
+          [campaignId]
+        )
+        .catch(() => [[]])
+    )[0] || []
+    .map((r) => String(r.phone || "").replace(/\D/g, "").slice(-10))
+    .filter(Boolean)
+  );
 
   while (true) {
     campaign = await getCampaignStatus(campaignId);
@@ -438,14 +460,19 @@ async function runCampaign(campaignId) {
     idleWaits = 0;
 
     // Duplicate check
-    if (duplicate_filter && seenPhones.has(nextMsg.phone)) {
+    // Key on the last 10 digits. The `phone` column is written inconsistently —
+    // "(country_code||'91') + phone" from some routes, bare last-10 from others
+    // — so keying on the raw value let "919876543210" and "9876543210" both send
+    // to the same person.
+    const dedupeKey = String(nextMsg.phone || "").replace(/\D/g, "").slice(-10);
+    if (duplicate_filter && seenPhones.has(dedupeKey)) {
       await db.promise().query(
         "UPDATE wa_campaign_messages SET status='skipped', error='Duplicate phone in campaign' WHERE id=?",
         [nextMsg.id]
       );
       continue;
     }
-    if (duplicate_filter) seenPhones.add(nextMsg.phone);
+    if (duplicate_filter) seenPhones.add(dedupeKey);
 
     // Opt-out check
     const optedOut = await isOptedOut(nextMsg.phone, tenant_id);

@@ -510,7 +510,7 @@ router.post("/:id/trigger", auth, async (req, res) => {
 
     let reqSessionKey = sessionKey || req.headers["x-session-key"] || req.query?.sessionKey || null;
     if (!reqSessionKey || !waService.get(reqSessionKey)?.ready) {
-      reqSessionKey = waInstance?.key || waService.defaultKey || "708";
+      reqSessionKey = waInstance?.key || waService.defaultKey;
     }
 
     const crmData = await lookupCrmDataByPhone(cleanPhone).catch(() => ({}));

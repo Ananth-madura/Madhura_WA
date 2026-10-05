@@ -340,7 +340,10 @@ async function handleInboundConfirmation(phone, messageText, interactiveReplyId 
   const waLoadBalancer = require("./waLoadBalancer");
   const mdToWa = require("./mdToWa");
   const sendTarget = targetChatId || normalizedPhone;
-  const activeSessionKey = sessionKey || "708";
+  // Never hardcode a session id here. "708" was baked in as a literal, so every
+// confirmation ack left from one specific user's number regardless of who the
+// message was for.
+const activeSessionKey = sessionKey || require("./whatsappService").defaultKey;
   const sentRes = await waLoadBalancer.sendTextMessage(sendTarget, mdToWa.toWhatsApp(acknowledgementText), activeSessionKey).catch((e) => {
     console.warn(`⚠️ [WA Confirmation] Acknowledgment send warning (+${normalizedPhone}):`, e.message);
     return null;

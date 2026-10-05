@@ -6,6 +6,7 @@ const multer = require("multer");
 const db = require("../config/database");
 const mgr = require("../services/whatsappService");
 const qrcode = require("qrcode");
+const { messageSendLimiter } = require("../middleware/waRateLimiter");
 
 const toDataUrl = async (qr) => {
   if (!qr) return null;
@@ -27,27 +28,40 @@ const upload = multer({
 });
 
 // Resolves the caller's specific session, isolated per authenticated user/sessionKey.
-// Only falls back to system default session if no user context exists or explicit fallback is requested.
+//
+// It used to fall back to `mgr.all().find((ses) => ses.ready)` when the caller's
+// own session was not ready. That is how a message typed by one user went out
+// from another user's WhatsApp number with no warning. There is now no
+// substitution: you send from your own number or the send fails.
 const s = (req) => {
   const reqKey = req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id;
-  if (reqKey) {
-    const target = mgr.get(reqKey);
-    if (target.ready) return target;
-    const readySession = mgr.all().find((ses) => ses.ready);
-    if (readySession) return readySession;
-    return target;
-  }
+  if (reqKey) return mgr.get(reqKey);
   return mgr.default();
 };
 
-// Specifically for auth/lifecycle routes (QR, pairing, logout, reset) - isolated per user
+// Same rule for auth/lifecycle routes (QR, pairing, logout, reset): never hand
+// back a different user's session. Being unable to act is recoverable; silently
+// acting as someone else is not.
 const userSession = (req) => {
   const reqKey = req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || mgr.defaultKey;
-  const target = mgr.get(reqKey);
-  if (target.ready || target.qrCode || target.isInitializing) return target;
-  const activeSession = mgr.all().find((ses) => ses.ready || ses.qrCode || ses.isInitializing);
-  if (activeSession) return activeSession;
-  return target;
+  return mgr.get(reqKey);
+};
+
+// Guard for every route that actually sends: refuses to send from a session that
+// is not connected instead of quietly using whichever number happens to be up.
+const requireReadySession = (req, res) => {
+  const session = s(req);
+  if (!session.ready) {
+    res.status(503).json({
+      error:
+        "Your WhatsApp session is not connected, so nothing was sent. Reconnect your number and try again — " +
+        "messages are never sent from another user's number.",
+      code: "WA_SESSION_NOT_READY",
+      sessionKey: String(req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || mgr.defaultKey),
+    });
+    return null;
+  }
+  return session;
 };
 
 const { configureForUser } = require("../services/waConfigHelper");
@@ -57,6 +71,9 @@ router.get("/status", async (req, res) => {
   if (req.user?.id) {
     await configureForUser(req.user.id).catch(() => {});
   }
+  const requestedKey = String(
+    req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || mgr.defaultKey
+  );
   const sessionStatus = await s(req).getStatus();
   const cloudConfigured = waCloud.isConfigured();
   res.json({
@@ -72,6 +89,12 @@ router.get("/status", async (req, res) => {
       : sessionStatus.connected
       ? "WhatsApp Web Session"
       : "Disconnected",
+    // Which session will actually carry a send from this request, and whose
+    // number that is. The UI surfaces a warning when `sendingAsAnotherUser` is
+    // true — a send used to leave from another user's number silently.
+    senderSessionKey: requestedKey,
+    senderKeyMatchesSession: requestedKey === String(s(req).key),
+    sendingAsAnotherUser: String(s(req).key) !== requestedKey,
   });
 });
 
@@ -438,13 +461,19 @@ router.patch("/chat/:phone/ai", async (req, res) => {
   }
 });
 
-router.post("/send", async (req, res) => {
+router.post("/send", messageSendLimiter, async (req, res) => {
   try {
-    const { chatId, message, quotedMessageId, replyToMessageId } = req.body;
+    const { chatId, message, quotedMessageId, replyToMessageId, idempotencyKey } = req.body;
     if (!chatId || !message) {
       return res.status(400).json({ error: "chatId and message required" });
     }
-    const result = await s(req).sendMessage(chatId, message, { quotedMessageId, replyToMessageId });
+    const session = requireReadySession(req, res);
+    if (!session) return;
+    const result = await session.sendMessage(chatId, message, {
+      quotedMessageId,
+      replyToMessageId,
+      idempotencyKey: idempotencyKey || null,
+    });
 
     // A human just replied in this chat, so mute the WHOLE bot here for a
     // while — flow engine, menus and welcome included, not just the AI.
@@ -452,6 +481,12 @@ router.post("/send", async (req, res) => {
 
     res.json(result);
   } catch (err) {
+    // The send reached WhatsApp but was never confirmed. It may still be
+    // delivered, so the client must NOT auto-retry — say so explicitly rather
+    // than reporting a generic failure the client retries.
+    if (err?.deliveryUnknown) {
+      return res.status(504).json({ error: err.message, deliveryUnknown: true, code: err.code });
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -758,26 +793,45 @@ router.post("/upload-media", upload.single("file"), async (req, res) => {
   });
 });
 
-router.post("/send-media", async (req, res) => {
+router.post("/send-media", messageSendLimiter, async (req, res) => {
   try {
-    const { chatId, mediaUrl, mediaType, filename, caption } = req.body;
+    const { chatId, mediaUrl, mediaType, filename, caption, idempotencyKey } = req.body;
     if (!chatId || !mediaUrl) return res.status(400).json({ error: "chatId and mediaUrl required" });
-    const result = await s(req).sendMediaMessage(chatId, mediaUrl, mediaType || "document", caption || "", filename || "");
+    const session = requireReadySession(req, res);
+    if (!session) return;
+    const result = await session.sendMediaMessage(
+      chatId,
+      mediaUrl,
+      mediaType || "document",
+      caption || "",
+      filename || "",
+      { idempotencyKey: idempotencyKey || null }
+    );
     await require("../services/waBotGate").pauseBot(chatId, undefined, "manual media reply").catch(() => {});
     res.json(result);
   } catch (err) {
+    if (err?.deliveryUnknown) {
+      return res.status(504).json({ error: err.message, deliveryUnknown: true, code: err.code });
+    }
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post("/send-location", async (req, res) => {
+router.post("/send-location", messageSendLimiter, async (req, res) => {
   try {
-    const { chatId, lat, lng, name } = req.body;
+    const { chatId, lat, lng, name, idempotencyKey } = req.body;
     if (!chatId || lat == null || lng == null) return res.status(400).json({ error: "chatId, lat and lng required" });
-    const result = await s(req).sendLocationMessage(chatId, lat, lng, name || "");
+    const session = requireReadySession(req, res);
+    if (!session) return;
+    const result = await session.sendLocationMessage(chatId, lat, lng, name || "", {
+      idempotencyKey: idempotencyKey || null,
+    });
     await require("../services/waBotGate").pauseBot(chatId, undefined, "manual location reply").catch(() => {});
     res.json(result);
   } catch (err) {
+    if (err?.deliveryUnknown) {
+      return res.status(504).json({ error: err.message, deliveryUnknown: true, code: err.code });
+    }
     res.status(500).json({ error: err.message });
   }
 });

@@ -91,6 +91,12 @@ router.delete("/:groupId/contacts/:contactId", auth, async (req, res) => {
   }
 });
 
+// ── Bulk-send blast guard ─────────────────────────────────────────────────────
+// Shared with the campaign endpoints: a group built here is exactly what a
+// later campaign start sends to, so the recipient count has to be acknowledged
+// at build time too.
+const { checkBlastSize } = require("../services/waBlastGuard");
+
 router.get("/sources/all", auth, async (req, res) => {
   try {
     const contacts = [];
@@ -143,11 +149,15 @@ router.get("/sources/all", auth, async (req, res) => {
 
 router.post("/create-from-selected", auth, async (req, res) => {
   try {
-    const { name, description, contacts } = req.body;
+    const { name, description, contacts, confirm_count } = req.body;
     if (!name) return res.status(400).json({ error: "Group name required" });
     if (!contacts || !Array.isArray(contacts) || !contacts.length) {
       return res.status(400).json({ error: "No contacts selected" });
     }
+    // A group built here is what a later campaign start sends to, so cap it
+    // here rather than discovering the size after the blast has gone out.
+    const blastError = checkBlastSize(contacts.length, confirm_count);
+    if (blastError) return res.status(400).json({ error: blastError });
 
     const [result] = await db.promise().query(
       "INSERT INTO wa_contact_groups (name, description, created_by) VALUES (?,?,?)",
@@ -180,10 +190,26 @@ router.post("/create-from-selected", auth, async (req, res) => {
 
 router.post("/:id/import-customers", auth, async (req, res) => {
   try {
+    // This imports EVERY client row in one click — the fastest way to build an
+    // "everyone" group and then message all of them. Require the caller to
+    // state how many they expect, so an accidental trigger is visible.
+    const [countRows] = await db.promise().query(
+      "SELECT COUNT(*) AS c FROM clients WHERE phone IS NOT NULL AND phone != ''"
+    );
+    const total = Number(countRows[0].c);
+    if (!total) return res.status(400).json({ error: "No customers with phone numbers found" });
+
+    const blastError = checkBlastSize(total, req.body?.confirm_count);
+    if (blastError) {
+      return res.status(400).json({
+        error: `${blastError} (This would import all ${total} customers with a phone number.)`,
+        wouldImport: total,
+      });
+    }
+
     const [customers] = await db.promise().query(
       "SELECT id, name, phone, city FROM clients WHERE phone IS NOT NULL AND phone != ''"
     );
-    if (!customers.length) return res.status(400).json({ error: "No customers with phone numbers found" });
 
     const values = customers.map((c) => [req.params.id, c.name || c.company_name || null, c.phone.replace(/[^0-9]/g, "").slice(-10), "91", c.city || null]);
     await db.promise().query(

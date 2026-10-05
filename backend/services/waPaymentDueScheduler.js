@@ -42,9 +42,23 @@ async function runPaymentDueCheck() {
 
     if (!rows.length) return;
 
+    // Claim each invoice BEFORE sending, and only send to the ones this run
+    // actually won. The interactive payment-due reminder runs at the same 10:00
+    // slot over the same "due tomorrow" set, so without a shared atomic claim
+    // the same customer got two different payment-due messages.
     const { triggerAutomation } = require("./waAutomationService");
+    let notified = 0;
     for (const inv of rows) {
       try {
+        const [claim] = await db.promise().query(
+          "UPDATE clientinvoices SET wa_payment_due_sent = 1 WHERE id = ? AND (wa_payment_due_sent IS NULL OR wa_payment_due_sent = 0)",
+          [inv.id]
+        );
+        if (!claim.affectedRows) {
+          console.log(`[WA Payment Due] Invoice ${inv.id} already claimed by another reminder path — skipping.`);
+          continue;
+        }
+
         await triggerAutomation("payment_due", {
           phone: inv.phone,
           contactName: inv.name,
@@ -54,12 +68,16 @@ async function runPaymentDueCheck() {
             due_date: inv.invoice_duedate,
           },
         });
+        notified++;
       } catch (e) {
         console.error(`[WA Payment Due] trigger failed for invoice ${inv.id}:`, e.message);
+        // Release the claim so a later run can retry this invoice.
+        await db.promise()
+          .query("UPDATE clientinvoices SET wa_payment_due_sent = 0 WHERE id = ?", [inv.id])
+          .catch(() => {});
       }
-      await db.promise().query("UPDATE clientinvoices SET wa_payment_due_sent = 1 WHERE id = ?", [inv.id]);
     }
-    console.log(`[WA Payment Due] Checked and notified ${rows.length} invoice(s) due tomorrow`);
+    console.log(`[WA Payment Due] Notified ${notified} invoice(s) due tomorrow`);
   } catch (err) {
     console.error("[WA Payment Due] check error:", err.message);
   }

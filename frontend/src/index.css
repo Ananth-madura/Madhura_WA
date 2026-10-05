@@ -1970,3 +1970,16 @@ main > * {
     padding-bottom: 0.4rem;
   }
 }
+
+/* ===== SHELL-LEVEL DESTRUCTIVE ACTION =========================
+   .hl-btn-danger-ghost draws a --color-rule hairline, which is nearly white
+   and reads as a bright box on the deep-navy .hl-shell. This re-tints the
+   border to the shell tone (same trick .hl-logout uses) while keeping the
+   danger-red text and red hover border. Appended last so the single-class
+   border-color beats .hl-btn-danger-ghost's shorthand. */
+.hl-shell-disconnect {
+  border-color: var(--color-shell-2);
+}
+.hl-shell-disconnect:hover:not(:disabled) {
+  border-color: var(--color-error);
+}

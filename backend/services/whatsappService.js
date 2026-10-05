@@ -134,9 +134,75 @@ function formatPhoneDisplay(phone) {
 function withTimeout(promise, ms = 10000, label = "operation") {
   let timer;
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    timer = setTimeout(() => {
+      const err = new Error(`${label} timed out after ${ms}ms`);
+      // A timeout is NOT a failure. Promise.race cannot cancel the underlying
+      // send, so the message may still be delivered after we give up on it.
+      // Anything that retries on this flag turns one send into two, three or
+      // four copies for the same recipient.
+      err.code = "WA_TIMEOUT";
+      err.deliveryUnknown = true;
+      reject(err);
+    }, ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+// Delivery outcome is unknown: WhatsApp Web was reached but never confirmed.
+// Never retry these automatically — the message may already be on the phone.
+function isDeliveryUnknown(err) {
+  return Boolean(err && (err.deliveryUnknown === true || err.code === "WA_TIMEOUT" || err.code === "WA_DELIVERY_UNKNOWN"));
+}
+
+function deliveryUnknownError(cause) {
+  const err = new Error(
+    "Send timed out and delivery is unknown. Check the chat before resending — resending may duplicate the message."
+  );
+  err.code = "WA_DELIVERY_UNKNOWN";
+  err.deliveryUnknown = true;
+  if (cause) err.cause = cause;
+  return err;
+}
+
+// ── Outbound idempotency ledger ─────────────────────────────────────────────
+// The client attaches a stable key to each send. If the same key arrives
+// again — double-click, Enter-then-click, or a client retrying after a slow
+// response — the original outcome is replayed instead of sending a second
+// copy. In-memory on purpose: it has to work on a request that failed before
+// any DB write, which is exactly the case that used to duplicate.
+const SEND_IDEMPOTENCY_TTL_MS = 15 * 60 * 1000;
+const SEND_IDEMPOTENCY_MAX = 2000;
+const sendIdempotencyStore = new Map();
+
+async function sendOnce(idempotencyKey, fn) {
+  if (!idempotencyKey) return fn();
+
+  const existing = sendIdempotencyStore.get(idempotencyKey);
+  if (existing && Date.now() <= existing.expiresAt) {
+    console.log(`♻️ [WA Send] Replaying result for idempotency key ${idempotencyKey} — not sending again.`);
+    return existing.promise;
+  }
+
+  if (sendIdempotencyStore.size >= SEND_IDEMPOTENCY_MAX) {
+    const oldest = sendIdempotencyStore.keys().next().value;
+    sendIdempotencyStore.delete(oldest);
+  }
+
+  const promise = (async () => fn())();
+  sendIdempotencyStore.set(idempotencyKey, {
+    promise,
+    expiresAt: Date.now() + SEND_IDEMPOTENCY_TTL_MS,
+  });
+
+  try {
+    return await promise;
+  } catch (err) {
+    // A clean failure may be retried with the same key. An unknown-delivery
+    // failure may NOT: the key is retained so the caller has to consciously
+    // start a new send (new key) rather than accidentally duplicating.
+    if (!isDeliveryUnknown(err)) sendIdempotencyStore.delete(idempotencyKey);
+    throw err;
+  }
 }
 
 // Root for all per-user session profiles. Each linked WhatsApp number gets
@@ -173,6 +239,24 @@ class WhatsAppService {
     this._isRefreshingQr = false;
     this.lidToPhoneMap = new Map();
     this.phoneToLidMap = new Map();
+    this._sendLocks = new Map();
+  }
+
+  // Serialise sends to a single recipient. Concurrent sends to the same chat
+  // defeat the anti-ban pacing gate and make wweb.js dispatch unpredictably.
+  async _withSendLock(lockKey, fn) {
+    const prev = this._sendLocks.get(lockKey) || Promise.resolve();
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const chained = prev.then(() => gate, () => gate);
+    this._sendLocks.set(lockKey, chained);
+    await prev.catch(() => {});
+    try {
+      return await fn();
+    } finally {
+      release();
+      if (this._sendLocks.get(lockKey) === chained) this._sendLocks.delete(lockKey);
+    }
   }
 
   clearQuarantineTimer() {
@@ -1110,136 +1194,140 @@ class WhatsAppService {
     const formattedJid = formatChatJid(chatId);
     let msgId = "sent_" + Date.now();
     const quotedId = options?.quotedMessageId || options?.replyToMessageId || null;
+    const idempotencyKey = options?.idempotencyKey || null;
 
-    let sentResult = null;
-    let lastError = null;
+    // Replay a repeated key instead of sending a second copy, then serialise
+    // everything else aimed at this recipient behind a per-chat lock.
+    return sendOnce(idempotencyKey, () =>
+      this._withSendLock(`${this.key}:${formattedJid}`, async () => {
+        let sentResult = null;
+        let lastError = null;
 
-    if (this.ready && this.client) {
-      try {
-        await this._paceSend();
-        const sendOpts = {};
-        if (quotedId) {
-          sendOpts.quotedMessageId = quotedId;
-        }
+        if (this.ready && this.client) {
+          const sendOpts = {};
+          if (quotedId) sendOpts.quotedMessageId = quotedId;
 
-        sentResult = await this.enqueueSend(() =>
-          this.withTimeout(
-            this.client.sendMessage(formattedJid, message, sendOpts),
-            20000,
-            "client.sendMessage direct"
-          )
-        ).catch(async (e) => {
-          lastError = e;
-          console.warn(`⚠️ Direct send to ${formattedJid} failed (${e.message}), attempting JID resolution...`);
-          const targetJid = await this.resolveTargetJid(formattedJid).catch(() => null);
-          const altJid = targetJid && targetJid !== formattedJid ? targetJid : formattedJid;
-          
-          // Try sending to resolved target JID
-          const res1 = await this.enqueueSend(() =>
-            this.withTimeout(
-              this.client.sendMessage(altJid, message, sendOpts),
-              20000,
-              "client.sendMessage fallback"
-            )
-          ).catch((err2) => {
-            lastError = err2;
-            console.warn(`⚠️ Fallback send to ${altJid} failed:`, err2.message);
-            return null;
-          });
-          if (res1) return res1;
-
-          // Try getChatById and chat.sendMessage
           try {
-            const chat = await this.enqueue(() =>
-              this.withTimeout(this.client.getChatById(altJid), 10000, "getChatById fallback")
-            ).catch(() => null);
-            if (chat && typeof chat.sendMessage === "function") {
-              return await this.enqueueSend(() =>
-                this.withTimeout(chat.sendMessage(message, sendOpts), 20000, "chat.sendMessage")
+            await this._paceSend();
+            sentResult = await this.enqueueSend(() =>
+              this.withTimeout(
+                this.client.sendMessage(formattedJid, message, sendOpts),
+                20000,
+                "client.sendMessage direct"
+              )
+            );
+          } catch (e) {
+            lastError = e;
+
+            // A timed-out send is not a failed send — WhatsApp Web was reached
+            // but never confirmed, so the message may already be delivered.
+            // Retrying here is what put two, three and four copies of the same
+            // text in front of one contact. Surface it and stop.
+            if (isDeliveryUnknown(e)) {
+              console.error(`⛔ [WA Send] Delivery unknown for ${formattedJid}: ${e.message} — not resending.`);
+              throw deliveryUnknownError(e);
+            }
+
+            // Definitive failure: retry only at a genuinely different JID.
+            // Re-sending to the same JID after WhatsApp already accepted the
+            // request is a duplicate, not a retry.
+            const resolvedJid = await this.resolveTargetJid(formattedJid).catch(() => null);
+            if (resolvedJid && resolvedJid !== formattedJid) {
+              console.warn(`⚠️ Send to ${formattedJid} failed (${e.message}); retrying once at resolved JID ${resolvedJid}`);
+              await this._paceSend();
+              sentResult = await this.enqueueSend(() =>
+                this.withTimeout(
+                  this.client.sendMessage(resolvedJid, message, sendOpts),
+                  20000,
+                  "client.sendMessage resolved-jid"
+                )
+              ).catch((err2) => {
+                lastError = err2;
+                if (isDeliveryUnknown(err2)) throw deliveryUnknownError(err2);
+                console.warn(`⚠️ Resolved-JID send to ${resolvedJid} failed: ${err2.message}`);
+                return null;
+              });
+            } else {
+              console.warn(
+                `⚠️ Send to ${formattedJid} failed (${e.message}); no distinct JID to retry with — not resending.`
               );
             }
-          } catch (chatErr) {
-            lastError = chatErr;
           }
+        }
 
-          return null;
+        if (sentResult) {
+          msgId = sentResult?.id?.id || sentResult?.id?._serialized || msgId;
+        } else if (waCloud.isConfigured()) {
+          // Only reachable when the web attempt failed definitively (a timeout
+          // already threw above), so handing off to the Cloud API here is a
+          // real transport failover rather than a second copy.
+          console.log("⚡ Sending via Meta Cloud API for +", cleanPhone);
+          try {
+            const sent = await waCloud.sendText(cleanPhone, message);
+            msgId = sent?.messages?.[0]?.id || msgId;
+          } catch (cloudErr) {
+            const errMsg = cloudErr.response?.data?.error?.message || cloudErr.message;
+            console.error("Meta Cloud API sendText error:", errMsg);
+            throw new Error(`Meta Cloud API error: ${errMsg}`);
+          }
+        } else {
+          if (!this.ready || !this.client) {
+            throw new Error("WhatsApp is not connected. Please scan QR Code or configure Meta Cloud API.");
+          }
+          throw new Error(lastError?.message || "Failed to deliver message via WhatsApp");
+        }
+
+        const newMsg = {
+          id: msgId,
+          serializedId: sentResult?.id?._serialized || msgId,
+          from: "me",
+          to: cleanPhone,
+          body: message,
+          replyToMessageId: quotedId,
+          timestamp: Math.floor(Date.now() / 1000),
+          isMe: true,
+          type: "text",
+          status: "sent",
+        };
+
+        if (!this.messagesCache[chatId]) this.messagesCache[chatId] = [];
+        if (!this.messagesCache[chatId].some((m) => m.id === newMsg.id)) {
+          this.messagesCache[chatId].unshift(newMsg);
+        }
+        delete this.messagesFetchCache[chatId];
+
+        this.emitWaEvent("wa_message_sent", chatId, cleanPhone, newMsg);
+        try {
+          require("./crmWebhookForwarder").forwardOutgoingMessage({
+            sessionKey: this.key,
+            chatId,
+            phone: cleanPhone,
+            message: newMsg,
+          });
+        } catch (_) {}
+
+        process.nextTick(async () => {
+          try {
+            const db = require("../config/database");
+            await db.promise().query(
+              `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, reply_to_message_id, status, created_at)
+               VALUES (?, ?, 'outbound', 'text', ?, ?, ?, 'sent', NOW())`,
+              [this.key, cleanPhone, message, msgId, quotedId]
+            );
+            await db.promise().query(
+              `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
+               VALUES (?, ?, '91', 'WhatsApp Chat', 1, ?, NOW(), 0)
+               ON DUPLICATE KEY UPDATE
+                 last_message_text = VALUES(last_message_text),
+                 last_message_at = NOW()`,
+              ["Me", cleanPhone, message]
+            ).catch(() => {});
+          } catch (e) {}
         });
-      } catch (err) {
-        lastError = err;
-        console.warn("⚠️ WhatsApp Web send error:", err.message);
-      }
-    }
 
-    if (sentResult) {
-      msgId = sentResult?.id?.id || sentResult?.id?._serialized || msgId;
-    } else if (waCloud.isConfigured()) {
-      console.log("⚡ Sending via Meta Cloud API for +", cleanPhone);
-      try {
-        const sent = await waCloud.sendText(cleanPhone, message);
-        msgId = sent?.messages?.[0]?.id || msgId;
-      } catch (cloudErr) {
-        const errMsg = cloudErr.response?.data?.error?.message || cloudErr.message;
-        console.error("Meta Cloud API sendText error:", errMsg);
-        throw new Error(`Meta Cloud API error: ${errMsg}`);
-      }
-    } else {
-      if (!this.ready || !this.client) {
-        throw new Error("WhatsApp is not connected. Please scan QR Code or configure Meta Cloud API.");
-      }
-      const specificErr = lastError?.message || "Failed to deliver message via WhatsApp";
-      throw new Error(specificErr);
-    }
-
-    const newMsg = {
-      id: msgId,
-      serializedId: sentResult?.id?._serialized || msgId,
-      from: "me",
-      to: cleanPhone,
-      body: message,
-      replyToMessageId: quotedId,
-      timestamp: Math.floor(Date.now() / 1000),
-      isMe: true,
-      type: "text",
-      status: "sent",
-    };
-
-    if (!this.messagesCache[chatId]) this.messagesCache[chatId] = [];
-    if (!this.messagesCache[chatId].some((m) => m.id === newMsg.id)) {
-      this.messagesCache[chatId].unshift(newMsg);
-    }
-    delete this.messagesFetchCache[chatId];
-
-    this.emitWaEvent("wa_message_sent", chatId, cleanPhone, newMsg);
-    try {
-      require("./crmWebhookForwarder").forwardOutgoingMessage({
-        sessionKey: this.key,
-        chatId,
-        phone: cleanPhone,
-        message: newMsg,
-      });
-    } catch (_) {}
-
-    process.nextTick(async () => {
-      try {
-        const db = require("../config/database");
-        await db.promise().query(
-          `INSERT INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, reply_to_message_id, status, created_at)
-           VALUES (?, ?, 'outbound', 'text', ?, ?, ?, 'sent', NOW())`,
-          [this.key, cleanPhone, message, msgId, quotedId]
-        );
-        // Update contact last message in CRM
-        await db.promise().query(
-          `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
-           VALUES (?, ?, '91', 'WhatsApp Chat', 1, ?, NOW(), 0)
-           ON DUPLICATE KEY UPDATE
-             last_message_text = VALUES(last_message_text),
-             last_message_at = NOW()`,
-          ["Me", cleanPhone, message]
-        ).catch(() => {});
-      } catch (e) {}
-    });
-
-    return { success: true, id: msgId, result: sentResult };
+        return { success: true, id: msgId, result: sentResult };
+      })
+    );
   }
 
   async getStatus() {
@@ -2061,28 +2149,9 @@ class WhatsAppService {
     }
   }
 
-  async sendReaction(chatId, messageId, emoji) {
-    if (!chatId || !messageId) return { success: false };
-    try {
-      if (this.ready && this.client) {
-        const formattedChatId = formatChatJid(chatId);
-        const chat = await this.client.getChatById(formattedChatId).catch(() => null);
-        if (chat) {
-          const msgs = await chat.fetchMessages({ limit: 50 }).catch(() => []);
-          const target = msgs.find((m) => m.id?.id === messageId || m.id?._serialized === messageId);
-          if (target && target.react) {
-            await target.react(emoji);
-            this.emitWaEvent("wa_message_reaction", chatId, chatId.replace(/\D/g, ""), { id: messageId, reaction: emoji });
-            return { success: true };
-          }
-        }
-      }
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  }
-
+  // NOTE: sendReaction used to be defined twice in this class. The later definition
+  // silently overwrote the first, leaving it dead. Only one may exist: the surviving
+  // version uses getMessageById instead of fetching 50 messages to find the target.
   async deleteMessage(chatId, messageId, everyone = true) {
     if (!chatId || !messageId) return { success: false };
     try {
@@ -2240,13 +2309,12 @@ class WhatsAppService {
   // Fails fast instead of hanging until nginx/the browser gives up with an
   // opaque 504 — whatsapp-web.js occasionally stalls on a slow/first-contact
   // Store lookup, especially on the pinned older WhatsApp Web build.
-  withTimeout(promise, ms, label) {
-    let timer;
-    const timeout = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
-    });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-  }
+  // NOTE: this method used to be defined a second time further down the class
+  // body. In JS the later definition wins, so that copy — which built its own
+  // Promise.race and threw a plain Error — shadowed this one for every call.
+  // That is why a timed-out send was not flagged deliveryUnknown and still got
+  // retried. There must be exactly one definition; it delegates to the
+  // module-level withTimeout above.
 
   async resolveTargetJid(cleanPhoneOrJid) {
     if (!cleanPhoneOrJid) return "";
@@ -2359,7 +2427,17 @@ class WhatsAppService {
     };
   }
 
-  async sendMediaMessage(chatId, mediaUrl, mediaType = "document", caption = "", filename = "") {
+  async sendMediaMessage(chatId, mediaUrl, mediaType = "document", caption = "", filename = "", options = {}) {
+    const targetJid = formatChatJid(chatId);
+    const idempotencyKey = options?.idempotencyKey || null;
+    return sendOnce(idempotencyKey, () =>
+      this._withSendLock(`${this.key}:${targetJid}`, () =>
+        this._sendMediaMessage(chatId, mediaUrl, mediaType, caption, filename)
+      )
+    );
+  }
+
+  async _sendMediaMessage(chatId, mediaUrl, mediaType = "document", caption = "", filename = "") {
     const waCloud = require("./whatsappCloudApi");
     if (!chatId) throw new Error("chatId is required");
 
@@ -2463,6 +2541,12 @@ class WhatsAppService {
         ));
         msgId = sent?.id?.id || msgId;
       } catch (e) {
+        // A timed-out media send may already have been delivered. Handing it
+        // to the Cloud API here sent the same attachment twice.
+        if (isDeliveryUnknown(e)) {
+          console.error(`⛔ [WA Send] Media delivery unknown for ${targetJid}: ${e.message} — not resending.`);
+          throw deliveryUnknownError(e);
+        }
         console.error("WhatsApp Web sendMediaMessage error:", e.message);
         if (waCloud.isConfigured()) {
           const sent = await waCloud.sendMedia(cleanPhone, mediaType, mediaUrl, caption, filename);
@@ -2484,7 +2568,7 @@ class WhatsAppService {
     try {
       const db = require("../config/database");
       await db.promise().query(
-        `INSERT INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
+        `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
          VALUES (?, ?, 'outbound', ?, ?, ?, 'sent', NOW())`,
         [this.key, cleanPhone, mediaType || "document", logText, msgId]
       );
@@ -2507,13 +2591,25 @@ class WhatsAppService {
       filename: filename || logText,
     };
     if (!this.messagesCache[chatId]) this.messagesCache[chatId] = [];
-    this.messagesCache[chatId].unshift(mediaMsg);
+    if (!this.messagesCache[chatId].some((m) => m.id === mediaMsg.id)) {
+      this.messagesCache[chatId].unshift(mediaMsg);
+    }
     this.emitWaEvent("wa_message_sent", chatId, cleanPhone, mediaMsg);
 
     return { success: true, id: msgId };
   }
 
-  async sendLocationMessage(chatId, lat, lng, name = "") {
+  async sendLocationMessage(chatId, lat, lng, name = "", options = {}) {
+    const targetJid = formatChatJid(chatId);
+    const idempotencyKey = options?.idempotencyKey || null;
+    return sendOnce(idempotencyKey, () =>
+      this._withSendLock(`${this.key}:${targetJid}`, () =>
+        this._sendLocationMessage(chatId, lat, lng, name)
+      )
+    );
+  }
+
+  async _sendLocationMessage(chatId, lat, lng, name = "") {
     const waCloud = require("./whatsappCloudApi");
     if (!chatId) throw new Error("chatId is required");
 
@@ -2534,6 +2630,10 @@ class WhatsAppService {
         ));
         msgId = sent?.id?.id || msgId;
       } catch (e) {
+        if (isDeliveryUnknown(e)) {
+          console.error(`⛔ [WA Send] Location delivery unknown for ${targetJid}: ${e.message} — not resending.`);
+          throw deliveryUnknownError(e);
+        }
         console.error("WhatsApp Web sendLocationMessage error:", e.message);
         if (waCloud.isConfigured()) {
           const sent = await waCloud.sendLocation(cleanPhone, lat, lng, name);
@@ -2554,7 +2654,7 @@ class WhatsAppService {
     try {
       const db = require("../config/database");
       await db.promise().query(
-        `INSERT INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
+        `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
          VALUES (?, ?, 'outbound', 'location', ?, ?, 'sent', NOW())`,
         [this.key, cleanPhone, name || "Location", msgId]
       );
@@ -2573,7 +2673,9 @@ class WhatsAppService {
       location: { lat, lng, name },
     };
     if (!this.messagesCache[chatId]) this.messagesCache[chatId] = [];
-    this.messagesCache[chatId].unshift(locationMsg);
+    if (!this.messagesCache[chatId].some((m) => m.id === locationMsg.id)) {
+      this.messagesCache[chatId].unshift(locationMsg);
+    }
     this.emitWaEvent("wa_message_sent", chatId, cleanPhone, locationMsg);
 
     return { success: true, id: msgId };
@@ -2828,10 +2930,21 @@ function all() {
 
 // The session CRM-side senders use when there is no user in context:
 // schedulers, Cloud API webhooks, invoice/payment automations, the queue worker.
+//
+// It used to return `all().find((s) => s.ready)` — the first session built in
+// this process, whoever that belongs to. With one linked number nobody notices;
+// the moment a second user links one, their automations go out from a colleague's
+// number. Only the configured default is ever returned now, and only when it is
+// actually ready — callers must handle not-ready rather than silently sending as
+// someone else.
 function getDefault() {
-  const readySession = all().find((s) => s.ready);
-  if (readySession) return readySession;
   return get(defaultKey);
+}
+
+// Resolve the session a background sender should use, refusing to substitute.
+function resolveDefaultReady() {
+  const session = get(defaultKey);
+  return session && session.ready ? session : null;
 }
 
 // A LocalAuth profile only counts as linked once Chrome has written its user
@@ -2962,9 +3075,17 @@ async function restoreExisting() {
 
   // Pre-multi-session rows carry no session_key; attribute them to the owner
   // so their history doesn't vanish from the chat list. No-op after first boot.
+  //
+  // Scoped to this install's own campaigns only. The campaign UPDATE used to be
+  // global, so on a multi-user database one boot rewrote every other tenant's
+  // campaign rows to the admin's session key — after which those campaigns sent
+  // from the admin's number.
   try {
     await db.promise().query("UPDATE wa_message_logs SET session_key = ? WHERE session_key IS NULL", [defaultKey]);
-    await db.promise().query("UPDATE wa_campaigns SET session_key = ? WHERE session_key IS NULL", [defaultKey]);
+    await db.promise().query(
+      "UPDATE wa_campaigns SET session_key = ? WHERE session_key IS NULL AND (created_by IS NULL OR created_by = ?)",
+      [defaultKey, defaultKey]
+    );
   } catch (_) {}
 
   let dirs = [];
@@ -3013,6 +3134,7 @@ module.exports = {
   get,
   all,
   default: getDefault,
+  resolveDefaultReady,
   hasSavedProfile,
   restoreExisting,
   cleanExpiredSessions,

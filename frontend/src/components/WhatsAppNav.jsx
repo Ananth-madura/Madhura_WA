@@ -18,7 +18,6 @@ import {
   ChevronLeft,
   CreditCard,
   RefreshCw,
-  LogOut,
   Bell,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
@@ -27,7 +26,7 @@ import { API } from "../config/api";
 import socket from "../socket/socket";
 import WAConfigPrompt from "./WAConfigPrompt";
 
-export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout, isSyncing, statusPhone }) {
+export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, isSyncing, statusPhone }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [showConfig, setShowConfig] = useState(false);
@@ -235,22 +234,26 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
     >
       {/*
           Chat view on a phone has very little vertical budget, so the whole
-          navigation collapses into ONE horizontally scrollable strip instead
-          of stacking tabs over actions. Document pages keep the two-row
-          layout because they are not height-constrained.
+          navigation collapses into ONE row instead of stacking tabs over
+          actions. Document pages keep the two-row layout because they are not
+          height-constrained.
+
+          In chat view the tab strip is the ONLY scrollable part — the action
+          buttons (Disconnect in particular) are pinned outside it so they can
+          never be scrolled off-screen and hidden behind the 10 tabs.
         */}
       <div
         className={
           isChatView
-            ? "flex items-center gap-1.5 overflow-x-auto wa-no-scrollbar -mx-1 px-1"
+            ? "flex items-center gap-1.5 min-w-0"
             : "flex flex-col lg:flex-row lg:flex-wrap lg:items-center lg:justify-between gap-2"
         }
       >
-        {/* Top Tabs — one horizontally scrollable strip at every width */}
+        {/* Top Tabs — scrolls horizontally in chat view, pinned actions beside it */}
         <div
           className={
             isChatView
-              ? "hl-tabs w-auto shrink-0"
+              ? "hl-tabs min-w-0 flex-1 overflow-x-auto wa-no-scrollbar"
               : "hl-tabs w-full lg:w-auto lg:flex-1"
           }
           style={{ borderBottom: "none", minWidth: 0 }}
@@ -336,18 +339,6 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, onLogout
             >
               <RefreshCw size={14} className={isSyncing ? "animate-spin" : undefined} />
               <span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Sync All"}</span>
-            </button>
-          )}
-
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="hl-btn-danger-ghost"
-              style={{ padding: isChatView ? "0.4rem 0.55rem" : "0.5rem 0.75rem", fontSize: 12, minHeight: isChatView ? 36 : 42 }}
-              title="Disconnect WhatsApp Session"
-            >
-              <LogOut size={14} />
-              <span className="hidden sm:inline">Disconnect</span>
             </button>
           )}
 

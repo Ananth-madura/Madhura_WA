@@ -1,5 +1,29 @@
 const db = require("../config/database");
 
+// A send whose delivery outcome is unknown. Failing over to another sender in
+// that state re-delivers the same text from a different number, which is how
+// one campaign message turned into several. Never fail over on these.
+function isDeliveryUnknown(err) {
+  return Boolean(
+    err && (err.deliveryUnknown === true || err.code === "WA_TIMEOUT" || err.code === "WA_DELIVERY_UNKNOWN")
+  );
+}
+
+// Explain an empty engine set. A session that exists but is not connected is a
+// different problem from an empty pool, and the operator needs to know which —
+// otherwise "no senders" reads like a pool misconfiguration and they go looking
+// in the wrong place.
+function noSenderMessage(sessionKey, poolId, tenantId) {
+  const waService = require("./whatsappService");
+  if (sessionKey && !waService.get(sessionKey).ready) {
+    return (
+      `WhatsApp session '${sessionKey}' is not connected, so nothing was sent. ` +
+      "Reconnect that number and try again — messages are never sent from another session."
+    );
+  }
+  return "No active or healthy WhatsApp senders available in this pool/tenant.";
+}
+
 /**
  * waLoadBalancer.js
  *
@@ -121,17 +145,24 @@ class WALoadBalancer {
 
     // 2. If no pool engines found or no pool specified, construct user/session-level engines
     if (engines.length === 0) {
+      // Only ever the session that was asked for. The old chain fell back to
+      // waService.default() and then to `all().find(s => s.ready)`, so a
+      // campaign or automation whose own session was down silently went out
+      // from a different user's number.
       let waWeb = null;
       if (sessionKey) {
         waWeb = waService.get(sessionKey);
       }
-      if (!waWeb || !waWeb.ready) {
+      if (!waWeb && !sessionKey) {
         waWeb = waService.default();
       }
-      if (!waWeb || !waWeb.ready) {
-        waWeb = waService.all().find((s) => s.ready);
+      if (waWeb && !waWeb.ready) {
+        console.warn(
+          `⛔ [WA LoadBalancer] Session '${waWeb.key}' is not connected — not substituting another sender.`
+        );
+        waWeb = null;
       }
-      const hasWeb = waWeb && waWeb.ready;
+      const hasWeb = Boolean(waWeb && waWeb.ready);
       const hasCloud = waCloud.isConfigured();
 
       const webEngine = hasWeb
@@ -316,7 +347,7 @@ class WALoadBalancer {
   async sendTextMessage(phone, text, sessionKey, preferredEngine = null, poolId = null, routingStrategy = "round_robin", tenantId = 1) {
     const engines = await this.getActiveEngines(sessionKey, preferredEngine, poolId, tenantId);
     if (!engines.length) {
-      throw new Error("No active or healthy WhatsApp senders available in this pool/tenant.");
+      throw new Error(noSenderMessage(sessionKey, poolId, tenantId));
     }
 
     const poolKey = poolId ? `pool_${poolId}` : `session_${sessionKey || "def"}`;
@@ -327,6 +358,12 @@ class WALoadBalancer {
       await this.recordSuccess(primaryEngine);
       return { success: true, engineUsed: primaryEngine.name, senderPhone: primaryEngine.phone, result };
     } catch (primaryErr) {
+      if (isDeliveryUnknown(primaryErr)) {
+        console.error(
+          `⛔ [WA LoadBalancer] Delivery unknown on '${primaryEngine.name}' — not failing over (would duplicate).`
+        );
+        throw primaryErr;
+      }
       console.warn(`⚠️ [WA LoadBalancer] Primary sender '${primaryEngine.name}' failed: ${primaryErr.message}. Executing failover...`);
       await this.recordFailure(primaryEngine, primaryErr);
       this.stats.failoverCount++;
@@ -354,7 +391,7 @@ class WALoadBalancer {
   async sendTemplateMessage(phone, templateName, language = "en", components = [], sessionKey, preferredEngine = null, poolId = null, routingStrategy = "round_robin", tenantId = 1) {
     const engines = await this.getActiveEngines(sessionKey, preferredEngine, poolId, tenantId);
     if (!engines.length) {
-      throw new Error("No active or healthy WhatsApp senders available in this pool/tenant.");
+      throw new Error(noSenderMessage(sessionKey, poolId, tenantId));
     }
 
     const poolKey = poolId ? `pool_${poolId}` : `session_${sessionKey || "def"}`;
@@ -365,6 +402,7 @@ class WALoadBalancer {
       await this.recordSuccess(primaryEngine);
       return { success: true, engineUsed: primaryEngine.name, senderPhone: primaryEngine.phone, result };
     } catch (primaryErr) {
+      if (isDeliveryUnknown(primaryErr)) throw primaryErr;
       await this.recordFailure(primaryEngine, primaryErr);
       this.stats.failoverCount++;
       this.stats.lastFailoverAt = new Date().toISOString();
@@ -376,6 +414,7 @@ class WALoadBalancer {
           await this.recordSuccess(fallbackEngine);
           return { success: true, engineUsed: fallbackEngine.name, senderPhone: fallbackEngine.phone, result, failover: true };
         } catch (fallbackErr) {
+          if (isDeliveryUnknown(fallbackErr)) throw fallbackErr;
           await this.recordFailure(fallbackEngine, fallbackErr);
         }
       }
@@ -389,7 +428,7 @@ class WALoadBalancer {
   async sendMediaMessage(phone, mediaType, mediaUrl, caption = "", filename = "", sessionKey, preferredEngine = null, poolId = null, routingStrategy = "round_robin", tenantId = 1) {
     const engines = await this.getActiveEngines(sessionKey, preferredEngine, poolId, tenantId);
     if (!engines.length) {
-      throw new Error("No active or healthy WhatsApp senders available in this pool/tenant.");
+      throw new Error(noSenderMessage(sessionKey, poolId, tenantId));
     }
 
     const poolKey = poolId ? `pool_${poolId}` : `session_${sessionKey || "def"}`;
@@ -400,6 +439,7 @@ class WALoadBalancer {
       await this.recordSuccess(primaryEngine);
       return { success: true, engineUsed: primaryEngine.name, senderPhone: primaryEngine.phone, result };
     } catch (primaryErr) {
+      if (isDeliveryUnknown(primaryErr)) throw primaryErr;
       await this.recordFailure(primaryEngine, primaryErr);
       this.stats.failoverCount++;
 
@@ -410,6 +450,7 @@ class WALoadBalancer {
           await this.recordSuccess(fallbackEngine);
           return { success: true, engineUsed: fallbackEngine.name, senderPhone: fallbackEngine.phone, result, failover: true };
         } catch (fallbackErr) {
+          if (isDeliveryUnknown(fallbackErr)) throw fallbackErr;
           await this.recordFailure(fallbackEngine, fallbackErr);
         }
       }
@@ -487,6 +528,12 @@ class WALoadBalancer {
             result,
           };
         } catch (err) {
+          if (isDeliveryUnknown(err)) {
+            console.error(
+              `⛔ [WA LoadBalancer] Interactive delivery unknown via '${engine.name}' — not trying another sender.`
+            );
+            throw err;
+          }
           console.warn(`⚠️ [WA LoadBalancer] Interactive ${kind} via '${engine.name}' failed: ${err.message}`);
           await this.recordFailure(engine, err);
           this.stats.failoverCount++;
@@ -579,6 +626,10 @@ class WALoadBalancer {
             result,
           };
         } catch (err) {
+          if (isDeliveryUnknown(err)) {
+            console.error(`⛔ [WA LoadBalancer] CTA delivery unknown via '${engine.name}' — not trying another sender.`);
+            throw err;
+          }
           console.warn(`⚠️ [WA LoadBalancer] CTA url via '${engine.name}' failed: ${err.message}`);
           await this.recordFailure(engine, err);
           this.stats.failoverCount++;

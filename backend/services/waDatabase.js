@@ -618,6 +618,31 @@ async function ensureWATables() {
     }
   };
 
+  // Unique indexes are what make INSERT IGNORE / ON DUPLICATE KEY UPDATE
+  // actually dedupe. Without them those statements silently append a new row
+  // every time, which is how a contact group grew to "everyone, several times
+  // over" and then got blasted by a campaign.
+  const addUniqueIndexIfNotExists = async (table, indexName, columnsSql) => {
+    try {
+      const rows = await queryAsync(
+        "SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?",
+        [table, indexName]
+      );
+      if (!rows || rows.length === 0) {
+        await queryAsync(`ALTER TABLE \`${table}\` ADD UNIQUE INDEX \`${indexName}\` (${columnsSql})`);
+        console.log(`✅ Added unique index ${indexName} on ${table}`);
+      }
+    } catch (err) {
+      if (!err.message.includes("Duplicate key") && !err.message.includes("already exists")) {
+        console.warn(
+          `⚠️ Could not add unique index ${table}.${indexName}: ${err.message}\n` +
+            `   This usually means legacy duplicate rows already exist. Run:\n` +
+            `   node backend/migrations/wa_dedupe_and_unique_keys.js`
+        );
+      }
+    }
+  };
+
   // 1. wa_automations column additions & type changes
   try { await queryAsync("ALTER TABLE wa_automations MODIFY COLUMN trigger_type VARCHAR(100) NOT NULL"); } catch (_) {}
   // wa_welcome_settings: native interactive welcome menu
@@ -716,6 +741,12 @@ async function ensureWATables() {
   await addColumnIfNotExists("wa_message_logs", "markup_inr", "DECIMAL(8,4) DEFAULT 0.0000");
   try { await queryAsync("ALTER TABLE wa_message_logs MODIFY COLUMN message_type VARCHAR(20) DEFAULT 'text'"); } catch (_) {}
   await addIndexIfNotExists("wa_message_logs", "idx_session_phone", "session_key, phone");
+
+  // 5b. UNIQUE keys that make outbound de-duplication actually work.
+  // Composite on session_key so two CRM users in the same WhatsApp group can
+  // each log the same message id once.
+  await addUniqueIndexIfNotExists("wa_message_logs", "uniq_session_msg", "session_key, wa_message_id");
+  await addUniqueIndexIfNotExists("wa_group_contacts", "uniq_group_phone", "group_id, phone");
 
   // 6. wa_contacts column additions
   await addColumnIfNotExists("wa_contacts", "ai_enabled", "TINYINT(1) DEFAULT 1");

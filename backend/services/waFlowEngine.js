@@ -130,7 +130,7 @@ class WaFlowEngine {
     let cleanPhone = String(phone || "").replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
     const waService = require("./whatsappService");
-    const activeSessionKey = sessionKey || waService.defaultKey || "708";
+    const activeSessionKey = sessionKey || waService.defaultKey;
     const chatId = targetChatId || `${cleanPhone}@c.us`;
     const msgId = "bot_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
 
@@ -330,7 +330,7 @@ class WaFlowEngine {
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
 
     const waService = require("./whatsappService");
-    const activeSessionKey = sessionKey || waService.defaultKey || "708";
+    const activeSessionKey = sessionKey || waService.defaultKey;
 
     // Resolve LID if cleanPhone is 14+ digits or targetChatId is a LID
     if (cleanPhone.length >= 14 || (targetChatId && targetChatId.includes("@lid"))) {
@@ -428,7 +428,7 @@ class WaFlowEngine {
     const targetChatId = vars._chat_id || options?.chatId || null;
     if (!vars._chat_id && options?.chatId) vars._chat_id = options.chatId;
     const waService = require("./whatsappService");
-    const activeSessionKey = sessionKey || vars._session_key || waService.defaultKey || "708";
+    const activeSessionKey = sessionKey || vars._session_key || waService.defaultKey;
 
     // Every inbound reply — typed text OR a tapped option — becomes the input that
     // ai_generate / ai_intent steps read. Without this only collect_input fed them.

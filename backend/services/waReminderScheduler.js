@@ -116,6 +116,24 @@ async function runPaymentDueInteractiveCheck() {
     `);
 
     for (const inv of rows) {
+      // Same claim column the payment_due automation uses. Both run at 10:00
+      // over the same "due tomorrow" invoices; without a shared atomic claim
+      // one customer received two different payment-due messages.
+      let claimed = false;
+      try {
+        const [claim] = await db.promise().query(
+          "UPDATE clientinvoices SET wa_payment_due_sent = 1 WHERE id = ? AND (wa_payment_due_sent IS NULL OR wa_payment_due_sent = 0)",
+          [inv.id]
+        );
+        claimed = claim.affectedRows > 0;
+      } catch (e) {
+        console.warn(`[WA Payment Due] claim failed for invoice #${inv.id}: ${e.message}`);
+      }
+      if (!claimed) {
+        console.log(`[WA Payment Due] Invoice #${inv.id} already handled by another reminder path — skipping.`);
+        continue;
+      }
+
       const msg = `Hi ${inv.name || inv.client_company}, reminder that invoice *INV-${inv.id}* is due for payment tomorrow (${new Date(inv.invoice_duedate).toLocaleDateString("en-IN")}). Please choose an option below:`;
       await waConfirmation.sendInteractiveReminder({
         phone: inv.phone,
@@ -125,7 +143,14 @@ async function runPaymentDueInteractiveCheck() {
         messageText: msg,
         refTable: "clientinvoices",
         refId: inv.id,
-      }).catch((e) => console.warn(`[WA Payment Due] Failed for invoice #${inv.id}:`, e.message));
+      })
+        .catch((e) => {
+          console.warn(`[WA Payment Due] Failed for invoice #${inv.id}:`, e.message);
+          // Release the claim so the other path (or tomorrow) can pick it up.
+          return db.promise()
+            .query("UPDATE clientinvoices SET wa_payment_due_sent = 0 WHERE id = ?", [inv.id])
+            .catch(() => {});
+        });
     }
 
     console.log(`[WA Payment Due Scheduler] Dispatched interactive payment reminders for ${rows.length} invoice(s).`);

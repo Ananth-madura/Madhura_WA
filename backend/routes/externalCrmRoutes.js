@@ -192,7 +192,18 @@ router.post(["/messages/send-media", "/send-media"], upload.single("file"), asyn
       return res.status(400).json({ success: false, error: "Either file upload or 'mediaUrl' is required" });
     }
 
-    const result = await session.sendMedia(targetPhone, filePath, caption || "", fileOriginalName);
+    // WhatsAppService exposes sendMediaMessage, not sendMedia. The old call threw a
+// TypeError → 500 *after* the file had already been written to disk, so every
+// retry leaked another copy.
+const mediaType = (req.body?.media_type || "").toLowerCase() || "document";
+const result = await session.sendMediaMessage(
+      targetPhone,
+      filePath,
+      mediaType,
+      caption || "",
+      fileOriginalName || "",
+      { idempotencyKey: req.body?.idempotencyKey || req.headers["x-idempotency-key"] || null }
+    );
 
     crmWebhookForwarder.forwardOutgoingMessage({
       sessionKey: session.key,

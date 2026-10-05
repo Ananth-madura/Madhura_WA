@@ -196,9 +196,18 @@ router.post("/:id/trigger-phone", auth, async (req, res) => {
     let targetPhone = phone;
     const targetChatId = chatId || null;
 
-    // Resolve LID to phone if phone is a LID or chatId is a LID
-    const waInstance = (sessionKey ? waService.get(sessionKey) : null) || waService.default();
-    if (waInstance && typeof waInstance.resolveLidToPhone === "function") {
+    // Bind to the caller's own session. Never fall back to whichever session
+    // happens to be ready — that sent a customer's flow from someone else's number.
+    const reqSessionKey =
+      sessionKey || req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || waService.defaultKey;
+    const waInstance = waService.get(reqSessionKey);
+    if (!waInstance.ready) {
+      return res.status(503).json({
+        error: "WhatsApp session is not connected, so nothing was sent. Reconnect and try again.",
+        code: "WA_SESSION_NOT_READY",
+      });
+    }
+    if (typeof waInstance.resolveLidToPhone === "function") {
       if (targetChatId && targetChatId.includes("@lid")) {
         const resolved = await waInstance.resolveLidToPhone(targetChatId).catch(() => null);
         if (resolved) targetPhone = resolved;
@@ -213,12 +222,6 @@ router.post("/:id/trigger-phone", auth, async (req, res) => {
 
     const [flows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ?", [req.params.id]);
     if (!flows.length) return res.status(404).json({ error: "Flow not found" });
-
-    // Fallback to active ready session key
-    let reqSessionKey = sessionKey || req.headers["x-session-key"] || req.query?.sessionKey || null;
-    if (!reqSessionKey || !waService.get(reqSessionKey)?.ready) {
-      reqSessionKey = waInstance?.key || waService.defaultKey || "708";
-    }
 
     const result = await waFlowEngine.startFlowRun(flows[0], cleanPhone, reqSessionKey, "", targetChatId);
     res.json({ success: true, message: `Flow "${flows[0].name}" started for +${cleanPhone}`, result, phone: cleanPhone });
@@ -473,31 +476,36 @@ router.get("/:id/analytics", auth, async (req, res) => {
 });
 
 // ── Trigger Main Menu / Flow directly for a Phone Number (CRM Integration) ────
-router.post("/send-menu", async (req, res) => {
+// This route was the only one in the file without `auth`, while the UI calls it.
+// With no auth, and a fallback that picked the lowest-id flow when flow_id was
+// omitted, any caller could fire an arbitrary flow at an arbitrary number.
+router.post("/send-menu", auth, async (req, res) => {
   try {
     const { phone, flow_id, flowId, sessionKey } = req.body || {};
     if (!phone) return res.status(400).json({ error: "Phone number is required" });
     let cleanPhone = String(phone).replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
 
-    let targetFlow = null;
+    // No "lowest-id active flow" fallback. Guessing which flow to run meant a
+    // missing flow_id silently started someone else's conversation.
     const requestedId = flow_id || flowId;
-    if (requestedId) {
-      const [flows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? LIMIT 1", [requestedId]);
-      if (flows.length) targetFlow = flows[0];
+    if (!requestedId) {
+      return res.status(400).json({ error: "flow_id is required — this route will not guess which flow to send." });
     }
-    if (!targetFlow) {
-      const [flows] = await db.promise().query("SELECT * FROM wa_flows WHERE status = 'active' ORDER BY id ASC LIMIT 1");
-      if (flows.length) targetFlow = flows[0];
+    const [flows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? LIMIT 1", [requestedId]);
+    const targetFlow = flows[0];
+    if (!targetFlow) return res.status(404).json({ error: "Flow not found" });
+
+    const waService = require("../services/whatsappService");
+    const reqSessionKey =
+      sessionKey || req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || waService.defaultKey;
+    if (!waService.get(reqSessionKey)?.ready) {
+      return res.status(503).json({
+        error: "WhatsApp session is not connected, so nothing was sent. Reconnect and try again.",
+        code: "WA_SESSION_NOT_READY",
+      });
     }
-    if (!targetFlow) {
-      const [flows] = await db.promise().query("SELECT * FROM wa_flows ORDER BY id ASC LIMIT 1");
-      if (flows.length) targetFlow = flows[0];
-    }
-    if (!targetFlow) {
-      return res.status(404).json({ error: "No WhatsApp flow found" });
-    }
-    const reqSessionKey = sessionKey || req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || null;
+
     const result = await waFlowEngine.startFlowRun(targetFlow, cleanPhone, reqSessionKey);
     res.json({ success: true, message: `Flow "${targetFlow.name}" triggered for +${cleanPhone}`, flowId: targetFlow.id, result });
   } catch (err) {

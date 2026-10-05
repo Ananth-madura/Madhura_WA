@@ -115,7 +115,10 @@ app.use("/api/wa/templates", require("./routes/waTemplateRoutes"));
 app.use("/api/wa/groups", require("./routes/waGroupRoutes"));
 app.use("/api/wa/campaigns", require("./routes/waCampaignRoutes"));
 app.use("/api/wa/analytics", require("./routes/waAnalyticsRoutes"));
-app.use("/api/wa/config", require("./routes/waConfigRoutes"));
+// Mounted behind verifyToken: the config router only applied auth to its
+// write/test routes, leaving /status, /phone-info, /business-profile,
+// /queue-stats and /meta-templates readable by any unauthenticated caller.
+app.use("/api/wa/config", require("./middleware/authMiddleware").verifyToken, require("./routes/waConfigRoutes"));
 app.use("/webhook", require("./routes/waWebhookRoutes"));
 app.use("/api/wa/webhook", require("./routes/waWebhookRoutes"));
 app.use("/api/wa/contacts", require("./routes/waContactRoutes"));
@@ -127,85 +130,22 @@ app.use("/api/wa/payments", require("./routes/waPaymentsRoutes"));
 app.use("/api/wa/drip", require("./routes/waDripRoutes"));
 app.use("/api/wa/reminders", require("./routes/waReminderRoutes"));
 
-// Direct trigger route for external webhooks or automation triggers
-app.post("/send-menu", async (req, res) => {
-  try {
-    const { phone, flow_id, flowId, sessionKey } = req.body || {};
-    if (!phone) return res.status(400).json({ error: "Phone number is required" });
-    let cleanPhone = String(phone).replace(/\D/g, "");
-    if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
-    const waFlowEngine = require("./services/waFlowEngine");
-    const db = require("./config/database");
-
-    let targetFlow = null;
-    const requestedId = flow_id || flowId;
-    if (requestedId) {
-      const [flows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? LIMIT 1", [requestedId]);
-      if (flows.length) targetFlow = flows[0];
-    }
-    if (!targetFlow) {
-      const [flows] = await db.promise().query("SELECT * FROM wa_flows WHERE status = 'active' ORDER BY id ASC LIMIT 1");
-      if (flows.length) targetFlow = flows[0];
-    }
-    if (!targetFlow) {
-      const [flows] = await db.promise().query("SELECT * FROM wa_flows ORDER BY id ASC LIMIT 1");
-      if (flows.length) targetFlow = flows[0];
-    }
-    if (!targetFlow) {
-      return res.status(404).json({ error: "No WhatsApp flow found in system" });
-    }
-    const result = await waFlowEngine.startFlowRun(targetFlow, cleanPhone, sessionKey || null);
-    res.json({ success: true, message: `Menu triggered for +${cleanPhone}`, flow: targetFlow.name, result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Test/simulate inbound message for WhatsApp flow or bot testing
-app.post("/simulate-inbound", async (req, res) => {
-  try {
-    const { phone, message, chatId, sessionKey } = req.body || {};
-    if (!phone && !chatId) return res.status(400).json({ error: "phone or chatId is required" });
-    const waFlowEngine = require("./services/waFlowEngine");
-    const handled = await waFlowEngine.dispatchInbound(
-      phone || chatId,
-      message || "",
-      null,
-      sessionKey || null,
-      null,
-      { chatId: chatId || null, isHistoric: false }
-    );
-    res.json({ success: true, handled, phone: phone || chatId, message });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Test/simulate automation trigger for CRM automation testing
-app.post("/trigger-automation", async (req, res) => {
-  try {
-    const { id, phone, contact_name, chatId, sessionKey } = req.body || {};
-    if (!id || (!phone && !chatId)) return res.status(400).json({ error: "id and phone/chatId required" });
-    const db = require("./config/database");
-    const [rows] = await db.promise().query("SELECT * FROM wa_automations WHERE id = ?", [id]);
-    if (!rows.length) return res.status(404).json({ error: "Automation not found" });
-    const { executeAutomationSend } = require("./services/waAutomationService");
-    const waService = require("./services/whatsappService");
-    const cleanPhone = String(phone || chatId).replace(/\D/g, "");
-    const activeKey = sessionKey || waService.defaultKey || "708";
-    await executeAutomationSend(
-      rows[0],
-      cleanPhone,
-      contact_name || "Valued Client",
-      { invoice_no: "INV-2026-999", amount: "25,000", due_date: "05 Oct 2026", date: "30/09/2026", service: "Full AMC Service", company: "Madhura Tech" },
-      activeKey,
-      chatId || null
-    );
-    res.json({ success: true, message: `Automation ${rows[0].name} triggered for ${cleanPhone}`, rule: rows[0].name });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// ── Removed: unauthenticated test hooks ──────────────────────────────────────
+// /send-menu, /simulate-inbound and /trigger-automation used to be registered on
+// the bare app here, outside every auth-wrapped mount, listening on 0.0.0.0.
+// Each performed real sends to a caller-supplied phone number with no auth, no
+// opt-in check and no allowlist — and CORS reflects every origin, so any web page
+// could reach them cross-origin.
+//
+// /simulate-inbound was the worst: dispatchInbound runs the whole inbound
+// pipeline (flow advance, payment confirmation, welcome, AI reply) and mutates
+// CRM records, so one POST caused several outbound messages plus financial
+// writes against an arbitrary number.
+//
+// All three had authenticated equivalents, still available at:
+//   POST /api/wa/flows/:id/trigger-phone   (replaces /send-menu)
+//   POST /api/wa/automations/:id/trigger   (replaces /trigger-automation)
+//   POST /api/wa/flows/simulate-step       (inbound simulation)
 
 // ── Ensure Runtime Directories Exist ──────────────────────────────────────────
 const fs = require("fs");

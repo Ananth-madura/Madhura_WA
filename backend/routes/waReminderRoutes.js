@@ -6,6 +6,7 @@ const db = require("../config/database");
 const { verifyToken } = require("../middleware/authMiddleware");
 const waConfirmation = require("../services/waConfirmationService");
 const waReminderScheduler = require("../services/waReminderScheduler");
+const { checkBlastSize } = require("../services/waBlastGuard");
 
 // ── 1. Summary Statistics ──────────────────────────────────────────────────
 router.get("/summary", verifyToken, async (req, res) => {
@@ -473,10 +474,14 @@ router.get("/pending-queue", verifyToken, async (req, res) => {
 // ── 10. Bulk Batch Dispatch Reminders ───────────────────────────────────────
 router.post("/bulk-send", verifyToken, async (req, res) => {
   try {
-    const { items = [] } = req.body;
+    const { items = [], confirm_count } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Items array is required" });
     }
+    // Guard the blast before the first send. The UI's "select all" made it easy
+    // to dispatch to every reminder row without noticing how many that was.
+    const blastError = checkBlastSize(items.length, confirm_count);
+    if (blastError) return res.status(400).json({ error: blastError, wouldSend: items.length });
 
     let successCount = 0;
     const errors = [];

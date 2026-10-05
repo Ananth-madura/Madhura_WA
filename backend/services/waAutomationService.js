@@ -440,16 +440,59 @@ function buildTemplateBodyComponent(templateBody, contactName, data = {}) {
 }
 
 /**
+ * Short-lived claim table so one business event cannot fire the same automation
+ * twice, no matter how many subsystems notice it.
+ *
+ * The window is deliberately short (10 min): long enough to absorb the fan-in
+ * from the event bus + inbound handler + webhook for a single message, short
+ * enough that a real second invoice or a genuine new enquiry later the same
+ * morning is not swallowed.
+ */
+const AUTOMATION_DEDUPE_TTL_MS = 10 * 60 * 1000;
+const AUTOMATION_DEDUPE_MAX = 5000;
+const automationDedupeStore = new Map();
+
+function claimAutomationDedupe(key) {
+  const now = Date.now();
+  const hit = automationDedupeStore.get(key);
+  if (hit && hit > now) return false;
+  if (automationDedupeStore.size >= AUTOMATION_DEDUPE_MAX) {
+    // Drop expired entries first; only then evict the oldest.
+    for (const [k, v] of automationDedupeStore) {
+      if (v <= now) automationDedupeStore.delete(k);
+    }
+    while (automationDedupeStore.size >= AUTOMATION_DEDUPE_MAX) {
+      const oldest = automationDedupeStore.keys().next().value;
+      automationDedupeStore.delete(oldest);
+    }
+  }
+  automationDedupeStore.set(key, now + AUTOMATION_DEDUPE_TTL_MS);
+  return true;
+}
+
+/**
  * Trigger active WhatsApp automations for a CRM event
  * @param {string} triggerType - 'new_lead' | 'invoice_created' | 'payment_received' | 'welcome_message' | etc.
  * @param {object} eventInfo - { phone, contactName, data }
+ * @param {object} [opts] - { dedupeKey } to override the automatic dedupe key
  */
-async function triggerAutomation(triggerType, eventInfo = {}) {
+async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
   const { phone, contactName, data = {} } = eventInfo;
   const cleanPhone = cleanPhoneNumber(phone);
   if (!cleanPhone) {
     console.log(`[WA Automation] Skipped '${triggerType}': invalid phone '${phone}'`);
     return { success: false, reason: "invalid_phone" };
+  }
+
+  // Structural backstop against repeat firing. Several subsystems legitimately
+  // reach this function for one business event (the CRM event bus, the inbound
+  // message handler, lead capture, the webhook), and any overlap used to send
+  // the customer the same automation twice. Keyed on rule + contact + trigger
+  // with a short TTL, so a genuinely new event still gets through.
+  const dedupeKey = opts.dedupeKey || `${triggerType}:${cleanPhone.slice(-10)}`;
+  if (!claimAutomationDedupe(dedupeKey)) {
+    console.log(`♻️ [WA Automation] Skipped duplicate '${triggerType}' for ${cleanPhone} (already fired recently).`);
+    return { success: true, count: 0, reason: "duplicate_suppressed" };
   }
 
   try {
@@ -490,6 +533,9 @@ async function triggerAutomation(triggerType, eventInfo = {}) {
     );
 
     if (!rules.length) {
+      // Nothing was sent, so release the claim: a rule created a moment later
+      // must still be able to fire for this contact.
+      automationDedupeStore.delete(dedupeKey);
       return { success: true, count: 0, reason: "no_active_rules" };
     }
 
@@ -949,7 +995,7 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
 
   const waLoadBalancer = require("./waLoadBalancer");
   const waService = require("./whatsappService");
-  const activeSessionKey = actualSessionKey || waService.defaultKey || "708";
+  const activeSessionKey = actualSessionKey || waService.defaultKey;
 
   let sentResult = null;
   const sendTarget = (actualTargetChatId && actualTargetChatId.includes("@lid")) ? actualTargetChatId : cleanPhone;
@@ -1059,7 +1105,7 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
     try {
       const { sendMenu, getOptions } = require("./waMenuHandler");
       const options = await getOptions(rule.id);
-      if (options.length) await sendMenu(cleanPhone, rule.id);
+      if (options.length) await sendMenu(cleanPhone, rule.id, activeSessionKey);
     } catch (menuErr) {
       console.error(`[WA Automation] Menu send failed for rule '${rule.name}':`, menuErr.message);
     }
@@ -1151,6 +1197,11 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
 
 module.exports = {
   triggerAutomation,
+  // Exported for tests: the claim is module-private and triggerAutomation
+  // releases it when no rule matches, so it cannot be observed from outside
+  // without a live rule in the database.
+  claimAutomationDedupe,
+  AUTOMATION_DEDUPE_TTL_MS,
   cleanPhoneNumber,
   formatMessagePlaceholders,
   resolveSpintax,

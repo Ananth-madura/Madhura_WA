@@ -275,7 +275,12 @@ crmEventBus.on("payment_received", async (payment) => {
 
       const waLoadBalancer = require("./waLoadBalancer");
       const mdToWa = require("./mdToWa");
-      await waLoadBalancer.sendTextMessage(normPhone, mdToWa.toWhatsApp(receiptMsg)).catch(() => {});
+      // Pass the session explicitly. Omitting it left the load balancer to pick
+      // a sender itself, which could be a different user's number.
+      const waService = require("./whatsappService");
+      await waLoadBalancer
+        .sendTextMessage(normPhone, mdToWa.toWhatsApp(receiptMsg), waService.defaultKey)
+        .catch(() => {});
     }
 
     emitSocketEvent("payment_received", { invoice_id, amount: amountStr, customerName, phone: normPhone });
@@ -505,85 +510,53 @@ crmEventBus.on("payment_claim_submitted", async ({ phone, customerName, utrRefer
 let sweepTimer = null;
 let isSweeping = false;
 
+// ── Atomic sweep claim ─────────────────────────────────────────────────────
+// Claim rows by flipping wa_notified as part of the statement that selects
+// them, then emit only for rows this process actually won.
+//
+// The previous shape wrote the flag first but ignored whether the write
+// succeeded, and emitted unconditionally. A single failed UPDATE (lock wait
+// timeout, deadlock) left the row unflagged, so 30 seconds later the sweep saw
+// it again and re-sent the customer the same message — repeatedly, for the rest
+// of the 24h window. Two backend instances on one database could also both read
+// the row before either wrote the flag, and both emit.
+//
+// Returns the claimed rows; callers get the full row so listeners keep the
+// columns they used to receive.
+async function claimSweepRows(table, describe, eventName) {
+  const rows = await db.promise().query(
+    `UPDATE \`${table}\` SET wa_notified = 1
+      WHERE (wa_notified IS NULL OR wa_notified = 0)
+        AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+        AND id IN (
+          SELECT id FROM (
+            SELECT id FROM \`${table}\`
+             WHERE (wa_notified IS NULL OR wa_notified = 0)
+               AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+             ORDER BY id ASC LIMIT 10
+          ) AS fresh_rows
+        )`
+  ).catch((err) => {
+    console.warn(`[CRM Sweep] claim failed for ${table}: ${err.message}`);
+    return [];
+  });
+
+  for (const row of rows || []) {
+    console.log(`🔔 [CRM Sweep] Claimed new ${describe} #${row.id}. Emitting ${eventName}...`);
+    crmEventBus.emit(eventName, row);
+  }
+}
+
 async function runCrmRealtimeEventSweep() {
   if (isSweeping) return;
   isSweeping = true;
 
   try {
-    // A. Check for new Invoices
-    const [newInvoices] = await db.promise().query(
-      `SELECT id, client_company, invoice_date, invoice_duedate, project_names
-       FROM clientinvoices
-       WHERE (wa_notified IS NULL OR wa_notified = 0)
-         AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-       ORDER BY id ASC LIMIT 10`
-    ).catch(() => [[]]);
-
-    for (const inv of newInvoices) {
-      await db.promise().query("UPDATE clientinvoices SET wa_notified = 1 WHERE id = ?", [inv.id]).catch(() => {});
-      console.log(`🔔 [CRM Sweep] Detected new Invoice #${inv.id} for "${inv.client_company}". Emitting event...`);
-      crmEventBus.emit("invoice_created", inv);
-    }
-
-    // B. Check for new Quotations
-    const [newQuotes] = await db.promise().query(
-      `SELECT id, customer_id, quotation_date, grand_total, reference_no, client_company
-       FROM quotations
-       WHERE (wa_notified IS NULL OR wa_notified = 0)
-         AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-       ORDER BY id ASC LIMIT 10`
-    ).catch(() => [[]]);
-
-    for (const quote of newQuotes) {
-      await db.promise().query("UPDATE quotations SET wa_notified = 1 WHERE id = ?", [quote.id]).catch(() => {});
-      console.log(`🔔 [CRM Sweep] Detected new Quotation #${quote.id} (${quote.reference_no}). Emitting event...`);
-      crmEventBus.emit("quotation_created", quote);
-    }
-
-    // C. Check for new AMC Contracts
-    const [newContracts] = await db.promise().query(
-      `SELECT id, client_company, contract_title, start_date, end_date, amount_value, mobile_number
-       FROM contracts
-       WHERE (wa_notified IS NULL OR wa_notified = 0)
-         AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-       ORDER BY id ASC LIMIT 10`
-    ).catch(() => [[]]);
-
-    for (const c of newContracts) {
-      await db.promise().query("UPDATE contracts SET wa_notified = 1 WHERE id = ?", [c.id]).catch(() => {});
-      console.log(`🔔 [CRM Sweep] Detected new AMC Contract #${c.id} ("${c.contract_title}"). Emitting event...`);
-      crmEventBus.emit("amc_created", c);
-    }
-
-    // D. Check for new Walkin Visitors
-    const [newWalkins] = await db.promise().query(
-      `SELECT id, customer_name, company_name, mobile_number, location_city, purpose
-       FROM walkins
-       WHERE (wa_notified IS NULL OR wa_notified = 0)
-         AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-       ORDER BY id ASC LIMIT 10`
-    ).catch(() => [[]]);
-
-    for (const w of newWalkins) {
-      await db.promise().query("UPDATE walkins SET wa_notified = 1 WHERE id = ?", [w.id]).catch(() => {});
-      console.log(`🔔 [CRM Sweep] Detected new Walkin visit #${w.id} for "${w.customer_name}". Emitting event...`);
-      crmEventBus.emit("walkin_created", w);
-    }
-
-    // E. Check for new Payments
-    const [newPayments] = await db.promise().query(
-      `SELECT id, invoice_id, amount, payment_method, Transaction_ID
-       FROM payments
-       WHERE (wa_notified IS NULL OR wa_notified = 0)
-         AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-       ORDER BY id ASC LIMIT 10`
-    ).catch(() => [[]]);
-
-    for (const p of newPayments) {
-      await db.promise().query("UPDATE payments SET wa_notified = 1 WHERE id = ?", [p.id]).catch(() => {});
-      console.log(`🔔 [CRM Sweep] Detected new Payment #${p.id} for Invoice #${p.invoice_id}. Emitting event...`);
-      crmEventBus.emit("payment_received", p);
-    }
+    await claimSweepRows("clientinvoices", "Invoice", "invoice_created");
+    await claimSweepRows("quotations", "Quotation", "quotation_created");
+    await claimSweepRows("contracts", "AMC Contract", "amc_created");
+    await claimSweepRows("walkins", "Walkin visit", "walkin_created");
+    await claimSweepRows("payments", "Payment", "payment_received");
 
   } catch (sweepErr) {
     console.warn("[CRM Sweep] Periodic sweep warning:", sweepErr.message);

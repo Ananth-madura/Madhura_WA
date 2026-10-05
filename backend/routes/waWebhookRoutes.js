@@ -31,9 +31,31 @@ router.get("/", (req, res) => {
   });
 });
 
+// Signature verification for Meta's webhook.
+//
+// It used to `return true` whenever WA_APP_SECRET was unset — and that is
+// exactly the state this install shipped in (.env has WA_APP_SECRET=). The
+// result was a fully open POST /webhook: anyone could drive
+// handleIncomingMessage, which creates leads, advances flows, fires welcome
+// messages and AI replies, and mutates CRM records.
+//
+// Now it fails closed. An install that genuinely has no app secret (for example
+// while testing against a WhatsApp Web session only) must opt in explicitly
+// with WA_WEBHOOK_ALLOW_UNSIGNED=1, which logs a warning on every boot so the
+// exposure is never silent.
+const ALLOW_UNSIGNED = process.env.WA_WEBHOOK_ALLOW_UNSIGNED === "1";
+
+if (!process.env.WA_APP_SECRET && !ALLOW_UNSIGNED) {
+  console.error(
+    "🔒 WA_APP_SECRET is not set and WA_WEBHOOK_ALLOW_UNSIGNED is not '1'. " +
+      "POST /webhook will reject every request. Set WA_APP_SECRET to your Meta app secret, " +
+      "or set WA_WEBHOOK_ALLOW_UNSIGNED=1 to accept unsigned webhooks deliberately."
+  );
+}
+
 function isValidSignature(req) {
   const appSecret = process.env.WA_APP_SECRET;
-  if (!appSecret) return true; // signature check only enforced when an app secret is configured
+  if (!appSecret) return ALLOW_UNSIGNED;
   const signature = req.headers["x-hub-signature-256"];
   if (!signature || !req.rawBody) return false;
   const expected = "sha256=" + crypto.createHmac("sha256", appSecret).update(req.rawBody).digest("hex");
