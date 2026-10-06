@@ -15,7 +15,6 @@ import {
   Smartphone,
   UserCheck,
   OctagonMinus,
-  ChevronLeft,
   CreditCard,
   RefreshCw,
   Bell,
@@ -258,17 +257,6 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, isSyncin
           }
           style={{ borderBottom: "none", minWidth: 0 }}
         >
-          <button
-            onClick={() => window.location.assign("https://crm.madhuratech.com")}
-            className="hl-tab"
-            style={{ fontWeight: 600 }}
-            title="Return to CRM Dashboard"
-          >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <ChevronLeft size={16} />
-              <span className="hidden sm:inline">CRM Dashboard</span>
-            </span>
-          </button>
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = isTabActive(tab);

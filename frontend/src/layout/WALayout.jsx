@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
-import { Loader2, LogOut, XCircle, CheckCircle2, X } from "lucide-react";
+import { Loader2, LogOut, XCircle, CheckCircle2, X, ChevronLeft } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { API } from "../config/api";
 
@@ -85,7 +85,7 @@ export default function WALayout() {
       className={
         isChatView
           ? "crm-layout-shell wa-chat-mode wa-dvh flex flex-col overflow-hidden"
-          : "crm-layout-shell wa-min-dvh flex flex-col"
+          : "crm-layout-shell wa-page-mode wa-dvh flex flex-col overflow-hidden"
       }
     >
       <header
@@ -93,7 +93,7 @@ export default function WALayout() {
         style={{ minHeight: 56 }}
       >
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <span className="hl-wordmark">
+          <span className="hl-wordmark" title="Madhura WhatsApp CRM">
             <span className="hl-wordmark-mark" aria-hidden="true"></span>
             <span className="truncate">
               Madhura&nbsp;<em>WhatsApp CRM</em>
@@ -108,6 +108,20 @@ export default function WALayout() {
         {/* Fixed 140x40 so it reads as a real action button and stays on the
             same row as Logout at every viewport. */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Back to the main CRM app. Lives in the shell, not the WhatsApp tab
+              strip, so it stays reachable on every page without scrolling the
+              tab row — the tab row is a horizontal scroller on narrow screens
+              and this button used to scroll off with it. Icon-only below lg so
+              it never squeezes the wordmark on a phone. */}
+          <button
+            onClick={() => window.location.assign("https://crm.madhuratech.com")}
+            className="hl-shell-link shrink-0"
+            style={{ height: 40, padding: "0 0.75rem", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+            title="Return to CRM Dashboard"
+          >
+            <ChevronLeft size={14} />
+            <span className="hidden lg:inline whitespace-nowrap">CRM Dashboard</span>
+          </button>
           <button
             onClick={onDisconnectWhatsApp}
             disabled={disconnecting}

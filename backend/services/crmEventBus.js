@@ -43,6 +43,14 @@ function emitSocketEvent(eventName, payload) {
 // ── 1. INVOICE CREATED AUTOMATION ───────────────────────────────────────────
 crmEventBus.on("invoice_created", async (invoice) => {
   try {
+    // The /events ingestion endpoint lets any caller emit this event with an
+    // arbitrary payload, so ignore shape-less payloads instead of logging
+    // "Invoice #undefined" and firing with no resolvable phone.
+    if (!invoice || typeof invoice !== "object" || invoice.id == null) {
+      console.warn("[CRM Event Bus] invoice_created ignored: payload has no record id.");
+      return;
+    }
+
     const { id, client_company, invoice_date, invoice_duedate, grand_total, client_phone, total_amount } = invoice;
 
     // Resolve client phone and name if not supplied
@@ -521,27 +529,40 @@ let isSweeping = false;
 // of the 24h window. Two backend instances on one database could also both read
 // the row before either wrote the flag, and both emit.
 //
-// Returns the claimed rows; callers get the full row so listeners keep the
-// columns they used to receive.
+// A SELECT is required to read the rows: mysql2 returns [ResultSetHeader,
+// undefined] for UPDATE, so iterating that result yields the header (no `id`)
+// and then throws on `undefined.id`, killing the whole sweep.
+//
+// Claiming is done per row with a guarded UPDATE and checked via affectedRows,
+// so two backend instances on one database cannot both emit the same record —
+// the loser sees affectedRows === 0 and skips.
 async function claimSweepRows(table, describe, eventName) {
-  const rows = await db.promise().query(
-    `UPDATE \`${table}\` SET wa_notified = 1
+  const [candidates] = await db.promise().query(
+    `SELECT * FROM \`${table}\`
       WHERE (wa_notified IS NULL OR wa_notified = 0)
         AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-        AND id IN (
-          SELECT id FROM (
-            SELECT id FROM \`${table}\`
-             WHERE (wa_notified IS NULL OR wa_notified = 0)
-               AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-             ORDER BY id ASC LIMIT 10
-          ) AS fresh_rows
-        )`
+      ORDER BY id ASC LIMIT 10`
   ).catch((err) => {
-    console.warn(`[CRM Sweep] claim failed for ${table}: ${err.message}`);
-    return [];
+    console.warn(`[CRM Sweep] candidate scan failed for ${table}: ${err.message}`);
+    return [[]];
   });
 
-  for (const row of rows || []) {
+  if (!Array.isArray(candidates)) return;
+
+  for (const row of candidates) {
+    if (!row || row.id == null) continue;
+
+    const [claim] = await db.promise().query(
+      `UPDATE \`${table}\` SET wa_notified = 1
+        WHERE id = ? AND (wa_notified IS NULL OR wa_notified = 0)`,
+      [row.id]
+    ).catch((err) => {
+      console.warn(`[CRM Sweep] claim failed for ${table} #${row.id}: ${err.message}`);
+      return [{ affectedRows: 0 }];
+    });
+
+    if (!claim || claim.affectedRows !== 1) continue;
+
     console.log(`🔔 [CRM Sweep] Claimed new ${describe} #${row.id}. Emitting ${eventName}...`);
     crmEventBus.emit(eventName, row);
   }
@@ -551,15 +572,24 @@ async function runCrmRealtimeEventSweep() {
   if (isSweeping) return;
   isSweeping = true;
 
-  try {
-    await claimSweepRows("clientinvoices", "Invoice", "invoice_created");
-    await claimSweepRows("quotations", "Quotation", "quotation_created");
-    await claimSweepRows("contracts", "AMC Contract", "amc_created");
-    await claimSweepRows("walkins", "Walkin visit", "walkin_created");
-    await claimSweepRows("payments", "Payment", "payment_received");
+  const targets = [
+    ["clientinvoices", "Invoice", "invoice_created"],
+    ["quotations", "Quotation", "quotation_created"],
+    ["contracts", "AMC Contract", "amc_created"],
+    ["walkins", "Walkin visit", "walkin_created"],
+    ["payments", "Payment", "payment_received"],
+  ];
 
-  } catch (sweepErr) {
-    console.warn("[CRM Sweep] Periodic sweep warning:", sweepErr.message);
+  // Each table is swept independently so a failure on one (missing column,
+  // lock timeout, bad shape) never starves the others.
+  try {
+    for (const [table, describe, eventName] of targets) {
+      try {
+        await claimSweepRows(table, describe, eventName);
+      } catch (err) {
+        console.warn(`[CRM Sweep] ${table} sweep warning: ${err.message}`);
+      }
+    }
   } finally {
     isSweeping = false;
   }
