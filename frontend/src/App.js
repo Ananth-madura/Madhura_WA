@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { Agentation } from "agentation";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import Landing from "./pages/Landing";
 import Login from "./auth/login";
+import Signup from "./auth/signup";
 import WALayout from "./layout/WALayout";
 import WhatsAppPage from "./pages/whatsapp";
 import WAContacts from "./pages/whatsappContacts";
@@ -21,6 +23,15 @@ function RequireAuth({ children }) {
   return children;
 }
 
+/* Signed-in users have no business on the public pages — send them into the
+   app instead of showing them a "Sign in" button that would just work. */
+function PublicOnly({ children }) {
+  const { user } = useAuth();
+  const token = localStorage.getItem("token");
+  if (user || token) return <Navigate to="/whatsapp" replace />;
+  return children;
+}
+
 function FlowParamRedirect() {
   const { flowId } = useParams();
   return <Navigate to={flowId ? `/whatsapp/flows/build/${flowId}` : "/whatsapp/flows/build"} replace />;
@@ -31,8 +42,30 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/whatsapp" replace />} />
-          <Route path="/login" element={<Login />} />
+          <Route
+            path="/"
+            element={
+              <PublicOnly>
+                <Landing />
+              </PublicOnly>
+            }
+          />
+          <Route
+            path="/login"
+            element={
+              <PublicOnly>
+                <Login />
+              </PublicOnly>
+            }
+          />
+          <Route
+            path="/signup"
+            element={
+              <PublicOnly>
+                <Signup />
+              </PublicOnly>
+            }
+          />
           {/* Back-compat: old /dashboard/whatsapp bookmarks keep working */}
           <Route path="/dashboard/whatsapp/*" element={<Navigate to="/whatsapp" replace />} />
           <Route path="/flows" element={<Navigate to="/whatsapp/flows" replace />} />

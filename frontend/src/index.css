@@ -1733,13 +1733,15 @@ select.hidden {
 .hl-wordmark em { font-style: normal; color: var(--color-accent); }
 /* Below `sm` there is not enough room for the full lockup next to Logout. */
 @media (max-width: 639px) {
-  .hl-wordmark em { display: none; }
+  .hl-shell .hl-wordmark em { display: none; }
 }
 /* Below 400px not even the short "Madhura" lockup fits beside the header
    actions, and ellipsis truncation leaves an unreadable sliver. Keep the brand
-   mark, drop the wordmark; the mark keeps `title` for context. */
+   mark, drop the wordmark; the mark keeps `title` for context.
+   Scoped to .hl-shell: the landing/auth headers wrap their buttons onto a
+   second row, so they keep the full lockup at every width. */
 @media (max-width: 399px) {
-  .hl-wordmark > span:last-child { display: none; }
+  .hl-shell .hl-wordmark > span:last-child { display: none; }
 }
 /* In @layer components so the `hidden md:inline-flex` utilities on the JSX can
    still win. As a bare rule it outranked Tailwind's `hidden` (unlayered CSS
@@ -2027,4 +2029,915 @@ main > * {
 .hl-shell-link:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+/* ═══════════════════════════════════════════════════════════════
+   PUBLIC LANDING PAGE (/)
+
+   The landing page lives outside the app shell, so it needs its own
+   page-level scroll container rather than the shell's bounded
+   .wa-page-mode layout. Long-form marketing content always scrolls on
+   the document: no overscroll-behavior: contain here, so the wheel
+   chains normally.
+
+   The page is organised around the CRM <-> WhatsApp loop rather than
+   a feature grid: the hero runs the loop once, the ledger lists the
+   events it can fire, and the remaining sections are what the team
+   touches day to day. Dark bands (.lp-invert) restate type colour so
+   the global `h1..h6` / `p` navy resets cannot leak navy-on-navy.
+   ═══════════════════════════════════════════════════════════════ */
+.lp-root {
+  --lp-hair: rgba(255, 255, 255, 0.11);
+  --lp-hair-soft: rgba(255, 255, 255, 0.06);
+  --lp-dim: rgba(255, 255, 255, 0.68);
+  /* 0.56 rather than a quieter value: this carries 10–12px helper text on
+     navy, and anything below ~0.5 drops under the 4.5:1 contrast floor. */
+  --lp-faint: rgba(255, 255, 255, 0.56);
+  --lp-wa: #25d366;
+  --lp-mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  overflow-x: clip;
+}
+
+.lp-shell {
+  width: 100%;
+  max-width: 1180px;
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 4vw, 2.5rem);
+}
+
+/* Invert helper: one scope for every navy band. */
+.lp-invert h1,
+.lp-invert h2,
+.lp-invert h3,
+.lp-invert strong {
+  color: var(--color-paper-2);
+}
+.lp-invert p,
+.lp-invert dd,
+.lp-invert li {
+  color: var(--lp-dim);
+}
+.lp-invert .hl-section-label {
+  color: var(--lp-faint);
+}
+.lp-invert code {
+  color: var(--lp-dim);
+}
+
+/* ── Reveal ────────────────────────────────────────────────────
+   Fade + 8px rise, staggered. Armed only from JS (IntersectionObserver,
+   no reduced-motion), so content is never hidden when the observer is
+   unavailable. */
+@keyframes lp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.lp-armed [data-reveal] {
+  opacity: 0;
+}
+.lp-armed [data-reveal].is-in {
+  animation: lp-rise var(--dur-short) var(--ease-out) both;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-armed [data-reveal] {
+    opacity: 1;
+  }
+}
+
+.lp-skip {
+  position: absolute;
+  left: -9999px;
+}
+.lp-skip:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 100;
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-input);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+.lp-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--color-shell);
+  border-bottom: 2px solid var(--color-accent);
+}
+.lp-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  min-height: 64px;
+  padding-block: 0.625rem;
+}
+.lp-header-links {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-inline: auto;
+  font-size: var(--text-sm);
+  min-width: 0;
+}
+.lp-header-links a {
+  color: var(--lp-dim);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--dur-short) var(--ease-out);
+}
+.lp-header-links a:hover {
+  color: var(--color-paper-2);
+}
+.lp-header-links a:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.lp-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: none;
+}
+
+/* --color-rule is a near-white hairline that disappears on navy, so dark
+   surfaces get their own outline colour. */
+.lp-btn-outline-dark {
+  background: transparent;
+  color: var(--color-paper-2);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+.lp-btn-outline-dark:hover {
+  border-color: var(--color-accent);
+  color: var(--color-paper-2);
+  background: rgba(255, 255, 255, 0.06);
+}
+.lp-btn-accent {
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+.lp-btn-accent:hover {
+  background: var(--color-accent-hover);
+}
+.lp-btn-lg {
+  padding: 0.75rem 1.375rem;
+  font-size: 1rem;
+}
+
+/* ── Hero ───────────────────────────────────────────────────── */
+.lp-hero {
+  background:
+    radial-gradient(62% 46% at 68% 0%, rgba(252, 189, 22, 0.13), transparent 68%),
+    var(--color-shell);
+  color: var(--color-paper-2);
+  padding-block: clamp(2rem, 5vw, 3.5rem);
+}
+.lp-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.04fr);
+  gap: clamp(2rem, 4.5vw, 3.25rem);
+  align-items: center;
+}
+.lp-hero-copy {
+  min-width: 0;
+}
+
+.lp-loop-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--lp-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--lp-dim);
+  border: 1px solid var(--lp-hair);
+  border-radius: var(--radius-pill);
+  padding: 0.3rem 0.75rem 0.3rem 0.6rem;
+}
+.lp-loop-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  flex: none;
+}
+
+.lp-h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.85rem, 1.05rem + 3vw, 2.9rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin: 1.125rem 0 0;
+  color: var(--color-paper-2);
+  text-wrap: balance;
+}
+.lp-accent {
+  color: var(--color-accent);
+}
+.lp-lede {
+  margin: 1.25rem 0 0;
+  font-size: clamp(1rem, 0.95rem + 0.3vw, 1.125rem);
+  line-height: 1.65;
+  color: var(--lp-dim);
+  max-width: 54ch;
+}
+.lp-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+.lp-cta-row-end {
+  justify-content: flex-end;
+}
+.lp-hero-note {
+  margin: 1.5rem 0 0;
+  font-size: var(--text-xs);
+  color: var(--lp-faint);
+}
+
+/* ── The chain ────────────────────────────────────────────────
+   A four-stage demonstration of the loop. Each stage is numbered in
+   a gutter and joined to the next by a hairline drawn from its own
+   ::before, so the connector always matches real stage heights.
+   The connector overflows the stage by the grid gap plus half the
+   next step chip, which is why .lp-chain must not clip. */
+.lp-chain {
+  position: relative;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.875rem;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--lp-hair);
+  border-radius: var(--radius-card);
+  box-shadow: 0 28px 70px rgba(5, 14, 47, 0.5);
+}
+.lp-chain-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 0.625rem 0.75rem;
+  align-items: start;
+  padding: 0.625rem 0.75rem;
+  background: rgba(5, 14, 47, 0.55);
+  border: 1px solid var(--lp-hair-soft);
+  border-radius: var(--radius-input);
+}
+.lp-chain-stage::before {
+  content: "";
+  position: absolute;
+  left: calc(0.75rem + 13px);
+  top: 100%;
+  width: 1px;
+  /* Grid gap plus half the next step chip: lands dead centre on it. */
+  height: calc(0.5rem + 13px);
+  background: var(--lp-hair);
+}
+.lp-chain-stage:last-child::before {
+  display: none;
+}
+.lp-chain-step {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-family: var(--lp-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--lp-faint);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--lp-hair);
+  border-radius: 7px;
+}
+.lp-chain-body {
+  display: grid;
+  gap: 0.375rem;
+  min-width: 0;
+}
+.lp-chain-body strong {
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-paper-2);
+}
+.lp-chain-detail {
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  color: var(--lp-dim);
+}
+.lp-chain-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex: none;
+  font-family: var(--lp-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  border: 1px solid var(--color-focus);
+  border-radius: var(--radius-pill);
+  padding: 0.15rem 0.5rem;
+}
+.lp-chain-stage.is-claimed {
+  border-color: rgba(252, 189, 22, 0.34);
+}
+.lp-chain-stage.is-claimed .lp-chain-step {
+  color: var(--color-accent);
+  border-color: rgba(252, 189, 22, 0.4);
+  background: rgba(252, 189, 22, 0.1);
+}
+
+@keyframes lp-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+}
+.lp-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  flex: none;
+  animation: lp-pulse 2.6s ease-in-out infinite;
+}
+
+.lp-node {
+  justify-self: start;
+  font-family: var(--lp-mono);
+  font-size: 11px;
+  color: var(--lp-dim);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--lp-hair);
+  border-radius: 6px;
+  padding: 0.15rem 0.5rem;
+  overflow-wrap: anywhere;
+}
+.lp-node-wa {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.lp-node.is-on {
+  color: var(--color-accent);
+  border-color: rgba(252, 189, 22, 0.42);
+  background: rgba(252, 189, 22, 0.1);
+}
+.lp-node.is-idle {
+  color: var(--lp-faint);
+  border-style: dashed;
+  background: transparent;
+}
+.lp-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lp-wa);
+  flex: none;
+}
+
+/* The delivered message, in WhatsApp's own bubble voice. */
+.lp-msg {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--color-primary-soft);
+  border-radius: 12px 12px 12px 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.86);
+}
+.lp-msg strong {
+  color: var(--color-paper-2);
+  font-weight: 700;
+}
+
+/* Real reply buttons — pressing one runs the inbound half of the loop. */
+.lp-replies {
+  display: grid;
+  gap: 0.375rem;
+  margin-top: 0.125rem;
+}
+.lp-reply-btn {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-paper-2);
+  background: transparent;
+  border: 1px solid var(--color-shell-2);
+  border-radius: 9px;
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+  transition: border-color var(--dur-short) var(--ease-out),
+    background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+.lp-reply-btn:hover {
+  border-color: var(--color-focus);
+}
+.lp-reply-btn:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.lp-reply-btn.is-on {
+  color: var(--color-accent-ink);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.lp-reply-action {
+  font-family: var(--lp-mono);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--lp-faint);
+  white-space: nowrap;
+}
+.lp-reply-btn.is-on .lp-reply-action {
+  color: rgba(5, 14, 47, 0.62);
+}
+.lp-chain-hint {
+  font-family: var(--lp-mono);
+  font-size: 10.5px;
+  color: var(--lp-faint);
+}
+.lp-chain-result {
+  border-style: dashed;
+}
+.lp-chain-result.is-live {
+  border-style: solid;
+  border-color: rgba(252, 189, 22, 0.34);
+  background: rgba(252, 189, 22, 0.06);
+}
+
+/* ── Sections ───────────────────────────────────────────────── */
+.lp-section {
+  padding-block: clamp(3rem, 7vw, 5.25rem);
+  scroll-margin-top: 84px;
+}
+.lp-h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.25rem);
+  line-height: 1.18;
+  margin: 0.5rem 0 0;
+  max-width: 24ch;
+  text-wrap: balance;
+}
+.lp-sub {
+  margin: 0.875rem 0 0;
+  color: var(--color-ink-2);
+  line-height: 1.65;
+  max-width: 62ch;
+}
+
+/* Loop — two directions, so the copy reads as a pair. */
+.lp-directions {
+  margin-top: 2.25rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(1.75rem, 4vw, 3rem);
+}
+.lp-direction {
+  border-top: 2px solid var(--color-ink);
+  padding-top: 1rem;
+  min-width: 0;
+}
+.lp-direction-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-2);
+}
+.lp-direction h3 {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0.625rem 0 0;
+}
+.lp-direction p {
+  margin: 0.625rem 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.7;
+  color: var(--color-ink-2);
+}
+
+/* ── Event ledger ───────────────────────────────────────────── */
+.lp-ledger-band {
+  background: var(--color-shell);
+  color: var(--color-paper-2);
+  border-block: 1px solid rgba(255, 255, 255, 0.08);
+}
+.lp-events {
+  list-style: none;
+  margin: 2.25rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 clamp(1.5rem, 4vw, 3.5rem);
+}
+.lp-event {
+  display: grid;
+  grid-template-columns: minmax(0, 12.5rem) minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: baseline;
+  border-top: 1px solid var(--lp-hair);
+  padding-block: 0.8125rem;
+  min-width: 0;
+}
+.lp-event code {
+  font-family: var(--lp-mono);
+  font-size: 12px;
+  /* Not yellow: the ledger is reference, not state. Yellow is reserved for
+     the live/automatic marker below, so accent keeps meaning something. */
+  color: var(--color-paper-2);
+  overflow-wrap: anywhere;
+}
+.lp-event span {
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--lp-dim);
+}
+
+.lp-swept {
+  margin-top: 2rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.125rem 1.25rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--lp-hair);
+  border-radius: var(--radius-card);
+}
+.lp-swept-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-self: start;
+  font-family: var(--lp-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+.lp-swept-body {
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--lp-dim);
+  max-width: 68ch;
+}
+.lp-swept-tables {
+  list-style: none;
+  margin: 0.125rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4375rem;
+}
+.lp-swept-tables code {
+  display: inline-block;
+  font-family: var(--lp-mono);
+  font-size: 11.5px;
+  color: var(--color-paper-2);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--lp-hair);
+  border-radius: 6px;
+  padding: 0.2rem 0.5rem;
+}
+
+/* ── Surfaces ───────────────────────────────────────────────── */
+.lp-surfaces {
+  margin-top: 2.25rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(1.5rem, 3.5vw, 2.75rem) clamp(1.75rem, 4vw, 3.5rem);
+}
+.lp-surface-group {
+  border-top: 2px solid var(--color-ink);
+  padding-top: 0.875rem;
+  min-width: 0;
+}
+.lp-surface-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 0;
+}
+.lp-surface-group-title svg {
+  color: var(--color-ink-2);
+  flex: none;
+}
+.lp-surface-list {
+  margin: 0.75rem 0 0;
+  display: grid;
+}
+.lp-surface-item {
+  display: grid;
+  gap: 0.1875rem;
+  padding-block: 0.6875rem;
+  border-top: 1px solid var(--color-rule);
+}
+.lp-surface-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.lp-surface-item dt {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.lp-surface-item dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--color-ink-2);
+}
+
+/* ── Connecting a number ───────────────────────────────────── */
+.lp-engines {
+  background: var(--color-shell);
+  color: var(--color-paper-2);
+  border-block: 1px solid rgba(255, 255, 255, 0.08);
+}
+.lp-engines-grid {
+  margin-top: 2.25rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(1.5rem, 3vw, 2.5rem);
+}
+.lp-engine {
+  min-width: 0;
+}
+.lp-engine > svg {
+  color: var(--color-accent);
+}
+.lp-engine h3 {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin: 0.75rem 0 0;
+}
+.lp-engine p {
+  margin: 0.5rem 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.65;
+}
+/* Hairline column dividers only while the three sit side by side; stacked
+   they would just underline everything. */
+@media (min-width: 1024px) {
+  .lp-engine + .lp-engine {
+    border-left: 1px solid var(--lp-hair);
+    padding-left: clamp(1.5rem, 2.5vw, 2.25rem);
+  }
+}
+
+.lp-guarantees {
+  list-style: none;
+  margin: 2.25rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.625rem;
+}
+.lp-guarantees li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: var(--text-sm);
+  color: var(--lp-dim);
+}
+.lp-guarantees svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--color-accent);
+}
+
+/* ── Closing ───────────────────────────────────────────────── */
+.lp-close {
+  background: var(--color-paper-2);
+  border-top: 1px solid var(--color-rule);
+}
+.lp-close-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  align-items: center;
+}
+.lp-close .lp-cta-row {
+  margin-top: 0;
+}
+
+/* ── Footer ─────────────────────────────────────────────────── */
+.lp-footer {
+  margin-top: auto;
+  background: var(--color-shell);
+  color: var(--color-paper-2);
+  border-top: 2px solid var(--color-accent);
+  padding-block: 1.75rem;
+}
+.lp-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.lp-footer-links {
+  display: flex;
+  gap: 1.25rem;
+  font-size: var(--text-sm);
+}
+.lp-footer-links a {
+  color: var(--lp-dim);
+  text-decoration: none;
+}
+.lp-footer-links a:hover {
+  color: var(--color-accent);
+}
+.lp-footer-links a:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 1023px) {
+  .lp-header-links {
+    display: none;
+  }
+  .lp-hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Copy first, demonstration second — the chain is the supporting proof. */
+  .lp-chain {
+    order: 2;
+  }
+  .lp-engines-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.75rem;
+  }
+  .lp-engine {
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--lp-hair);
+  }
+  .lp-engine:first-child {
+    padding-top: 0;
+    border-top: 0;
+  }
+  .lp-close-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+  .lp-cta-row-end {
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 767px) {
+  .lp-directions,
+  .lp-events,
+  .lp-surfaces {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lp-event {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
+  }
+}
+@media (max-width: 480px) {
+  .lp-header-row {
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+  }
+  .lp-header-actions {
+    width: 100%;
+  }
+  .lp-header-actions > * {
+    flex: 1 1 0;
+  }
+  /* Side by side the two hero CTAs end up different widths and read as
+     ragged. Stacked at equal width they match the header treatment above. */
+  .lp-cta-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .lp-cta-row > * {
+    width: 100%;
+  }
+  /* The step gutter and the "claimed" flag stop fitting beside the copy. */
+  .lp-chain {
+    padding: 0.75rem;
+  }
+  .lp-chain-stage {
+    grid-template-columns: 26px minmax(0, 1fr);
+    padding: 0.625rem;
+  }
+  .lp-chain-stage::before {
+    left: calc(0.625rem + 13px);
+  }
+  .lp-chain-flag {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .lp-footer-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   AUTH PAGES (/login, /signup)
+
+   Shared shell so sign-in and request-access match the landing page.
+   Deliberately NOT .wa-page-mode: these are short forms, so they
+   centre in the viewport and never need their own scroll container.
+   ═══════════════════════════════════════════════════════════════ */
+.lp-auth {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(1rem, 4vw, 3rem) 1rem;
+  background:
+    radial-gradient(58% 42% at 50% 6%, rgba(252, 189, 22, 0.10), transparent 70%),
+    var(--color-shell);
+}
+.lp-auth-panel {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-paper-2);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
+  padding: clamp(1.5rem, 4vw, 2.25rem);
+  margin-block: auto;
+}
+.lp-auth-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-ink-2);
+  text-decoration: none;
+  margin-bottom: 1.25rem;
+}
+.lp-auth-back:hover {
+  color: var(--color-primary);
+}
+.lp-auth-error {
+  display: flex;
+  gap: 0.5rem;
+  background: #FEE4E2;
+  color: #D92D20;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  border-radius: var(--radius-input);
+  padding: 0.625rem 0.875rem;
+  margin-bottom: 1rem;
+  border: 1px solid #FECDCA;
+}
+.lp-auth-note {
+  display: flex;
+  gap: 0.625rem;
+  align-items: flex-start;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  border-radius: var(--radius-input);
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--color-rule);
 }

@@ -1,3 +1,28 @@
+/*
+ * Whatsapp_CRM service worker.
+ *
+ * ⚠️ READ BEFORE EDITING CACHE STRATEGIES
+ *
+ * This app holds WhatsApp conversations, contact phone numbers, invoices and
+ * payment records. Two rules follow from that, and both are enforced below:
+ *
+ *   1. NEVER cache /api/** into CacheStorage. The previous version used
+ *      NetworkFirst with a 24h TTL, which wrote conversation content and
+ *      payment records to disk in the browser and kept serving them after a
+ *      user logged out or after a record was deleted. That is a DPDP Act 2023 /
+ *      GDPR problem and it also served stale business data. It is now
+ *      NetworkOnly.
+ *
+ *   2. NEVER cache navigations. The old NetworkFirst/24h rule meant that after a
+ *      Vercel deploy, users could be served yesterday's index.html - including
+ *      a dead hashed JS bundle reference - for up to a day. Vercel's edge
+ *      already caches the static assets correctly; the SW only made it worse.
+ *      It is now NetworkOnly.
+ *
+ * Static assets ARE safe to cache because Create React App content-hashes every
+ * file under /static/, so a changed file always has a changed name.
+ */
+
 importScripts("https://storage.googleapis.com/workbox-cdn/releases/6.5.4/workbox-sw.js");
 
 workbox.setConfig({ debug: false });
@@ -9,45 +34,54 @@ const { ExpirationPlugin } = workbox.expiration;
 const { CacheableResponsePlugin } = workbox.cacheableResponse;
 
 const CACHE_NAMES = {
-  pages: "achme-pages",
-  static: "achme-static",
-  images: "achme-images",
-  api: "achme-api",
-  googleFonts: "achme-fonts",
+  static: "achme-static-v2",
+  images: "achme-images-v2",
+  googleFonts: "achme-fonts-v2",
+  manifest: "achme-manifest-v2",
 };
 
 self.addEventListener("activate", (event) => {
   const valid = Object.values(CACHE_NAMES);
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.map((key) => {
-          if (!valid.includes(key)) return caches.delete(key);
-        })
-      )
-    )
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys.filter((key) => !valid.includes(key)).map((key) => caches.delete(key))
+      );
+      await self.clients.claim();
+    })()
   );
 });
 
+self.addEventListener("install", () => {
+  self.skipWaiting();
+});
+
+/* ── 1. Never touch the API ─────────────────────────────────────────────────── */
 registerRoute(
-  ({ request }) => request.mode === "navigate",
-  new NetworkFirst({
-    cacheName: CACHE_NAMES.pages,
-    plugins: [
-      new CacheableResponsePlugin({ statuses: [200] }),
-    ],
-  })
+  ({ url }) =>
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/uploads/") ||
+    url.pathname.includes("socket.io"),
+  new NetworkOnly()
 );
 
+/* ── 2. Never cache navigations ─────────────────────────────────────────────── */
+registerRoute(({ request }) => request.mode === "navigate", new NetworkOnly());
+
+/* ── 3. Content-hashed static assets: safe to cache forever ─────────────────── */
 registerRoute(
-  ({ request }) =>
-    request.destination === "script" ||
-    request.destination === "style" ||
-    request.destination === "font" ||
-    request.destination === "worker",
-  new StaleWhileRevalidate({
+  ({ request, url }) =>
+    (request.destination === "script" ||
+      request.destination === "style" ||
+      request.destination === "font") &&
+    // sw.js must stay uncached or a deploy can never ship a new worker.
+    url.pathname !== "/sw.js" &&
+    url.pathname !== "/service-worker.js",
+  new CacheFirst({
     cacheName: CACHE_NAMES.static,
     plugins: [
+      new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 30 * 24 * 60 * 60 }),
       new CacheableResponsePlugin({ statuses: [0, 200] }),
     ],
   })
@@ -58,17 +92,24 @@ registerRoute(
   new CacheFirst({
     cacheName: CACHE_NAMES.images,
     plugins: [
-      new ExpirationPlugin({
-        maxEntries: 100,
-        maxAgeSeconds: 30 * 24 * 60 * 60,
-      }),
+      new ExpirationPlugin({ maxEntries: 100, maxAgeSeconds: 30 * 24 * 60 * 60 }),
       new CacheableResponsePlugin({ statuses: [0, 200] }),
     ],
   })
 );
 
 registerRoute(
-  ({ url }) => url.origin === "https://fonts.googleapis.com" || url.origin === "https://fonts.gstatic.com",
+  ({ request }) => request.destination === "manifest",
+  new StaleWhileRevalidate({
+    cacheName: CACHE_NAMES.manifest,
+    plugins: [new CacheableResponsePlugin({ statuses: [0, 200] })],
+  })
+);
+
+registerRoute(
+  ({ url }) =>
+    url.origin === "https://fonts.googleapis.com" ||
+    url.origin === "https://fonts.gstatic.com",
   new StaleWhileRevalidate({
     cacheName: CACHE_NAMES.googleFonts,
     plugins: [
@@ -78,48 +119,12 @@ registerRoute(
   })
 );
 
-registerRoute(
-  ({ url }) => url.pathname.startsWith("/api/"),
-  new NetworkFirst({
-    cacheName: CACHE_NAMES.api,
-    plugins: [
-      new ExpirationPlugin({
-        maxEntries: 200,
-        maxAgeSeconds: 24 * 60 * 60,
-      }),
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
-    ],
-  })
-);
-
-const API_BACKEND_URL = self.location.origin.includes("localhost")
-  ? self.location.origin.replace(/:\d+$/, ":5000")
-  : null;
-
-if (API_BACKEND_URL) {
-  registerRoute(
-    ({ url }) => url.origin === API_BACKEND_URL && url.pathname.startsWith("/api/"),
-    new NetworkFirst({
-      cacheName: CACHE_NAMES.api,
-      plugins: [
-        new ExpirationPlugin({
-          maxEntries: 200,
-          maxAgeSeconds: 24 * 60 * 60,
-        }),
-        new CacheableResponsePlugin({ statuses: [0, 200] }),
-      ],
-    })
-  );
-}
-
-registerRoute(
-  ({ url }) => url.pathname.includes("socket.io"),
-  new NetworkOnly()
-);
-
-// Push event listener for desktop alerts
+/* ── Push notifications (desktop alerts) ───────────────────────────────────── */
 self.addEventListener("push", (event) => {
-  let data = { title: "Madhura Tech CRM Notification", body: "You have a new update!" };
+  let data = {
+    title: "Madhura Tech CRM Notification",
+    body: "You have a new update!",
+  };
   if (event.data) {
     try {
       data = event.data.json();
@@ -132,37 +137,28 @@ self.addEventListener("push", (event) => {
     body: data.body,
     icon: "/Madhura-logo.png",
     badge: "/Madhura-logo.png",
-    data: {
-      url: data.url || "/dashboard"
-    },
-    actions: [
-      { action: "open_url", title: "View Details" }
-    ]
+    data: { url: data.url || "/dashboard" },
+    actions: [{ action: "open_url", title: "View Details" }],
   };
 
-  event.waitUntil(
-    self.registration.showNotification(data.title, options)
-  );
+  event.waitUntil(self.registration.showNotification(data.title, options));
 });
 
-// Click listener to navigate when a notification is clicked
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const urlToOpen = event.notification.data?.url || "/dashboard";
 
   event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
-      // If window client is open and has focus capabilities, focus it
-      for (var i = 0; i < windowClients.length; i++) {
-        var client = windowClients[i];
-        if (client.url.includes(urlToOpen) && "focus" in client) {
-          return client.focus();
+    clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((windowClients) => {
+        for (var i = 0; i < windowClients.length; i++) {
+          var client = windowClients[i];
+          if (client.url.includes(urlToOpen) && "focus" in client) {
+            return client.focus();
+          }
         }
-      }
-      // Otherwise open a new window
-      if (clients.openWindow) {
-        return clients.openWindow(urlToOpen);
-      }
-    })
+        if (clients.openWindow) return clients.openWindow(urlToOpen);
+      })
   );
 });

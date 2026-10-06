@@ -1,27 +1,60 @@
 import { io } from "socket.io-client";
-import { API } from "../config/api";
+import { SOCKET } from "../config/api";
 
-const socketUrl = API || window.location.origin;
+// SOCKET is REACT_APP_SOCKET_URL when set (direct to the VPS backend), otherwise
+// it falls back to the API origin, i.e. same-origin through the Vercel rewrite.
+const socketUrl = SOCKET || window.location.origin;
+
+// Read the JWT lazily on every (re)connect rather than once at module load.
+// Reading it at import time captures whatever was in localStorage when this
+// module was first evaluated, which is `null` for a user who is still on the
+// login page — the socket then reconnects forever without a token.
+const readToken = () => {
+  try {
+    return localStorage.getItem("token") || null;
+  } catch (_) {
+    return null;
+  }
+};
+
+const readUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user") || "{}");
+  } catch (_) {
+    return {};
+  }
+};
+
 const socketOptions = {
   path: "/socket.io",
   transports: ["websocket", "polling"],
+  withCredentials: true,
   reconnection: true,
   reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
 };
 
-const socket = io(socketUrl, socketOptions);
+// Socket.IO evaluates this on EVERY handshake and expects the CALLBACK form:
+//
+//   socket.io-client/src/socket.js -> onopen():
+//     if (typeof this.auth == "function") this.auth((data) => this._sendConnectPacket(data));
+//
+// Returning an object from this function would be silently ignored and the
+// server would reject the socket with "unauthorized: no token". The callback
+// shape is load-bearing, not stylistic.
+const auth = (cb) => {
+  const token = readToken();
+  cb(token ? { token } : {});
+};
+
+const socket = io(socketUrl, { ...socketOptions, auth });
 
 // Connect to notifications namespace
-const notificationSocket = io(`${socketUrl}/notifications`, socketOptions);
+const notificationSocket = io(`${socketUrl}/notifications`, { ...socketOptions, auth });
 
 const joinMainRooms = () => {
-  const token = localStorage.getItem("token");
-  let user = {};
-  try {
-    user = JSON.parse(localStorage.getItem("user") || "{}");
-  } catch (_) {}
+  const user = readUser();
   const userId = user.id || user._id || localStorage.getItem("userId") || "1";
 
   socket.emit("join_room", "whatsapp");
@@ -40,8 +73,8 @@ socket.on("reconnect", () => {
 });
 
 const joinNotificationRooms = () => {
-  const token = localStorage.getItem("token");
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const token = readToken();
+  const user = readUser();
 
   if (token && user.id) {
     notificationSocket.emit("join", { userId: user.id, role: user.role });

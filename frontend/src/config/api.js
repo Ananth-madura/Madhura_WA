@@ -1,14 +1,10 @@
-import { API as API_CONSTANT } from "./index";
+import { API as API_CONSTANT, SOCKET as SOCKET_CONSTANT } from "./index";
 
 export const API = API_CONSTANT;
+export const SOCKET = SOCKET_CONSTANT;
 export const API_PROXY_URL = API_CONSTANT;
 export const API_BACKEND = API_CONSTANT;
 
-export const getApiUrl = (path) => {
-  if (path.startsWith("/api")) {
-    return `${API}${path}`;
-  }
-  return `${API}${path}`;
-};
+export const getApiUrl = (path) => `${API}${path}`;
 
 export default API;

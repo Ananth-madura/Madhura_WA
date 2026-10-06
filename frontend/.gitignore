@@ -6,6 +6,12 @@
 .pnp.js
 *mov
 
+# local environment — never commit. .env*.example files ARE tracked on purpose:
+# a fresh clone needs them for first-boot setup.
+.env
+.env.local
+.env.*.local
+
 # testing
 /coverage
 

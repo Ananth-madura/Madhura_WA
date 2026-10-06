@@ -1,4 +1,16 @@
 node_modules
-.env
-*.log
 build
+coverage
+.git
+
+# Secrets — never bake these into an image layer.
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+npm-debug.log*
+Dockerfile
+.dockerignore
+.vercel
+deploy/

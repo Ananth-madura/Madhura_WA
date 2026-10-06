@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
+import { ArrowLeft } from "lucide-react";
 import { useAuth } from "./AuthContext";
 import { API } from "../config/api";
 
@@ -71,8 +72,13 @@ export default function Login() {
   };
 
   return (
-    <div className="hl-reveal" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(60% 45% at 50% 12%, rgba(252, 189, 22, 0.10), transparent 70%), var(--color-shell)", padding: 16 }}>
-      <form onSubmit={submit} className="hl-card" style={{ width: "100%", maxWidth: 400, padding: "36px 32px" }}>
+    <div className="lp-auth">
+      <div className="lp-auth-panel">
+        <Link to="/" className="lp-auth-back">
+          <ArrowLeft size={15} />
+          Back to home
+        </Link>
+
         <div className="hl-wordmark" style={{ color: "var(--color-ink)", marginBottom: 6 }}>
           <span className="hl-wordmark-mark" aria-hidden="true"></span>
           Madhura&nbsp;<em>WhatsApp CRM</em>
@@ -81,34 +87,36 @@ export default function Login() {
         <p style={{ fontSize: 13, color: "var(--color-ink-2)", marginBottom: 24 }}>Your WhatsApp corporate workspace</p>
 
         {error && (
-          <div role="alert" style={{ background: "#FEE4E2", color: "#D92D20", fontSize: 13, borderRadius: 8, padding: "10px 14px", marginBottom: 16, border: "1px solid #FECDCA" }}>{error}</div>
+          <div role="alert" className="lp-auth-error">{error}</div>
         )}
 
-        <label htmlFor="hl-email" style={{ fontSize: 12, fontWeight: 600, color: "var(--color-ink)", display: "block", marginBottom: 6 }}>Email Address</label>
-        <input
-          id="hl-email"
-          type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username"
-          className="hl-input"
-          style={{ width: "100%", marginBottom: 16 }}
-          placeholder="name@company.com"
-        />
+        <form onSubmit={submit} noValidate>
+          <label htmlFor="hl-email" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>Email Address</label>
+          <input
+            id="hl-email"
+            type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username"
+            className="hl-input"
+            style={{ width: "100%", marginBottom: 16 }}
+            placeholder="name@company.com"
+          />
 
-        <label htmlFor="hl-password" style={{ fontSize: 12, fontWeight: 600, color: "var(--color-ink)", display: "block", marginBottom: 6 }}>Password</label>
-        <input
-          id="hl-password"
-          type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
-          className="hl-input"
-          style={{ width: "100%", marginBottom: 22 }}
-          placeholder="••••••••"
-        />
+          <label htmlFor="hl-password" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>Password</label>
+          <input
+            id="hl-password"
+            type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
+            className="hl-input"
+            style={{ width: "100%", marginBottom: 22 }}
+            placeholder="••••••••"
+          />
 
-        <button
-          type="submit" disabled={loading}
-          className="hl-btn-primary"
-          style={{ width: "100%" }}
-        >
-          {loading ? "Signing in…" : "Sign in to Dashboard"}
-        </button>
+          <button
+            type="submit" disabled={loading}
+            className="hl-btn-primary"
+            style={{ width: "100%" }}
+          >
+            {loading ? "Signing in…" : "Sign in to Dashboard"}
+          </button>
+        </form>
 
         <button
           type="button" disabled={loading}
@@ -119,10 +127,17 @@ export default function Login() {
           Demo Login (Admin)
         </button>
 
+        <p style={{ fontSize: 12, color: "var(--color-ink-2)", marginTop: 18, textAlign: "center" }}>
+          Need an account?{" "}
+          <Link to="/signup" style={{ color: "var(--color-primary)", fontWeight: 600 }}>
+            Request access
+          </Link>
+        </p>
+
         <p style={{ fontSize: 12, color: "var(--color-ink-2)", marginTop: 20, textAlign: "center" }}>
           Protected by enterprise-grade security &amp; encryption
         </p>
-      </form>
+      </div>
     </div>
   );
 }
