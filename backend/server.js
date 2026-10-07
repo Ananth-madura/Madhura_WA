@@ -86,11 +86,20 @@ const app = express();
  * the settled outcome means /health and the degraded guard report what is
  * actually true at request time.
  */
+const r2Storage = require("./services/r2StorageService");
+const isR2OrSqliteActive =
+  r2Storage.isConfigured() ||
+  ["1", "true", "sqlite", "r2"].includes(
+    String(process.env.USE_SQLITE || process.env.DB_ENGINE || "").toLowerCase()
+  );
+
 const dbState = {
   connected: false,
-  configured: ["DB_HOST", "DB_NAME", "DB_USER", "DB_PASS"].every(
-    (k) => process.env[k] && String(process.env[k]).trim()
-  ),
+  configured:
+    isR2OrSqliteActive ||
+    ["DB_HOST", "DB_NAME", "DB_USER", "DB_PASS"].every(
+      (k) => process.env[k] && String(process.env[k]).trim()
+    ),
   degradedAllowed: ["1", "true", "yes", "on"].includes(
     String(process.env.ALLOW_START_WITHOUT_DB || "").toLowerCase()
   ),
@@ -450,46 +459,54 @@ function startServer() {
     startWorker().catch(() => {});
   };
 
-  if (dbState.degradedAllowed) {
-    /*
-     * Degraded mode: listen NOW rather than waiting on db.ready.
-     *
-     * The previous shape called server.listen() *inside* db.ready.then(), so
-     * with no database nothing ever listened — the process ran, answered
-     * nothing, and any orchestrator saw a port refusal rather than an
-     * explanation. Listening immediately makes /health reachable so the
-     * deployment reports "degraded, no database" instead of failing obscurely.
-     *
-     * The database-backed features are still kicked off: if the database becomes
-     * reachable later they start by themselves, and if it never does their
-     * failure is logged rather than fatal.
-     */
-    initSockets();
-    bootDatabaseFeatures().catch((error) => {
+  if (isR2OrSqliteActive || !dbState.degradedAllowed) {
+    return db.ready
+      .then(async () => {
+        initSockets();
+        await bootDatabaseFeatures();
+        server.listen(PORT, "0.0.0.0", () => {
+          console.log(`✅ Whatsapp_CRM server running: http://0.0.0.0:${PORT} [${process.env.NODE_ENV || "development"}]`);
+          startKeepAlive();
+        });
+      })
+      .catch((error) => {
+        if (dbState.degradedAllowed) {
+          initSockets();
+          server.listen(PORT, "0.0.0.0", () => {
+            console.log(`⚠️  Whatsapp_CRM server running DEGRADED: http://0.0.0.0:${PORT} [${process.env.NODE_ENV || "development"}]`);
+            console.log(`   Database features are disabled until database resolves.`);
+            startKeepAlive();
+          });
+          return Promise.resolve();
+        }
+        console.error("Database is not ready. Server not started.");
+        console.error(`Check DB_HOST, DB_PORT, DB_USER, DB_PASS, and DB_NAME in Whatsapp_CRM/backend/.env. Details: ${error.message}`);
+        console.error("To boot anyway with every /api route answering 503, set ALLOW_START_WITHOUT_DB=1.");
+        process.exit(1);
+      });
+  }
+
+  /*
+   * Degraded mode for unconfigured / legacy MySQL boot where degraded boot was allowed:
+   * Listen immediately for /health so orchestrators and tests see the degraded status right away.
+   * Boot database features only when db.ready resolves.
+   */
+  initSockets();
+  db.ready
+    .then(async () => {
+      await bootDatabaseFeatures();
+    })
+    .catch((error) => {
       console.error(`Database features unavailable: ${error.message}`);
       console.error("Running degraded: /health reports it and /api answers 503.");
     });
-    server.listen(PORT, "0.0.0.0", () => {
-      console.log(`⚠️  Whatsapp_CRM server running DEGRADED: http://0.0.0.0:${PORT} [${process.env.NODE_ENV || "development"}]`);
-      console.log(`   Database features are disabled until DB_HOST/DB_USER/DB_PASS/DB_NAME resolve.`);
-      startKeepAlive();
-    });
-    return Promise.resolve();
-  }
 
-  return db.ready.then(async () => {
-    initSockets();
-    await bootDatabaseFeatures();
-    server.listen(PORT, "0.0.0.0", () => {
-      console.log(`✅ Whatsapp_CRM server running: http://0.0.0.0:${PORT} [${process.env.NODE_ENV || "development"}]`);
-      startKeepAlive();
-    });
-  }).catch((error) => {
-    console.error("Database is not ready. Server not started.");
-    console.error(`Check DB_HOST, DB_PORT, DB_USER, DB_PASS, and DB_NAME in Whatsapp_CRM/backend/.env. Details: ${error.message}`);
-    console.error("To boot anyway with every /api route answering 503, set ALLOW_START_WITHOUT_DB=1.");
-    process.exit(1);
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`⚠️  Whatsapp_CRM server running DEGRADED: http://0.0.0.0:${PORT} [${process.env.NODE_ENV || "development"}]`);
+    console.log(`   Database features are disabled until DB_HOST/DB_USER/DB_PASS/DB_NAME resolve.`);
+    startKeepAlive();
   });
+  return Promise.resolve();
 }
 
 app.startServer = startServer;

@@ -184,7 +184,17 @@ function checkAllowedOrigins(env) {
  */
 function checkEnv(env = process.env) {
   const isProd = env.NODE_ENV === "production";
-  const degraded = allowNoDb(env);
+  const r2Storage = require("../services/r2StorageService");
+  const isR2OrSqlite =
+    r2Storage.isConfigured() ||
+    ["1", "true", "sqlite", "r2"].includes(
+      String(env.USE_SQLITE || env.DB_ENGINE || "").toLowerCase()
+    );
+  const isMysqlConfigured = ["DB_HOST", "DB_NAME", "DB_USER"].every(
+    (k) => !isBlank(env[k]) && !isPlaceholder(env[k])
+  );
+  const hasDb = isR2OrSqlite || isMysqlConfigured;
+  const degraded = allowNoDb(env) && !hasDb;
 
   const errors = [];
   const warnings = [];
@@ -232,11 +242,15 @@ function checkEnv(env = process.env) {
       if (item.required && isProd) {
         if (degraded && dbKeys.has(item.key)) {
           warnings.push(`${item.key} is not set — starting in degraded mode, database features disabled`);
+        } else if (isR2OrSqlite && dbKeys.has(item.key)) {
+          // Handled by SQLite/R2 database engine — no need to warn for MySQL keys
         } else {
           fail(`${item.key} is not set — required in production`);
         }
       } else if (item.required) {
-        warnings.push(`${item.key} is not set (fine outside production)`);
+        if (!isR2OrSqlite || !dbKeys.has(item.key)) {
+          warnings.push(`${item.key} is not set (fine outside production)`);
+        }
       }
       continue;
     }

@@ -46,20 +46,37 @@ const isR2OrSqliteRequested =
     String(process.env.USE_SQLITE || process.env.DB_ENGINE || "").toLowerCase()
   );
 
-const db = mysql.createConnection({
-  host: process.env.DB_HOST,
-  port: dbPort,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASS,
-  database: dbName || undefined,
-  charset: "utf8mb4",
-  multipleStatements: true
-});
+const sqliteAdapter = require("./sqliteDatabase");
 
-db.on("error", (err) => {
-  if (db.isSqlite || isR2OrSqliteRequested) return;
-  console.warn("⚠️ [MySQL Socket Warning]:", err && err.message);
-});
+let db;
+if (isR2OrSqliteRequested) {
+  db = {
+    isSqlite: true,
+    r2Enabled: false,
+    query: (...args) => sqliteAdapter.query(...args),
+    promise: () => sqliteAdapter.promise(),
+    on: () => db,
+    connect: (cb) => { if (typeof cb === "function") cb(null); },
+    end: (cb) => { if (typeof cb === "function") cb(null); },
+    changeUser: (opts, cb) => { if (typeof cb === "function") cb(null); },
+    escape: (val) => (typeof val === "string" ? `'${val.replace(/'/g, "''")}'` : String(val)),
+  };
+} else {
+  db = mysql.createConnection({
+    host: process.env.DB_HOST,
+    port: dbPort,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: dbName || undefined,
+    charset: "utf8mb4",
+    multipleStatements: true
+  });
+
+  db.on("error", (err) => {
+    if (db.isSqlite || isR2OrSqliteRequested) return;
+    console.warn("⚠️ [MySQL Socket Warning]:", err && err.message);
+  });
+}
 
 const schemaPath = path.join(__dirname, "../schema.sql");
 
@@ -1021,12 +1038,10 @@ const ready = new Promise((resolve, reject) => {
 
   const sqliteAdapter = require("./sqliteDatabase");
 
-  // If Cloudflare R2 is configured or SQLite is explicitly requested (and no MySQL is configured)
-  if (isR2OrSqliteRequested && (!dbName || process.env.USE_SQLITE === "1" || process.env.DB_ENGINE === "sqlite" || process.env.DB_ENGINE === "r2")) {
+  // If Cloudflare R2 is configured or SQLite is explicitly requested
+  if (isR2OrSqliteRequested) {
     console.log("✨ Initializing Embedded SQLite database engine backed by Cloudflare R2 persistent storage...");
     return sqliteAdapter.initialize().then(() => {
-      db.query = sqliteAdapter.query.bind(sqliteAdapter);
-      db.promise = sqliteAdapter.promise.bind(sqliteAdapter);
       db.isSqlite = true;
       db.r2Enabled = sqliteAdapter.r2Enabled;
       return resolve(db);

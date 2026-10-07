@@ -101,6 +101,69 @@ function translateMySqlToSqlite(sql) {
   // Convert ON DUPLICATE KEY UPDATE to ON CONFLICT DO UPDATE SET
   s = s.replace(/\bON\s+DUPLICATE\s+KEY\s+UPDATE\b/gi, "ON CONFLICT DO UPDATE SET");
 
+  // ── Date and Interval Expressions Translation ──
+  // 1. DATE_SUB(dateExpr, INTERVAL n UNIT) or DATE_SUB(dateExpr, INTERVAL ? UNIT)
+  s = s.replace(/DATE_SUB\s*\(\s*(NOW\(\)|CURRENT_TIMESTAMP)\s*,\s*INTERVAL\s+([0-9]+)\s+([a-zA-Z]+)\s*\)/gi, (m, d, n, u) => {
+    return `datetime('now', '-${n} ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/DATE_SUB\s*\(\s*(NOW\(\)|CURRENT_TIMESTAMP)\s*,\s*INTERVAL\s+(\?)\s+([a-zA-Z]+)\s*\)/gi, (m, d, q, u) => {
+    return `datetime('now', '-' || ? || ' ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/DATE_SUB\s*\(\s*CURDATE\(\)\s*,\s*INTERVAL\s+([0-9]+)\s+([a-zA-Z]+)\s*\)/gi, (m, n, u) => {
+    return `date('now', '-${n} ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/DATE_SUB\s*\(\s*CURDATE\(\)\s*,\s*INTERVAL\s+(\?)\s+([a-zA-Z]+)\s*\)/gi, (m, q, u) => {
+    return `date('now', '-' || ? || ' ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/DATE_SUB\s*\(\s*([a-zA-Z0-9_.]+)\s*,\s*INTERVAL\s+([0-9]+)\s+([a-zA-Z]+)\s*\)/gi, (m, col, n, u) => {
+    return `datetime(${col}, '-${n} ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/DATE_SUB\s*\(\s*([a-zA-Z0-9_.]+)\s*,\s*INTERVAL\s+(\?)\s+([a-zA-Z]+)\s*\)/gi, (m, col, q, u) => {
+    return `datetime(${col}, '-' || ? || ' ${u.toLowerCase()}')`;
+  });
+
+  // 2. DATE_ADD(dateExpr, INTERVAL n UNIT) or DATE_ADD(dateExpr, INTERVAL ? UNIT)
+  s = s.replace(/DATE_ADD\s*\(\s*(NOW\(\)|CURRENT_TIMESTAMP)\s*,\s*INTERVAL\s+([0-9]+)\s+([a-zA-Z]+)\s*\)/gi, (m, d, n, u) => {
+    return `datetime('now', '+${n} ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/DATE_ADD\s*\(\s*(NOW\(\)|CURRENT_TIMESTAMP)\s*,\s*INTERVAL\s+(\?)\s+([a-zA-Z]+)\s*\)/gi, (m, d, q, u) => {
+    return `datetime('now', '+' || ? || ' ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/DATE_ADD\s*\(\s*CURDATE\(\)\s*,\s*INTERVAL\s+([0-9]+)\s+([a-zA-Z]+)\s*\)/gi, (m, n, u) => {
+    return `date('now', '+${n} ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/DATE_ADD\s*\(\s*CURDATE\(\)\s*,\s*INTERVAL\s+(\?)\s+([a-zA-Z]+)\s*\)/gi, (m, q, u) => {
+    return `date('now', '+' || ? || ' ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/DATE_ADD\s*\(\s*([a-zA-Z0-9_.]+)\s*,\s*INTERVAL\s+([0-9]+)\s+([a-zA-Z]+)\s*\)/gi, (m, col, n, u) => {
+    return `datetime(${col}, '+${n} ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/DATE_ADD\s*\(\s*([a-zA-Z0-9_.]+)\s*,\s*INTERVAL\s+(\?)\s+([a-zA-Z]+)\s*\)/gi, (m, col, q, u) => {
+    return `datetime(${col}, '+' || ? || ' ${u.toLowerCase()}')`;
+  });
+
+  // 3. NOW() - INTERVAL / NOW() + INTERVAL
+  s = s.replace(/NOW\(\)\s*-\s*INTERVAL\s+([0-9]+)\s+([a-zA-Z]+)/gi, (m, n, u) => {
+    return `datetime('now', '-${n} ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/NOW\(\)\s*-\s*INTERVAL\s+(\?)\s+([a-zA-Z]+)/gi, (m, q, u) => {
+    return `datetime('now', '-' || ? || ' ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/NOW\(\)\s*\+\s*INTERVAL\s+([0-9]+)\s+([a-zA-Z]+)/gi, (m, n, u) => {
+    return `datetime('now', '+${n} ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/NOW\(\)\s*\+\s*INTERVAL\s+(\?)\s+([a-zA-Z]+)/gi, (m, q, u) => {
+    return `datetime('now', '+' || ? || ' ${u.toLowerCase()}')`;
+  });
+
+  // 4. CURDATE() + INTERVAL / CURDATE() - INTERVAL
+  s = s.replace(/CURDATE\(\)\s*\+\s*INTERVAL\s+([0-9]+)\s+([a-zA-Z]+)/gi, (m, n, u) => {
+    return `date('now', '+${n} ${u.toLowerCase()}')`;
+  });
+  s = s.replace(/CURDATE\(\)\s*-\s*INTERVAL\s+([0-9]+)\s+([a-zA-Z]+)/gi, (m, n, u) => {
+    return `date('now', '-${n} ${u.toLowerCase()}')`;
+  });
+
   return s;
 }
 
@@ -111,9 +174,16 @@ class SQLiteDatabaseAdapter {
     this.isReady = false;
     this.isSqlite = true;
     this.r2Enabled = false;
+    this.initPromise = null;
   }
 
   async initialize(customDbPath = null) {
+    if (this.initPromise) return this.initPromise;
+    this.initPromise = this._doInitialize(customDbPath);
+    return this.initPromise;
+  }
+
+  async _doInitialize(customDbPath = null) {
     const defaultDir = dataDir || path.join(__dirname, "..");
     if (!fs.existsSync(defaultDir)) {
       try { fs.mkdirSync(defaultDir, { recursive: true }); } catch (_) {}
@@ -1264,6 +1334,16 @@ class SQLiteDatabaseAdapter {
       vals = [];
     }
 
+    if (!this.isReady) {
+      if (!this.initPromise) this.initialize();
+      this.initPromise
+        .then(() => this.query(sql, vals, cb))
+        .catch((err) => {
+          if (typeof cb === "function") cb(err);
+        });
+      return this;
+    }
+
     try {
       const [res, fields] = this.executeSql(sql, vals);
       if (typeof cb === "function") cb(null, res, fields);
@@ -1280,20 +1360,20 @@ class SQLiteDatabaseAdapter {
   promise() {
     return {
       query: async (sql, params = []) => {
-        try {
-          const [res, fields] = this.executeSql(sql, params);
-          return [res, fields];
-        } catch (err) {
-          throw err;
+        if (!this.isReady) {
+          if (!this.initPromise) this.initialize();
+          await this.initPromise;
         }
+        const [res, fields] = this.executeSql(sql, params);
+        return [res, fields];
       },
       execute: async (sql, params = []) => {
-        try {
-          const [res, fields] = this.executeSql(sql, params);
-          return [res, fields];
-        } catch (err) {
-          throw err;
+        if (!this.isReady) {
+          if (!this.initPromise) this.initialize();
+          await this.initPromise;
         }
+        const [res, fields] = this.executeSql(sql, params);
+        return [res, fields];
       },
     };
   }
