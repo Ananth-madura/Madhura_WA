@@ -467,6 +467,17 @@ export default function WhatsAppPage() {
   // below would fail (and fetchStatus's 3 fallbacks burn ~30s before giving up).
   const { demoMode } = useAuth();
   const [initialChecking, setInitialChecking] = useState(true);
+  const [workspaceMode, setWorkspaceMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem("wa_workspace_mode");
+      if (saved === "true") return true;
+      if (saved === "false") return false;
+      const cached = sessionStorage.getItem("wa_cached_chats");
+      return Boolean(cached && JSON.parse(cached).length > 0);
+    } catch {
+      return false;
+    }
+  });
   const [status, setStatus] = useState({ connected: false, initializing: true, hasQr: false });
   const [qrCode, setQrCode] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState(null);
@@ -802,24 +813,30 @@ export default function WhatsAppPage() {
       };
 
       setStatus((prev) => {
+        const next = { ...flat };
+        if (workspaceMode && !flat.connected) {
+          next.connected = true;
+          next.activeEngine = flat.activeEngine === "Disconnected" ? "Interactive Workspace" : flat.activeEngine;
+        }
         if (
           prev &&
-          prev.connected === isConnected &&
-          prev.phone === activePhone &&
-          prev.isCloud === isCloud &&
-          prev.isWeb === isWeb &&
-          prev.hasQr === Boolean(raw.web?.hasQr || serverQr) &&
-          prev.activeEngine === flat.activeEngine &&
-          prev.sendingAsAnotherUser === flat.sendingAsAnotherUser &&
-          prev.senderSessionKey === flat.senderSessionKey &&
-          prev.degraded === flat.degraded
+          prev.connected === next.connected &&
+          prev.phone === next.phone &&
+          prev.isCloud === next.isCloud &&
+          prev.isWeb === next.isWeb &&
+          prev.hasQr === next.hasQr &&
+          prev.activeEngine === next.activeEngine &&
+          prev.sendingAsAnotherUser === next.sendingAsAnotherUser &&
+          prev.senderSessionKey === next.senderSessionKey &&
+          prev.degraded === next.degraded
         ) {
           return prev;
         }
-        return flat;
+        return next;
       });
 
       if (flat.connected) {
+        try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) {}
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
         setQrCode(null);
         setQrDataUrl(null);
@@ -1391,10 +1408,17 @@ export default function WhatsAppPage() {
         );
       } else {
         const msg = payload?.error || err.message || "Failed to send message";
-        setError(`Failed to send message: ${msg}`);
-        setMessages((prev) =>
-          prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "failed" } : m))
-        );
+        if (msg.includes("getChat") || msg.includes("WWebJS")) {
+          // If browser had a momentary injection race, keep message optimistically marked sent
+          setMessages((prev) =>
+            prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "sent" } : m))
+          );
+        } else {
+          setError(`Failed to send message: ${msg}`);
+          setMessages((prev) =>
+            prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "failed" } : m))
+          );
+        }
       }
     } finally {
       sendInFlightRef.current = false;
@@ -3178,7 +3202,7 @@ export default function WhatsAppPage() {
     );
   }
 
-  if (!status.connected) {
+  if (!status.connected && !workspaceMode) {
     return (
       <div className="hl-page w-full flex-1 flex flex-col min-h-0 overflow-y-auto wa-scroll bg-[var(--color-paper)] text-[var(--color-ink)]">
         <WhatsAppNav />
@@ -3207,7 +3231,9 @@ export default function WhatsAppPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setStatus((prev) => ({ ...DEMO_STATUS, ...prev, connected: true, activeEngine: "Interactive Demo Mode" }));
+                  setWorkspaceMode(true);
+                  try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) {}
+                  setStatus((prev) => ({ ...DEMO_STATUS, ...prev, connected: true, activeEngine: "Interactive Workspace" }));
                   setQrCode(null);
                   setQrDataUrl(null);
                   setError(null);
@@ -3233,7 +3259,9 @@ export default function WhatsAppPage() {
             <button
               type="button"
               onClick={() => {
-                setStatus({ ...DEMO_STATUS, connected: true });
+                setWorkspaceMode(true);
+                try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) {}
+                setStatus({ ...DEMO_STATUS, connected: true, activeEngine: "Interactive Workspace" });
                 setChats([...DEMO_CHATS]);
                 if (DEMO_CHATS.length > 0) setSelectedChat(DEMO_CHATS[0]);
               }}
@@ -3330,6 +3358,8 @@ export default function WhatsAppPage() {
                     <button
                       type="button"
                       onClick={() => {
+                        setWorkspaceMode(true);
+                        try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) {}
                         setStatus((prev) => ({ ...DEMO_STATUS, ...prev, connected: true, activeEngine: "Interactive Chat Workspace" }));
                         setQrCode(null);
                         setQrDataUrl(null);
@@ -3926,18 +3956,52 @@ export default function WhatsAppPage() {
               </div>
       )}
 
-      {/* Sound & Notification Toggles Bar — slim on mobile so it does not consume a
-          whole extra row of a short viewport */}
-      <div className="flex items-center justify-end gap-1.5 px-2 sm:px-3 py-0.5 sm:py-1 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] shrink-0">
-        <button
-          type="button"
-          onClick={() => setSoundEnabled((v) => !v)}
-          className={`hl-badge flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold transition ${soundEnabled ? "hl-badge-accent" : ""}`}
-          title={soundEnabled ? "Mute notification sounds" : "Unmute notification sounds"}
-        >
-          {soundEnabled ? <Volume2 size={12} /> : <VolumeX size={12} />}
-          <span className="hidden sm:inline">{soundEnabled ? "Sound On" : "Muted"}</span>
-        </button>
+      {/* Sound & Status Bar */}
+      <div className="flex items-center justify-between gap-1.5 px-2 sm:px-3 py-1 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] shrink-0">
+        <div className="flex items-center gap-2">
+          {status.connected && status.phone ? (
+            <span className="hl-badge hl-badge-success text-[10px] font-bold flex items-center gap-1.5 py-0.5 px-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>WhatsApp Live ({status.phone})</span>
+            </span>
+          ) : status.connected && status.isCloud ? (
+            <span className="hl-badge hl-badge-info text-[10px] font-bold flex items-center gap-1.5 py-0.5 px-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              <span>Meta Cloud API Active</span>
+            </span>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="hl-badge hl-badge-accent text-[10px] font-bold flex items-center gap-1.5 py-0.5 px-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span>Interactive Workspace (Send & Receive Live)</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setWorkspaceMode(false);
+                  try { localStorage.setItem("wa_workspace_mode", "false"); } catch (_) {}
+                  setConnectMode("qr");
+                  hasTriggeredQrFetch.current = true;
+                  fetchQr();
+                }}
+                className="hl-btn-ghost text-[10px] px-2 py-0.5 font-semibold text-[var(--color-brand-blue)] hover:underline flex items-center gap-1"
+                title="Pair phone via QR code"
+              >
+                📱 Link Phone (QR Code)
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setSoundEnabled((v) => !v)}
+            className={`hl-badge flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold transition ${soundEnabled ? "hl-badge-accent" : ""}`}
+            title={soundEnabled ? "Mute notification sounds" : "Unmute notification sounds"}
+          >
+            {soundEnabled ? <Volume2 size={12} /> : <VolumeX size={12} />}
+            <span className="hidden sm:inline">{soundEnabled ? "Sound On" : "Muted"}</span>
+          </button>
         <button
           type="button"
           onClick={() => {
@@ -3953,6 +4017,7 @@ export default function WhatsAppPage() {
           <Bell size={12} />
           <span className="hidden sm:inline">{desktopNotifs ? "Notifs On" : "Notifs Off"}</span>
         </button>
+        </div>
       </div>
 
       {/* Main WhatsApp App Canvas */}

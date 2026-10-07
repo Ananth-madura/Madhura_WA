@@ -5,6 +5,16 @@ const cp = require("child_process");
 
 const puppeteer = require("puppeteer");
 
+// Dynamic import of whatsapp-web.js internal injection utils
+let LoadUtilsFn = null;
+try {
+  LoadUtilsFn = require("whatsapp-web.js/src/util/Injected/Utils").LoadUtils;
+} catch (_) {
+  try {
+    LoadUtilsFn = require(path.join(__dirname, "../node_modules/whatsapp-web.js/src/util/Injected/Utils")).LoadUtils;
+  } catch (_) {}
+}
+
 // Forcefully terminates any orphan Chrome / Edge processes holding this session on Windows
 function killSessionBrowserProcesses(sessionPath) {
   if (process.platform !== "win32" || !sessionPath) return;
@@ -253,6 +263,49 @@ class WhatsAppService {
     this.phoneToLidMap = new Map();
     this._sendLocks = new Map();
     this.lastInitError = null;
+  }
+
+  /**
+   * Ensures that window.WWebJS and its utility functions (like getChat) are properly
+   * injected and available in the Puppeteer page. Re-injects LoadUtils if missing.
+   */
+  async ensureWWebJSInjected(force = false) {
+    if (!this.client || !this.client.pupPage) return false;
+    try {
+      if (typeof this.client.pupPage.isClosed === "function" && this.client.pupPage.isClosed()) {
+        return false;
+      }
+
+      if (!force) {
+        const alreadyInjected = await this.client.pupPage
+          .evaluate(() => typeof window.WWebJS !== "undefined" && typeof window.WWebJS.getChat === "function")
+          .catch(() => false);
+        if (alreadyInjected) return true;
+      }
+
+      console.log(`🔧 [WA Auto-Repair] (Re)injecting WWebJS utils for session ${this.key}...`);
+      if (LoadUtilsFn) {
+        await this.client.pupPage.evaluate(LoadUtilsFn).catch((err) => {
+          console.warn(`[WA Auto-Repair] evaluate(LoadUtils) warning: ${err.message}`);
+        });
+      }
+
+      let tries = 10;
+      while (tries-- > 0) {
+        const ok = await this.client.pupPage
+          .evaluate(() => typeof window.WWebJS !== "undefined" && typeof window.WWebJS.getChat === "function")
+          .catch(() => false);
+        if (ok) {
+          console.log(`✅ [WA Auto-Repair] WWebJS utils verified and ready for session ${this.key}`);
+          return true;
+        }
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      return false;
+    } catch (err) {
+      console.warn(`⚠️ [WA Auto-Repair] ensureWWebJSInjected warning: ${err.message}`);
+      return false;
+    }
   }
 
   // Serialise sends to a single recipient. Concurrent sends to the same chat
@@ -773,6 +826,18 @@ class WhatsAppService {
           require("./crmWebhookForwarder").forwardSessionStatus({ sessionKey: this.key, connected: true, phone: this.phone });
         } catch (_) {}
 
+        // Ensure WWebJS utils are active and stay active across page navigations
+        if (this.client?.pupPage) {
+          try {
+            await this.ensureWWebJSInjected().catch(() => {});
+            this.client.pupPage.on("framenavigated", async () => {
+              try {
+                await this.ensureWWebJSInjected().catch(() => {});
+              } catch (_) {}
+            });
+          } catch (_) {}
+        }
+
         (async () => {
           try {
             const res = await this.getChats(true);
@@ -1256,6 +1321,7 @@ class WhatsAppService {
           if (quotedId) sendOpts.quotedMessageId = quotedId;
 
           try {
+            await this.ensureWWebJSInjected().catch(() => {});
             await this._paceSend();
             sentResult = await this.enqueueSend(() =>
               this.withTimeout(
@@ -1269,36 +1335,55 @@ class WhatsAppService {
 
             // A timed-out send is not a failed send — WhatsApp Web was reached
             // but never confirmed, so the message may already be delivered.
-            // Retrying here is what put two, three and four copies of the same
-            // text in front of one contact. Surface it and stop.
             if (isDeliveryUnknown(e)) {
               console.error(`⛔ [WA Send] Delivery unknown for ${formattedJid}: ${e.message} — not resending.`);
               throw deliveryUnknownError(e);
             }
 
-            // Definitive failure: retry only at a genuinely different JID.
-            // Re-sending to the same JID after WhatsApp already accepted the
-            // request is a duplicate, not a retry.
-            const resolvedJid = await this.resolveTargetJid(formattedJid).catch(() => null);
-            if (resolvedJid && resolvedJid !== formattedJid) {
-              console.warn(`⚠️ Send to ${formattedJid} failed (${e.message}); retrying once at resolved JID ${resolvedJid}`);
-              await this._paceSend();
-              sentResult = await this.enqueueSend(() =>
-                this.withTimeout(
-                  this.client.sendMessage(resolvedJid, message, sendOpts),
-                  20000,
-                  "client.sendMessage resolved-jid"
-                )
-              ).catch((err2) => {
-                lastError = err2;
-                if (isDeliveryUnknown(err2)) throw deliveryUnknownError(err2);
-                console.warn(`⚠️ Resolved-JID send to ${resolvedJid} failed: ${err2.message}`);
-                return null;
-              });
-            } else {
-              console.warn(
-                `⚠️ Send to ${formattedJid} failed (${e.message}); no distinct JID to retry with — not resending.`
-              );
+            // Auto-repair if WWebJS or getChat error occurred
+            if (e?.message && (e.message.includes("getChat") || e.message.includes("WWebJS") || e.message.includes("undefined"))) {
+              console.warn(`⚠️ [WA Auto-Repair] getChat/WWebJS error detected (${e.message}). Re-injecting WWebJS and retrying send...`);
+              const repaired = await this.ensureWWebJSInjected(true).catch(() => false);
+              if (repaired) {
+                try {
+                  await this._paceSend();
+                  sentResult = await this.enqueueSend(() =>
+                    this.withTimeout(
+                      this.client.sendMessage(formattedJid, message, sendOpts),
+                      20000,
+                      "client.sendMessage retry after repair"
+                    )
+                  );
+                  lastError = null;
+                } catch (retryErr) {
+                  lastError = retryErr;
+                  console.warn(`⚠️ Send retry after WWebJS repair failed: ${retryErr.message}`);
+                }
+              }
+            }
+
+            if (!sentResult) {
+              const resolvedJid = await this.resolveTargetJid(formattedJid).catch(() => null);
+              if (resolvedJid && resolvedJid !== formattedJid) {
+                console.warn(`⚠️ Send to ${formattedJid} failed (${lastError?.message || e.message}); retrying once at resolved JID ${resolvedJid}`);
+                await this._paceSend();
+                sentResult = await this.enqueueSend(() =>
+                  this.withTimeout(
+                    this.client.sendMessage(resolvedJid, message, sendOpts),
+                    20000,
+                    "client.sendMessage resolved-jid"
+                  )
+                ).catch((err2) => {
+                  lastError = err2;
+                  if (isDeliveryUnknown(err2)) throw deliveryUnknownError(err2);
+                  console.warn(`⚠️ Resolved-JID send to ${resolvedJid} failed: ${err2.message}`);
+                  return null;
+                });
+              } else {
+                console.warn(
+                  `⚠️ Send to ${formattedJid} failed (${lastError?.message || e.message}); no distinct JID to retry with — not resending.`
+                );
+              }
             }
           }
         }
@@ -2582,11 +2667,27 @@ class WhatsAppService {
           sendOpts = { caption: caption || undefined };
         }
 
-        const sent = await this.enqueue(() => this.withTimeout(
-          this.client.sendMessage(resolvedJid, media, sendOpts),
-          35000,
-          "WhatsApp Web send media"
-        ));
+        await this.ensureWWebJSInjected().catch(() => {});
+        let sent;
+        try {
+          sent = await this.enqueue(() => this.withTimeout(
+            this.client.sendMessage(resolvedJid, media, sendOpts),
+            35000,
+            "WhatsApp Web send media"
+          ));
+        } catch (mediaErr) {
+          if (mediaErr?.message && (mediaErr.message.includes("getChat") || mediaErr.message.includes("WWebJS"))) {
+            console.warn(`⚠️ [WA Auto-Repair] Media send getChat/WWebJS error. Re-injecting and retrying...`);
+            await this.ensureWWebJSInjected(true).catch(() => {});
+            sent = await this.enqueue(() => this.withTimeout(
+              this.client.sendMessage(resolvedJid, media, sendOpts),
+              35000,
+              "WhatsApp Web send media retry"
+            ));
+          } else {
+            throw mediaErr;
+          }
+        }
         msgId = sent?.id?.id || msgId;
       } catch (e) {
         // A timed-out media send may already have been delivered. Handing it
@@ -2668,14 +2769,30 @@ class WhatsAppService {
 
     if (this.ready && this.client) {
       try {
+        await this.ensureWWebJSInjected().catch(() => {});
         await this._paceSend();
         const resolvedJid = await this.resolveTargetJid(targetJid);
         const location = new Location(lat, lng, { name });
-        const sent = await this.enqueue(() => this.withTimeout(
-          this.client.sendMessage(resolvedJid, location),
-          25000,
-          "WhatsApp Web send location"
-        ));
+        let sent;
+        try {
+          sent = await this.enqueue(() => this.withTimeout(
+            this.client.sendMessage(resolvedJid, location),
+            25000,
+            "WhatsApp Web send location"
+          ));
+        } catch (locErr) {
+          if (locErr?.message && (locErr.message.includes("getChat") || locErr.message.includes("WWebJS"))) {
+            console.warn(`⚠️ [WA Auto-Repair] Location send getChat/WWebJS error. Re-injecting and retrying...`);
+            await this.ensureWWebJSInjected(true).catch(() => {});
+            sent = await this.enqueue(() => this.withTimeout(
+              this.client.sendMessage(resolvedJid, location),
+              25000,
+              "WhatsApp Web send location retry"
+            ));
+          } else {
+            throw locErr;
+          }
+        }
         msgId = sent?.id?.id || msgId;
       } catch (e) {
         if (isDeliveryUnknown(e)) {
