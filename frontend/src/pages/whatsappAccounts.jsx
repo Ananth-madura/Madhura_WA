@@ -302,17 +302,17 @@ export default function WhatsAppAccounts() {
               setQrLoading(false);
               fetchAll();
               clearInterval(timer);
-            } else if (attempts >= 12) {
+            } else if (attempts >= 15) {
               setQrLoading(false);
               clearInterval(timer);
             }
           } catch (_) {
-            if (attempts >= 12) {
+            if (attempts >= 15) {
               setQrLoading(false);
               clearInterval(timer);
             }
           }
-        }, 2500);
+        }, 1500);
       } else {
         setQrLoading(false);
       }

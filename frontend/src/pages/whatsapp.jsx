@@ -856,9 +856,9 @@ export default function WhatsAppPage() {
       const endpoint = force ? "/api/whatsapp/qr?refresh=true" : "/api/whatsapp/qr";
       let res;
       try {
-        res = await axios.get(`${API}${endpoint}`, { headers, timeout: 25000 });
+        res = await axios.get(`${API}${endpoint}`, { headers, timeout: 10000 });
       } catch (e1) {
-        res = await axios.get(`${LIVE_BACKEND_URL}${endpoint}`, { headers, timeout: 25000 });
+        res = await axios.get(`${LIVE_BACKEND_URL}${endpoint}`, { headers, timeout: 10000 });
       }
       if (res.data && res.data.connected) {
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
@@ -876,14 +876,14 @@ export default function WhatsAppPage() {
         setQrLoading(false);
         setError(null);
       } else if (res.data && res.data.initializing) {
-        // Still initializing in background — keep spinner and check after 4s
-        if (qrRetryCountRef.current < 6) {
+        // Still initializing in background — poll fast every 1.5s
+        if (qrRetryCountRef.current < 15) {
           qrRetryCountRef.current += 1;
           setQrLoading(true);
           if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
           qrPollTimerRef.current = setTimeout(() => {
             fetchQr(false);
-          }, 4000);
+          }, 1500);
         } else {
           setQrLoading(false);
           setError("WhatsApp browser is initializing on server. Click 'Refresh QR Code' to display your QR.");
@@ -899,14 +899,14 @@ export default function WhatsAppPage() {
       }
     } catch (err) {
       if (err.response?.status === 504 || err.code === "ECONNABORTED" || (err.message && err.message.includes("timeout"))) {
-        if (qrRetryCountRef.current < 4) {
+        if (qrRetryCountRef.current < 10) {
           qrRetryCountRef.current += 1;
-          console.warn("ℹ️ WhatsApp QR generation in progress, re-checking...");
+          console.warn("ℹ️ WhatsApp QR generation in progress, re-checking in 1.5s...");
           setQrLoading(true);
           if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
           qrPollTimerRef.current = setTimeout(() => {
             fetchQr(false);
-          }, 4000);
+          }, 1500);
         } else {
           setError("Server is taking longer to start WhatsApp browser session. Click 'Force Fresh QR Code' below to retry.");
           setQrLoading(false);

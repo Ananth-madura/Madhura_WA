@@ -209,7 +209,7 @@ router.get("/qr", async (req, res) => {
       }
       const refreshed = await session.refreshQr();
       const qrVal = refreshed.qr || session.qrCode || null;
-      const qrDataUrl = await toDataUrl(qrVal);
+      const qrDataUrl = session.qrDataUrl || await toDataUrl(qrVal);
       return res.json({
         qr: qrVal,
         qrDataUrl,
@@ -221,17 +221,22 @@ router.get("/qr", async (req, res) => {
 
     // Fast-path: return cached QR instantly if already in memory (<1ms)
     if (session.qrCode) {
-      const qrDataUrl = await toDataUrl(session.qrCode);
+      const qrDataUrl = session.qrDataUrl || await toDataUrl(session.qrCode);
       return res.json({ qr: session.qrCode, qrDataUrl, initializing: false, connected: false });
     }
     if (session.ready) {
       return res.json({ qr: null, qrDataUrl: null, initializing: false, connected: true });
     }
 
-    // Wait for up to 15s for the initial QR event to emit (getQr will initiate init(false) cleanly if needed)
-    const qr = await session.getQr(15000);
+    // Ensure initialization is kicked off in the background immediately
+    if (!session.client && !session.isInitializing) {
+      session.init(false).catch((e) => console.warn("WhatsApp background init warning:", e.message));
+    }
+
+    // Quick wait (up to 3.5s) for instant response without hanging proxies or timing out
+    const qr = await session.getQr(3500).catch(() => null);
     const finalQr = qr || session.qrCode || null;
-    const qrDataUrl = await toDataUrl(finalQr);
+    const qrDataUrl = session.qrDataUrl || await toDataUrl(finalQr);
     res.json({
       qr: finalQr,
       qrDataUrl,
@@ -246,7 +251,7 @@ router.get("/qr", async (req, res) => {
   } catch (err) {
     const session = userSession(req);
     const finalQr = session?.qrCode || null;
-    const qrDataUrl = await toDataUrl(finalQr);
+    const qrDataUrl = session?.qrDataUrl || await toDataUrl(finalQr);
     res.json({
       qr: finalQr,
       qrDataUrl,

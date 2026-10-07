@@ -592,17 +592,33 @@ class WhatsAppService {
           "--no-sandbox",
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
-          "--disable-accelerated-2d-canvas",
           "--no-first-run",
           "--no-zygote",
           "--disable-gpu",
           "--disable-blink-features=AutomationControlled",
-          "--disable-features=IsolateOrigins,site-per-process",
+          "--disable-features=IsolateOrigins,site-per-process,Translate,OptimizationHints,MediaRouter",
           "--disable-site-isolation-trials",
           "--disable-extensions",
+          "--disable-component-extensions-with-background-pages",
           "--disable-default-apps",
           "--mute-audio",
           "--no-default-browser-check",
+          "--disable-background-networking",
+          "--disable-background-timer-throttling",
+          "--disable-backgrounding-occluded-windows",
+          "--disable-breakpad",
+          "--disable-component-update",
+          "--disable-domain-reliability",
+          "--disable-hang-monitor",
+          "--disable-ipc-flooding-protection",
+          "--disable-popup-blocking",
+          "--disable-prompt-on-repost",
+          "--disable-renderer-backgrounding",
+          "--disable-sync",
+          "--force-color-profile=srgb",
+          "--metrics-recording-only",
+          "--password-store=basic",
+          "--use-mock-keychain",
           `--user-agent=${defaultUserAgent}`,
         ],
       };
@@ -684,14 +700,20 @@ class WhatsAppService {
       console.log(`ℹ️ WhatsApp Web build: ${pinnedWebVersion === "latest" ? "live (not pinned)" : pinnedWebVersion}`);
       this.client = new Client(clientOptions);
 
-      this.client.on("qr", (qr) => {
+      this.client.on("qr", async (qr) => {
         clearTimeout(initTimer);
         this.qrCode = qr;
         this.qrCodeAt = Date.now();
         this.ready = false;
         this.isInitializing = false;
+        let qrDataUrl = null;
+        try {
+          const qrcode = require("qrcode");
+          qrDataUrl = await qrcode.toDataURL(qr, { margin: 1, width: 280 });
+          this.qrDataUrl = qrDataUrl;
+        } catch (_) {}
         console.log(`✅ WhatsApp QR Code generated successfully for session ${this.key}!`);
-        this.emitWaEvent("wa_qr", null, null, { qr, sessionKey: this.key });
+        this.emitWaEvent("wa_qr", null, null, { qr, qrDataUrl, sessionKey: this.key });
         this.qrCallbacks.forEach((cb) => cb(qr));
         this.qrCallbacks = [];
       });
@@ -3158,7 +3180,16 @@ async function restoreExisting() {
     restored++;
   }
 
-  console.log(restored ? `📱 ${restored} saved WhatsApp session(s) queued for restore` : "ℹ️ No active saved WhatsApp sessions — none started");
+  if (restored === 0 && WEB_ENGINE_ENABLED) {
+    console.log("ℹ️ No active saved WhatsApp sessions — pre-warming default session in background for instant QR pairing...");
+    setTimeout(() => {
+      getDefault().init(false).catch((e) => {
+        console.warn("⚠️ WhatsApp default session pre-warm warning:", e.message);
+      });
+    }, 2500);
+  } else {
+    console.log(restored ? `📱 ${restored} saved WhatsApp session(s) queued for restore` : "ℹ️ No active saved WhatsApp sessions — none started");
+  }
   return { restored };
 }
 
