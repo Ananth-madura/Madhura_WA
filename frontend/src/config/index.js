@@ -18,22 +18,27 @@
 
 const clean = (v) => (v ? String(v).trim().replace(/\/+$/, "") : "");
 
+export const LIVE_BACKEND_URL = "https://madhura-wa-backend.onrender.com";
+
 const getApiUrl = () => {
   const configured = clean(process.env.REACT_APP_API_URL);
   if (configured) return configured;
-  if (process.env.NODE_ENV === "production") return ""; // same-origin, proxied by Vercel
+  if (typeof window !== "undefined" && window.location.hostname.includes("vercel.app")) {
+    return LIVE_BACKEND_URL;
+  }
+  if (process.env.NODE_ENV === "production") {
+    return LIVE_BACKEND_URL;
+  }
   const protocol = window.location.protocol;
   const hostname = window.location.hostname;
   return `${protocol}//${hostname}:5001`;
 };
 
-export const LIVE_BACKEND_URL = "https://madhura-wa-backend.onrender.com";
-
 const getSocketUrl = () => {
   const configured = clean(process.env.REACT_APP_SOCKET_URL);
   if (configured) return configured;
   // Vercel Hobby plan does not proxy WebSocket upgrades. Point directly to Render backend.
-  if (process.env.NODE_ENV === "production" || typeof window !== "undefined" && window.location.hostname.includes("vercel.app")) {
+  if (process.env.NODE_ENV === "production" || (typeof window !== "undefined" && window.location.hostname.includes("vercel.app"))) {
     return LIVE_BACKEND_URL;
   }
   return getApiUrl() || clean(window.location.origin);

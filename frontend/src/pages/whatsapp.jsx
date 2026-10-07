@@ -476,6 +476,7 @@ export default function WhatsAppPage() {
   const hasTriggeredQrFetch = useRef(false);
   const qrFetchInFlightRef = useRef(false);
   const qrPollTimerRef = useRef(null);
+  const qrRetryCountRef = useRef(0);
   const [chats, setChats] = useState(() => {
     try {
       const saved = sessionStorage.getItem("wa_cached_chats");
@@ -771,9 +772,9 @@ export default function WhatsAppPage() {
         res = await axios.get(`${API}/api/whatsapp/unified-status`, { headers, timeout: 10000 });
       } catch (e1) {
         try {
-          res = await axios.get(`/api/whatsapp/unified-status`, { headers, timeout: 10000 });
+          res = await axios.get(`${LIVE_BACKEND_URL}/api/whatsapp/unified-status`, { headers, timeout: 10000 });
         } catch (e2) {
-          res = await axios.get(`${API}/api/whatsapp/status`, { headers, timeout: 10000 });
+          res = await axios.get(`${LIVE_BACKEND_URL}/api/whatsapp/status`, { headers, timeout: 10000 });
         }
       }
       const raw = res.data;
@@ -845,6 +846,7 @@ export default function WhatsAppPage() {
     if (qrFetchInFlightRef.current && !force) return;
     if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
 
+    if (force) qrRetryCountRef.current = 0;
     qrFetchInFlightRef.current = true;
     setQrLoading(true);
     setError(null);
@@ -854,9 +856,9 @@ export default function WhatsAppPage() {
       const endpoint = force ? "/api/whatsapp/qr?refresh=true" : "/api/whatsapp/qr";
       let res;
       try {
-        res = await axios.get(`${API}${endpoint}`, { headers, timeout: 20000 });
+        res = await axios.get(`${API}${endpoint}`, { headers, timeout: 25000 });
       } catch (e1) {
-        res = await axios.get(endpoint, { headers, timeout: 20000 });
+        res = await axios.get(`${LIVE_BACKEND_URL}${endpoint}`, { headers, timeout: 25000 });
       }
       if (res.data && res.data.connected) {
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
@@ -866,6 +868,7 @@ export default function WhatsAppPage() {
         fetchStatus();
       } else if (res.data && res.data.qr) {
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+        qrRetryCountRef.current = 0;
         setQrCode(res.data.qr);
         if (res.data.qrDataUrl) setQrDataUrl(res.data.qrDataUrl);
         setQrCountdown(25);
@@ -874,11 +877,17 @@ export default function WhatsAppPage() {
         setError(null);
       } else if (res.data && res.data.initializing) {
         // Still initializing in background — keep spinner and check after 4s
-        setQrLoading(true);
-        if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
-        qrPollTimerRef.current = setTimeout(() => {
-          fetchQr(false);
-        }, 4000);
+        if (qrRetryCountRef.current < 6) {
+          qrRetryCountRef.current += 1;
+          setQrLoading(true);
+          if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+          qrPollTimerRef.current = setTimeout(() => {
+            fetchQr(false);
+          }, 4000);
+        } else {
+          setQrLoading(false);
+          setError("WhatsApp browser is initializing on server. Click 'Refresh QR Code' to display your QR.");
+        }
       } else if (res.data && res.data.error) {
         setError(res.data.error);
         setQrLoading(false);
@@ -890,12 +899,18 @@ export default function WhatsAppPage() {
       }
     } catch (err) {
       if (err.response?.status === 504 || err.code === "ECONNABORTED" || (err.message && err.message.includes("timeout"))) {
-        console.warn("ℹ️ WhatsApp QR generation in progress in background, re-checking...");
-        setQrLoading(true);
-        if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
-        qrPollTimerRef.current = setTimeout(() => {
-          fetchQr(false);
-        }, 5000);
+        if (qrRetryCountRef.current < 4) {
+          qrRetryCountRef.current += 1;
+          console.warn("ℹ️ WhatsApp QR generation in progress, re-checking...");
+          setQrLoading(true);
+          if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+          qrPollTimerRef.current = setTimeout(() => {
+            fetchQr(false);
+          }, 4000);
+        } else {
+          setError("Server is taking longer to start WhatsApp browser session. Click 'Force Fresh QR Code' below to retry.");
+          setQrLoading(false);
+        }
       } else {
         const msg = err.response?.data?.error || err.message || "Failed to generate QR code. Click Refresh QR to retry.";
         setError(msg);
@@ -906,6 +921,48 @@ export default function WhatsAppPage() {
       hasTriggeredQrFetch.current = true;
     }
   }, [demoMode, fetchStatus]);
+
+  // Socket.IO real-time QR and session sync in Live Chat
+  useEffect(() => {
+    const handleWaQr = (data) => {
+      const qrVal = data?.qr || data?.message?.qr || (typeof data === "string" ? data : null);
+      if (qrVal) {
+        setQrCode(qrVal);
+        if (data?.qrDataUrl) setQrDataUrl(data.qrDataUrl);
+        setQrCountdown(25);
+        setQrLoading(false);
+        setError(null);
+        setStatus((s) => ({ ...s, hasQr: true, connected: false }));
+      }
+    };
+
+    const handleWaReady = () => {
+      setQrCode(null);
+      setQrDataUrl(null);
+      setQrLoading(false);
+      fetchStatus();
+      fetchChats(true);
+      fetchAccountDetails();
+    };
+
+    const handleWaDisconnected = () => {
+      fetchStatus();
+    };
+
+    socket.on("wa_qr", handleWaQr);
+    socket.on("wa_authenticated", handleWaReady);
+    socket.on("wa_ready", handleWaReady);
+    socket.on("wa_connected", handleWaReady);
+    socket.on("wa_disconnected", handleWaDisconnected);
+
+    return () => {
+      socket.off("wa_qr", handleWaQr);
+      socket.off("wa_authenticated", handleWaReady);
+      socket.off("wa_ready", handleWaReady);
+      socket.off("wa_connected", handleWaReady);
+      socket.off("wa_disconnected", handleWaDisconnected);
+    };
+  }, [fetchStatus, fetchChats, fetchAccountDetails]);
 
   // QR auto-countdown timer (25s visual indicator)
   useEffect(() => {
