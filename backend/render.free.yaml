@@ -1,0 +1,146 @@
+# ══════════════════════════════════════════════════════════════════════════════
+#  Render blueprint — FREE-PLAN TESTING VARIANT
+#
+#  Same app, sized for Render's free tier so you can deploy and exercise it
+#  without paying. Read the limits before you rely on it — this is a testing
+#  setup, not a production one.
+#
+#      Render dashboard -> New -> Blueprint -> point at this repo
+#      (Render will use whichever render.yaml it finds; this file is named
+#       render.free.yaml so it does not replace the production one. Copy it over
+#       render.yaml only when you want the free variant.)
+#
+#  ── WHAT WORKS ON FREE ──────────────────────────────────────────────────────
+#     • The app boots and serves. No crash loop, no OOM kill.
+#     • Contacts, groups, templates, campaigns, automations, chatbot flows,
+#       analytics, reminders, the admin UI and the whole CRM surface.
+#     • The Meta Cloud API engine (no browser needed).
+#     • /health reports exactly what is and is not available.
+#
+#  ── WHAT DOES NOT WORK, AND WHY ─────────────────────────────────────────────
+#  These are platform limits, not configuration mistakes. No value set here
+#  changes them.
+#
+#  1. NO PAIRED WHATSAPP NUMBERS.
+#      The WhatsApp Web engine is a headless Chromium per number (~350-500 MB
+#      each). Free gives 512 MB total and Node alone takes a third of it, so the
+#      browser is switched OFF below via WA_ENABLE_WEB_ENGINE=0 and QR pairing
+#      does nothing. /health says whatsappWebEngine:"disabled" so this is never
+#      a mystery. To send real messages, configure the Meta Cloud API engine.
+#
+#  2. NO PERSISTENT DISKS.
+#      Free tiers cannot attach one. Two consequences:
+#        • The database is EPHEMERAL. Every time the container is replaced the
+#          MySQL data is gone. That is survivable here only because
+#          config/database.js creates every table with CREATE TABLE IF NOT
+#          EXISTS and seeds the admin on boot — so the service comes back as an
+#          empty-but-working app rather than a broken one.
+#        • There is nowhere to keep uploads. Files written this cycle are lost
+#          on the next replacement.
+#
+#  3. IT SPINS DOWN AFTER ~15 MINUTES IDLE, then rebuilds on the next request.
+#      The first request after an idle period is slow (cold start) and sees an
+#      empty database. Anything you entered before the spin-down is gone.
+#
+#  ── SO: WHAT IS THIS GOOD FOR? ──────────────────────────────────────────────
+#  Demoing the UI, testing a frontend change, validating a deploy, checking
+#  CORS and env wiring, running the API against a scratch database. It is NOT
+#  good for real customers, real campaigns, or any number you would hate to
+#  re-pair. Use the paid render.yaml for that.
+# ══════════════════════════════════════════════════════════════════════════════
+
+services:
+  # ── MySQL (free, ephemeral) ────────────────────────────────────────────────
+  - type: pserv
+    name: wa-mysql
+    runtime: docker
+    repo: https://github.com/render-examples/mysql
+    plan: free
+    region: singapore
+    # No disk: free tiers cannot attach one. This is why the database resets.
+    # Keep MYSQL_DATABASE and MYSQL_USER in step with DB_NAME / DB_USER below.
+
+    envVars:
+      - key: MYSQL_DATABASE
+        value: achme_wa
+      - key: MYSQL_USER
+        value: mysql
+      - key: MYSQL_PASSWORD
+        generateValue: true
+      - key: MYSQL_ROOT_PASSWORD
+        generateValue: true
+
+  # ── Backend (free) ─────────────────────────────────────────────────────────
+  - type: web
+    name: madhura-wa-backend
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Render injects PORT for free services; 5001 here matches the Dockerfile.
+      - key: TZ
+        value: Asia/Kolkata
+      - key: WA_MESSAGE_INTERVAL
+        value: "2000"
+
+      # ── the two things to review ──────────────────────────────────────────
+      - key: ALLOWED_ORIGINS
+        value: https://madhura-wa-frontend.vercel.app
+      - key: PUBLIC_BASE_URL
+        value: https://madhura-wa-backend.onrender.com
+
+      # ── free-tier accommodations ─────────────────────────────────────────
+      # No browser: this is what keeps a 512 MB container alive.
+      - key: WA_ENABLE_WEB_ENGINE
+        value: "0"
+      # Boot even if the ephemeral database has not come up yet, instead of
+      # crash-looping. /health reports degraded and /api answers 503.
+      - key: ALLOW_START_WITHOUT_DB
+        value: "1"
+      # No disk on free, so state lives inside the container and is lost when
+      # the container is replaced. /var/data is the path the image creates and
+      # chowns to the `node` user, so it is writable — /app is owned by root and
+      # would fail with EACCES. Set this to the mountPath instead once you attach
+      # a disk on a paid plan.
+      - key: WA_DATA_DIR
+        value: /var/data
+
+      # ── database (auto-filled from wa-mysql) ─────────────────────────────
+      - key: DB_HOST
+        fromService:
+          name: wa-mysql
+          type: pserv
+          property: host
+      - key: DB_PORT
+        fromService:
+          name: wa-mysql
+          type: pserv
+          property: port
+      - key: DB_USER
+        value: mysql
+      - key: DB_NAME
+        value: achme_wa
+      - key: DB_PASS
+        fromService:
+          name: wa-mysql
+          type: pserv
+          envVarKey: MYSQL_PASSWORD
+
+      # ── auth ─────────────────────────────────────────────────────────────
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DEFAULT_TEST_PASSWORD
+        generateValue: true
+      - key: ADMIN_SEED_EMAIL
+        value: admin@madhuratech.com
+      - key: ADMIN_SEED_PASSWORD
+        generateValue: true
+      - key: WA_VERIFY_TOKEN
+        generateValue: true

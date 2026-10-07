@@ -34,6 +34,9 @@ function killSessionBrowserProcesses(sessionPath) {
 }
 
 function getExecutablePath() {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
+    return process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
   if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
     return process.env.CHROME_PATH;
   }
@@ -207,9 +210,18 @@ async function sendOnce(idempotencyKey, fn) {
 
 // Root for all per-user session profiles. Each linked WhatsApp number gets
 // whatsapp-sessions/<userId>/ — a full Chrome profile owned by LocalAuth.
-const SESSIONS_ROOT = path.join(__dirname, "../../whatsapp-sessions");
+//
+// Resolution lives in config/runtimePaths so there is exactly one answer to
+// "where does session state live". On the VPS it points OUTSIDE the deploy
+// directory, because the app is deployed with `git pull`: if the profile lived
+// inside the repo, a deploy could orphan a live WhatsApp session and force an
+// operator to re-scan a QR for every number the business runs.
+//
+// With no env var set (local dev) it resolves to the original repo-relative
+// path, so behaviour on this machine is unchanged.
+const { sessionsDir: SESSIONS_ROOT } = require("../config/runtimePaths");
 // Pre-multi-session location. Migrated into SESSIONS_ROOT/<adminId> on first boot.
-const LEGACY_SESSION_PATH = path.join(__dirname, "../../whatsapp-session");
+const LEGACY_SESSION_PATH = process.env.WA_LEGACY_SESSION_DIR || path.join(__dirname, "../../whatsapp-session");
 
 const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000; // 96 hours (4 days)
 
@@ -478,6 +490,16 @@ class WhatsAppService {
     if (!forceFresh && this.ready) return Promise.resolve();
     if (!forceFresh && this.isInitializing && this._initPromise) {
       return this._initPromise;
+    }
+    // Refuse BEFORE anything touches disk or spawns a process. The caller gets an
+    // error carrying the reason, which the routes turn into a clear 503 — far
+    // better than a Chromium launch that gets the container OOM-killed and
+    // surfaces as a generic failure or a crash-looping deploy.
+    if (!WEB_ENGINE_ENABLED) {
+      const err = new Error(WEB_ENGINE_DISABLED_REASON);
+      err.code = "WHATSAPP_WEB_ENGINE_DISABLED";
+      err.status = 503;
+      return Promise.reject(err);
     }
     this._initPromise = this.lifecycle(() => this._doInit(forceFresh))
       .finally(() => {
@@ -3099,6 +3121,16 @@ async function restoreExisting() {
   }
 
   let restored = 0;
+
+  // Never launch Chromium when the Web engine is switched off. Without this the
+  // boot sequence would still spawn a browser per saved profile and be
+  // OOM-killed on a small instance, which is the whole reason the flag exists.
+  if (!WEB_ENGINE_ENABLED) {
+    console.log(`ℹ️  WhatsApp Web engine disabled (WA_ENABLE_WEB_ENGINE=0) — ${dirs.length} saved profile(s) left untouched, nothing launched.`);
+    console.log(`   ${WEB_ENGINE_DISABLED_REASON}`);
+    return { restored: 0, engineDisabled: true };
+  }
+
   for (const key of dirs) {
     const dir = path.join(SESSIONS_ROOT, key);
     if (!hasSavedProfile(dir)) {
@@ -3130,6 +3162,15 @@ async function restoreExisting() {
   return { restored };
 }
 
+/*
+ * WhatsApp Web (browser) engine toggle — see config/webEngine.js for the full
+ * rationale. The flag itself lives in that dependency-free module so /health can
+ * read it at boot without loading Puppeteer first.
+ */
+const { isWebEngineEnabled, WEB_ENGINE_DISABLED_REASON } = require("../config/webEngine");
+
+const WEB_ENGINE_ENABLED = isWebEngineEnabled();
+
 module.exports = {
   get,
   all,
@@ -3139,6 +3180,8 @@ module.exports = {
   restoreExisting,
   cleanExpiredSessions,
   startSessionCleanupScheduler,
+  isWebEngineEnabled,
+  WEB_ENGINE_DISABLED_REASON,
   get defaultKey() { return defaultKey; },
   SESSIONS_ROOT,
 };

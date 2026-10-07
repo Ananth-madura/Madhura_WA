@@ -5,13 +5,68 @@
 // every require() resolves locally — see DIVERGENCE NOTE in README.md).
 // ─────────────────────────────────────────────────────────────────────────────
 const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, ".env"), override: true });
+// NOTE: override:false (the default) so a real process environment wins over .env.
+// That is what lets a VPS inject env vars (systemd / PM2 / panel) without .env
+// silently clobbering them. Local dev sets no env vars, so .env still wins there.
+// WA_SKIP_DOTENV exists so a container with no .env — and a test that wants to
+// assert true zero-config behaviour — can prove the defaults carry the process on
+// their own. Without it, a developer's local .env silently supplies the very
+// variables under test, and the test passes for the wrong reason. That is not
+// hypothetical: it is how a missing DB_NAME crash went unnoticed locally.
+if (["1", "true", "yes", "on"].includes(String(process.env.WA_SKIP_DOTENV || "").toLowerCase())) {
+  console.log("ℹ️  WA_SKIP_DOTENV set — not loading .env");
+} else {
+  require("dotenv").config({ path: path.join(__dirname, ".env") });
+}
+
+// Apply defaults BEFORE anything reads configuration, and before validation, so
+// the service comes up on a host where no environment variables were injected at
+// all. Without this, a service created by hand rather than from render.yaml
+// refused to boot with every variable reported missing — including values that
+// were plainly present in the repository's blueprint. A real environment
+// variable always wins; these are fallbacks. See config/runtimeDefaults.js for
+// what is defaulted and, more importantly, what deliberately is not.
+const { applyDefaults } = require("./config/runtimeDefaults");
+const defaults = applyDefaults(process.env);
+if (defaults.applied.length) {
+  console.log(`\nℹ️  ${defaults.applied.length} configuration value(s) defaulted (no environment was provided):`);
+  for (const d of defaults.applied) console.log(`   ${d.key.padEnd(24)} ${d.why}`);
+}
+if (defaults.ephemeralJwt) {
+  console.warn(`\n⚠️  ${defaults.ephemeralJwt.reason}\n`);
+}
+
+// ── Validate configuration before anything has a side effect ────────────────
+// Deliberately placed ABOVE `require("./config/database")`: opening the database
+// starts a 15-attempt connection retry loop and spins up the SMTP verifier, so
+// validating afterwards means a misconfigured host waits through all of that
+// before being told what is wrong.
+//
+// dotenv has already run (line above), so .env values are visible while a real
+// process environment still wins over the file.
+//
+// This used to be a bare ["DB_HOST","DB_USER","DB_PASS","DB_NAME","JWT_SECRET"]
+// presence check. Presence is not enough: a template value left as CHANGE_ME is
+// "present" and still broken. config/envCheck.js also rejects placeholders and
+// validates PUBLIC_BASE_URL and the CORS allowlist — the two settings that fail
+// silently, with a healthy-looking server and a blank frontend.
+const { reportEnv } = require("./config/envCheck");
+console.log("\n── configuration ──");
+if (!reportEnv(process.env)) {
+  process.exit(1);
+}
+console.log("");
+
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
 const db = require("./config/database");
+// Dependency-free: reporting the Web-engine state must not pull Puppeteer into
+// memory on a small instance.
+const webEngine = require("./config/webEngine");
 const { initSocket } = require("./sockets/chatsockets");
 const { initNotificationsSocket } = require("./sockets/notifications");
+const { startKeepAlive } = require("./services/renderKeepAlive");
 
 process.on("unhandledRejection", (reason, promise) => {
   console.warn("⚠️ [Server Guard] Unhandled Rejection at:", promise, "reason:", reason?.message || reason);
@@ -20,16 +75,44 @@ process.on("uncaughtException", (err) => {
   console.warn("⚠️ [Server Guard] Uncaught Exception:", err?.message || err);
 });
 
-// ── Fail fast if required env vars are missing ──────────────────────────────
-const REQUIRED_ENV = ["DB_HOST", "DB_USER", "DB_PASS", "DB_NAME", "JWT_SECRET"];
-const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
-if (missing.length) {
-  console.error(`❌ Missing required environment variables: ${missing.join(", ")}`);
-  console.error("   Copy backend/.env.example to backend/.env and fill in the values.");
-  process.exit(1);
-}
-
 const app = express();
+
+/*
+ * Database readiness, tracked here rather than inferred.
+ *
+ * `db.ready` is the promise config/database.js already exposes. The service
+ * starts before that promise settles, so a synchronous check at boot would
+ * always read "not connected" and would then be wrong a second later. Tracking
+ * the settled outcome means /health and the degraded guard report what is
+ * actually true at request time.
+ */
+const dbState = {
+  connected: false,
+  configured: ["DB_HOST", "DB_NAME", "DB_USER", "DB_PASS"].every(
+    (k) => process.env[k] && String(process.env[k]).trim()
+  ),
+  degradedAllowed: ["1", "true", "yes", "on"].includes(
+    String(process.env.ALLOW_START_WITHOUT_DB || "").toLowerCase()
+  ),
+  lastError: null,
+};
+
+// Never let a database failure become an unhandled rejection. Without this, a
+// dead database crashes the process even in degraded mode, which defeats the
+// point of booting without one.
+db.ready.then(
+  () => {
+    dbState.connected = true;
+    console.log("  database: connected");
+  },
+  (err) => {
+    dbState.lastError = err && err.message;
+    console.error(`  database: NOT available — ${dbState.lastError}`);
+    if (!dbState.degradedAllowed) {
+      console.error("  Set ALLOW_START_WITHOUT_DB=1 to boot anyway (API will answer 503).");
+    }
+  }
+);
 const server = http.createServer(app);
 module.exports = app;
 
@@ -56,27 +139,132 @@ process.on("unhandledRejection", (reason) => handleFatal("unhandledRejection", r
 process.on("uncaughtException", (err) => handleFatal("uncaughtException", err));
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
-const dynamicOrigin = (origin, callback) => {
-  callback(null, true);
-};
+// Policy lives in config/corsPolicy.js so it can be unit-tested without booting
+// this file (booting server.js also starts the WhatsApp session engine, so the
+// only alternative was to restart a live server holding a paired number).
+//
+// Summary: no Origin -> allowed (curl, PM2, Meta webhook, CRM X-API-Key calls).
+// Exact match against ALLOWED_ORIGINS -> allowed. localhost -> dev only.
+// Everything else refused, with no CORS headers so the browser blocks it.
+const { createCorsOrigin, describePolicy } = require("./config/corsPolicy");
+const corsOrigin = createCorsOrigin(process.env);
+
+// Behind nginx on the VPS. Without this, express-rate-limit sees the nginx
+// proxy IP as the client and every visitor shares one rate-limit bucket.
+app.set("trust proxy", 1);
+
 app.use(cors({
-  origin: dynamicOrigin,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  origin: corsOrigin,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-Requested-With"],
+  exposedHeaders: ["Content-Disposition"],
   credentials: true,
+  maxAge: 86400,
 }));
-const corsOrigins = dynamicOrigin;
+const corsOrigins = corsOrigin;
+
+if (corsOrigin.isProd && corsOrigin.allowedOrigins.length === 0) {
+  console.warn("?? NODE_ENV=production but ALLOWED_ORIGINS is empty - all cross-origin browser requests will be blocked. Set it to your Vercel domain.");
+} else {
+  console.log(`? CORS allowlist: ${describePolicy(process.env)}`);
+}
+
 
 app.use(express.json({ limit: "50mb", verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 app.get(["/health", "/api/health"], (req, res) => {
+  // Truth over green ticks. The status stays 200 so orchestrators do not
+  // kill-loop the container, but the body reports the real state — a monitor
+  // reading `ok` sees degraded, and a human reading the deploy log sees why.
+  const dbUp = dbState.connected;
+  const webEngineOn = webEngine.isWebEngineEnabled();
+  const r2Storage = require("./services/r2StorageService");
+  const isSqlite = Boolean(db.isSqlite);
+  const r2Status = r2Storage.getStatus();
   res.json({
-    ok: true,
+    ok: dbUp,
     service: "whatsapp-crm",
-    database: "ready",
+    database: dbUp ? "ready" : "disconnected",
+    dbEngine: isSqlite ? (r2Status.configured ? "sqlite-r2" : "sqlite") : "mysql",
+    storage: {
+      r2Configured: r2Status.configured,
+      r2Bucket: r2Status.bucket,
+      lastSyncAt: r2Status.lastSyncAt,
+    },
+    degraded: !dbUp,
+    ...(dbUp
+      ? {}
+      : {
+          reason:
+            dbState.configured
+              ? "Database is configured but not reachable"
+              : "No database configured — set DB_HOST, DB_USER, DB_PASS, DB_NAME (or configure Cloudflare R2 / USE_SQLITE=1)",
+          hint: "Every /api route answers 503 while degraded. Provision MySQL or set Cloudflare R2 keys.",
+        }),
+    // Not a fault: the Web engine is optional. Reported so it is never a
+    // mystery why QR pairing does nothing.
+    whatsappWebEngine: webEngineOn ? "enabled" : "disabled",
+    ...(webEngineOn ? {} : { whatsappWebEngineHint: webEngine.WEB_ENGINE_DISABLED_REASON }),
+    // So a defaulted deployment is visible in one place rather than inferred from
+    // a deploy log that has already scrolled away.
+    defaultedValues: defaults.applied.map((d) => d.key),
+    ephemeralJwtSecret: Boolean(defaults.ephemeralJwt),
+    ...(defaults.ephemeralJwt
+      ? { ephemeralJwtSecretHint: "Set a real JWT_SECRET; sessions do not survive a restart until you do." }
+      : {}),
     uptime: process.uptime(),
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/*
+ * Degraded mode guard.
+ *
+ * When ALLOW_START_WITHOUT_DB=1 and the database is not usable, short-circuit
+ * every API route with an explicit 503 instead of letting each one fail
+ * somewhere different — a raw driver error, an unhandled rejection, or a
+ * request that hangs until the client gives up.
+ *
+ * This is deliberately a hard stop. It does not fall back to a substitute
+ * datastore: this service keeps clients, invoices, contacts, campaigns, flows
+ * and chat history as raw SQL, and a JSON shim would mean rewriting every query
+ * and would lose all records on restart. Degraded mode is for seeing that the
+ * database is missing, not for pretending to work without it.
+ */
+app.use("/api", (req, res, next) => {
+  // Never block CORS OPTIONS preflight checks with 503
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+
+  // Allow dedicated demo-login endpoint so demo access always works even before DB is provisioned
+  if (req.path === "/auth/demo-login") return next();
+
+  // WhatsApp Web engine routes run independently of MySQL database using LocalAuth filesystem persistence
+  if (req.path.startsWith("/whatsapp")) return next();
+
+  // Storage and Cloudflare R2 routes run independently
+  if (req.path.startsWith("/storage")) return next();
+
+  // Guard on the database being down, NOT on whether degraded boot was
+  // requested. Gating this on degradedAllowed left a hole: with the flag off and
+  // no database, routes were allowed through to a dead socket and produced raw
+  // driver errors and unhandled rejections instead of one clear 503.
+  if (dbState.connected) return next();
+
+  if (!dbState.degradedAllowed) {
+    console.warn(
+      "Database is not connected and ALLOW_START_WITHOUT_DB is not set — /api will answer 503. " +
+        "Set ALLOW_START_WITHOUT_DB=1 to make that intentional rather than accidental."
+    );
+  }
+  res.status(503).json({
+    error: "Service is running without a database",
+    degraded: true,
+    database: dbState.configured ? "disconnected" : "not configured",
+    reason: dbState.configured
+      ? "The configured database is not reachable"
+      : "DB_HOST, DB_USER, DB_PASS and DB_NAME are not set",
+    hint: "Provision MySQL (render.yaml can create it) and restart the service.",
   });
 });
 
@@ -129,6 +317,7 @@ app.use("/api/wa/ai", require("./routes/waAiRoutes"));
 app.use("/api/wa/payments", require("./routes/waPaymentsRoutes"));
 app.use("/api/wa/drip", require("./routes/waDripRoutes"));
 app.use("/api/wa/reminders", require("./routes/waReminderRoutes"));
+app.use("/api/storage", require("./routes/r2Routes"));
 
 // ── Removed: unauthenticated test hooks ──────────────────────────────────────
 // /send-menu, /simulate-inbound and /trigger-automation used to be registered on
@@ -148,22 +337,32 @@ app.use("/api/wa/reminders", require("./routes/waReminderRoutes"));
 //   POST /api/wa/flows/simulate-step       (inbound simulation)
 
 // ── Ensure Runtime Directories Exist ──────────────────────────────────────────
-const fs = require("fs");
-const runtimeDirs = [
-  path.join(__dirname, "uploads"),
-  path.join(__dirname, "uploads", "wa-media"),
-  path.join(__dirname, "..", "whatsapp-sessions"),
-  path.join(__dirname, "..", "logs"),
-];
-runtimeDirs.forEach((dir) => {
-  try {
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  } catch (_) {}
-});
+//
+// Deploy model: the app is deployed by `git pull` into a deploy directory, so
+// the code directory is replaceable. Runtime state is NOT — it holds the paired
+// WhatsApp session (a full Chromium profile) and every uploaded PDF and image.
+//
+// All path resolution therefore lives in config/runtimePaths.js, and each path
+// is env-overridable. On the VPS they point at /home/wauser/wa-data/*, outside
+// the deploy directory, so a deploy can never orphan a live WhatsApp session.
+// With no env set (local dev) they resolve to the original hardcoded locations,
+// so nothing changes on this machine.
+const { ensureRuntimeDirs, uploadsDir, sessionsDir, logsDir, isExternalState } =
+  require("./config/runtimePaths");
+
+ensureRuntimeDirs();
 
 // Absolute path: express.static("uploads") resolves against process.cwd(), so
 // uploaded media 404'd whenever the server was started from anywhere but backend/.
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static(uploadsDir));
+
+// Make the resolved locations visible in the boot log. A deployment mistake
+// here (state written inside the deploy dir) must be obvious in the first
+// screenful of PM2 output, not discovered when a session vanishes.
+console.log(`? Runtime state ${isExternalState() ? "EXTERNAL (persistent)" : "in-repo (dev)"}`);
+console.log(`?   uploads  -> ${uploadsDir}`);
+console.log(`?   sessions -> ${sessionsDir}`);
+console.log(`?   logs     -> ${logsDir}`);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT) || 5001;
@@ -177,12 +376,19 @@ server.on("error", (error) => {
 });
 
 function startServer() {
-  return db.ready.then(async () => {
+  const initSockets = () => {
     const io = initSocket(server, corsOrigins);
     initNotificationsSocket(io, corsOrigins);
     app.set("io", io);
     app.set("notificationIO", io);
+  };
 
+  /*
+   * Everything that needs a live database: WhatsApp tables, Meta credential
+   * load, session restore, the reminder/automation schedulers, the CRM sweep
+   * and the queue worker. Split out so degraded mode can skip it.
+   */
+  const bootDatabaseFeatures = async () => {
     // Ensure WhatsApp tables exist
     try {
       await require("./services/waDatabase").ensureWATables();
@@ -242,12 +448,46 @@ function startServer() {
     // Start WhatsApp Cloud API queue worker (no Redis fallback = synchronous)
     const { startWorker } = require("./services/waQueue");
     startWorker().catch(() => {});
+  };
+
+  if (dbState.degradedAllowed) {
+    /*
+     * Degraded mode: listen NOW rather than waiting on db.ready.
+     *
+     * The previous shape called server.listen() *inside* db.ready.then(), so
+     * with no database nothing ever listened — the process ran, answered
+     * nothing, and any orchestrator saw a port refusal rather than an
+     * explanation. Listening immediately makes /health reachable so the
+     * deployment reports "degraded, no database" instead of failing obscurely.
+     *
+     * The database-backed features are still kicked off: if the database becomes
+     * reachable later they start by themselves, and if it never does their
+     * failure is logged rather than fatal.
+     */
+    initSockets();
+    bootDatabaseFeatures().catch((error) => {
+      console.error(`Database features unavailable: ${error.message}`);
+      console.error("Running degraded: /health reports it and /api answers 503.");
+    });
+    server.listen(PORT, "0.0.0.0", () => {
+      console.log(`⚠️  Whatsapp_CRM server running DEGRADED: http://0.0.0.0:${PORT} [${process.env.NODE_ENV || "development"}]`);
+      console.log(`   Database features are disabled until DB_HOST/DB_USER/DB_PASS/DB_NAME resolve.`);
+      startKeepAlive();
+    });
+    return Promise.resolve();
+  }
+
+  return db.ready.then(async () => {
+    initSockets();
+    await bootDatabaseFeatures();
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`✅ Whatsapp_CRM server running: http://0.0.0.0:${PORT} [${process.env.NODE_ENV || "development"}]`);
+      startKeepAlive();
     });
   }).catch((error) => {
     console.error("Database is not ready. Server not started.");
     console.error(`Check DB_HOST, DB_PORT, DB_USER, DB_PASS, and DB_NAME in Whatsapp_CRM/backend/.env. Details: ${error.message}`);
+    console.error("To boot anyway with every /api route answering 503, set ALLOW_START_WITHOUT_DB=1.");
     process.exit(1);
   });
 }

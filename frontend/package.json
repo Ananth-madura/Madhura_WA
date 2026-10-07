@@ -28,7 +28,7 @@
     "verify:api": "node scripts/verify-api-link.js"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "eslintConfig": {
     "extends": [

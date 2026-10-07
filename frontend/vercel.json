@@ -16,19 +16,19 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://wa-api.madhuratech.com/api/:path*"
+      "destination": "https://madhura-wa-backend.onrender.com/api/:path*"
     },
     {
       "source": "/uploads/:path*",
-      "destination": "https://wa-api.madhuratech.com/uploads/:path*"
+      "destination": "https://madhura-wa-backend.onrender.com/uploads/:path*"
     },
     {
       "source": "/socket.io/:path*",
-      "destination": "https://wa-api.madhuratech.com/socket.io/:path*"
+      "destination": "https://madhura-wa-backend.onrender.com/socket.io/:path*"
     },
     {
       "source": "/health",
-      "destination": "https://wa-api.madhuratech.com/health"
+      "destination": "https://madhura-wa-backend.onrender.com/health"
     },
     {
       "source": "/:path*",

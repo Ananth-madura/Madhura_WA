@@ -15,6 +15,8 @@ import { API } from "../config/api";
 import socket from "../socket/socket";
 import WhatsAppNav from "../components/WhatsAppNav";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
+import { useAuth } from "../auth/AuthContext";
+import { DEMO_STATUS } from "../auth/demoData";
 
 const QUALITY_COLORS = {
   GREEN: { bg: "hl-card", text: "", badge: "hl-badge hl-badge-success", label: "Green — High Quality (Tier 1)" },
@@ -109,6 +111,8 @@ export default function WhatsAppAccounts() {
   const [kbDocs, setKbDocs] = useState([]);
   const [kbUploading, setKbUploading] = useState(false);
   const [kbError, setKbError] = useState("");
+
+  const { demoMode } = useAuth();
 
   // ── WhatsApp Web Live QR & Session Control ──
   const [qrCode, setQrCode] = useState(null);
@@ -361,6 +365,22 @@ export default function WhatsAppAccounts() {
     };
   }, [fetchAll]);
 
+  useEffect(() => {
+    const onDisconnect = () => {
+      setQrCode(null);
+      setQrDataUrl(null);
+      setStatus((prev) => ({
+        ...prev,
+        connected: false,
+        isWeb: false,
+        web: { ...(prev?.web || {}), connected: false },
+      }));
+      fetchAll();
+    };
+    window.addEventListener("wa_session_disconnected", onDisconnect);
+    return () => window.removeEventListener("wa_session_disconnected", onDisconnect);
+  }, [fetchAll]);
+
   // QR auto-countdown timer (visual indicator of WhatsApp Web's QR lifespan)
   useEffect(() => {
     let timer;
@@ -542,6 +562,7 @@ export default function WhatsAppAccounts() {
     if (!pairingPhone.trim()) return;
     setPairingLoading(true);
     setPairingCode("");
+
     try {
       const cleanPhone = pairingPhone.replace(/\D/g, "");
       const res = await axios.get(`${API}/api/whatsapp/pairing-code?phone=${cleanPhone}`, { headers: headers() });

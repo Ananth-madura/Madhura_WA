@@ -1,23 +1,64 @@
 const path = require("path");
 const fs = require("fs");
 
-require("dotenv").config({ path: path.join(__dirname, "../.env"), override: true });
+// override is deliberately NOT set (defaults to false), matching server.js.
+//
+// This used to be `override: true`, which meant a .env file on disk won over
+// the real process environment. On a VPS or Render that set NODE_ENV=production
+// as a genuine env var, the .env line NODE_ENV=development silently overrode it.
+// The visible symptom is that CORS never reaches fail-closed and the allowlist
+// stays in dev convenience mode on a public hostname; everything else keeps
+// working, so nothing looks broken. A real injected environment variable must
+// always win over a checked-out file.
+if (!["1", "true", "yes", "on"].includes(String(process.env.WA_SKIP_DOTENV || "").toLowerCase())) {
+  require("dotenv").config({ path: path.join(__dirname, "../.env") });
+}
 
 const mysql = require("mysql2");
 const bcrypt = require("bcryptjs");
 
 const dbPort = Number(process.env.DB_PORT) || 3306;
-const dbName = process.env.DB_NAME;
+
+// DB_NAME must not throw at import time.
+//
+// This module is required by server.js before anything can report a problem, and
+// `undefined.replace` killed the process outright when the variable was absent.
+// On a host with no .env file - which is every container deployment - DB_NAME is
+// genuinely unset, and a crash with a stack trace tells you far less than
+// starting up and reporting "no database configured" on /health.
+//
+// An empty name is left empty deliberately rather than invented here; picking a
+// schema to talk to is the operator's decision.
+const dbName = (process.env.DB_NAME || "").trim();
 const escapedDbName = dbName.replace(/`/g, "``");
+
+if (!dbName) {
+  console.warn(
+    "[database] DB_NAME is not set. The database connection cannot be established; " +
+      "set DB_NAME (and DB_HOST/DB_USER/DB_PASS) to enable database-backed features."
+  );
+}
+
+const r2Storage = require("../services/r2StorageService");
+const isR2OrSqliteRequested =
+  r2Storage.isConfigured() ||
+  ["1", "true", "sqlite", "r2"].includes(
+    String(process.env.USE_SQLITE || process.env.DB_ENGINE || "").toLowerCase()
+  );
 
 const db = mysql.createConnection({
   host: process.env.DB_HOST,
   port: dbPort,
   user: process.env.DB_USER,
   password: process.env.DB_PASS,
-  database: dbName,
+  database: dbName || undefined,
   charset: "utf8mb4",
   multipleStatements: true
+});
+
+db.on("error", (err) => {
+  if (db.isSqlite || isR2OrSqliteRequested) return;
+  console.warn("⚠️ [MySQL Socket Warning]:", err && err.message);
 });
 
 const schemaPath = path.join(__dirname, "../schema.sql");
@@ -878,16 +919,34 @@ async function seedDefaultEmployees() {
     });
   } catch (e) { console.log("Seed alter skip:", e.message); }
 
-  const adminUser = { first_name: "Admin", last_name: "", emp_id: "ADMIN001", email: "admin@madhuratech.com", mobile: "", job_title: "Administrator", emp_role: "Manager", role: "admin", password: "admin@123" };
-  const adminHash = await bcrypt.hash(adminUser.password, 10);
+  // Seed password comes from the environment. It used to be a literal in this
+  // file, and because the seed UPDATEs an existing row it silently reset the
+  // admin password back to that literal on every boot — so rotating it had no
+  // effect until this file was edited too. Set ADMIN_SEED_PASSWORD in .env; it
+  // is used ONLY to create the admin row the first time. On later boots the
+  // password column is left alone, so a rotated password survives a restart.
+  const adminPassword = process.env.ADMIN_SEED_PASSWORD;
+  if (!adminPassword) {
+    console.warn(
+      "[seed] ADMIN_SEED_PASSWORD is not set — skipping admin user seed entirely. " +
+        "Set it in .env to create the first admin."
+    );
+    return;
+  }
+
+  const adminUser = { first_name: "Admin", last_name: "", emp_id: "ADMIN001", email: process.env.ADMIN_SEED_EMAIL || "admin@madhuratech.com", mobile: "", job_title: "Administrator", emp_role: "Manager", role: "admin", password: adminPassword };
   try {
     const existingAdmin = await queryAsync(`SELECT id FROM users WHERE email = ?`, [adminUser.email]);
     if (existingAdmin.length > 0) {
-      await queryAsync(`UPDATE users SET first_name=?, last_name=?, emp_id=?, user_password=?, role='admin', status='active' WHERE email=?`,
-        [adminUser.first_name, adminUser.last_name, adminUser.emp_id, adminHash, adminUser.email]);
+      // Deliberately does NOT touch user_password: re-hashing and writing it on
+      // every boot would undo any password change made since.
+      await queryAsync(`UPDATE users SET first_name=?, last_name=?, emp_id=?, role='admin', status='active' WHERE email=?`,
+        [adminUser.first_name, adminUser.last_name, adminUser.emp_id, adminUser.email]);
     } else {
+      const adminHash = await bcrypt.hash(adminUser.password, 10);
       await queryAsync(`INSERT INTO users (first_name, last_name, emp_id, email, user_password, role, status) VALUES (?, ?, ?, ?, ?, 'admin', 'active')`,
         [adminUser.first_name, adminUser.last_name, adminUser.emp_id, adminUser.email, adminHash]);
+      console.log("[seed] Admin user created — set a new password immediately.");
     }
   } catch (e) { console.log("Admin seed:", e.message); }
 
@@ -960,14 +1019,58 @@ const ready = new Promise((resolve, reject) => {
   let attempts = 0;
   const maxAttempts = 15;
 
+  const sqliteAdapter = require("./sqliteDatabase");
+
+  // If Cloudflare R2 is configured or SQLite is explicitly requested (and no MySQL is configured)
+  if (isR2OrSqliteRequested && (!dbName || process.env.USE_SQLITE === "1" || process.env.DB_ENGINE === "sqlite" || process.env.DB_ENGINE === "r2")) {
+    console.log("✨ Initializing Embedded SQLite database engine backed by Cloudflare R2 persistent storage...");
+    return sqliteAdapter.initialize().then(() => {
+      db.query = sqliteAdapter.query.bind(sqliteAdapter);
+      db.promise = sqliteAdapter.promise.bind(sqliteAdapter);
+      db.isSqlite = true;
+      db.r2Enabled = sqliteAdapter.r2Enabled;
+      return resolve(db);
+    }).catch((err) => {
+      console.error("❌ Failed to initialize SQLite + R2 engine:", err.message);
+      return reject(err);
+    });
+  }
+
+  // No database named: nothing to retry against. Reject immediately so the
+  // caller can decide between exiting and booting degraded, instead of sitting
+  // through 15 connection attempts to an obviously absent database.
+  if (!dbName) {
+    return reject(new Error("DB_NAME is not set — no database configured"));
+  }
+
   function attemptConnect() {
     attempts++;
     db.connect((err) => {
       if (err) {
+        if (isR2OrSqliteRequested && (attempts >= 2 || err.code === "ECONNREFUSED" || err.code === "ENOTFOUND")) {
+          console.warn("⚠️ MySQL unreachable — instantly activating Embedded SQLite + Cloudflare R2 engine!");
+          return sqliteAdapter.initialize().then(() => {
+            db.query = sqliteAdapter.query.bind(sqliteAdapter);
+            db.promise = sqliteAdapter.promise.bind(sqliteAdapter);
+            db.isSqlite = true;
+            db.r2Enabled = sqliteAdapter.r2Enabled;
+            return resolve(db);
+          }).catch(reject);
+        }
         if (attempts < maxAttempts) {
           console.warn(`⏳ [MySQL Connection Retry] Attempt ${attempts}/${maxAttempts} failed (${err.message}). Retrying in 3 seconds...`);
           setTimeout(attemptConnect, 3000);
           return;
+        }
+        if (isR2OrSqliteRequested) {
+          console.warn("⚠️ MySQL unreachable — falling back to Embedded SQLite + Cloudflare R2 engine!");
+          return sqliteAdapter.initialize().then(() => {
+            db.query = sqliteAdapter.query.bind(sqliteAdapter);
+            db.promise = sqliteAdapter.promise.bind(sqliteAdapter);
+            db.isSqlite = true;
+            db.r2Enabled = sqliteAdapter.r2Enabled;
+            return resolve(db);
+          }).catch(reject);
         }
         console.error("❌ MySQL connection failed after max retries:", err.message);
         return reject(err);

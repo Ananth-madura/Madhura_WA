@@ -1,3 +1,26 @@
 node_modules
+npm-debug.log*
+
+# Secrets — never bake these into an image layer.
 .env
+.env.*
+!.env.example
+!.env.production.example
+
+# Runtime state. Sessions hold a live WhatsApp login, so a leaked image layer
+# is a leaked account. Mount these as volumes instead.
+uploads
+.wwebjs_cache/
+backups/
+
+logs/
 *.log
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
+deploy/
+tests/
+coverage/
+.vscode/

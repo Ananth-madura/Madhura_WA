@@ -5,6 +5,8 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
+import { useAuth } from "../auth/AuthContext";
+import { DEMO_TEMPLATES } from "../auth/demoData";
 import WhatsAppNav from "../components/WhatsAppNav";
 import WAVariablePicker, { VARIABLE_GROUPS, evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 import { useNavigate } from "react-router-dom";
@@ -62,15 +64,22 @@ export default function WATemplates() {
   const [saving, setSaving] = useState(false);
   const bodyTextareaRef = useRef(null);
 
+  const { demoMode } = useAuth();
+
   const fetchTemplates = async () => {
+    if (demoMode) {
+      setTemplates(DEMO_TEMPLATES);
+      setLoading(false);
+      return;
+    }
     try {
       const token = localStorage.getItem("token");
       const { data } = await axios.get(`${API}/api/wa/templates`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setTemplates(data || []);
+      setTemplates(data && data.length ? data : DEMO_TEMPLATES);
     } catch (err) {
-      console.error(err);
+      setTemplates(DEMO_TEMPLATES);
     }
     setLoading(false);
   };

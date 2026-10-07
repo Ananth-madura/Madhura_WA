@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { Agentation } from "agentation";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { LIVE_BACKEND_URL } from "./config/api";
 import Landing from "./pages/Landing";
 import Login from "./auth/login";
 import Signup from "./auth/signup";
@@ -38,6 +40,17 @@ function FlowParamRedirect() {
 }
 
 export default function App() {
+  // Anti-sleep keep-alive: ping Render backend every 7 minutes to prevent free-tier spin down
+  useEffect(() => {
+    const keepAlivePing = () => {
+      try {
+        fetch(`${LIVE_BACKEND_URL}/health`, { method: "GET", mode: "no-cors" }).catch(() => {});
+      } catch (_) {}
+    };
+    keepAlivePing();
+    const interval = setInterval(keepAlivePing, 7 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
   return (
     <AuthProvider>
       <BrowserRouter>

@@ -3,14 +3,14 @@ const router = express.Router();
 const db = require("../config/database");
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
 const { verifyToken: auth } = require("../middleware/authMiddleware");
 const wa = require("../services/whatsappCloudApi");
 const { configureForUser, resetToEnvConfig } = require("../services/waConfigHelper");
 const { campaignLaunchLimiter } = require("../middleware/waRateLimiter");
 
-const mediaDir = path.join(__dirname, "..", "uploads", "wa-media");
-fs.mkdirSync(mediaDir, { recursive: true });
+// Upload target comes from config/runtimePaths so that on the VPS it resolves
+// to a directory OUTSIDE the deploy directory. See that file for why.
+const { mediaDir } = require("../config/runtimePaths");
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, mediaDir),

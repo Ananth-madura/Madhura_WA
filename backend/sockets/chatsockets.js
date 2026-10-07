@@ -1,5 +1,6 @@
 const { Server } = require("socket.io");
 const db = require("../config/database");
+const { authenticateSocket, canJoinUserRoom, canJoinNamedRoom } = require("./socketAuth");
 
 const onlineUsers = new Map();
 
@@ -9,21 +10,40 @@ function initSocket(server, corsOrigin = "*") {
   const io = new Server(server, {
     cors: {
       origin: corsOrigin,
-      methods: ["GET", "POST", "PUT", "DELETE"]
-    }
+      methods: ["GET", "POST", "PUT", "DELETE"],
+      credentials: true,
+    },
   });
   globalIO = io;
 
+  // Every connection must present a valid JWT before any handler runs. Without
+  // this, `join` was an open impersonation primitive: any client could name any
+  // userId and receive that user's live WhatsApp messages.
+  io.use(authenticateSocket);
+
   io.on("connection", (socket) => {
+    const me = socket.data.user;
+    console.log(`[Socket] connected user=${me.id} role=${me.role} sid=${socket.id}`);
+
     socket.on("join", (userId) => {
-      if (!userId) return;
+      if (!canJoinUserRoom(socket, userId)) {
+        // Deliberately terse: do not confirm whether the target id exists.
+        console.warn(`[Socket] user=${me.id} rejected join to room user:${userId}`);
+        socket.emit("join_denied", { reason: "not_permitted" });
+        return;
+      }
       onlineUsers.set(String(userId), socket.id);
       socket.join(`user:${userId}`);
       io.emit("online_users", Array.from(onlineUsers.keys()));
     });
 
     socket.on("join_room", (room) => {
-      if (room) socket.join(room);
+      if (!canJoinNamedRoom(socket, room)) {
+        console.warn(`[Socket] user=${me.id} rejected join_room "${room}"`);
+        socket.emit("join_denied", { reason: "not_permitted" });
+        return;
+      }
+      socket.join(room);
     });
 
     socket.on("task_updated", (data) => {

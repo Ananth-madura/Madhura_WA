@@ -1,7 +1,8 @@
 # ── Stage 1: build the React bundle ────────────────────────────────
-# Node 20 to match package.json "engines" and .nvmrc. An earlier node:18 base
-# disagreed with both and made the local/CI/Docker Node versions drift.
-FROM node:20-alpine AS build
+# Node 24 to match package.json "engines" and .nvmrc. Vercel rejects 20.x as
+# discontinued, and the three pins must agree or image builds silently run a
+# different Node than CI.
+FROM node:24-alpine AS build
 
 WORKDIR /app
 

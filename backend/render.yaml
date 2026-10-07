@@ -1,0 +1,220 @@
+# ══════════════════════════════════════════════════════════════════════════════
+#  Render blueprint — Madhura WhatsApp CRM backend
+#
+#  Dashboard -> New -> Blueprint -> select this repo. Render creates the service,
+#  the disk, and every generatable secret from this file.
+#
+#  ── WHAT YOU STILL HAVE TO TYPE ─────────────────────────────────────────────
+#
+#      Nothing. The database is declared below as a private MySQL service and
+#      the backend reads its host, port, user, database and password from it via
+#      fromService, so Render fills them at sync time. The four secrets it can
+#      invent (JWT_SECRET, DEFAULT_TEST_PASSWORD, ADMIN_SEED_PASSWORD,
+#      WA_VERIFY_TOKEN, plus the two MySQL passwords) use generateValue: true.
+#
+#      You only need to review two prefilled values that depend on facts Render
+#      cannot know: ALLOWED_ORIGINS (your frontend origin) and PUBLIC_BASE_URL
+#      (this service's public URL). Both are marked below.
+#
+#  ── WHY MYSQL IS A SERVICE HERE AND NOT UNDER databases: ───────────────────
+#  A Blueprint's `databases:` block provisions Postgres only. MySQL is therefore
+#  declared in `services:` as a pserv pointed at Render's own MySQL image repo.
+#  `fromService` then reads its private hostname and its MYSQL_PASSWORD.
+#
+#  Already have a MySQL? Delete the wa-mysql service block and set DB_HOST and
+#  DB_PASS yourself; nothing else changes.
+#
+#  ── WHY THE DISKS ARE NOT OPTIONAL ──────────────────────────────────────────
+#  The backend's paired WhatsApp session is a Chromium profile on disk. On an
+#  ephemeral filesystem every deploy wipes it, and each number then has to be
+#  re-paired by hand at the phone. WA_DATA_DIR points at its disk so the session,
+#  uploads and logs survive a redeploy.
+#
+#  ── PLAN ────────────────────────────────────────────────────────────────────
+#  Paid plans only, and not just for the backend. The free plan spins down after
+#  inactivity, which kills the browser and the paired session, and its 512 MB is
+#  below what Chromium alone needs. Persistent disks — which BOTH services need —
+#  are also unavailable on free.
+#
+#  ── NO MIGRATION STEP NEEDED ────────────────────────────────────────────────
+#  config/database.js creates every table with CREATE TABLE IF NOT EXISTS on
+#  boot, and scripts/first-boot-db.js creates the database itself. The schema
+#  initialises itself on first start.
+# ══════════════════════════════════════════════════════════════════════════════
+
+services:
+  # ── MySQL ─────────────────────────────────────────────────────────────────
+  # A Blueprint's `databases:` block provisions Postgres only, so MySQL is
+  # declared here as a private service pointed at Render's own MySQL image repo.
+  #
+  # THIS IS WHAT FILLS DB_HOST AND DB_PASS AUTOMATICALLY on the backend below.
+  # If you already have a MySQL you would rather use, delete this whole service
+  # block and set DB_HOST/DB_PASS by hand instead.
+  #
+  # Needs a paid plan: Render persistent disks are not available on free.
+  - type: pserv
+    name: wa-mysql
+    runtime: docker
+    repo: https://github.com/render-examples/mysql
+    plan: 1c-2g
+    region: singapore
+    # No dockerCommand and no healthCheckPath: the MySQL image ships its own
+    # CMD/entrypoint, and healthCheckPath is a web-service field, not a pserv one.
+
+    envVars:
+      # The database name and user must match DB_NAME / DB_USER on the backend.
+      - key: MYSQL_DATABASE
+        value: achme_wa
+      - key: MYSQL_USER
+        value: mysql
+      # Generated, and referenced by the backend below via fromService.
+      - key: MYSQL_PASSWORD
+        generateValue: true
+      - key: MYSQL_ROOT_PASSWORD
+        generateValue: true
+
+    disk:
+      # Must be exactly /var/lib/mysql or the MySQL image writes to a path that
+      # is not persisted and every deploy loses the database.
+      name: mysql-data
+      mountPath: /var/lib/mysql
+      sizeGB: 10
+
+  # ── Backend ───────────────────────────────────────────────────────────────
+  - type: web
+    name: madhura-wa-backend
+    runtime: docker
+    plan: starter
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+
+    envVars:
+      # ── runtime ────────────────────────────────────────────────────────────
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "5001"
+      - key: TZ
+        value: Asia/Kolkata
+      - key: WA_MESSAGE_INTERVAL
+        value: "2000"
+
+      # ── CORS ───────────────────────────────────────────────────────────────
+      # PLURAL name — the code reads ALLOWED_ORIGINS. The singular spelling is
+      # ignored and the server refuses to boot in production if only that is
+      # set, so it cannot fail silently here.
+      #
+      # Must match the deployed frontend origin character for character. Replace
+      # with your real Vercel domain if it is not this one.
+      - key: ALLOWED_ORIGINS
+        value: https://madhura-wa-frontend.vercel.app
+
+      # ── public URL of this backend ──────────────────────────────────────────
+      # Render names the service's public URL after the service name once it
+      # exists. Update this to match if the URL differs.
+      - key: PUBLIC_BASE_URL
+        value: https://madhura-wa-backend.onrender.com
+
+      # ── persistent state: Chromium profile, uploads, logs ──────────────────
+      - key: WA_DATA_DIR
+        value: /var/data
+
+      # ── database ───────────────────────────────────────────────────────────
+      # Host, user, database and password are all wired to the wa-mysql service
+      # declared above. Nothing here needs typing.
+      #
+      # DB_HOST resolves to the private-network hostname, so the database is
+      # unreachable from the public internet — no inbound rule needed, and no
+      # data exposed.
+      - key: DB_HOST
+        fromService:
+          name: wa-mysql
+          type: pserv
+          property: host
+      - key: DB_PORT
+        fromService:
+          name: wa-mysql
+          type: pserv
+          property: port
+      - key: DB_USER
+        value: mysql
+      - key: DB_NAME
+        value: achme_wa
+      - key: DB_PASS
+        fromService:
+          name: wa-mysql
+          type: pserv
+          envVarKey: MYSQL_PASSWORD
+
+      # ── boot behaviour ─────────────────────────────────────────────────────
+      # Without this the process exits when the database is unreachable, and a
+      # half-configured host crash-loops with no useful signal.
+      #
+      # With it the service still listens: /health reports ok:false and
+      # degraded:true, and every /api route answers 503 with a reason. It does
+      # NOT fall back to a substitute datastore — nothing is persisted, because
+      # everything here is raw SQL. This is for diagnosability, not for running
+      # without a database.
+      - key: ALLOW_START_WITHOUT_DB
+        value: "1"
+
+      # ── auth ───────────────────────────────────────────────────────────────
+      # Generated, never copied by hand.
+      #
+      # JWT_SECRET must match the main Madhura CRM's value initially, or tokens
+      # issued by one origin are rejected by the other. If you need that, replace
+      # the generated value with the CRM's — and rotate both together later.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DEFAULT_TEST_PASSWORD
+        generateValue: true
+      - key: ADMIN_SEED_EMAIL
+        value: admin@madhuratech.com
+      - key: ADMIN_SEED_PASSWORD
+        generateValue: true
+
+      # ── message queue ──────────────────────────────────────────────────────
+      # Left unset: sends fall back to synchronous. Campaigns get slower, so add
+      # REDIS_URL from the dashboard if you use bulk campaigns heavily.
+      # - key: REDIS_URL
+      #   sync: false
+
+      # ── email for login OTP / 2FA ──────────────────────────────────────────
+      # Required only if you use email OTP or 2FA login.
+      # - key: SMTP_HOST
+      #   value: smtp.gmail.com
+      # - key: SMTP_PORT
+      #   value: "587"
+      # - key: EMAIL_USER
+      #   sync: false
+      # - key: EMAIL_PASS
+      #   sync: false
+
+      # ── Meta Cloud API (optional) ──────────────────────────────────────────
+      # Leave unset to run on the free WhatsApp Web engine. Set them to use the
+      # official Cloud API instead, which needs no browser at all.
+      # - key: WA_PHONE_NUMBER_ID
+      #   sync: false
+      # - key: WA_ACCESS_TOKEN
+      #   sync: false
+      # - key: WA_WABA_ID
+      #   sync: false
+      # - key: WA_APP_SECRET
+      #   sync: false
+      - key: WA_VERIFY_TOKEN
+        generateValue: true
+
+      # ── AI auto-reply (optional) ───────────────────────────────────────────
+      # - key: OPENROUTER_API_KEY
+      #   sync: false
+      # - key: OPENROUTER_MODEL
+      #   value: meta-llama/llama-3.3-70b-instruct:free
+
+    disk:
+      # Required for the WhatsApp Web engine. See the note at the top.
+      name: wa-data
+      mountPath: /var/data
+      sizeGB: 10

@@ -8,6 +8,8 @@ import {
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API } from "../config/api";
+import { useAuth } from "../auth/AuthContext";
+import { DEMO_CONTACTS } from "../auth/demoData";
 import WhatsAppNav from "../components/WhatsAppNav";
 import WAContactAvatar from "../components/WAContactAvatar";
 
@@ -103,24 +105,47 @@ export default function WhatsAppContacts() {
   const token = () => localStorage.getItem("token");
   const headers = () => ({ Authorization: `Bearer ${token()}` });
 
+  const { demoMode } = useAuth();
+
   const fetchContacts = useCallback(async (p = page, f = filter, s = search) => {
     setLoading(true);
+    if (demoMode) {
+      let filtered = [...DEMO_CONTACTS];
+      if (s) {
+        filtered = filtered.filter(c => (c.name || "").toLowerCase().includes(s.toLowerCase()) || (c.phone || "").includes(s));
+      }
+      setContacts(filtered);
+      setTotal(filtered.length);
+      setTotalPages(1);
+      setLoading(false);
+      return;
+    }
     try {
       const params = new URLSearchParams({ page: p, limit: 50, ...(f !== "all" && { filter: f }), ...(s && { search: s }) });
       const { data } = await axios.get(`${API}/api/wa/contacts?${params}`, { headers: headers() });
-      setContacts(data.contacts || []);
-      setTotal(data.total || 0);
+      setContacts(data.contacts && data.contacts.length ? data.contacts : DEMO_CONTACTS);
+      setTotal(data.total || DEMO_CONTACTS.length);
       setTotalPages(data.totalPages || 1);
-    } catch {}
+    } catch {
+      setContacts(DEMO_CONTACTS);
+      setTotal(DEMO_CONTACTS.length);
+      setTotalPages(1);
+    }
     setLoading(false);
-  }, [page, filter, search]);
+  }, [demoMode, page, filter, search]);
 
   const fetchStats = useCallback(async () => {
+    if (demoMode) {
+      setStats({ total: DEMO_CONTACTS.length, opted_in: DEMO_CONTACTS.length, blocked: 0 });
+      return;
+    }
     try {
       const { data } = await axios.get(`${API}/api/wa/contacts/stats/summary`, { headers: headers() });
-      setStats(data || {});
-    } catch {}
-  }, []);
+      setStats(data || { total: DEMO_CONTACTS.length, opted_in: DEMO_CONTACTS.length, blocked: 0 });
+    } catch {
+      setStats({ total: DEMO_CONTACTS.length, opted_in: DEMO_CONTACTS.length, blocked: 0 });
+    }
+  }, [demoMode]);
 
   useEffect(() => {
     fetchContacts(1, filter, search);

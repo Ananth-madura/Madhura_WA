@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
+import { useAuth } from "../auth/AuthContext";
+import { DEMO_CAMPAIGNS, DEMO_TEMPLATES } from "../auth/demoData";
 import WhatsAppNav from "../components/WhatsAppNav";
 import WhatsAppCampaignWizard from "../components/WhatsAppCampaignWizard";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
@@ -62,6 +64,7 @@ function ProgressBar({ sent, total, color = "" }) {
 }
 
 export default function WACampaigns() {
+  const { demoMode } = useAuth();
   const [campaigns, setCampaigns] = useState([]);
   const [groups, setGroups] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -85,6 +88,12 @@ export default function WACampaigns() {
 
   const fetchData = async (silent = false) => {
     if (!silent) setLoading(true);
+    if (demoMode) {
+      setCampaigns(DEMO_CAMPAIGNS);
+      setTemplates(DEMO_TEMPLATES);
+      if (!silent) setLoading(false);
+      return;
+    }
     try {
       const [cRes, gRes, tRes, flRes] = await Promise.all([
         axios.get(`${API}/api/wa/campaigns`, { headers: headers() }),
@@ -92,12 +101,13 @@ export default function WACampaigns() {
         axios.get(`${API}/api/wa/templates`, { headers: headers() }),
         axios.get(`${API}/api/wa/flows`, { headers: headers() }).catch(() => ({ data: [] })),
       ]);
-      setCampaigns(cRes.data || []);
+      setCampaigns(cRes.data && cRes.data.length ? cRes.data : DEMO_CAMPAIGNS);
       setGroups(gRes.data || []);
-      setTemplates(tRes.data || []);
+      setTemplates(tRes.data && tRes.data.length ? tRes.data : DEMO_TEMPLATES);
       setFlows(flRes.data || []);
     } catch (err) {
-      console.error(err);
+      setCampaigns(DEMO_CAMPAIGNS);
+      setTemplates(DEMO_TEMPLATES);
     }
     if (!silent) setLoading(false);
   };

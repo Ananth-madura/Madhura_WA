@@ -1,4 +1,6 @@
 import { createContext, useContext, useState } from "react";
+import { isDemoSession } from "./demoSession";
+import { connectSocket, disconnectSocket } from "../socket/socket";
 
 // Minimal auth shell for Whatsapp_CRM (duplicated from the CRM's AuthContext
 // so WA pages keep working standalone — see README divergence note).
@@ -16,7 +18,12 @@ export function AuthProvider({ children }) {
   const login = (userData) => {
     setUser(userData);
     localStorage.setItem("user", JSON.stringify(userData));
-    if (userData.token) localStorage.setItem("token", userData.token);
+    if (userData.token) {
+      localStorage.setItem("token", userData.token);
+      connectSocket();
+    } else {
+      localStorage.removeItem("token");
+    }
   };
 
   const logout = () => {
@@ -30,11 +37,7 @@ export function AuthProvider({ children }) {
       }
     } catch (_) {}
 
-    try {
-      if (window.__crmSocket && typeof window.__crmSocket.disconnect === "function") {
-        window.__crmSocket.disconnect();
-      }
-    } catch (_) {}
+    disconnectSocket();
 
     try {
       localStorage.clear();
@@ -48,7 +51,9 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, login, logout, demoMode: isDemoSession(user) }}
+    >
       {children}
     </AuthContext.Provider>
   );

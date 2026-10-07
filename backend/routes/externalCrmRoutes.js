@@ -10,8 +10,9 @@ const mgr = require("../services/whatsappService");
 const crmWebhookForwarder = require("../services/crmWebhookForwarder");
 const db = require("../config/database");
 
-const uploadDir = path.join(__dirname, "..", "uploads", "wa-media");
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+// Upload target comes from config/runtimePaths so that on the VPS it resolves
+// to a directory OUTSIDE the deploy directory. See that file for why.
+const { mediaDir: uploadDir } = require("../config/runtimePaths");
 
 const upload = multer({
   storage: multer.diskStorage({

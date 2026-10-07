@@ -1,16 +1,57 @@
-   
-    # Node modules
-    node_modules/
+# ---------------------------------------------------------------------------
+# backend/.gitignore — this file travels with the backend repo on the VPS, so it
+# must be self-sufficient. Do NOT rely on the repo root .gitignore.
+# ---------------------------------------------------------------------------
 
-    
-    uploads/*
-    !uploads/.gitkeep
+# Secrets. The root .gitignore also covers .env, but once backend/ is pushed as
+# its OWN repository the root file is not present, and this would have shipped
+# DB_PASS, JWT_SECRET, SMTP_PASS and the Meta access token to GitHub.
+.env
+.env.*
+!.env.example
+!.env.production.example
 
-    
-    *.log
+# Dependencies
+node_modules/
 
-    
-    .DS_Store
-    Thumbs.db
-    .vscode/
+# Runtime state — MUST stay on disk across deploys, MUST never be in git.
+# These hold the logged-in WhatsApp session (a full Chrome profile). Committing
+# one leaks a live WhatsApp login, and losing one forces every number to be
+# re-paired by hand.
+uploads/*
+!uploads/.gitkeep
+.wwebjs_cache/
+
+# Patch files ARE tracked (nothing to un-ignore here — deliberately NOT
+# ignored). package.json runs `patch-package` on postinstall, and the
+# whatsapp-web.js patch is what keeps a paired QR session alive on newer
+# WhatsApp Web builds. When patches/ was ignored, postinstall silently no-oped
+# on the VPS (it ends in `|| echo "Patch applied or skipped"`) and deployed an
+# unpatched whatsapp-web.js that drops sessions right after pairing.
+#
+# If a patch file ever conflicts with your local node_modules, fix the conflict
+# in the patch itself. Do not ignore this directory.
+
+# Logs and crash dumps
+*.log
+logs/
+pm2-logs/
+
+# Local tooling
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build / test artefacts
+coverage/
+*.tsbuildinfo
+
+# Local database dumps taken before a migration. The .js migration scripts in
+# migrations/ and scripts/ ARE tracked; only ad-hoc dumps are ignored.
+*.sql
+*.sql.gz
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
 

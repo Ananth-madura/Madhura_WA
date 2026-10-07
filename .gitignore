@@ -15,6 +15,17 @@ dist/
 build/
 npm-debug.log*
 whatsapp-sessions/
-backend/patches/
 logs
 
+# ⚠️ backend/patches/ is deliberately NOT ignored.
+# backend/package.json runs `patch-package` on postinstall, and
+# patches/whatsapp-web.js+1.34.7.patch is what keeps a paired WhatsApp session
+# from being dropped immediately. When this directory was ignored, postinstall
+# silently no-oped on the VPS (it ends in `|| echo "Patch applied or skipped"`)
+# and the server ran an unpatched whatsapp-web.js. Verify after cloning:
+#     git ls-files backend/patches/
+# Any conflict with a local node_modules must be fixed in the patch itself.
+# Database snapshots (persisted in Cloudflare R2)
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import {
   MessageCircle,
@@ -60,7 +60,9 @@ import {
   Columns,
 } from "lucide-react";
 import axios from "axios";
-import { API } from "../config/api";
+import { API, LIVE_BACKEND_URL } from "../config/api";
+import { useAuth } from "../auth/AuthContext";
+import { DEMO_STATUS, DEMO_CHATS, DEMO_MESSAGES_MAP } from "../auth/demoData";
 import WhatsAppNav from "../components/WhatsAppNav";
 import socket from "../socket/socket";
 import RichMessageContent from "../components/RichMessageContent";
@@ -460,13 +462,19 @@ const formatPhoneNumber = (phone) => {
 };
 
 export default function WhatsAppPage() {
+  const location = useLocation();
+  // Offline demo sessions have no token and no reachable API, so every fetch
+  // below would fail (and fetchStatus's 3 fallbacks burn ~30s before giving up).
+  const { demoMode } = useAuth();
   const [initialChecking, setInitialChecking] = useState(true);
   const [status, setStatus] = useState({ connected: false, initializing: true, hasQr: false });
   const [qrCode, setQrCode] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState(null);
   const [qrLoading, setQrLoading] = useState(false);
+  const [qrCountdown, setQrCountdown] = useState(25);
   const hasLoadedChatsOnce = useRef(false);
   const hasTriggeredQrFetch = useRef(false);
+  const qrFetchInFlightRef = useRef(false);
   const qrPollTimerRef = useRef(null);
   const [chats, setChats] = useState(() => {
     try {
@@ -785,6 +793,7 @@ export default function WhatsAppPage() {
         hasQr: Boolean(raw.web?.hasQr || serverQr),
         cloud: raw.cloud || null,
         web: raw.web || null,
+        degraded: Boolean(raw.degraded),
         // Which session the server will actually send from, and whether that is
         // the one this operator is logged in as.
         senderSessionKey: raw.senderSessionKey || null,
@@ -801,7 +810,8 @@ export default function WhatsAppPage() {
           prev.hasQr === Boolean(raw.web?.hasQr || serverQr) &&
           prev.activeEngine === flat.activeEngine &&
           prev.sendingAsAnotherUser === flat.sendingAsAnotherUser &&
-          prev.senderSessionKey === flat.senderSessionKey
+          prev.senderSessionKey === flat.senderSessionKey &&
+          prev.degraded === flat.degraded
         ) {
           return prev;
         }
@@ -832,7 +842,10 @@ export default function WhatsAppPage() {
   }, []);
 
   const fetchQr = useCallback(async (force = false) => {
+    if (qrFetchInFlightRef.current && !force) return;
     if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+
+    qrFetchInFlightRef.current = true;
     setQrLoading(true);
     setError(null);
     try {
@@ -841,9 +854,9 @@ export default function WhatsAppPage() {
       const endpoint = force ? "/api/whatsapp/qr?refresh=true" : "/api/whatsapp/qr";
       let res;
       try {
-        res = await axios.get(`${API}${endpoint}`, { headers, timeout: 25000 });
+        res = await axios.get(`${API}${endpoint}`, { headers, timeout: 20000 });
       } catch (e1) {
-        res = await axios.get(endpoint, { headers, timeout: 25000 });
+        res = await axios.get(endpoint, { headers, timeout: 20000 });
       }
       if (res.data && res.data.connected) {
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
@@ -855,16 +868,17 @@ export default function WhatsAppPage() {
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
         setQrCode(res.data.qr);
         if (res.data.qrDataUrl) setQrDataUrl(res.data.qrDataUrl);
+        setQrCountdown(25);
         setStatus((s) => ({ ...s, hasQr: true, connected: false }));
         setQrLoading(false);
         setError(null);
       } else if (res.data && res.data.initializing) {
-        // Still initializing in background — keep spinner and actively re-check in 2.5s
+        // Still initializing in background — keep spinner and check after 4s
         setQrLoading(true);
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
         qrPollTimerRef.current = setTimeout(() => {
           fetchQr(false);
-        }, 2500);
+        }, 4000);
       } else if (res.data && res.data.error) {
         setError(res.data.error);
         setQrLoading(false);
@@ -881,14 +895,80 @@ export default function WhatsAppPage() {
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
         qrPollTimerRef.current = setTimeout(() => {
           fetchQr(false);
-        }, 3000);
+        }, 5000);
       } else {
-        const msg = err.response?.data?.error || err.message || "Failed to generate QR code. Please click Fresh QR / Reset.";
+        const msg = err.response?.data?.error || err.message || "Failed to generate QR code. Click Refresh QR to retry.";
         setError(msg);
         setQrLoading(false);
       }
+    } finally {
+      qrFetchInFlightRef.current = false;
+      hasTriggeredQrFetch.current = true;
     }
-  }, [fetchStatus]);
+  }, [demoMode, fetchStatus]);
+
+  // QR auto-countdown timer (25s visual indicator)
+  useEffect(() => {
+    let timer;
+    if (!status.connected && qrCode) {
+      timer = setInterval(() => {
+        setQrCountdown((prev) => (prev <= 1 ? 25 : prev - 1));
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [status.connected, qrCode]);
+
+  const handleForceDisconnectToQr = useCallback(() => {
+    try {
+      sessionStorage.removeItem("wa_cached_status");
+      sessionStorage.removeItem("wa_cached_chats");
+      sessionStorage.removeItem("wa_active_chat");
+      localStorage.removeItem("wa_cached_status");
+      localStorage.removeItem("wa_cached_chats");
+      localStorage.removeItem("wa_active_chat");
+    } catch (_) {}
+    messagesCacheRef.current = {};
+    setStatus((prev) => ({
+      ...prev,
+      connected: false,
+      isWeb: false,
+      hasQr: true,
+      phone: null,
+      activeEngine: "Disconnected",
+    }));
+    setChats([]);
+    setSelectedChat(null);
+    setMessages([]);
+    setAccountDetails(null);
+    setConnectMode("qr");
+    setQrCode(null);
+    setQrDataUrl(null);
+    hasTriggeredQrFetch.current = false;
+    qrFetchInFlightRef.current = false;
+    fetchQr(true);
+  }, [fetchQr]);
+
+  // Listen for disconnect events to immediately enter the QR scan stage
+  useEffect(() => {
+    const onDisconnectEvent = () => {
+      console.log("ℹ️ wa_session_disconnected event received -> transitioning to QR scan stage");
+      handleForceDisconnectToQr();
+    };
+    window.addEventListener("wa_session_disconnected", onDisconnectEvent);
+    return () => {
+      window.removeEventListener("wa_session_disconnected", onDisconnectEvent);
+    };
+  }, [handleForceDisconnectToQr]);
+
+  // If navigated with ?mode=qr or disconnect query param, transition to QR stage
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("mode") === "qr" || params.has("disconnect")) {
+      handleForceDisconnectToQr();
+    }
+  }, [location.search, handleForceDisconnectToQr]);
 
   const fetchChats = useCallback(async (refresh = false) => {
     if (!hasLoadedChatsOnce.current && (!chatsRef.current || chatsRef.current.length === 0)) {
@@ -941,6 +1021,24 @@ export default function WhatsAppPage() {
   };
 
   const fetchMessages = useCallback(async (chatId, limit = 10) => {
+    if (demoMode) {
+      const demoMsgs = messagesCacheRef.current[chatId] || DEMO_MESSAGES_MAP[chatId] || [
+        {
+          id: `demo_${chatId}_1`,
+          from: chatId,
+          body: "Hello! This is an interactive demo conversation in Madhura WhatsApp CRM.",
+          timestamp: Math.floor(Date.now() / 1000) - 300,
+          isMe: false,
+          status: "read",
+        }
+      ];
+      messagesCacheRef.current[chatId] = demoMsgs;
+      setMessages(demoMsgs);
+      setMessagesLoading(false);
+      setLoadingMore(false);
+      if (limit === 10) setTimeout(() => scrollToBottom(false), 50);
+      return;
+    }
     const hasCached = Boolean(messagesCacheRef.current[chatId] && messagesCacheRef.current[chatId].length > 0);
     if (!hasCached) {
       if (limit === 10) setMessagesLoading(true);
@@ -958,7 +1056,7 @@ export default function WhatsAppPage() {
     } catch { }
     setMessagesLoading(false);
     setLoadingMore(false);
-  }, [scrollToBottom]);
+  }, [demoMode, scrollToBottom]);
 
   const handleLoadMoreMessages = async () => {
     if (!selectedChat || loadingMore) return;
@@ -1134,6 +1232,65 @@ export default function WhatsAppPage() {
     const quotedId = replyingTo?.id || null;
     const quotedText = replyingTo?.body || null;
     setReplyingTo(null);
+
+    if (demoMode) {
+      setTimeout(() => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId || m.idempotencyKey === idempotencyKey
+              ? { ...m, status: "delivered" }
+              : m
+          )
+        );
+      }, 400);
+
+      // Simulate realistic auto-reply after 1.5 seconds
+      setTimeout(() => {
+        const replyId = "reply_" + Date.now();
+        const autoReplies = [
+          "Thank you for reaching out to Madhura WhatsApp CRM! We have received your inquiry.",
+          "Received! Our representative will assist you with the CRM modules shortly.",
+          "Noted! Would you like to schedule an enterprise demo walkthrough?",
+          "Got your message! All workflows are active and synced."
+        ];
+        const replyText = autoReplies[Math.floor(Math.random() * autoReplies.length)];
+        const replyMsg = {
+          id: replyId,
+          from: selectedChat.id,
+          body: replyText,
+          timestamp: Math.floor(Date.now() / 1000),
+          isMe: false,
+          status: "read",
+        };
+
+        setMessages((prev) => [replyMsg, ...prev]);
+        messagesCacheRef.current[selectedChat.id] = [
+          replyMsg,
+          ...(messagesCacheRef.current[selectedChat.id] || [])
+        ];
+
+        setChats((prev) => {
+          const idx = prev.findIndex((c) => c.id === selectedChat.id);
+          if (idx !== -1) {
+            const current = prev[idx];
+            const updated = {
+              ...current,
+              hasMessages: true,
+              lastMessage: { body: replyText, timestamp: Math.floor(Date.now() / 1000), fromMe: false },
+              timestamp: Math.floor(Date.now() / 1000),
+            };
+            return [updated, ...prev.slice(0, idx), ...prev.slice(idx + 1)];
+          }
+          return prev;
+        });
+
+        setTimeout(scrollToBottom, 50);
+      }, 1500);
+
+      sendInFlightRef.current = false;
+      setSending(false);
+      return;
+    }
 
     try {
       const token = localStorage.getItem("token");
@@ -2243,9 +2400,14 @@ export default function WhatsAppPage() {
 
   const handleRefresh = () => {
     if (status.connected) {
+      if (demoMode) {
+        setChats([...DEMO_CHATS]);
+        return;
+      }
       fetchChats();
     } else {
       setQrCode(null);
+      hasTriggeredQrFetch.current = false;
       fetchQr(true);
     }
   };
@@ -2255,13 +2417,65 @@ export default function WhatsAppPage() {
   const [pairingCode, setPairingCode] = useState(null);
   const [pairingLoading, setPairingLoading] = useState(false);
   const [pairingError, setPairingError] = useState(null);
+  const [checkingLogin, setCheckingLogin] = useState(false);
+
+  const handleCheckLogin = async () => {
+    setCheckingLogin(true);
+    try {
+      const res = await fetchStatus();
+      if (res && res.connected) {
+        setQrCode(null);
+        setQrDataUrl(null);
+        await fetchChats(true);
+        await fetchAccountDetails();
+        return;
+      }
+      // Check direct status endpoint in case unified status was cached
+      const token = localStorage.getItem("token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      try {
+        const direct = await axios.get(`${API}/api/whatsapp/status`, { headers, timeout: 5000 });
+        if (direct.data?.connected) {
+          setStatus((s) => ({ ...s, connected: true, isWeb: true, phone: direct.data?.phone || s.phone }));
+          setQrCode(null);
+          setQrDataUrl(null);
+          await fetchChats(true);
+          return;
+        }
+      } catch (_) {}
+
+      // If user is in dev test / demoMode and device hasn't finished pairing, enter chat workspace directly
+      if (demoMode) {
+        setStatus((s) => ({ ...DEMO_STATUS, ...s, connected: true }));
+        setQrCode(null);
+        setQrDataUrl(null);
+        setChats([...DEMO_CHATS]);
+        if (DEMO_CHATS.length > 0) setSelectedChat(DEMO_CHATS[0]);
+      }
+    } finally {
+      setCheckingLogin(false);
+    }
+  };
 
   useEffect(() => {
+    if (demoMode) {
+      setStatus(DEMO_STATUS);
+      setChats(DEMO_CHATS);
+      if (DEMO_CHATS.length > 0) {
+        setSelectedChat(DEMO_CHATS[0]);
+        const initMsgs = DEMO_MESSAGES_MAP[DEMO_CHATS[0].id] || [];
+        setMessages(initMsgs);
+        messagesCacheRef.current[DEMO_CHATS[0].id] = initMsgs;
+      }
+      setInitialChecking(false);
+      setChatsLoading(false);
+      return;
+    }
     // Initial fetch on mount
     fetchStatus();
     fetchChats(false);
     fetchAccountDetails();
-  }, [fetchStatus, fetchChats, fetchAccountDetails]);
+  }, [demoMode, fetchStatus, fetchChats, fetchAccountDetails]);
 
   useEffect(() => {
     // Status polling in background
@@ -2269,13 +2483,15 @@ export default function WhatsAppPage() {
     return () => clearInterval(interval);
   }, [fetchStatus, status.connected]);
 
-  // Auto-fetch QR code if not connected and no QR yet
+  // Auto-fetch QR code once when entering QR mode and disconnected
   useEffect(() => {
     if (status.connected) {
       hasTriggeredQrFetch.current = false;
       return;
     }
-    if (!status.connected && !qrCode && !qrLoading && connectMode === "qr") {
+    // Strict guard: only auto-triggers ONCE per disconnect; avoids infinite re-render loop
+    if (!hasTriggeredQrFetch.current && !status.connected && !qrCode && !qrLoading && connectMode === "qr") {
+      hasTriggeredQrFetch.current = true;
       fetchQr();
     }
   }, [status.connected, qrCode, qrLoading, connectMode, fetchQr]);
@@ -2286,6 +2502,7 @@ export default function WhatsAppPage() {
     setPairingLoading(true);
     setPairingError(null);
     setPairingCode(null);
+
     try {
       const token = localStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -2527,21 +2744,7 @@ export default function WhatsAppPage() {
     };
     const handleWaDisconnected = (data) => {
       console.log("ℹ️ WhatsApp disconnected event received:", data);
-      try {
-        sessionStorage.removeItem("wa_cached_status");
-        sessionStorage.removeItem("wa_cached_chats");
-        sessionStorage.removeItem("wa_active_chat");
-        localStorage.removeItem("wa_cached_status");
-        localStorage.removeItem("wa_cached_chats");
-        localStorage.removeItem("wa_active_chat");
-      } catch (_) {}
-      messagesCacheRef.current = {};
-      setStatus((s) => ({ ...s, connected: false, isWeb: false, hasQr: false }));
-      setChats([]);
-      setSelectedChat(null);
-      setMessages([]);
-      setAccountDetails(null);
-      fetchStatus();
+      handleForceDisconnectToQr();
     };
 
     socket.on("wa_qr", handleWaQr);
@@ -2900,6 +3103,7 @@ export default function WhatsAppPage() {
     displayChats = baseList;
   }
 
+
   if (initialChecking) {
     return (
       <div className="hl-page w-full flex-1 flex flex-col min-h-0 items-center justify-center bg-[var(--color-paper-2)] text-[var(--color-ink-2)]">
@@ -2935,11 +3139,37 @@ export default function WhatsAppPage() {
           </div>
         )}
 
+        {status.degraded && (
+          <div className="hl-card mb-4 p-3.5 text-xs border-[var(--color-rule)] bg-[var(--color-paper-2)] flex flex-wrap items-center justify-between gap-3 max-w-2xl mx-auto w-full">
+            <div className="flex items-center gap-2">
+              <span className="text-amber-500 font-bold">⚠️ Notice:</span>
+              <span>Backend is live on Render in degraded mode (MySQL not yet attached). You can explore all features in Interactive Dev Mode.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setStatus({ ...DEMO_STATUS, connected: true });
+                setChats([...DEMO_CHATS]);
+                if (DEMO_CHATS.length > 0) setSelectedChat(DEMO_CHATS[0]);
+              }}
+              className="hl-btn-primary text-xs px-3 py-1 font-semibold whitespace-nowrap"
+            >
+              Explore in Dev Mode ⚡
+            </button>
+          </div>
+        )}
+
         {/* Connection Options Sub-Tabs */}
         <div className="hl-card p-6 max-w-2xl mx-auto w-full">
           <div className="hl-tabs flex items-center justify-center gap-2 mb-6 pb-4">
             <button
-              onClick={() => { setConnectMode("qr"); if (!qrCode) fetchQr(); }}
+              onClick={() => {
+                setConnectMode("qr");
+                if (!qrCode && !qrLoading) {
+                  hasTriggeredQrFetch.current = true;
+                  fetchQr();
+                }
+              }}
               className={`hl-tab px-4 py-2 text-xs font-bold transition ${connectMode === "qr" ? "is-active" : ""}`}
             >
               📱 Scan QR Code
@@ -2975,12 +3205,15 @@ export default function WhatsAppPage() {
                 </div>
               ) : qrCode ? (
                 <div>
-                  <div className="hl-card p-4 inline-block mb-4 shadow-md bg-white border-2 border-[var(--color-rule)]">
+                  <div className="hl-card p-4 inline-block mb-2 shadow-md bg-white border-2 border-[var(--color-rule)]">
                     {qrDataUrl ? (
                       <img src={qrDataUrl} alt="WhatsApp Web QR Code" className="w-[240px] h-[240px] object-contain mx-auto" />
                     ) : (
                       <QRCodeSVG value={qrCode} size={240} level="M" className="mx-auto" />
                     )}
+                  </div>
+                  <div className="text-[11px] font-semibold text-[var(--color-ink-2)] mb-3">
+                    QR Code active • Refresh in <span className="font-bold text-emerald-600">{qrCountdown}s</span>
                   </div>
                   <h3 className="hl-empty-title mb-1">Scan with your WhatsApp App</h3>
                   <p className="hl-subtitle max-w-md mx-auto mb-4">
@@ -2996,10 +3229,33 @@ export default function WhatsAppPage() {
                       <span>{qrLoading ? "Refreshing..." : "Refresh QR Code"}</span>
                     </button>
                     <button
-                      onClick={() => fetchStatus()}
-                      className="hl-btn-primary px-4 py-2 text-xs font-semibold transition"
+                      onClick={handleCheckLogin}
+                      disabled={checkingLogin}
+                      className="hl-btn-primary px-4 py-2 text-xs font-semibold transition flex items-center gap-1.5"
                     >
-                      I Scanned It → Check Login ⚡
+                      {checkingLogin ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          <span>Checking Login...</span>
+                        </>
+                      ) : (
+                        <span>I Scanned It → Check Login ⚡</span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatus((prev) => ({ ...DEMO_STATUS, ...prev, connected: true, activeEngine: "Interactive Chat Workspace" }));
+                        setQrCode(null);
+                        setQrDataUrl(null);
+                        if (!chats || chats.length === 0) {
+                          setChats([...DEMO_CHATS]);
+                          if (DEMO_CHATS.length > 0) setSelectedChat(DEMO_CHATS[0]);
+                        }
+                      }}
+                      className="hl-btn-ghost px-3 py-2 text-xs font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] transition flex items-center gap-1.5"
+                    >
+                      <span>💬 Open Chat Workspace</span>
                     </button>
                   </div>
                 </div>
@@ -3009,7 +3265,10 @@ export default function WhatsAppPage() {
                   <h3 className="hl-empty-title mb-1">Ready to Link WhatsApp Phone</h3>
                   <p className="hl-subtitle max-w-sm mx-auto mb-4">Click below to generate a QR code to scan with your phone.</p>
                   <button
-                    onClick={() => fetchQr()}
+                    onClick={() => {
+                      hasTriggeredQrFetch.current = true;
+                      fetchQr();
+                    }}
                     className="hl-btn-primary font-bold text-xs"
                   >
                     Display QR Code Now

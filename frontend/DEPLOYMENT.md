@@ -98,8 +98,9 @@ builds, CI and Docker all get identical flags. `vercel.json` still sets
 `CI=true`, and react-scripts then treats **any** lint warning as a build error,
 which fails the deploy on pre-existing unrelated warnings.
 
-Node is pinned to 20 in **three** places that must agree: `package.json`
-`engines`, `.nvmrc`, and the Dockerfile base image.
+Node is pinned to 24 in **three** places that must agree: `package.json`
+`engines`, `.nvmrc`, and the Dockerfile base image. Vercel rejects `20.x` as
+discontinued, so all three move together.
 
 ## Caching
 

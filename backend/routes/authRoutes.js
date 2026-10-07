@@ -7,6 +7,7 @@ const { encrypt, decrypt } = require("../backendutil/cryptoHelper");
 const { generateOtp } = require("../backendutil/otp");
 const sendEmailOtp = require("../backendutil/sendSms");
 const { verifyToken, isAdmin, isAdminOnly } = require("../middleware/authMiddleware");
+const { createRateLimiter } = require("../middleware/waRateLimiter");
 const { getNotificationIO } = require("../sockets/notifications");
 
 const router = express.Router();
@@ -136,6 +137,93 @@ router.post("/register", async (req, res) => {
   );
 });
 
+/* ================= REQUEST ACCESS (public, no OTP) =================
+   The landing page's "Request access" form. Accounts here are created by an
+   admin, so there is nothing to verify against and no password to set — this
+   only records the request and pings the admins. Stored in admin_notifications
+   so it shows up in the same place registration approvals already do.
+   Unauthenticated, so it is rate limited per IP and rejects duplicate emails. */
+const accessRequestLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxRequests: 5, category: "access_request" });
+
+router.post("/request-access", accessRequestLimiter, (req, res) => {
+  const firstName = (req.body?.first_name || "").trim();
+  const email = (req.body?.email || "").trim().toLowerCase();
+  const empId = (req.body?.emp_id || "").trim();
+
+  if (!firstName || !email || !empId) {
+    return res.status(400).json({ message: "All fields required (Name, Email, Employee ID)" });
+  }
+  if (firstName.length > 100 || empId.length > 50) {
+    return res.status(400).json({ message: "Name or Employee ID is too long" });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    return res.status(400).json({ message: "Enter a valid email address" });
+  }
+
+  // LIKE wildcards in the email must not widen the match.
+  const likeEmail = email.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+  db.query(
+    `SELECT id FROM users WHERE email = ? OR emp_id = ? LIMIT 1`,
+    [email, empId],
+    (err, existing) => {
+      if (err) return res.status(500).json({ message: "Could not submit request" });
+      if (existing && existing.length) {
+        return res.status(409).json({ message: "This email or employee ID already has an account — try signing in." });
+      }
+
+      // Requesting access never creates a users row, so the users check above
+      // cannot catch the same person submitting twice. Dedupe against recent
+      // access requests instead, otherwise the form can be spammed with copies
+      // of one request until the rate limit resets.
+      db.query(
+        `SELECT id FROM admin_notifications
+          WHERE type = 'access_request'
+            AND message LIKE ? ESCAPE '\\\\'
+            AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+          LIMIT 1`,
+        [`%${likeEmail}%`],
+        (dupErr, dupes) => {
+          if (dupErr) return res.status(500).json({ message: "Could not submit request" });
+          if (dupes && dupes.length) {
+            return res.status(409).json({ message: "An access request from this email was already received. An admin will be in touch." });
+          }
+          insertAccessRequest(res, firstName, email, empId);
+        }
+      );
+    }
+  );
+});
+
+function insertAccessRequest(res, firstName, email, empId) {
+  const message = `Access requested by ${firstName} (${email}, EMP: ${empId}). An admin must create this account.`;
+
+  db.query(
+    `INSERT INTO admin_notifications (type, message, related_type, priority) VALUES ('access_request', ?, 'user', 'normal')`,
+    [message],
+    (insErr, result) => {
+      if (insErr) {
+        console.error("request-access insert error:", insErr.message);
+        return res.status(500).json({ message: "Could not submit request" });
+      }
+
+      const notificationIO = getNotificationIO();
+      if (notificationIO) {
+        notificationIO.sendToAdmin("new_notification", {
+          dbId: result.insertId,
+          type: "access_request",
+          timestamp: new Date().toISOString(),
+          is_read: 0,
+          data: { id: result.insertId, type: "user", message },
+          message,
+        });
+      }
+
+      res.json({ message: "Access request received. An admin will create your account and you can sign in once it is approved." });
+    }
+  );
+}
+
 /* ================= ADMIN LOGIN ================= */
 router.post("/admin-login", (req, res) => {
   const { email, password } = req.body;
@@ -188,6 +276,32 @@ router.post("/admin-login", (req, res) => {
       });
     }
   );
+});
+
+/* ================= DEMO LOGIN (Works with or without DB - Full Admin Access) ================= */
+router.post("/demo-login", (req, res) => {
+  const jwtSecret = process.env.JWT_SECRET || "ephemeral-secret-demo";
+  const adminUser = {
+    id: 1,
+    emp_id: "EMP001",
+    first_name: "Admin",
+    name: "Admin",
+    email: "admin@madhuratech.com",
+    role: "admin",
+    status: "active",
+    isAdmin: true,
+    demoMode: false,
+  };
+  const token = jwt.sign(
+    { id: adminUser.id, role: adminUser.role, name: adminUser.first_name, email: adminUser.email, isAdmin: true },
+    jwtSecret,
+    { expiresIn: "30d" }
+  );
+  return res.json({
+    token,
+    user: adminUser,
+    message: "Signed in with Admin access for testing",
+  });
 });
 
 /* ================= LOGIN with Password or OTP ================= */

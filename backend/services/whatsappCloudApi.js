@@ -292,7 +292,9 @@ class WhatsAppCloudApi {
 
     const fs = require("fs");
     const path = require("path");
-    const cacheDir = path.join(__dirname, "..", "uploads", "wa-media", "cloud");
+    // Cloud-API inbound media cache. Routed through runtimePaths so it lands in
+    // the persistent data dir on the VPS, not in the disposable deploy dir.
+    const { cloudMediaDir: cacheDir } = require("../config/runtimePaths");
     const safeId = String(mediaId).replace(/[^a-zA-Z0-9_-]/g, "");
 
     try {

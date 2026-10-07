@@ -1,11 +1,23 @@
+const path = require("path");
 const mysql = require("mysql2");
 
+// Credentials come from .env, exactly like config/database.js. This script used
+// to hardcode a live DB user and password in source, which meant the real
+// credentials shipped to GitHub with the repo and had to be rotated after any
+// leak. Read the same DB_* environment variables the rest of the backend uses
+// instead.
+//
+// No `override`, matching server.js and config/database.js: a real process
+// environment must win over a checked-out .env file, or setting
+// NODE_ENV=production on the host has no effect.
+require("dotenv").config({ path: path.join(__dirname, ".env") });
+
 const db = mysql.createConnection({
-  host: "127.0.0.1",
-  port: 3306,
-  user: "achme_user",
-  password: "AchmeSecure@2024",
-  database: "achme",
+  host: process.env.DB_HOST || "127.0.0.1",
+  port: Number(process.env.DB_PORT) || 3306,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
   charset: "utf8mb4",
   multipleStatements: true,
 });

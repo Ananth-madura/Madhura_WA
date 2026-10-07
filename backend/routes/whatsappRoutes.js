@@ -1,7 +1,6 @@
 const express = require("express");
 const router = express.Router();
 const path = require("path");
-const fs = require("fs");
 const multer = require("multer");
 const db = require("../config/database");
 const mgr = require("../services/whatsappService");
@@ -17,8 +16,9 @@ const toDataUrl = async (qr) => {
   }
 };
 
-const mediaDir = path.join(__dirname, "..", "uploads", "wa-media");
-fs.mkdirSync(mediaDir, { recursive: true });
+// Upload target comes from config/runtimePaths so that on the VPS it resolves
+// to a directory OUTSIDE the deploy directory. See that file for why.
+const { mediaDir } = require("../config/runtimePaths");
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, mediaDir),
@@ -190,6 +190,18 @@ router.post("/test-send", async (req, res) => {
 
 router.get("/qr", async (req, res) => {
   try {
+    if (req.query.mock === "true") {
+      const demoQr = "2@madhura-demo-qr-token-" + Date.now();
+      const demoDataUrl = await toDataUrl(demoQr);
+      return res.json({
+        qr: demoQr,
+        qrDataUrl: demoDataUrl,
+        initializing: false,
+        connected: false,
+        message: "QR Ready (Mock Test Mode)",
+      });
+    }
+
     const session = userSession(req);
     if (req.query.force === "true" || req.query.refresh === "true") {
       if (req.query.force === "true" && !session.ready) {
@@ -247,6 +259,18 @@ router.get("/qr", async (req, res) => {
 
 router.post("/refresh-qr", async (req, res) => {
   try {
+    if (req.query.mock === "true") {
+      const demoQr = "2@madhura-demo-qr-token-" + Date.now();
+      const demoDataUrl = await toDataUrl(demoQr);
+      return res.json({
+        connected: false,
+        qr: demoQr,
+        qrDataUrl: demoDataUrl,
+        refreshed: true,
+        message: "QR Refreshed (Mock Test Mode)",
+      });
+    }
+
     const session = userSession(req);
     const result = await session.refreshQr();
     res.json(result);
@@ -257,6 +281,16 @@ router.post("/refresh-qr", async (req, res) => {
 
 router.get("/pairing-code", async (req, res) => {
   try {
+    if (req.query.mock === "true") {
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let code = "";
+      for (let i = 0; i < 8; i++) {
+        if (i === 4) code += "-";
+        code += chars[Math.floor(Math.random() * chars.length)];
+      }
+      return res.json({ code, message: "Mock pairing code generated for testing" });
+    }
+
     const phone = req.query.phone;
     if (!phone) return res.status(400).json({ error: "phone query parameter is required (e.g. ?phone=919876543210)" });
     const code = await userSession(req).getPairingCode(phone);

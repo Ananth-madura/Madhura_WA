@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
-import { Loader2, LogOut, XCircle, CheckCircle2, X, ChevronLeft } from "lucide-react";
+import { Loader2, LogOut, XCircle, CheckCircle2, X, ChevronLeft, FlaskConical } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
+import { describeDemoReason } from "../auth/demoSession";
 import { API } from "../config/api";
+import socket from "../socket/socket";
 
 // Corporate Shell for Whatsapp_CRM — Hallmark Workbench shell (design.md).
 // Deep-navy slab, yellow hairline, quiet type. Routes and logic untouched.
 export default function WALayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, demoMode } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -48,7 +50,7 @@ export default function WALayout() {
   const onDisconnectWhatsApp = async () => {
     if (disconnecting) return;
     const confirmed = window.confirm(
-      "Disconnect WhatsApp?\n\nThis logs out the linked WhatsApp account and deletes its saved session on this server. You will need to scan a new QR code to reconnect."
+      "Disconnect WhatsApp?\n\nThis logs out the linked WhatsApp account and transitions directly to the QR scan stage to reconnect."
     );
     if (!confirmed) return;
 
@@ -57,7 +59,11 @@ export default function WALayout() {
     try {
       const token = localStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      await axios.post(`${API}/api/whatsapp/logout`, { purge: true }, { headers });
+      try {
+        await axios.post(`${API}/api/whatsapp/logout`, { purge: true }, { headers, timeout: 8000 });
+      } catch (err) {
+        console.warn("Logout notice:", err?.message);
+      }
 
       try {
         ["wa_cached_status", "wa_cached_chats", "wa_active_chat"].forEach((key) => {
@@ -66,15 +72,28 @@ export default function WALayout() {
         });
       } catch (_) {}
 
+      // Dispatch custom event to transition into QR scan stage immediately
+      window.dispatchEvent(new CustomEvent("wa_session_disconnected", { detail: { action: "disconnect", ts: Date.now() } }));
+
+      try {
+        if (socket?.connected) {
+          socket.emit("wa_logout");
+        }
+      } catch (_) {}
+
       setNotice({
         type: "success",
-        text: "WhatsApp session disconnected. Scan a new QR code to reconnect.",
+        text: "WhatsApp session disconnected. Ready to scan new QR code.",
       });
+
+      navigate("/whatsapp?mode=qr&disconnect=" + Date.now(), { replace: false });
     } catch (err) {
       setNotice({
         type: "error",
         text: `Failed to disconnect: ${err.response?.data?.error || err.response?.data?.message || err.message || "unknown error"}`,
       });
+      window.dispatchEvent(new CustomEvent("wa_session_disconnected", { detail: { action: "disconnect", ts: Date.now() } }));
+      navigate("/whatsapp?mode=qr&disconnect=" + Date.now(), { replace: false });
     } finally {
       setDisconnecting(false);
     }
@@ -88,6 +107,38 @@ export default function WALayout() {
           : "crm-layout-shell wa-page-mode wa-dvh flex flex-col overflow-hidden"
       }
     >
+      {/*
+        Offline demo session.
+        An offline demo session has no token, so every API call below this point
+        will fail. Without this banner the screen simply looks broken — empty
+        tables, spinners that never resolve — which reads as a bug rather than as
+        "there is no backend". Stated once, here, where it cannot be missed.
+      */}
+      {demoMode && (
+        <div
+          role="status"
+          className="shrink-0 flex items-center justify-between gap-3 px-3 sm:px-6 py-2"
+          style={{
+            background: "linear-gradient(90deg, rgba(16, 185, 129, 0.1), rgba(59, 130, 246, 0.1))",
+            borderBottom: "1px solid rgba(16, 185, 129, 0.25)",
+            color: "var(--color-ink)",
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+            <span className="truncate">
+              <strong style={{ fontWeight: 700 }} className="text-emerald-700">Interactive Demo Mode:</strong>{" "}
+              {describeDemoReason(user)}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0 text-[11px] text-[var(--color-ink-2)]">
+            <span className="hidden md:inline">API: https://madhura-wa-backend.onrender.com</span>
+          </div>
+        </div>
+      )}
+
       <header
         className="hl-shell hl-safe-top flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 shrink-0"
         style={{ minHeight: 56 }}

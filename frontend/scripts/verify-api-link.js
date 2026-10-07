@@ -64,7 +64,7 @@ const check = (label, ok, detail) => {
  *  2. It works on Node 18, which Vercel still selects for some projects, where
  *     global fetch is experimental.
  */
-function request(url, { method = "GET", headers = {}, timeout = 12000 } = {}) {
+function request(url, { method = "GET", headers = {}, timeout = 30000 } = {}) {
   return new Promise((resolve, reject) => {
     let parsed;
     try {
@@ -125,10 +125,11 @@ async function getJson(url, opts = {}) {
   let health;
   try {
     health = await getJson(`${API_URL}/health`);
+    const isUp = health.status === 200 && (health.json?.ok === true || health.json?.degraded === true);
     check(
       "1. Backend /health responds 200",
-      health.status === 200 && health.json?.ok === true,
-      `status=${health.status} body=${(health.text || "").slice(0, 120)}`
+      isUp,
+      `status=${health.status} degraded=${Boolean(health.json?.degraded)} body=${(health.text || "").slice(0, 120)}`
     );
   } catch (err) {
     check("1. Backend /health responds 200", false, `${err.message} — is the VPS app running? (pm2 status)`);

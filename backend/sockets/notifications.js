@@ -1,6 +1,7 @@
 const { Server } = require("socket.io");
 const db = require("../config/database");
 const { sendPushToUser, sendPushToAdmins } = require("../backendutil/pushSender");
+const { authenticateSocket, socketIsAdmin, canJoinUserRoom } = require("./socketAuth");
 
 let notificationIO = null;
 let notificationHelpers = null;
@@ -12,34 +13,69 @@ function getNotificationIO() {
 function initNotificationsSocket(io, corsOrigin = "*") {
   notificationIO = io.of("/notifications");
 
+  // Same JWT requirement as the main namespace — these rooms carry admin-wide
+  // and per-user notifications.
+  notificationIO.use(authenticateSocket);
+
   notificationIO.on("connection", (socket) => {
+    const me = socket.data.user;
+    console.log(`[Notify] connected user=${me.id} role=${me.role}`);
+
     socket.on("join", ({ userId, role } = {}) => {
-      if (userId) socket.join(`notifications:${userId}`);
-      if (role === "admin") socket.join("admin_notifications");
+      // `role` from the client is ignored. Authority comes from the verified
+      // token, so a caller cannot grant themselves admin by passing
+      // { role: "admin" } here.
+      if (canJoinUserRoom(socket, userId)) {
+        socket.join(`notifications:${userId}`);
+      } else {
+        console.warn(`[Notify] user=${me.id} rejected notifications:${userId}`);
+      }
+      if (socketIsAdmin(socket)) socket.join("admin_notifications");
     });
 
     socket.on("join_notifications", (userId) => {
-      if (!userId) return;
+      if (!canJoinUserRoom(socket, userId)) {
+        console.warn(`[Notify] user=${me.id} rejected join_notifications:${userId}`);
+        return;
+      }
       socket.join(`notifications:${userId}`);
-      console.log(`User ${userId} joined notifications channel`);
+      console.log(`User ${me.id} joined notifications channel`);
     });
 
     socket.on("join_admin", () => {
+      if (!socketIsAdmin(socket)) {
+        console.warn(`[Notify] user=${me.id} (role=${me.role}) rejected join_admin`);
+        socket.emit("join_denied", { reason: "admin_only" });
+        return;
+      }
       socket.join("admin_notifications");
-      console.log("Admin joined notifications channel");
+      console.log(`Admin ${me.id} joined notifications channel`);
     });
 
     socket.on("mark_read", (notificationId) => {
       if (!notificationId) return;
-      db.query("UPDATE admin_notifications SET is_read = 1 WHERE id = ?", [notificationId], (err) => {
-        db.query("UPDATE notifications SET is_read = 1 WHERE id = ?", [notificationId], () => {
+      // Two different tables, two different rules:
+      //   admin_notifications -> admin-wide, so only an admin may touch it
+      //   notifications        -> per-user, so scope the UPDATE by user_id
+      // Scoping the UPDATE (rather than trusting the client) is what stops one
+      // user marking another's notification read.
+      if (socketIsAdmin(socket)) {
+        db.query("UPDATE admin_notifications SET is_read = 1 WHERE id = ?", [notificationId], () => {
           notificationIO.emit("notification_read", { notificationId });
         });
-      });
+        return;
+      }
+      db.query(
+        "UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?",
+        [notificationId, me.id],
+        (err) => {
+          if (!err) notificationIO.emit("notification_read", { notificationId, userId: me.id });
+        }
+      );
     });
 
     socket.on("disconnect", () => {
-      console.log("Client disconnected from notifications");
+      console.log(`[Notify] user=${me.id} disconnected`);
     });
   });
 
