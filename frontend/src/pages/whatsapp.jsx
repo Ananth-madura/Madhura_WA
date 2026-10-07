@@ -922,48 +922,6 @@ export default function WhatsAppPage() {
     }
   }, [demoMode, fetchStatus]);
 
-  // Socket.IO real-time QR and session sync in Live Chat
-  useEffect(() => {
-    const handleWaQr = (data) => {
-      const qrVal = data?.qr || data?.message?.qr || (typeof data === "string" ? data : null);
-      if (qrVal) {
-        setQrCode(qrVal);
-        if (data?.qrDataUrl) setQrDataUrl(data.qrDataUrl);
-        setQrCountdown(25);
-        setQrLoading(false);
-        setError(null);
-        setStatus((s) => ({ ...s, hasQr: true, connected: false }));
-      }
-    };
-
-    const handleWaReady = () => {
-      setQrCode(null);
-      setQrDataUrl(null);
-      setQrLoading(false);
-      fetchStatus();
-      fetchChats(true);
-      fetchAccountDetails();
-    };
-
-    const handleWaDisconnected = () => {
-      fetchStatus();
-    };
-
-    socket.on("wa_qr", handleWaQr);
-    socket.on("wa_authenticated", handleWaReady);
-    socket.on("wa_ready", handleWaReady);
-    socket.on("wa_connected", handleWaReady);
-    socket.on("wa_disconnected", handleWaDisconnected);
-
-    return () => {
-      socket.off("wa_qr", handleWaQr);
-      socket.off("wa_authenticated", handleWaReady);
-      socket.off("wa_ready", handleWaReady);
-      socket.off("wa_connected", handleWaReady);
-      socket.off("wa_disconnected", handleWaDisconnected);
-    };
-  }, [fetchStatus, fetchChats, fetchAccountDetails]);
-
   // QR auto-countdown timer (25s visual indicator)
   useEffect(() => {
     let timer;
@@ -1063,6 +1021,48 @@ export default function WhatsAppPage() {
       setAccountDetails(data);
     } catch (_) { }
   }, []);
+
+  // Socket.IO real-time QR and session sync in Live Chat
+  useEffect(() => {
+    const handleWaQr = (data) => {
+      const qrVal = data?.qr || data?.message?.qr || (typeof data === "string" ? data : null);
+      if (qrVal) {
+        setQrCode(qrVal);
+        if (data?.qrDataUrl) setQrDataUrl(data.qrDataUrl);
+        setQrCountdown(25);
+        setQrLoading(false);
+        setError(null);
+        setStatus((s) => ({ ...s, hasQr: true, connected: false }));
+      }
+    };
+
+    const handleWaReady = () => {
+      setQrCode(null);
+      setQrDataUrl(null);
+      setQrLoading(false);
+      fetchStatus();
+      fetchChats(true);
+      fetchAccountDetails();
+    };
+
+    const handleWaDisconnected = () => {
+      fetchStatus();
+    };
+
+    socket.on("wa_qr", handleWaQr);
+    socket.on("wa_authenticated", handleWaReady);
+    socket.on("wa_ready", handleWaReady);
+    socket.on("wa_connected", handleWaReady);
+    socket.on("wa_disconnected", handleWaDisconnected);
+
+    return () => {
+      socket.off("wa_qr", handleWaQr);
+      socket.off("wa_authenticated", handleWaReady);
+      socket.off("wa_ready", handleWaReady);
+      socket.off("wa_connected", handleWaReady);
+      socket.off("wa_disconnected", handleWaDisconnected);
+    };
+  }, [fetchStatus, fetchChats, fetchAccountDetails]);
 
   const handleSyncWhatsApp = async () => {
     setSyncing(true);
