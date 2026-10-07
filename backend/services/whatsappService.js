@@ -252,6 +252,7 @@ class WhatsAppService {
     this.lidToPhoneMap = new Map();
     this.phoneToLidMap = new Map();
     this._sendLocks = new Map();
+    this.lastInitError = null;
   }
 
   // Serialise sends to a single recipient. Concurrent sends to the same chat
@@ -566,14 +567,15 @@ class WhatsAppService {
 
     const initTimer = setTimeout(() => {
       if (this.isInitializing && !this.ready && !this.qrCode) {
-        console.warn("⚠️ WhatsApp Client init watchdog timeout — resetting state");
+        console.warn(`⚠️ WhatsApp Client init watchdog timeout (75s) for session ${this.key} — resetting state`);
+        this.lastInitError = "Init watchdog timeout (75s) waiting for browser/WhatsApp Web to load";
         this.isInitializing = false;
         if (this.client) {
           this.client.destroy().catch(() => {});
           this.client = null;
         }
       }
-    }, 60000); // cold Chrome/Puppeteer launch + WhatsApp Web's JS bundle can legitimately take longer than 30s
+    }, 75000); // cold Chrome/Puppeteer launch + WhatsApp Web's JS bundle can legitimately take longer than 30s on cloud
 
     try {
       const execPath = getExecutablePath();
@@ -593,7 +595,7 @@ class WhatsAppService {
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
           "--no-first-run",
-          "--no-zygote",
+          ...(process.platform === "linux" ? ["--single-process", "--no-zygote"] : []),
           "--disable-gpu",
           "--disable-blink-features=AutomationControlled",
           "--disable-features=IsolateOrigins,site-per-process,Translate,OptimizationHints,MediaRouter",
@@ -1202,6 +1204,8 @@ class WhatsAppService {
       await this.client.initialize();
     } catch (err) {
       this.isInitializing = false;
+      this.lastInitError = err?.message || String(err);
+      console.error(`❌ [WA Init Error] Session ${this.key} initialization error:`, err?.message || err);
       const deadClient = this.client;
       this.client = null;
       try { await deadClient?.destroy?.(); } catch (_) {}
@@ -3213,6 +3217,7 @@ module.exports = {
   startSessionCleanupScheduler,
   isWebEngineEnabled,
   WEB_ENGINE_DISABLED_REASON,
+  getExecutablePath,
   get defaultKey() { return defaultKey; },
   SESSIONS_ROOT,
 };

@@ -876,17 +876,18 @@ export default function WhatsAppPage() {
         setQrLoading(false);
         setError(null);
       } else if (res.data && res.data.initializing) {
-        // Still initializing in background — poll fast every 1.5s
-        if (qrRetryCountRef.current < 15) {
+        // Still initializing in background — poll fast every 1.5s (up to 45 attempts = ~68s for cold cloud boot)
+        if (qrRetryCountRef.current < 45) {
           qrRetryCountRef.current += 1;
           setQrLoading(true);
+          setError(`WhatsApp browser is warming up on server (attempt ${qrRetryCountRef.current}/45)... Stand by.`);
           if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
           qrPollTimerRef.current = setTimeout(() => {
             fetchQr(false);
           }, 1500);
         } else {
           setQrLoading(false);
-          setError("WhatsApp browser is initializing on server. Click 'Refresh QR Code' to display your QR.");
+          setError("WhatsApp browser is initializing on server. Click 'Refresh QR Code' or 'Instant Demo Mode' below.");
         }
       } else if (res.data && res.data.error) {
         setError(res.data.error);
@@ -3191,8 +3192,35 @@ export default function WhatsAppPage() {
         )}
 
         {error && (
-          <div className="hl-card mb-4 p-3 text-xs font-semibold border-[var(--color-error)] text-[var(--color-error)]">
-            {error}
+          <div className={`hl-card mb-4 p-3 text-xs font-semibold flex items-center justify-between gap-2 max-w-2xl mx-auto w-full ${
+            error.includes("warming up") || error.includes("initializing")
+              ? "border-[var(--color-accent)] bg-[var(--color-paper-2)] text-[var(--color-ink)]"
+              : "border-[var(--color-error)] text-[var(--color-error)]"
+          }`}>
+            <div className="flex items-center gap-2">
+              {(error.includes("warming up") || error.includes("initializing")) && (
+                <Loader2 size={15} className="animate-spin text-[var(--color-accent)] shrink-0" />
+              )}
+              <span>{error}</span>
+            </div>
+            {(error.includes("warming up") || error.includes("initializing")) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStatus((prev) => ({ ...DEMO_STATUS, ...prev, connected: true, activeEngine: "Interactive Demo Mode" }));
+                  setQrCode(null);
+                  setQrDataUrl(null);
+                  setError(null);
+                  if (!chats || chats.length === 0) {
+                    setChats([...DEMO_CHATS]);
+                    if (DEMO_CHATS.length > 0) setSelectedChat(DEMO_CHATS[0]);
+                  }
+                }}
+                className="hl-btn-primary text-[10px] px-2.5 py-1 font-bold shrink-0 whitespace-nowrap shadow-sm"
+              >
+                Instant Demo Mode ⚡
+              </button>
+            )}
           </div>
         )}
 

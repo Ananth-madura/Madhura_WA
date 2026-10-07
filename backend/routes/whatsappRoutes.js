@@ -118,6 +118,47 @@ router.get("/unified-status", async (req, res) => {
   res.json(unified);
 });
 
+router.get("/diagnostics", async (req, res) => {
+  const session = userSession(req);
+  let browserPid = null;
+  let browserConnected = false;
+  let pageUrl = null;
+  let pageTitle = null;
+  try {
+    if (session.client?.pupBrowser) {
+      browserConnected = session.client.pupBrowser.isConnected();
+      browserPid = session.client.pupBrowser.process()?.pid || null;
+    }
+    if (session.client?.pupPage) {
+      pageUrl = await session.client.pupPage.url().catch((e) => e.message);
+      pageTitle = await session.client.pupPage.title().catch((e) => e.message);
+    }
+  } catch (_) {}
+
+  const execPath = mgr.getExecutablePath ? mgr.getExecutablePath() : null;
+  const fs = require("fs");
+  res.json({
+    platform: process.platform,
+    arch: process.arch,
+    nodeVersion: process.version,
+    memoryUsageMB: Math.round(process.memoryUsage().rss / 1024 / 1024),
+    execPath,
+    execExists: execPath ? fs.existsSync(execPath) : false,
+    sessionKey: session.key,
+    isInitializing: session.isInitializing,
+    ready: session.ready,
+    hasQr: Boolean(session.qrCode),
+    qrLength: session.qrCode ? session.qrCode.length : 0,
+    hasClient: Boolean(session.client),
+    browserConnected,
+    browserPid,
+    pageUrl,
+    pageTitle,
+    lastInitError: session.lastInitError || null,
+    uptimeSeconds: Math.round(process.uptime()),
+  });
+});
+
 router.get("/account", async (req, res) => {
   try {
     if (req.user?.id) {
