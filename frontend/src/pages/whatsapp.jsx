@@ -1555,17 +1555,11 @@ export default function WhatsAppPage() {
         );
       } else {
         const msg = payload?.error || err.message || "Failed to send message";
-        if (msg.includes("getChat") || msg.includes("WWebJS")) {
-          // If browser had a momentary injection race, keep message optimistically marked sent
-          setMessages((prev) =>
-            prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "sent" } : m))
-          );
-        } else {
-          setError(`Failed to send message: ${msg}`);
-          setMessages((prev) =>
-            prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "failed" } : m))
-          );
-        }
+        setError(`Failed to send message: ${msg}`);
+        setMessages((prev) =>
+          prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "failed" } : m))
+        );
+        setMessageInput((current) => current || textToSend);
       }
     } finally {
       sendInFlightRef.current = false;

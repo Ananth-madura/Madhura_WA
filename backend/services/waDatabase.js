@@ -722,6 +722,10 @@ async function ensureWATables() {
   await addColumnIfNotExists("telecalls", "wa_followup_sent_date", "DATE DEFAULT NULL");
   await addColumnIfNotExists("walkins", "wa_followup_sent_date", "DATE DEFAULT NULL");
   await addColumnIfNotExists("fields", "wa_followup_sent_date", "DATE DEFAULT NULL");
+  for (const table of ["telecalls", "walkins", "fields"]) {
+    await addColumnIfNotExists(table, "followup_date", "DATE DEFAULT NULL");
+    await addColumnIfNotExists(table, "followup_required", "VARCHAR(20) DEFAULT 'No'");
+  }
 
   // 5. wa_message_logs column additions & indexes
   await addColumnIfNotExists("wa_message_logs", "session_key", "VARCHAR(64) DEFAULT NULL");

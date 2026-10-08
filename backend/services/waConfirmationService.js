@@ -18,7 +18,7 @@ function queryAsync(sql, params = []) {
 
 function cleanPhone(phone) {
   if (!phone) return "";
-  const cleaned = phone.replace(/\D/g, "");
+  const cleaned = String(phone).replace(/\D/g, "");
   return cleaned.length === 10 ? "91" + cleaned : cleaned;
 }
 
@@ -40,12 +40,17 @@ async function sendInteractiveReminder({
   flowId = null,
   template_id = null,
   templateId = null,
+  data = {},
 }) {
   const normalizedPhone = cleanPhone(phone);
   if (!normalizedPhone) throw new Error("A valid phone number is required to send a WhatsApp reminder.");
 
   const linkedFlowId = flow_id || flowId || null;
   const linkedTemplateId = template_id || templateId || null;
+
+  const [optedOut] = await db.promise().query("SELECT id FROM wa_opt_outs WHERE phone = ? OR phone LIKE ? LIMIT 1", [normalizedPhone, `%${normalizedPhone.slice(-10)}`]);
+  const [blocked] = await db.promise().query("SELECT id FROM wa_contacts WHERE (phone = ? OR phone LIKE ?) AND (is_blocked = 1 OR is_unsubscribed = 1) LIMIT 1", [normalizedPhone, `%${normalizedPhone.slice(-10)}`]);
+  if (optedOut.length || blocked.length) return { success: false, error: "Contact opted out, unsubscribed, or is blocked." };
 
   const defaultOptionsMap = {
     appointment_reminder: [
@@ -78,9 +83,12 @@ async function sendInteractiveReminder({
     ? options
     : (defaultOptionsMap[reminderType] || defaultOptionsMap.appointment_reminder);
 
-  const { formatMessagePlaceholders } = require("./waAutomationService");
+  const { formatMessagePlaceholders, lookupCrmDataByPhone } = require("./waAutomationService");
+  const crmData = await lookupCrmDataByPhone(normalizedPhone).catch(() => ({}));
   const rawText = messageText || `Hello {name}! This is a reminder regarding your scheduled service with us. Please confirm your availability:`;
   const formattedText = formatMessagePlaceholders(rawText, contactName, {
+    ...crmData,
+    ...data,
     phone: normalizedPhone,
     contact_name: contactName,
     title,
@@ -94,7 +102,7 @@ async function sendInteractiveReminder({
     `INSERT INTO wa_interactive_reminders (
       phone, contact_name, reminder_type, reference_table, reference_id,
       title, message_text, options_payload, status, scheduled_for, sent_at, assigned_staff_name, flow_id, template_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sent', NOW(), NOW(), ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NULL, ?, ?, ?)`,
     [
       normalizedPhone,
       contactName,
@@ -124,6 +132,7 @@ async function sendInteractiveReminder({
       items.length <= waInteractive.LIMITS.maxButtons
         ? await waLoadBalancer.sendInteractiveButtons({ ...opts, buttons: items })
         : await waLoadBalancer.sendInteractiveList({ ...opts, sections: items, buttonText: "Choose Option" });
+    await queryAsync("UPDATE wa_interactive_reminders SET status = 'sent', sent_at = NOW() WHERE id = ?", [reminderId]);
     console.log(
       `🔔 [WA Interactive Reminder] #${reminderId} -> +${normalizedPhone} via ${res?.engineUsed || "WA"} (${res?.native ? "native interactive" : "text fallback"})`
     );
@@ -393,7 +402,14 @@ const activeSessionKey = sessionKey || require("./whatsappService").defaultKey;
       if (flowRows.length > 0) {
         const waFlowEngine = require("./waFlowEngine");
         console.log(`🤖 [WA Reminder -> Flow] Starting Flow "${flowRows[0].name}" for response from +${normalizedPhone}`);
-        await waFlowEngine.startFlowRun(flowRows[0], normalizedPhone, activeSessionKey, messageText, targetChatId);
+        await waFlowEngine.startFlowRun(flowRows[0], normalizedPhone, activeSessionKey, messageText, targetChatId, {
+          reminder_id: reminder.id,
+          reminder_type: reminder.reminder_type,
+          reminder_response: responseStatus,
+          selected_option: action,
+          reference_id: reminder.reference_id,
+          reference_table: reminder.reference_table,
+        });
       }
     } catch (fErr) {
       console.warn(`[WA Reminder -> Flow] Failed to launch linked flow:`, fErr.message);

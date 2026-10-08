@@ -1750,7 +1750,7 @@ export default function WhatsAppInteractiveReminders() {
                 <div className="p-3 bg-[var(--color-paper)] rounded-xl border border-[var(--color-rule)] flex items-center justify-between">
                   <div>
                     <span className="font-bold text-[var(--color-ink)] block">Service & Appointment Reminders</span>
-                    <span className="text-[11px] text-[var(--color-ink-2)]">Auto-send 24h before technician visit</span>
+                    <span className="text-[11px] text-[var(--color-ink-2)]">Send {settings.appointment_reminder_hours_before} hours before the visit; date-only appointments round up to days</span>
                   </div>
                   <input
                     type="checkbox"
@@ -1763,7 +1763,7 @@ export default function WhatsAppInteractiveReminders() {
                 <div className="p-3 bg-[var(--color-paper)] rounded-xl border border-[var(--color-rule)] flex items-center justify-between">
                   <div>
                     <span className="font-bold text-[var(--color-ink)] block">Payment Due Invoice Reminders</span>
-                    <span className="text-[11px] text-[var(--color-ink-2)]">Auto-send 1 day before invoice due date</span>
+                    <span className="text-[11px] text-[var(--color-ink-2)]">Send {settings.payment_due_days_before} days before the invoice due date</span>
                   </div>
                   <input
                     type="checkbox"
@@ -1776,7 +1776,7 @@ export default function WhatsAppInteractiveReminders() {
                 <div className="p-3 bg-[var(--color-paper)] rounded-xl border border-[var(--color-rule)] flex items-center justify-between">
                   <div>
                     <span className="font-bold text-[var(--color-ink)] block">AMC Contract Expiry Reminders</span>
-                    <span className="text-[11px] text-[var(--color-ink-2)]">Auto-send 7 days before agreement expires</span>
+                    <span className="text-[11px] text-[var(--color-ink-2)]">Send {settings.amc_renewal_days_before} days before the agreement expires</span>
                   </div>
                   <input
                     type="checkbox"
@@ -1785,6 +1785,19 @@ export default function WhatsAppInteractiveReminders() {
                     className="w-4 h-4 text-[var(--color-focus)] rounded"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  ["appointment_reminder_hours_before", "Appointment lead time (hours)", 8760],
+                  ["payment_due_days_before", "Payment lead time (days)", 365],
+                  ["amc_renewal_days_before", "Renewal lead time (days)", 365],
+                ].map(([field, label, max]) => (
+                  <label key={field} className="block text-sm space-y-1">
+                    <span>{label}</span>
+                    <input type="number" min="0" max={max} step="1" className="hl-input w-full p-2" value={settings[field]} onChange={(e) => setSettings((prev) => ({ ...prev, [field]: e.target.value === "" ? "" : Number(e.target.value) }))} />
+                  </label>
+                ))}
               </div>
 
               <div className="pt-2 border-t border-[var(--color-rule)] space-y-3">

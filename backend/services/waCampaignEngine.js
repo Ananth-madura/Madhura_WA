@@ -217,7 +217,7 @@ if (!claim.affectedRows) {
       if (spintaxEnabled !== false) {
         resolvedText = parseSpintax(resolvedText);
       }
-      resolvedText = formatMessagePlaceholders(resolvedText, contact_name, mergedData);
+      resolvedText = formatMessagePlaceholders(resolvedText, contact_name, mergedData, { spintaxEnabled });
     }
 
     const waLoadBalancer = require("./waLoadBalancer");
@@ -226,10 +226,13 @@ if (!claim.affectedRows) {
       const components = (typeof template_components === "string"
         ? JSON.parse(template_components || "[]")
         : (template_components || [])
-      ).filter((c) => c.type !== "body");
+      );
       const [tmplRows] = await db.promise().query("SELECT body FROM wa_templates WHERE name = ? LIMIT 1", [template_name]);
       const bodyComponent = tmplRows[0] ? buildTemplateBodyComponent(tmplRows[0].body, contact_name, mergedData) : null;
-      const finalComponents = bodyComponent ? [...components, bodyComponent] : components;
+      // Preserve explicitly authored positional template parameters. Named
+      // placeholders can be resolved from CRM only when no body was supplied.
+      const finalComponents = components.some((c) => c.type === "body") || !bodyComponent
+        ? components : [...components, bodyComponent];
       result = await waLoadBalancer.sendTemplateMessage(phone, template_name, "en", finalComponents, sessionKey, null, poolId, routingStrategy, tenantId);
     } else if (media_type && media_url) {
       result = await waLoadBalancer.sendMediaMessage(phone, media_type, media_url, resolvedText || "", "", sessionKey, null, poolId, routingStrategy, tenantId);

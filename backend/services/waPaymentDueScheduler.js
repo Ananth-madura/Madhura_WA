@@ -59,7 +59,7 @@ async function runPaymentDueCheck() {
           continue;
         }
 
-        await triggerAutomation("payment_due", {
+        const result = await triggerAutomation("payment_due", {
           phone: inv.phone,
           contactName: inv.name,
           data: {
@@ -67,7 +67,8 @@ async function runPaymentDueCheck() {
             company: inv.client_company,
             due_date: inv.invoice_duedate,
           },
-        });
+        }, { dedupeKey: `payment_due:invoice:${inv.id}` });
+        if (!result.success || !result.triggeredCount) throw new Error(result.error || result.reason || "No payment reminder dispatched.");
         notified++;
       } catch (e) {
         console.error(`[WA Payment Due] trigger failed for invoice ${inv.id}:`, e.message);
@@ -88,7 +89,7 @@ let job = null;
 function startPaymentDueScheduler() {
   if (job) return;
   // Strictly runs daily at 10:00 AM on schedule, never blindly on server boot or WhatsApp connection.
-  job = schedule.scheduleJob("0 10 * * *", runPaymentDueCheck);
+  job = schedule.scheduleJob({ rule: "0 10 * * *", tz: process.env.TZ || "Asia/Kolkata" }, runPaymentDueCheck);
   console.log("[WA Payment Due] Scheduler started (daily at 10:00)");
 }
 

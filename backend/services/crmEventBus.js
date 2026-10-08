@@ -98,7 +98,7 @@ crmEventBus.on("invoice_created", async (invoice) => {
     });
 
     // 2. If no active rule was executed, dispatch standard interactive confirmation reminder
-    if (!autoRes || autoRes.count === 0) {
+    if (autoRes?.reason === "no_active_rules") {
       const messageText =
         `Hello *${customerName}*,\n\n` +
         `Your invoice *INV-${id}* has been generated.\n\n` +
@@ -191,7 +191,7 @@ crmEventBus.on("quotation_created", async (quotation) => {
     });
 
     // 2. If no active rule was executed, dispatch interactive quotation followup
-    if (!autoRes || autoRes.count === 0) {
+    if (autoRes?.reason === "no_active_rules") {
       const messageText =
         `Hello *${customerName}*,\n\n` +
         `Your quotation proposal *${refNo}* ${amountStr ? `(${amountStr}) ` : ""}is ready for review.\n\n` +
@@ -271,7 +271,7 @@ crmEventBus.on("payment_received", async (payment) => {
       return null;
     });
 
-    if (!autoRes || autoRes.count === 0) {
+    if (autoRes?.reason === "no_active_rules") {
       const receiptMsg =
         `🎉 *Payment Received Successfully!*\n\n` +
         `Dear *${customerName}*,\n` +

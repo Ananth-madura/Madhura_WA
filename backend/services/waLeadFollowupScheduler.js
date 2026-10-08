@@ -31,6 +31,10 @@ async function runLeadFollowupCheck() {
 
     for (const { name: table, serviceCol } of TABLES) {
       try {
+        const [columns] = await db.promise().query(db.isSqlite ? `PRAGMA table_info(${table})` : `SHOW COLUMNS FROM ${table}`);
+        const names = new Set(columns.map((c) => c.Field || c.name));
+        if (!names.has("followup_date") || !names.has("followup_required")) continue;
+        const serviceField = names.has(serviceCol) ? serviceCol : names.has("service") ? "service" : null;
         // Dedupe by comparing the stored "last sent for" date against the
         // current follow-up date, not a plain boolean — so re-scheduling a
         // follow-up to a new date naturally re-arms the reminder instead of
@@ -39,7 +43,7 @@ async function runLeadFollowupCheck() {
         // the app's own UI treats "Default" (the unset placeholder) as NOT
         // needing a follow-up — only an explicit "Yes" does. Match that exactly.
         const [rows] = await db.promise().query(`
-          SELECT id, customer_name, company_name, mobile_number, ${serviceCol} AS service_name, staff_name
+          SELECT id, customer_name, company_name, mobile_number, ${serviceField || "NULL"} AS service_name
           FROM ${table}
           WHERE followup_date = CURDATE()
             AND followup_required = 'Yes'
@@ -51,18 +55,19 @@ async function runLeadFollowupCheck() {
 
         for (const lead of rows) {
           try {
-            await triggerAutomation("lead_followup", {
+            const result = await triggerAutomation("lead_followup", {
               phone: lead.mobile_number,
               contactName: lead.customer_name || lead.company_name,
               data: {
                 company: lead.company_name,
                 service: lead.service_name,
               },
-            });
+            }, { dedupeKey: `lead_followup:${table}:${lead.id}` });
+            if (!result.success || !result.triggeredCount) continue;
+            await db.promise().query(`UPDATE ${table} SET wa_followup_sent_date = CURDATE() WHERE id = ?`, [lead.id]);
           } catch (e) {
             console.error(`[WA Lead Followup] trigger failed for ${table}#${lead.id}:`, e.message);
           }
-          await db.promise().query(`UPDATE ${table} SET wa_followup_sent_date = CURDATE() WHERE id = ?`, [lead.id]);
         }
         console.log(`[WA Lead Followup] Notified ${rows.length} ${table} lead(s) due today`);
       } catch (err) {
@@ -79,7 +84,7 @@ let job = null;
 function startLeadFollowupScheduler() {
   if (job) return;
   // Strictly runs daily at 9:30 AM according to schedule, never blindly on server restart or number connection.
-  job = schedule.scheduleJob("30 9 * * *", runLeadFollowupCheck);
+  job = schedule.scheduleJob({ rule: "30 9 * * *", tz: process.env.TZ || "Asia/Kolkata" }, runLeadFollowupCheck);
   console.log("[WA Lead Followup] Scheduler started (daily at 09:30)");
 }
 

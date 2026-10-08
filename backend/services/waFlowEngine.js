@@ -325,7 +325,7 @@ class WaFlowEngine {
   /**
    * Start a brand new flow execution for a phone number
    */
-  async startFlowRun(flow, phone, sessionKey = null, triggerText = "", targetChatId = null) {
+  async startFlowRun(flow, phone, sessionKey = null, triggerText = "", targetChatId = null, context = {}) {
     let cleanPhone = String(phone || "").replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
 
@@ -379,7 +379,7 @@ class WaFlowEngine {
     );
 
     // Deep CRM Context auto-resolution from database
-    const initialVars = await this.resolveInitialCrmVars(cleanPhone);
+    const initialVars = { ...await this.resolveInitialCrmVars(cleanPhone), ...context };
     if (targetChatId) initialVars._chat_id = targetChatId;
     initialVars._session_key = activeSessionKey;
 
@@ -1242,7 +1242,7 @@ class WaFlowEngine {
             const [targetFlows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ?", [config.target_flow_id]);
             if (targetFlows[0]) {
               await this.completeRun(runId, `jumped_to_flow_${config.target_flow_id}`);
-              return await this.startFlowRun(targetFlows[0], cleanPhone, sessionKey, vars.last_input || "", targetChatId);
+              return await this.startFlowRun(targetFlows[0], cleanPhone, sessionKey, vars.last_input || "", targetChatId, vars);
             }
           }
           nodeKey = config.next_node_key;

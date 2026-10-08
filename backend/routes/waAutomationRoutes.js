@@ -351,6 +351,13 @@ router.post("/", auth, async (req, res) => {
     } = req.body;
     if (!name || !trigger_type) return res.status(400).json({ error: "name and trigger_type required" });
 
+    let validatedConditions;
+    try { validatedConditions = require("../services/waRuleConditions").normalizeConditions(conditions); }
+    catch (err) { return res.status(400).json({ error: err.message }); }
+    if (!Number.isFinite(Number(delay_minutes)) || Number(delay_minutes) < 0 || Number(delay_minutes) > 43200) {
+      return res.status(400).json({ error: "Delay must be between 0 and 43200 minutes." });
+    }
+
     const [result] = await db.promise().query(
       `INSERT INTO wa_automations (
         name, trigger_type, template_id, message_text, media_type, media_url,
@@ -361,7 +368,7 @@ router.post("/", auth, async (req, res) => {
         name, trigger_type, template_id || null, message_text || null, media_type || null, media_url || null,
         parseInt(sequence_delay_seconds, 10) || 7, followup_message_text || null, followup_media_type || null,
         followup_media_url || null, followup_template_id || null, flow_id || null, group_id || null,
-        parseInt(delay_minutes, 10) || 0, conditions ? JSON.stringify(conditions) : null,
+        parseInt(delay_minutes, 10) || 0, JSON.stringify(validatedConditions),
         is_active ? 1 : 0, req.user?.id || null
       ]
     );
@@ -384,6 +391,13 @@ router.put("/:id", auth, async (req, res) => {
       sequence_delay_seconds, followup_message_text, followup_media_type, followup_media_url, followup_template_id,
       flow_id, group_id, delay_minutes, conditions, is_active
     } = req.body;
+    if (!name || !trigger_type) return res.status(400).json({ error: "name and trigger_type required" });
+    let validatedConditions;
+    try { validatedConditions = require("../services/waRuleConditions").normalizeConditions(conditions); }
+    catch (err) { return res.status(400).json({ error: err.message }); }
+    if (!Number.isFinite(Number(delay_minutes ?? 0)) || Number(delay_minutes ?? 0) < 0 || Number(delay_minutes ?? 0) > 43200) {
+      return res.status(400).json({ error: "Delay must be between 0 and 43200 minutes." });
+    }
     await db.promise().query(
       `UPDATE wa_automations SET
         name=?, trigger_type=?, template_id=?, message_text=?, media_type=?, media_url=?,
@@ -394,7 +408,7 @@ router.put("/:id", auth, async (req, res) => {
         name, trigger_type, template_id || null, message_text || null, media_type || null, media_url || null,
         parseInt(sequence_delay_seconds, 10) || 7, followup_message_text || null, followup_media_type || null,
         followup_media_url || null, followup_template_id || null, flow_id || null, group_id || null,
-        parseInt(delay_minutes || 0, 10), conditions ? JSON.stringify(conditions) : null,
+        parseInt(delay_minutes || 0, 10), JSON.stringify(validatedConditions),
         is_active ? 1 : 0, req.params.id
       ]
     );

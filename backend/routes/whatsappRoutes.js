@@ -67,6 +67,29 @@ const requireReadySession = (req, res) => {
 const { configureForUser } = require("../services/waConfigHelper");
 const waCloud = require("../services/whatsappCloudApi");
 
+// Cloud sends must appear in the same conversation history as Web sends.
+// Recording errors never turn a confirmed provider send into a retryable failure.
+async function recordCloudSend(req, chatId, phone, messageId, body, type = "text", extra = {}) {
+  const sessionKey = String(req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || mgr.defaultKey);
+  await db.promise().query(
+    `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
+     VALUES (?, ?, 'outbound', ?, ?, ?, 'sent', NOW())`,
+    [sessionKey, phone, type, body, messageId]
+  ).catch((err) => console.warn("[Cloud Send] History recording failed:", err.message));
+  await db.promise().query(
+    `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
+     VALUES ('Customer', ?, '91', 'WhatsApp Chat', 1, ?, NOW(), 0)
+     ON DUPLICATE KEY UPDATE last_message_text = VALUES(last_message_text), last_message_at = NOW()`,
+    [phone.slice(-10), body]
+  ).catch(() => {});
+  await require("../services/waBotGate").pauseBot(chatId, undefined, "manual cloud reply").catch(() => {});
+  const io = req.app?.get("io");
+  if (io) io.to(`user:${sessionKey}`).emit("wa_message_sent", {
+    chatId, phone, sessionKey,
+    message: { id: messageId, from: "me", body, isMe: true, status: "sent", type, timestamp: Math.floor(Date.now() / 1000), ...extra },
+  });
+}
+
 router.get("/status", async (req, res) => {
   if (req.user?.id) {
     await configureForUser(req.user.id).catch(() => {});
@@ -565,7 +588,7 @@ router.post("/send", messageSendLimiter, async (req, res) => {
         if (sendErr?.deliveryUnknown) {
           return res.status(504).json({ error: sendErr.message, deliveryUnknown: true, code: sendErr.code });
         }
-        console.warn(`⚠️ [Send Route] session.sendMessage error: ${sendErr.message}. Attempting fallback...`);
+        return res.status(502).json({ success: false, error: sendErr.message, code: "WA_SEND_FAILED" });
       }
     }
 
@@ -576,123 +599,17 @@ router.post("/send", messageSendLimiter, async (req, res) => {
         if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
         const sent = await waCloud.sendText(cleanPhone, message);
         const msgId = sent?.messages?.[0]?.id || ("cloud_" + Date.now());
+        await recordCloudSend(req, chatId, cleanPhone, msgId, message).catch(() => {});
         return res.json({ success: true, id: msgId, activeEngine: "Meta Cloud API" });
       } catch (cloudErr) {
-        console.warn(`⚠️ [Send Route] Cloud API send error: ${cloudErr.message}`);
+        return res.status(502).json({ success: false, error: cloudErr.message, code: "WA_CLOUD_SEND_FAILED" });
       }
     }
 
-    // 3. ⚡ Seamless Interactive Instant Send & Receive Fallback
-    // Delivers instantly in seconds, logs to SQLite / R2, and schedules an authentic
-    // reply in 1.2s so the user can test chat seamlessly!
-    const cleanPhone = String(chatId).replace(/\D/g, "") || "919876543210";
-    const msgId = "msg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
-    const sessionKey = String(req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || mgr.defaultKey);
-    const nowSec = Math.floor(Date.now() / 1000);
-
-    const outboundMsg = {
-      id: msgId,
-      serializedId: msgId,
-      from: "me",
-      to: cleanPhone,
-      body: message,
-      replyToMessageId: quotedMessageId || replyToMessageId || null,
-      timestamp: nowSec,
-      isMe: true,
-      type: "text",
-      status: "delivered",
-      simulated: true,
-    };
-
-    // Emit live Socket event INSTANTLY
-    if (session && typeof session.emitWaEvent === "function") {
-      session.emitWaEvent("wa_message_sent", chatId, cleanPhone, outboundMsg);
-    } else {
-      const io = req.app.get("io");
-      if (io) io.emit("wa_message_sent", { chatId, phone: cleanPhone, message: outboundMsg });
-    }
-
-    // Persist to DB in background
-    process.nextTick(async () => {
-      try {
-        await db.promise().query(
-          `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, reply_to_message_id, status, created_at)
-           VALUES (?, ?, 'outbound', 'text', ?, ?, ?, 'delivered', NOW())`,
-          [sessionKey, cleanPhone, message, msgId, quotedMessageId || replyToMessageId || null]
-        );
-        await db.promise().query(
-          `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
-           VALUES (?, ?, '91', 'WhatsApp Chat', 1, ?, NOW(), 0)
-           ON DUPLICATE KEY UPDATE
-             last_message_text = VALUES(last_message_text),
-             last_message_at = NOW()`,
-          ["Me", cleanPhone, message]
-        ).catch(() => {});
-      } catch (_) {}
-    });
-
-    // Schedule automatic authentic inbound reply in 1.2 seconds!
-    setTimeout(async () => {
-      try {
-        const replyId = "rep_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
-        const lower = (message || "").toLowerCase().trim();
-        let replyText = "Hello! 👋 Thank you for contacting Madhura WhatsApp CRM. How can we assist you today?";
-        if (lower.includes("price") || lower.includes("cost") || lower.includes("rate") || lower.includes("plan")) {
-          replyText = "Our WhatsApp CRM plans include unlimited messaging and automated AI flows! Would you like a detailed brochure?";
-        } else if (lower.includes("demo") || lower.includes("test")) {
-          replyText = "Interactive test response: Both real-time sending and receiving are functioning smoothly!";
-        } else if (lower.includes("order") || lower.includes("status")) {
-          replyText = "Your inquiry has been received. Our support team will follow up shortly!";
-        } else if (lower === "hi" || lower === "hello" || lower === "hey") {
-          replyText = "Hi there! 👋 Welcome to Madhura Tech WhatsApp CRM. Send and receive are fully active!";
-        } else {
-          replyText = `Thank you for your message: "${message}". We have received it and will get back to you immediately!`;
-        }
-
-        const inboundMsg = {
-          id: replyId,
-          serializedId: replyId,
-          from: cleanPhone,
-          to: "me",
-          body: replyText,
-          timestamp: Math.floor(Date.now() / 1000),
-          isMe: false,
-          type: "text",
-          status: "delivered",
-        };
-
-        if (session && typeof session.emitWaEvent === "function") {
-          session.emitWaEvent("wa_message_received", chatId, cleanPhone, inboundMsg);
-        } else {
-          const io = req.app.get("io");
-          if (io) io.emit("wa_message_received", { chatId, phone: cleanPhone, message: inboundMsg });
-        }
-
-        await db.promise().query(
-          `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
-           VALUES (?, ?, 'inbound', 'text', ?, ?, 'delivered', NOW())`,
-          [sessionKey, cleanPhone, replyText, replyId]
-        );
-        await db.promise().query(
-          `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
-           VALUES (?, ?, '91', 'WhatsApp Chat', 1, ?, NOW(), 1)
-           ON DUPLICATE KEY UPDATE
-             last_message_text = VALUES(last_message_text),
-             last_message_at = NOW(),
-             unread_count = unread_count + 1`,
-          ["Customer", cleanPhone, replyText]
-        ).catch(() => {});
-      } catch (repErr) {
-        console.warn("⚠️ [Send Route] Inbound reply error:", repErr.message);
-      }
-    }, 1200);
-
-    return res.json({
-      success: true,
-      id: msgId,
-      status: "sent",
-      body: message,
-      interactiveMode: true,
+    return res.status(503).json({
+      success: false,
+      code: "WA_SEND_UNAVAILABLE",
+      error: "Message was not sent. Connect your WhatsApp number or check your Cloud API configuration, then try again.",
     });
   } catch (err) {
     if (err?.deliveryUnknown) {
@@ -1037,7 +954,7 @@ router.post("/send-media", messageSendLimiter, async (req, res) => {
         if (mediaErr?.deliveryUnknown) {
           return res.status(504).json({ error: mediaErr.message, deliveryUnknown: true, code: mediaErr.code });
         }
-        console.warn(`⚠️ [send-media] session error: ${mediaErr.message}. Falling back...`);
+        return res.status(502).json({ success: false, code: "WA_SEND_FAILED", error: mediaErr.message });
       }
     } else if (cloudConfigured) {
       try {
@@ -1050,39 +967,14 @@ router.post("/send-media", messageSendLimiter, async (req, res) => {
         }
         const sent = await waCloud.sendMedia(cleanPhone, resolvedType, cloudUrl, caption || "", filename || "");
         const msgId = sent?.messages?.[0]?.id || ("cloud_" + Date.now());
+        await recordCloudSend(req, chatId, cleanPhone, msgId, caption || filename || "Attachment", resolvedType, { hasMedia: true, mediaUrl: cloudUrl, filename }).catch(() => {});
         return res.json({ success: true, id: msgId, activeEngine: "Meta Cloud API" });
       } catch (cloudErr) {
-        console.warn(`⚠️ [send-media] Cloud API error: ${cloudErr.message}`);
+        return res.status(502).json({ success: false, code: "WA_SEND_FAILED", error: cloudErr.message });
       }
     }
 
-    // Interactive fallback for media
-    const cleanPhone = String(chatId).replace(/\D/g, "") || "919876543210";
-    const msgId = "media_" + Date.now();
-    const outboundMsg = {
-      id: msgId,
-      serializedId: msgId,
-      from: "me",
-      to: cleanPhone,
-      body: caption || filename || `[${mediaType || "media"}]`,
-      mediaUrl,
-      type: mediaType || "image",
-      hasMedia: true,
-      filename: filename || "",
-      timestamp: Math.floor(Date.now() / 1000),
-      isMe: true,
-      status: "delivered",
-      simulated: true,
-    };
-
-    if (session && typeof session.emitWaEvent === "function") {
-      session.emitWaEvent("wa_message_sent", chatId, cleanPhone, outboundMsg);
-    } else {
-      const io = req.app.get("io");
-      if (io) io.emit("wa_message_sent", { chatId, phone: cleanPhone, message: outboundMsg });
-    }
-
-    res.json({ success: true, id: msgId, simulated: true });
+    return res.status(503).json({ success: false, code: "WA_SEND_UNAVAILABLE", error: "Nothing was sent. Connect your WhatsApp number or check your Cloud API configuration, then try again." });
   } catch (err) {
     if (err?.deliveryUnknown) {
       return res.status(504).json({ error: err.message, deliveryUnknown: true, code: err.code });
@@ -1109,7 +1001,7 @@ router.post("/send-location", messageSendLimiter, async (req, res) => {
         if (locErr?.deliveryUnknown) {
           return res.status(504).json({ error: locErr.message, deliveryUnknown: true, code: locErr.code });
         }
-        console.warn(`⚠️ [send-location] session error: ${locErr.message}. Falling back...`);
+        return res.status(502).json({ success: false, code: "WA_SEND_FAILED", error: locErr.message });
       }
     } else if (cloudConfigured) {
       try {
@@ -1117,36 +1009,14 @@ router.post("/send-location", messageSendLimiter, async (req, res) => {
         if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
         const sent = await waCloud.sendLocation(cleanPhone, lat, lng, name || "");
         const msgId = sent?.messages?.[0]?.id || ("cloud_" + Date.now());
+        await recordCloudSend(req, chatId, cleanPhone, msgId, name || `Location (${lat}, ${lng})`, "location", { location: { lat, lng, name } }).catch(() => {});
         return res.json({ success: true, id: msgId, activeEngine: "Meta Cloud API" });
       } catch (cloudErr) {
-        console.warn(`⚠️ [send-location] Cloud API error: ${cloudErr.message}`);
+        return res.status(502).json({ success: false, code: "WA_SEND_FAILED", error: cloudErr.message });
       }
     }
 
-    const cleanPhone = String(chatId).replace(/\D/g, "") || "919876543210";
-    const msgId = "loc_" + Date.now();
-    const outboundMsg = {
-      id: msgId,
-      serializedId: msgId,
-      from: "me",
-      to: cleanPhone,
-      body: name || `📍 Location (${lat}, ${lng})`,
-      location: { lat, lng, name: name || "" },
-      type: "location",
-      timestamp: Math.floor(Date.now() / 1000),
-      isMe: true,
-      status: "delivered",
-      simulated: true,
-    };
-
-    if (session && typeof session.emitWaEvent === "function") {
-      session.emitWaEvent("wa_message_sent", chatId, cleanPhone, outboundMsg);
-    } else {
-      const io = req.app.get("io");
-      if (io) io.emit("wa_message_sent", { chatId, phone: cleanPhone, message: outboundMsg });
-    }
-
-    res.json({ success: true, id: msgId, simulated: true });
+    return res.status(503).json({ success: false, code: "WA_SEND_UNAVAILABLE", error: "Nothing was sent. Connect your WhatsApp number or check your Cloud API configuration, then try again." });
   } catch (err) {
     if (err?.deliveryUnknown) {
       return res.status(504).json({ error: err.message, deliveryUnknown: true, code: err.code });

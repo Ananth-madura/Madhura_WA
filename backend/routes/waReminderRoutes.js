@@ -80,12 +80,12 @@ router.get("/settings", verifyToken, async (req, res) => {
     const row = rows[0] || {};
     res.json({
       appointment_reminders_enabled: row.appointment_reminders_enabled !== 0,
-      appointment_reminder_hours_before: row.appointment_reminder_hours_before || 24,
+      appointment_reminder_hours_before: row.appointment_reminder_hours_before ?? 24,
       payment_due_reminders_enabled: row.payment_due_reminders_enabled !== 0,
-      payment_due_days_before: row.payment_due_days_before || 1,
+      payment_due_days_before: row.payment_due_days_before ?? 1,
       lead_followup_reminders_enabled: row.lead_followup_reminders_enabled !== 0,
       amc_renewal_reminders_enabled: row.amc_renewal_reminders_enabled !== 0,
-      amc_renewal_days_before: row.amc_renewal_days_before || 7,
+      amc_renewal_days_before: row.amc_renewal_days_before ?? 7,
       confirmation_auto_update_crm: row.confirmation_auto_update_crm !== 0,
       notify_staff_on_response: row.notify_staff_on_response !== 0,
       default_confirm_prompt: row.default_confirm_prompt || "",
@@ -115,6 +115,13 @@ router.put("/settings", verifyToken, async (req, res) => {
       default_cancel_prompt,
     } = req.body;
 
+    for (const [field, max] of [["appointment_reminder_hours_before", 8760], ["payment_due_days_before", 365], ["amc_renewal_days_before", 365]]) {
+      const value = req.body[field];
+      if (value != null && (!Number.isInteger(Number(value)) || Number(value) < 0 || Number(value) > max)) {
+        return res.status(400).json({ error: `${field} must be a whole number between 0 and ${max}.` });
+      }
+    }
+
     await db.promise().query(
       `UPDATE wa_reminder_settings SET
         appointment_reminders_enabled = ?,
@@ -132,12 +139,12 @@ router.put("/settings", verifyToken, async (req, res) => {
        WHERE id = 1`,
       [
         appointment_reminders_enabled ? 1 : 0,
-        parseInt(appointment_reminder_hours_before, 10) || 24,
+        Number(appointment_reminder_hours_before ?? 24),
         payment_due_reminders_enabled ? 1 : 0,
-        parseInt(payment_due_days_before, 10) || 1,
+        Number(payment_due_days_before ?? 1),
         lead_followup_reminders_enabled ? 1 : 0,
         amc_renewal_reminders_enabled ? 1 : 0,
-        parseInt(amc_renewal_days_before, 10) || 7,
+        Number(amc_renewal_days_before ?? 7),
         confirmation_auto_update_crm ? 1 : 0,
         notify_staff_on_response ? 1 : 0,
         default_confirm_prompt || null,

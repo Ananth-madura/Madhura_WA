@@ -28,22 +28,23 @@ async function runAppointmentReminderCheck() {
     const settings = settingsRows[0] || {};
     if (settings.appointment_reminders_enabled === 0) return;
 
-    // Check telecalls with visit/appointment tomorrow
+    const daysBefore = Math.max(0, Math.ceil(Number(settings.appointment_reminder_hours_before ?? 24) / 24));
+    // Date-only appointments use the configured lead time rounded up to days.
     const [telecallRows] = await db.promise().query(`
       SELECT t.id, t.customer_name, t.mobile_number, t.service_name, t.location_city, t.followup_date
       FROM telecalls t
-      WHERE t.followup_date = DATE_ADD(CURDATE(), INTERVAL 1 DAY)
+      WHERE t.followup_date = DATE_ADD(CURDATE(), INTERVAL ? DAY)
         AND t.followup_required = 'Yes'
         AND t.mobile_number IS NOT NULL AND t.mobile_number != ''
         AND NOT EXISTS (
-          SELECT 1 FROM wa_interactive_reminders r 
-          WHERE r.reference_table = 'telecalls' AND r.reference_id = t.id 
+          SELECT 1 FROM wa_interactive_reminders r
+          WHERE r.status != 'failed' AND r.reference_table = 'telecalls' AND r.reference_id = t.id
             AND r.scheduled_for >= CURDATE()
         )
-    `);
+    `, [daysBefore]);
 
     for (const t of telecallRows) {
-      const msg = `Hi ${t.customer_name || "Customer"}, reminder for your scheduled service appointment (${t.service_name || "AMC & Technical Support"}) tomorrow on ${new Date(t.followup_date).toLocaleDateString("en-IN")}. Please confirm your availability:`;
+      const msg = `Hi ${t.customer_name || "Customer"}, reminder for your scheduled service appointment (${t.service_name || "AMC & Technical Support"}) on ${new Date(t.followup_date).toLocaleDateString("en-IN")}. Please confirm your availability:`;
       await waConfirmation.sendInteractiveReminder({
         phone: t.mobile_number,
         contactName: t.customer_name,
@@ -60,17 +61,17 @@ async function runAppointmentReminderCheck() {
       SELECT s.id, s.client, s.material, s.date, s.engineer_name,
         (SELECT c.phone FROM clients c WHERE c.name = s.client OR c.company_name = s.client LIMIT 1) AS phone
       FROM services s
-      WHERE s.date = DATE_ADD(CURDATE(), INTERVAL 1 DAY)
+      WHERE s.date = DATE_ADD(CURDATE(), INTERVAL ? DAY)
         AND NOT EXISTS (
-          SELECT 1 FROM wa_interactive_reminders r 
-          WHERE r.reference_table = 'services' AND r.reference_id = s.id 
+          SELECT 1 FROM wa_interactive_reminders r
+          WHERE r.status != 'failed' AND r.reference_table = 'services' AND r.reference_id = s.id
             AND r.scheduled_for >= CURDATE()
         )
       HAVING phone IS NOT NULL AND phone != ''
-    `).catch(() => [[]]);
+    `, [daysBefore]).catch(() => [[]]);
 
     for (const s of serviceRows) {
-      const msg = `Hi ${s.client}, reminder for your scheduled maintenance service (${s.material || "Equipment Inspection"}) tomorrow. Assigned Engineer: ${s.engineer_name || "Technical Team"}. Please confirm your visit:`;
+      const msg = `Hi ${s.client}, reminder for your scheduled maintenance service (${s.material || "Equipment Inspection"}) on ${new Date(s.date).toLocaleDateString("en-IN")}. Assigned Engineer: ${s.engineer_name || "Technical Team"}. Please confirm your visit:`;
       await waConfirmation.sendInteractiveReminder({
         phone: s.phone,
         contactName: s.client,
@@ -83,7 +84,7 @@ async function runAppointmentReminderCheck() {
       }).catch((e) => console.warn(`[WA Service Reminder] Failed for service #${s.id}:`, e.message));
     }
 
-    console.log(`[WA Appointment Scheduler] Dispatched interactive appointment reminders for tomorrow.`);
+    console.log(`[WA Appointment Scheduler] Checked appointments using the configured reminder lead time.`);
   } catch (err) {
     console.error("[WA Appointment Scheduler] Error:", err.message);
   }
@@ -105,15 +106,15 @@ async function runPaymentDueInteractiveCheck() {
         (SELECT c.phone FROM clients c WHERE (c.company_name = ci.client_company OR c.name = ci.client_company)
           AND c.phone IS NOT NULL AND c.phone != '' LIMIT 1) AS phone
       FROM clientinvoices ci
-      WHERE ci.invoice_duedate = DATE_ADD(CURDATE(), INTERVAL 1 DAY)
+      WHERE ci.invoice_duedate = DATE_ADD(CURDATE(), INTERVAL ? DAY)
         AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.invoice_id = ci.id)
         AND NOT EXISTS (
-          SELECT 1 FROM wa_interactive_reminders r 
-          WHERE r.reference_table = 'clientinvoices' AND r.reference_id = ci.id 
+          SELECT 1 FROM wa_interactive_reminders r
+          WHERE r.status != 'failed' AND r.reference_table = 'clientinvoices' AND r.reference_id = ci.id
             AND r.scheduled_for >= CURDATE()
         )
       HAVING phone IS NOT NULL AND phone != ''
-    `);
+    `, [Math.max(0, Number(settings.payment_due_days_before ?? 1))]);
 
     for (const inv of rows) {
       // Same claim column the payment_due automation uses. Both run at 10:00
@@ -134,7 +135,7 @@ async function runPaymentDueInteractiveCheck() {
         continue;
       }
 
-      const msg = `Hi ${inv.name || inv.client_company}, reminder that invoice *INV-${inv.id}* is due for payment tomorrow (${new Date(inv.invoice_duedate).toLocaleDateString("en-IN")}). Please choose an option below:`;
+      const msg = `Hi ${inv.name || inv.client_company}, reminder that invoice *INV-${inv.id}* is due for payment on ${new Date(inv.invoice_duedate).toLocaleDateString("en-IN")}). Please choose an option below:`;
       await waConfirmation.sendInteractiveReminder({
         phone: inv.phone,
         contactName: inv.name || inv.client_company,
@@ -144,6 +145,7 @@ async function runPaymentDueInteractiveCheck() {
         refTable: "clientinvoices",
         refId: inv.id,
       })
+        .then((result) => { if (!result.success) throw new Error(result.error || "Reminder send failed"); })
         .catch((e) => {
           console.warn(`[WA Payment Due] Failed for invoice #${inv.id}:`, e.message);
           // Release the claim so the other path (or tomorrow) can pick it up.
@@ -179,8 +181,8 @@ async function runQuotationFollowupCheck() {
       WHERE (q.status = 'Pending' OR q.status IS NULL OR q.status = '')
         AND q.quotation_date = DATE_SUB(CURDATE(), INTERVAL 3 DAY)
         AND NOT EXISTS (
-          SELECT 1 FROM wa_interactive_reminders r 
-          WHERE r.reference_table = 'quotations' AND r.reference_id = q.id
+          SELECT 1 FROM wa_interactive_reminders r
+          WHERE r.status != 'failed' AND r.reference_table = 'quotations' AND r.reference_id = q.id
         )
       HAVING mobile_number IS NOT NULL AND mobile_number != ''
     `).catch(() => [[]]);
@@ -212,15 +214,15 @@ async function runAmcRenewalCheck() {
     const settings = settingsRows[0] || {};
     if (settings.amc_renewal_reminders_enabled === 0) return;
 
-    const daysBefore = settings.amc_renewal_days_before || 7;
+    const daysBefore = settings.amc_renewal_days_before ?? 7;
     const [contracts] = await db.promise().query(`
       SELECT c.id, c.contract_title, c.client_company, c.mobile_number, c.end_date
       FROM contracts c
       WHERE c.end_date = DATE_ADD(CURDATE(), INTERVAL ? DAY)
         AND c.mobile_number IS NOT NULL AND c.mobile_number != ''
         AND NOT EXISTS (
-          SELECT 1 FROM wa_interactive_reminders r 
-          WHERE r.reference_table = 'contracts' AND r.reference_id = c.id
+          SELECT 1 FROM wa_interactive_reminders r
+          WHERE r.status != 'failed' AND r.reference_table = 'contracts' AND r.reference_id = c.id
         )
     `, [daysBefore]).catch(() => [[]]);
 
@@ -249,19 +251,19 @@ let amcJob = null;
 function startInteractiveReminderSchedulers() {
   // Appointment reminders daily at 09:00 AM
   if (!appointmentJob) {
-    appointmentJob = schedule.scheduleJob("0 9 * * *", runAppointmentReminderCheck);
+    appointmentJob = schedule.scheduleJob({ rule: "0 9 * * *", tz: process.env.TZ || "Asia/Kolkata" }, runAppointmentReminderCheck);
   }
   // Payment Due reminders daily at 10:00 AM
   if (!paymentJob) {
-    paymentJob = schedule.scheduleJob("0 10 * * *", runPaymentDueInteractiveCheck);
+    paymentJob = schedule.scheduleJob({ rule: "0 10 * * *", tz: process.env.TZ || "Asia/Kolkata" }, runPaymentDueInteractiveCheck);
   }
   // Quotation followups daily at 11:30 AM
   if (!quoteJob) {
-    quoteJob = schedule.scheduleJob("30 11 * * *", runQuotationFollowupCheck);
+    quoteJob = schedule.scheduleJob({ rule: "30 11 * * *", tz: process.env.TZ || "Asia/Kolkata" }, runQuotationFollowupCheck);
   }
   // AMC renewal reminders daily at 12:00 PM
   if (!amcJob) {
-    amcJob = schedule.scheduleJob("0 12 * * *", runAmcRenewalCheck);
+    amcJob = schedule.scheduleJob({ rule: "0 12 * * *", tz: process.env.TZ || "Asia/Kolkata" }, runAmcRenewalCheck);
   }
 
   console.log("✅ [WA Reminder Schedulers] Initialized all 4 interactive confirmation schedulers (strict cron schedule)");

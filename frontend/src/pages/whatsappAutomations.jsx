@@ -11,6 +11,7 @@ import { API } from "../config/api";
 import WhatsAppNav from "../components/WhatsAppNav";
 import WhatsAppInteractiveReminders from "../components/WhatsAppInteractiveReminders";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
+import WAConditionEditor, { parseConditions } from "../components/WAConditionEditor";
 
 const TRIGGER_TYPES = [
   { value: "welcome_message", label: "Welcome Message", desc: "First inbound message / contact added", emoji: "👋" },
@@ -143,6 +144,7 @@ export default function WhatsAppAutomations() {
   });
 
   const [menuOptions, setMenuOptions] = useState([]);
+  const [conditions, setConditions] = useState({ match: "all", rules: [] });
   const [bulkToggling, setBulkToggling] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadingFollowupMedia, setUploadingFollowupMedia] = useState(false);
@@ -203,6 +205,7 @@ export default function WhatsAppAutomations() {
   };
 
   const openCreate = () => {
+    setConditions({ match: "all", rules: [] });
     setEditAutomation(null);
     setForm({
       name: "",
@@ -229,6 +232,7 @@ export default function WhatsAppAutomations() {
   };
 
   const openEdit = async (a) => {
+    setConditions(parseConditions(a.conditions));
     setEditAutomation(a);
     const hasSeq = Boolean(a.followup_message_text || a.followup_media_url || a.followup_template_id);
     const msgKind = a.template_id ? "template" : a.media_type && a.media_url ? "media" : "text";
@@ -303,6 +307,7 @@ export default function WhatsAppAutomations() {
       flow_id: form.flow_id || null,
       group_id: form.group_id || null,
       delay_minutes: parseInt(form.delay_minutes, 10) || 0,
+      conditions,
       is_active: form.is_active ? 1 : 0,
     };
 
@@ -1426,6 +1431,11 @@ export default function WhatsAppAutomations() {
               </div>
 
               {/* Cross-Module Linkages: Contact Group & Chatbot Flow */}
+              <WAConditionEditor value={conditions} onChange={setConditions} />
+              <label className="block text-sm space-y-1">
+                <span>Delay before sending (minutes)</span>
+                <input type="number" min="0" max="43200" className="hl-input w-full p-2" value={form.delay_minutes} onChange={(e) => setForm((f) => ({ ...f, delay_minutes: e.target.value }))} />
+              </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 hl-card">
                 <div>
                   <label className="hl-section-label block mb-1 flex items-center gap-1">

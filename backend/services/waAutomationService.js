@@ -38,15 +38,25 @@ async function lookupCrmDataByPhone(phone) {
 
   for (const [table, nameCol, companyCol, cityCol, addressCol, emailCol, phoneCol, serviceCol, agentCol, notesCol] of sources) {
     try {
+      const [columns] = db.isSqlite
+        ? await db.promise().query(`PRAGMA table_info(${table})`)
+        : await db.promise().query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?", [table]);
+      const available = new Set(columns.map((c) => c.COLUMN_NAME || c.column_name || c.name));
+      if (!available.has(phoneCol)) continue;
+      const selectColumn = (preferred, alias, alternatives = []) => {
+        const column = [preferred, ...alternatives].find((c) => c && available.has(c));
+        return column ? `${column} AS ${alias}` : null;
+      };
       const selectFields = [
-        nameCol ? `${nameCol} AS name` : null,
-        companyCol ? `${companyCol} AS company` : null,
-        cityCol ? `${cityCol} AS city` : null,
-        addressCol ? `${addressCol} AS address` : null,
-        emailCol ? `${emailCol} AS email` : null,
-        serviceCol ? `${serviceCol} AS service` : null,
-        agentCol ? `${agentCol} AS assigned_agent` : null,
-        notesCol ? `${notesCol} AS notes` : null,
+        selectColumn(nameCol, "name"),
+        selectColumn(companyCol, "company"),
+        selectColumn(cityCol, "city", ["city", "location_city"]),
+        selectColumn(addressCol, "address"),
+        selectColumn(emailCol, "email"),
+        selectColumn(serviceCol, "service", ["service", "service_name", "purpose"]),
+        selectColumn(agentCol, "assigned_agent", ["assigned_agent_name", "staff_name"]),
+        selectColumn(notesCol, "notes", ["notes", "remarks"]),
+        `${phoneCol} AS phone`,
       ].filter(Boolean).join(", ");
 
       const [rows] = await db.promise().query(
@@ -65,24 +75,24 @@ async function lookupCrmDataByPhone(phone) {
   if (lookupName) {
     try {
       const [invRows] = await db.promise().query(
-        `SELECT invoice_no, total_amount, due_date, status 
+        `SELECT *
          FROM clientinvoices 
-         WHERE client_company = ? OR customer_name = ? 
+         WHERE client_company = ?
          ORDER BY id DESC LIMIT 1`,
-        [lookupName, lookupName]
+        [lookupName]
       );
       if (invRows && invRows[0]) {
-        profile.invoice_no = invRows[0].invoice_no;
-        profile.invoice_amount = invRows[0].total_amount;
-        profile.amount = invRows[0].total_amount;
-        profile.due_date = invRows[0].due_date;
+        profile.invoice_no = invRows[0].invoice_no || `INV-${invRows[0].id}`;
+        profile.invoice_amount = invRows[0].total_amount ?? invRows[0].grand_total;
+        profile.amount = profile.invoice_amount;
+        profile.due_date = invRows[0].due_date || invRows[0].invoice_duedate;
         profile.invoice_status = invRows[0].status;
       }
     } catch (_) {}
 
     try {
       const [amcRows] = await db.promise().query(
-        `SELECT contract_title, total_amount, start_date, end_date, status 
+        `SELECT *
          FROM contracts 
          WHERE client_company = ? 
          ORDER BY id DESC LIMIT 1`,
@@ -144,7 +154,7 @@ function resolveSpintax(text, injectMicroJitter = true) {
 }
 
 // Substitutes multi-dynamic {{placeholder}}, {placeholder}, and %placeholder% tokens in a message
-function formatMessagePlaceholders(templateText, contactName, data = {}) {
+function formatMessagePlaceholders(templateText, contactName, data = {}, options = {}) {
   let msg = templateText || "Hello {{name}}!";
   const rawName = contactName || data.name || data.customer_name || data.client_name || data.company_name || data.company || "Customer";
   const nameParts = (rawName || "").trim().split(/\s+/);
@@ -162,7 +172,8 @@ function formatMessagePlaceholders(templateText, contactName, data = {}) {
 
   // Hour in IST for smart greeting
   const istHourStr = now.toLocaleTimeString("en-IN", { hour: "numeric", hour12: false, timeZone: istTz });
-  const currentHour = parseInt(istHourStr, 10) || now.getHours();
+  const parsedHour = parseInt(istHourStr, 10);
+  const currentHour = Number.isFinite(parsedHour) ? parsedHour : now.getHours();
   let greetingTime = "Hello";
   if (currentHour < 12) greetingTime = "Good morning";
   else if (currentHour < 17) greetingTime = "Good afternoon";
@@ -181,8 +192,8 @@ function formatMessagePlaceholders(templateText, contactName, data = {}) {
   const dateTimeStr = `${formattedDate}, ${formattedTime}`;
   const tomorrowDateTimeStr = `${tomorrowFormatted}, ${formattedTime}`;
 
-  const amountVal = data.amount || data.total_amount || data.invoice_amount || data.balance || "";
-  const formattedAmount = amountVal ? (String(amountVal).startsWith("₹") ? String(amountVal) : `₹${amountVal}`) : "";
+  const amountVal = data.amount ?? data.total_amount ?? data.invoice_amount ?? data.balance ?? "";
+  const formattedAmount = amountVal !== "" ? (String(amountVal).startsWith("₹") ? String(amountVal) : `₹${amountVal}`) : "";
 
   const known = {
     // 👤 Contact Person & Customer
@@ -370,6 +381,19 @@ function formatMessagePlaceholders(templateText, contactName, data = {}) {
     const dotNormalized = rawLower.replace(/[\s\-]+/g, ".").replace(/\.+/g, ".");
     const underscoreNormalized = rawLower.replace(/\./g, "_");
 
+    // Explicit custom/event values take precedence over built-in defaults.
+    // Monetary aliases retain their currency formatting below.
+    const amountKeys = new Set(["amount", "total_amount", "invoice_amount", "balance", "due_amount"]);
+    if (!amountKeys.has(normalizedKey)) {
+      const deepValue = require("./waRuleConditions").fieldValue(data, rawTrimmed);
+      if (deepValue != null && deepValue !== "") return String(deepValue);
+      for (const key of [rawLower, normalizedKey, dotNormalized, underscoreNormalized]) {
+        if (Object.prototype.hasOwnProperty.call(dataLookup, key) && dataLookup[key] != null && dataLookup[key] !== "") {
+          return String(dataLookup[key]);
+        }
+      }
+    }
+
     // Exact match in known
     if (Object.prototype.hasOwnProperty.call(known, rawLower) && known[rawLower] !== "") {
       return String(known[rawLower]);
@@ -426,7 +450,7 @@ function formatMessagePlaceholders(templateText, contactName, data = {}) {
   });
 
   // 2. Resolve Spintax dynamic text choices [Option 1|Option 2] and {Option 1|Option 2}
-  return resolveSpintax(resolved);
+  return options.spintaxEnabled === false ? resolved : resolveSpintax(resolved, false);
 }
 
 function buildTemplateBodyComponent(templateBody, contactName, data = {}) {
@@ -489,7 +513,8 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
   // message handler, lead capture, the webhook), and any overlap used to send
   // the customer the same automation twice. Keyed on rule + contact + trigger
   // with a short TTL, so a genuinely new event still gets through.
-  const dedupeKey = opts.dedupeKey || `${triggerType}:${cleanPhone.slice(-10)}`;
+  const eventId = eventInfo.eventId ?? data.event_id ?? data.payment_id ?? data.quotation_id ?? data.invoice_id ?? data.lead_id ?? data.reference_id ?? data.invoice_no ?? data.quotation_no ?? data.reference_no;
+  const dedupeKey = opts.dedupeKey || `${triggerType}:${cleanPhone.slice(-10)}${eventId != null ? `:${eventId}` : ""}`;
   if (!claimAutomationDedupe(dedupeKey)) {
     console.log(`♻️ [WA Automation] Skipped duplicate '${triggerType}' for ${cleanPhone} (already fired recently).`);
     return { success: true, count: 0, reason: "duplicate_suppressed" };
@@ -544,11 +569,13 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
     // (e.g. invoice_no) always wins over the generic lookup.
     const crmData = await lookupCrmDataByPhone(cleanPhone).catch(() => ({}));
     const mergedData = { ...crmData, ...data };
-    const resolvedName = contactName || crmData.name || null;
+    const resolvedName = contactName || data.name || data.customer_name || crmData.name || null;
 
     console.log(`⚡ [WA Automation] Trigger '${triggerType}' matched ${rules.length} rule(s) for ${cleanPhone}`);
 
+    let triggeredCount = 0;
     for (const rule of rules) {
+      if (!require("./waRuleConditions").matchesConditions(rule.conditions, { ...mergedData, phone: cleanPhone, name: resolvedName })) continue;
       const rawText = rule.message_text || rule.template_body || "Hello {name}! Thank you for reaching out.";
       const messageText = formatMessagePlaceholders(rawText, resolvedName, mergedData);
 
@@ -571,16 +598,24 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
 
         // Fast path: fire in-process so short delays stay punctual. The claim
         // below makes this safe against the sweeper picking up the same row.
-        setTimeout(() => {
-          runScheduledAutomation(logId, rule, cleanPhone, resolvedName, messageText, mergedData).catch(() => {});
-        }, rule.delay_minutes * 60 * 1000);
+        const delayMs = rule.delay_minutes * 60 * 1000;
+        // Node timers overflow beyond ~24.8 days; the durable sweeper handles those.
+        if (delayMs <= 2147483647) {
+          const timer = setTimeout(() => {
+            runScheduledAutomation(logId, rule, cleanPhone, resolvedName, messageText, mergedData).catch(() => {});
+          }, delayMs);
+          timer.unref?.();
+        }
       } else {
         // Execute immediately
-        await executeAutomationSend(rule, cleanPhone, resolvedName, messageText, mergedData);
+        const result = await executeAutomationSend(rule, cleanPhone, resolvedName, messageText, mergedData);
+        if (!result?.success) continue;
       }
+      triggeredCount++;
     }
 
-    return { success: true, triggeredCount: rules.length };
+    if (!triggeredCount) automationDedupeStore.delete(dedupeKey);
+    return { success: triggeredCount > 0, count: triggeredCount, triggeredCount, reason: triggeredCount ? undefined : "no_rules_dispatched" };
   } catch (err) {
     console.error(`❌ [WA Automation] Error handling '${triggerType}':`, err.message);
     return { success: false, error: err.message };
@@ -600,7 +635,10 @@ async function runScheduledAutomation(logId, rule, cleanPhone, contactName, mess
   if (!claim.affectedRows) return false; // already handled elsewhere
 
   try {
-    await executeAutomationSend(rule, cleanPhone, contactName, messageText, data);
+    const [current] = await db.promise().query("SELECT is_active FROM wa_automations WHERE id = ?", [rule.id]);
+    if (!current[0]?.is_active) throw new Error("Automation was paused or deleted before dispatch.");
+    const result = await executeAutomationSend(rule, cleanPhone, contactName, messageText, data);
+    if (!result?.success) throw new Error(result?.error || "Automation send failed.");
     await db.promise().query("UPDATE wa_automation_logs SET status = 'sent' WHERE id = ?", [logId]);
     return true;
   } catch (err) {
@@ -998,11 +1036,21 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
   const activeSessionKey = actualSessionKey || waService.defaultKey;
 
   let sentResult = null;
+  let sendError = null;
   const sendTarget = (actualTargetChatId && actualTargetChatId.includes("@lid")) ? actualTargetChatId : cleanPhone;
   const chatId = actualTargetChatId || `${cleanPhone}@c.us`;
 
   try {
     // ── STEP 1: Main Message Send (Template, Rich Media, or Text) ──────────────
+    const [optedOut] = await db.promise().query(
+      "SELECT id FROM wa_opt_outs WHERE phone = ? OR phone LIKE ? LIMIT 1",
+      [cleanPhone, `%${cleanPhone.slice(-10)}`]
+    );
+    const [blocked] = await db.promise().query(
+      "SELECT id FROM wa_contacts WHERE (phone = ? OR phone LIKE ?) AND (is_blocked = 1 OR is_unsubscribed = 1) LIMIT 1",
+      [cleanPhone, `%${cleanPhone.slice(-10)}`]
+    );
+    if (optedOut.length || blocked.length) throw new Error("Contact opted out, unsubscribed, or is blocked.");
     if (rule.template_name) {
       const bodyComponent = buildTemplateBodyComponent(rule.template_body, contactName, actualData);
       sentResult = await waLoadBalancer.sendTemplateMessage(sendTarget, rule.template_name, "en", bodyComponent ? [bodyComponent] : [], activeSessionKey);
@@ -1093,7 +1141,7 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
         const [flowRows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? AND status = 'active' LIMIT 1", [rule.flow_id]);
         if (flowRows.length > 0) {
           const waFlowEngine = require("./waFlowEngine");
-          await waFlowEngine.startFlowRun(flowRows[0], cleanPhone, activeSessionKey, "", actualTargetChatId);
+          await waFlowEngine.startFlowRun(flowRows[0], cleanPhone, activeSessionKey, "", actualTargetChatId, { ...actualData, automation_id: rule.id });
           console.log(`🤖 [WA Automation] Triggered Chatbot Flow "${flowRows[0].name}" for ${cleanPhone}`);
         }
       } catch (flowErr) {
@@ -1193,6 +1241,7 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
       [rule.id, cleanPhone, contactName || null, JSON.stringify(actualData), sendError]
     ).catch(() => {});
   }
+  return { success: !sendError, error: sendError || undefined, result: sentResult };
 }
 
 module.exports = {
