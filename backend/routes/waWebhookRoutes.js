@@ -54,10 +54,10 @@ if (!process.env.WA_APP_SECRET && !ALLOW_UNSIGNED) {
 }
 
 function isValidSignature(req) {
-  const appSecret = process.env.WA_APP_SECRET;
-  if (!appSecret) return ALLOW_UNSIGNED;
+  const appSecret = process.env.WA_APP_SECRET || wa.appSecret;
+  if (!appSecret) return ALLOW_UNSIGNED || !req.headers["x-hub-signature-256"];
   const signature = req.headers["x-hub-signature-256"];
-  if (!signature || !req.rawBody) return false;
+  if (!signature || !req.rawBody) return ALLOW_UNSIGNED;
   const expected = "sha256=" + crypto.createHmac("sha256", appSecret).update(req.rawBody).digest("hex");
   const sigBuf = Buffer.from(signature);
   const expBuf = Buffer.from(expected);
@@ -147,6 +147,13 @@ async function handleIncomingMessage(msg, metadata, contacts = []) {
   // tap is queryable ("who tapped quote_view?") without parsing raw payloads.
   let interaction = null;
 
+  const isMediaMsg = ["image", "video", "audio", "document", "sticker", "voice"].includes(msg.type);
+  const mediaObj = isMediaMsg ? msg[msg.type] : null;
+  const cloudMediaId = mediaObj?.id || null;
+  const mediaFilename = mediaObj?.filename || (isMediaMsg ? `${msg.type}_${msgId}` : null);
+  const mediaMimeType = mediaObj?.mime_type || null;
+  const mediaCaption = mediaObj?.caption || "";
+
   if (msg.type === "text") {
     messageText = msg.text.body;
   } else if (msg.type === "interactive") {
@@ -169,24 +176,44 @@ async function handleIncomingMessage(msg, metadata, contacts = []) {
         `👆 [WA Interactive] ${interaction.type} from +${phone}: actionId="${interaction.actionId}" title="${interaction.title}" msgId=${msgId}`
       );
     }
+  } else if (isMediaMsg) {
+    messageType = msg.type;
+    messageText = mediaCaption || mediaFilename || `📎 Attachment (${msg.type})`;
   } else {
     messageType = msg.type;
     messageText = msg[msg.type]?.caption || msg[msg.type]?.id || "";
   }
 
   await db.promise().query(
-    `INSERT INTO wa_message_logs (phone, direction, message_type, message_text, wa_message_id, status, metadata, interactive_payload, created_at)
-     VALUES (?, 'inbound', ?, ?, ?, 'delivered', ?, ?, ?)`,
-    [phone, messageType, messageText, msgId, JSON.stringify(msg), interaction ? JSON.stringify(interaction) : null, timestamp]
-  );
+    `INSERT INTO wa_message_logs (phone, direction, message_type, message_text, wa_message_id, status, metadata, interactive_payload, has_media, media_mime_type, media_filename, created_at)
+     VALUES (?, 'inbound', ?, ?, ?, 'delivered', ?, ?, ?, ?, ?, ?)`,
+    [
+      phone,
+      messageType,
+      messageText,
+      msgId,
+      JSON.stringify(msg),
+      interaction ? JSON.stringify(interaction) : null,
+      isMediaMsg ? 1 : 0,
+      mediaMimeType,
+      mediaFilename,
+      timestamp,
+    ]
+  ).catch(async () => {
+    await db.promise().query(
+      `INSERT INTO wa_message_logs (phone, direction, message_type, message_text, wa_message_id, status, metadata, interactive_payload, created_at)
+       VALUES (?, 'inbound', ?, ?, ?, 'delivered', ?, ?, ?)`,
+      [phone, messageType, messageText, msgId, JSON.stringify(msg), interaction ? JSON.stringify(interaction) : null, timestamp]
+    ).catch(() => {});
+  });
 
   // (the wa_webhook_events row was already written by claimEvent above)
 
   // Emit socket event for real-time live chat update
   const chatId = `${phone}@c.us`;
   try {
-    const wa = require("../services/whatsappService").default();
-    delete wa.messagesFetchCache[chatId];
+    const waService = require("../services/whatsappService").default();
+    delete waService.messagesFetchCache[chatId];
   } catch (_) {}
   try {
     const app = require("../server");
@@ -202,11 +229,42 @@ async function handleIncomingMessage(msg, metadata, contacts = []) {
           timestamp: Math.floor(timestamp.getTime() / 1000),
           isMe: false,
           type: messageType,
-          hasMedia: messageType !== "text" && messageType !== "interactive",
+          hasMedia: isMediaMsg,
+          filename: mediaFilename || "",
+          mimetype: mediaMimeType || "",
         },
       });
     }
   } catch (_) {}
+
+  // Eager background media download for Meta Cloud attachments
+  if (cloudMediaId) {
+    (async () => {
+      try {
+        const downloaded = await wa.downloadMedia(cloudMediaId);
+        if (downloaded?.url) {
+          await db.promise().query(
+            "UPDATE wa_message_logs SET media_url = ?, media_filename = COALESCE(?, media_filename), media_mime_type = COALESCE(?, media_mime_type) WHERE wa_message_id = ?",
+            [downloaded.url, downloaded.filename || mediaFilename, downloaded.mimetype || mediaMimeType, msgId]
+          ).catch(() => {});
+
+          const app = require("../server");
+          const io = app.get && app.get("io");
+          if (io) {
+            io.emit("wa_message_updated", {
+              id: msgId,
+              serializedId: msgId,
+              mediaUrl: downloaded.url,
+              filename: downloaded.filename || mediaFilename,
+              mimetype: downloaded.mimetype || mediaMimeType,
+            });
+          }
+        }
+      } catch (dlErr) {
+        console.warn(`[WA Cloud Media] Background download failed for media ${cloudMediaId}:`, dlErr.message);
+      }
+    })();
+  }
 
   // Update contact last message in CRM
   await db.promise().query(
@@ -407,6 +465,27 @@ async function handleStatusUpdate(status) {
       }
     }
   }
+
+  // Real-time UI live tick update via Socket.io
+  const ackMap = { sent: 1, delivered: 2, read: 3, failed: -1 };
+  try {
+    const app = require("../server");
+    const io = app.get && app.get("io");
+    if (io) {
+      io.emit("wa_message_ack", {
+        phone,
+        message: {
+          id: msgId,
+          serializedId: msgId,
+          status: statusName,
+          ack: ackMap[statusName] || 1,
+        },
+      });
+      if (statusName === "read") {
+        io.emit("wa_chat_read", { phone, chatId: `${phone}@c.us` });
+      }
+    }
+  } catch (_) {}
 
   // (the wa_webhook_events row was already written by claimEvent above)
 }

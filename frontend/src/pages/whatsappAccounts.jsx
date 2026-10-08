@@ -151,6 +151,14 @@ export default function WhatsAppAccounts() {
   const [metaSaved, setMetaSaved] = useState(false);
   const [metaTestLoading, setMetaTestLoading] = useState(false);
   const [metaTestResult, setMetaTestResult] = useState(null);
+  const [showMetaToken, setShowMetaToken] = useState(false);
+  const [showMetaSecret, setShowMetaSecret] = useState(false);
+  const [metaSubscribeLoading, setMetaSubscribeLoading] = useState(false);
+  const [metaSubscribeResult, setMetaSubscribeResult] = useState(null);
+  const [metaDirectTestPhone, setMetaDirectTestPhone] = useState("");
+  const [metaDirectTestMsg, setMetaDirectTestMsg] = useState("Hello from Madhura CRM! 🚀 Meta Cloud API is verified and active.");
+  const [metaDirectTestLoading, setMetaDirectTestLoading] = useState(false);
+  const [metaDirectTestResult, setMetaDirectTestResult] = useState(null);
 
   // ── Welcome Auto-Reply Settings ──
   const [welcomeForm, setWelcomeForm] = useState({
@@ -212,7 +220,8 @@ export default function WhatsAppAccounts() {
           waba_id: cRes.data.config.waba_id || "",
           verify_token: cRes.data.config.verify_token || "crm_verify_123",
           business_account_id: cRes.data.config.business_account_id || "",
-          access_token: "••••••••••••••••",
+          access_token: cRes.data.config.has_access_token !== false && cRes.data.config.phone_number_id ? "••••••••••••••••" : "",
+          app_secret: cRes.data.config.has_app_secret ? "••••••••••••••••" : "",
         }));
       }
 
@@ -623,6 +632,49 @@ export default function WhatsAppAccounts() {
       });
     }
     setMetaTestLoading(false);
+  };
+
+  const handleSubscribeWebhook = async () => {
+    if (!metaForm.waba_id) {
+      alert("WABA Account ID is required to auto-subscribe webhooks. Please enter your WhatsApp Business Account ID.");
+      return;
+    }
+    setMetaSubscribeLoading(true);
+    setMetaSubscribeResult(null);
+    try {
+      const res = await axios.post(`${API}/api/wa/config/subscribe-webhook`, { waba_id: metaForm.waba_id }, { headers: headers() });
+      setMetaSubscribeResult({ success: true, message: res.data?.message || "App subscribed to Meta Webhooks successfully!" });
+    } catch (err) {
+      setMetaSubscribeResult({
+        success: false,
+        error: err.response?.data?.message || err.message,
+      });
+    }
+    setMetaSubscribeLoading(false);
+  };
+
+  const handleSendMetaDirectTest = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!metaDirectTestPhone.trim()) {
+      alert("Please enter a recipient phone number (e.g. 919876543210)");
+      return;
+    }
+    setMetaDirectTestLoading(true);
+    setMetaDirectTestResult(null);
+    try {
+      const res = await axios.post(
+        `${API}/api/wa/config/send-meta-test`,
+        { phone: metaDirectTestPhone.trim(), message: metaDirectTestMsg.trim() },
+        { headers: headers() }
+      );
+      setMetaDirectTestResult({ success: true, data: res.data });
+    } catch (err) {
+      setMetaDirectTestResult({
+        success: false,
+        error: err.response?.data?.message || err.message,
+      });
+    }
+    setMetaDirectTestLoading(false);
   };
 
   // ── Welcome Settings Actions ──
@@ -1714,36 +1766,90 @@ export default function WhatsAppAccounts() {
           {activeTab === "meta" && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 min-w-0">
               <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
+                {/* 1. Credentials Configuration */}
                 <div className="hl-card border p-4 sm:p-6 min-w-0">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b">
                     <div>
                       <h2 className="font-black text-base flex items-center gap-2">
-                        <Key size={18} className="" />
+                        <Key size={18} className="text-blue-500" />
                         <span>Meta Cloud API Credentials</span>
                       </h2>
                       <p className="hl-subtitle mt-0.5">
-                        Connect your official Meta WhatsApp Business Account (WABA) for official cloud messaging.
+                        Connect your official Meta WhatsApp Business Account (WABA) for official cloud messaging with verified badge and high throughput.
                       </p>
                     </div>
                     <span className="hl-badge hl-badge-info text-xs font-bold px-3 py-1 border">
-                      Official Meta API
+                      Official Meta Graph v22.0
                     </span>
                   </div>
 
                   {metaTestResult && (
                     <div
-                      className={`hl-badge mb-4 p-3.5 text-xs font-semibold flex items-center gap-2.5 ${
+                      className={`mb-4 p-4 rounded-xl border text-xs font-semibold ${
                         metaTestResult.success
-                          ? "hl-badge-success"
-                          : "hl-badge-error"
+                          ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100"
+                          : "bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-100"
                       }`}
                     >
-                      {metaTestResult.success ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-                      <div>
-                        <p className="font-bold">{metaTestResult.success ? "Connection Verified Successfully!" : "Connection Failed"}</p>
-                        <p className="text-[11px] mt-0.5">
-                          {metaTestResult.error || `Connected Number: ${metaTestResult.data?.phoneInfo?.display_phone_number || "Active"}`}
-                        </p>
+                      <div className="flex items-start gap-2.5">
+                        {metaTestResult.success ? (
+                          <CheckCircle2 size={20} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                        ) : (
+                          <AlertCircle size={20} className="text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                        )}
+                        <div className="flex-1 space-y-2">
+                          <div>
+                            <p className="font-bold text-sm">
+                              {metaTestResult.success ? "Meta Cloud Connection Verified Successfully!" : "Meta Connection Failed"}
+                            </p>
+                            <p className="text-[11px] opacity-90 mt-0.5">
+                              {metaTestResult.error || metaTestResult.data?.message || "Connected and ready for production messaging."}
+                            </p>
+                          </div>
+
+                          {metaTestResult.success && metaTestResult.data?.phoneInfo && (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-emerald-200 dark:border-emerald-800/50 text-[11px]">
+                              {metaTestResult.data.phoneInfo.verified_name && (
+                                <div className="p-2 bg-white/70 dark:bg-black/20 rounded-lg">
+                                  <span className="block opacity-70 text-[10px] uppercase font-bold">Verified Name</span>
+                                  <span className="font-bold">{metaTestResult.data.phoneInfo.verified_name}</span>
+                                </div>
+                              )}
+                              {metaTestResult.data.phoneInfo.display_phone_number && (
+                                <div className="p-2 bg-white/70 dark:bg-black/20 rounded-lg">
+                                  <span className="block opacity-70 text-[10px] uppercase font-bold">Display Phone</span>
+                                  <span className="font-mono font-bold">{metaTestResult.data.phoneInfo.display_phone_number}</span>
+                                </div>
+                              )}
+                              {metaTestResult.data.phoneInfo.quality_rating && (
+                                <div className="p-2 bg-white/70 dark:bg-black/20 rounded-lg">
+                                  <span className="block opacity-70 text-[10px] uppercase font-bold">Quality Rating</span>
+                                  <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                                    ● {metaTestResult.data.phoneInfo.quality_rating}
+                                  </span>
+                                </div>
+                              )}
+                              {metaTestResult.data.phoneInfo.messaging_limit_tier && (
+                                <div className="p-2 bg-white/70 dark:bg-black/20 rounded-lg">
+                                  <span className="block opacity-70 text-[10px] uppercase font-bold">Limit Tier</span>
+                                  <span className="font-bold">{metaTestResult.data.phoneInfo.messaging_limit_tier}</span>
+                                </div>
+                              )}
+                              {metaTestResult.data.phoneInfo.code_verification_status && (
+                                <div className="p-2 bg-white/70 dark:bg-black/20 rounded-lg">
+                                  <span className="block opacity-70 text-[10px] uppercase font-bold">OTP Status</span>
+                                  <span className="font-bold">{metaTestResult.data.phoneInfo.code_verification_status}</span>
+                                </div>
+                              )}
+                              {typeof metaTestResult.data.templateCount === "number" && (
+                                <div className="p-2 bg-white/70 dark:bg-black/20 rounded-lg">
+                                  <span className="block opacity-70 text-[10px] uppercase font-bold">Templates</span>
+                                  <span className="font-bold">{metaTestResult.data.templateCount} Templates Active</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1758,17 +1864,28 @@ export default function WhatsAppAccounts() {
                         placeholder="e.g. 104857392019485"
                         className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                       />
+                      <span className="text-[10px] opacity-60 mt-1 block">Found in Meta App → WhatsApp → API Setup</span>
                     </div>
 
                     <div>
                       <label className="hl-section-label block mb-1">Permanent Access Token *</label>
-                      <input
-                        type="password"
-                        value={metaForm.access_token}
-                        onChange={(e) => setMetaForm({ ...metaForm, access_token: e.target.value })}
-                        placeholder="EAA..."
-                        className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                      />
+                      <div className="relative">
+                        <input
+                          type={showMetaToken ? "text" : "password"}
+                          value={metaForm.access_token}
+                          onChange={(e) => setMetaForm({ ...metaForm, access_token: e.target.value })}
+                          placeholder="EAA..."
+                          className="w-full pl-3.5 pr-10 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowMetaToken(!showMetaToken)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {showMetaToken ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      </div>
+                      <span className="text-[10px] opacity-60 mt-1 block">Meta System User Token with whatsapp_business_messaging</span>
                     </div>
 
                     <div>
@@ -1780,9 +1897,31 @@ export default function WhatsAppAccounts() {
                         placeholder="e.g. 102938475610293"
                         className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                       />
+                      <span className="text-[10px] opacity-60 mt-1 block">WhatsApp Business Account ID for templates & webhook subscribe</span>
                     </div>
 
                     <div>
+                      <label className="hl-section-label block mb-1">Meta App Secret (HMAC Webhook Security)</label>
+                      <div className="relative">
+                        <input
+                          type={showMetaSecret ? "text" : "password"}
+                          value={metaForm.app_secret}
+                          onChange={(e) => setMetaForm({ ...metaForm, app_secret: e.target.value })}
+                          placeholder="Meta App Secret..."
+                          className="w-full pl-3.5 pr-10 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowMetaSecret(!showMetaSecret)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {showMetaSecret ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      </div>
+                      <span className="text-[10px] opacity-60 mt-1 block">Found in Meta App → Basic Settings → App Secret</span>
+                    </div>
+
+                    <div className="sm:col-span-2">
                       <label className="hl-section-label block mb-1">Webhook Verify Token</label>
                       <div className="flex items-center gap-2">
                         <input
@@ -1794,30 +1933,58 @@ export default function WhatsAppAccounts() {
                         <button
                           type="button"
                           onClick={() => copyToClipboard(metaForm.verify_token, "token")}
-                          className="px-3 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl transition text-xs font-bold shrink-0"
+                          className="px-3.5 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl transition text-xs font-bold shrink-0 flex items-center gap-1.5"
                         >
-                          {copiedToken ? <Check size={14} className="" /> : <Copy size={14} />}
+                          {copiedToken ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                          <span>{copiedToken ? "Copied" : "Copy"}</span>
                         </button>
                       </div>
                     </div>
                   </div>
 
-                  {/* Webhook URL Helper */}
-                  <div className="hl-card mt-4 p-4 border text-xs space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold">Meta Webhook Callback URL:</span>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(webhookUrl, "webhook")}
-                        className="flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"
-                      >
-                        {copiedWebhook ? <Check size={12} /> : <Copy size={12} />}
-                        <span>{copiedWebhook ? "Copied!" : "Copy URL"}</span>
-                      </button>
+                  {/* Webhook Configuration Guide */}
+                  <div className="hl-card mt-5 p-4 border rounded-xl text-xs space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Webhook size={16} className="text-blue-500" />
+                        <span className="font-bold">Meta Webhook Callback URL:</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(webhookUrl, "webhook")}
+                          className="flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"
+                        >
+                          {copiedWebhook ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                          <span>{copiedWebhook ? "Copied URL!" : "Copy Webhook URL"}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSubscribeWebhook}
+                          disabled={metaSubscribeLoading || !metaForm.waba_id}
+                          className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg text-[10px] font-bold transition flex items-center gap-1 disabled:opacity-50"
+                        >
+                          {metaSubscribeLoading ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
+                          <span>Auto-Subscribe Webhook to WABA</span>
+                        </button>
+                      </div>
                     </div>
-                    <code className="hl-id hl-card block p-2 border font-mono text-[11px] select-all overflow-x-auto">
+                    <code className="hl-id hl-card block p-2.5 border font-mono text-[11px] select-all overflow-x-auto">
                       {webhookUrl}
                     </code>
+
+                    {metaSubscribeResult && (
+                      <div
+                        className={`p-2.5 rounded-lg border text-[11px] flex items-center gap-2 ${
+                          metaSubscribeResult.success
+                            ? "bg-emerald-50 border-emerald-300 text-emerald-800"
+                            : "bg-rose-50 border-rose-300 text-rose-800"
+                        }`}
+                      >
+                        {metaSubscribeResult.success ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+                        <span>{metaSubscribeResult.message || metaSubscribeResult.error}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t">
@@ -1842,23 +2009,142 @@ export default function WhatsAppAccounts() {
                     </button>
                   </div>
                 </div>
+
+                {/* 2. Direct Meta WhatsApp Test Dispatcher */}
+                <div className="hl-card border p-4 sm:p-6 min-w-0 space-y-4 text-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-3 border-b">
+                    <div>
+                      <h3 className="font-black text-sm flex items-center gap-2">
+                        <Send size={16} className="text-emerald-500" />
+                        <span>Instant Meta WhatsApp Test Dispatcher</span>
+                      </h3>
+                      <p className="hl-subtitle mt-0.5">
+                        Send a live WhatsApp test message directly through Meta Cloud API to verify real outbound handset delivery.
+                      </p>
+                    </div>
+                    <span className="hl-badge hl-badge-success text-[10px] font-bold px-2 py-0.5">
+                      Live Delivery Check
+                    </span>
+                  </div>
+
+                  <form onSubmit={handleSendMetaDirectTest} className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="hl-section-label block mb-1">Recipient Phone *</label>
+                        <input
+                          type="text"
+                          value={metaDirectTestPhone}
+                          onChange={(e) => setMetaDirectTestPhone(e.target.value)}
+                          placeholder="e.g. 919876543210"
+                          className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="hl-section-label block mb-1">Message Body</label>
+                        <input
+                          type="text"
+                          value={metaDirectTestMsg}
+                          onChange={(e) => setMetaDirectTestMsg(e.target.value)}
+                          placeholder="Hello from Madhura CRM!"
+                          className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <p className="text-[11px] opacity-70">
+                        Include country code without leading plus (e.g. 91 for India).
+                      </p>
+                      <button
+                        type="submit"
+                        disabled={metaDirectTestLoading || !metaDirectTestPhone.trim()}
+                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {metaDirectTestLoading ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                        <span>{metaDirectTestLoading ? "Sending to Handset..." : "Send Test WhatsApp"}</span>
+                      </button>
+                    </div>
+                  </form>
+
+                  {metaDirectTestResult && (
+                    <div
+                      className={`p-3.5 rounded-xl border text-xs font-semibold ${
+                        metaDirectTestResult.success
+                          ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100"
+                          : "bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-100"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {metaDirectTestResult.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                        <span>
+                          {metaDirectTestResult.success
+                            ? "WhatsApp message dispatched successfully via Meta Cloud API!"
+                            : metaDirectTestResult.error}
+                        </span>
+                      </div>
+                      {metaDirectTestResult.data?.metaMessageId && (
+                        <div className="mt-1.5 pl-6 font-mono text-[11px] opacity-80">
+                          Meta Message ID: {metaDirectTestResult.data.metaMessageId}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Meta Account Status Card */}
-              <div className="space-y-6">
-                <div className="hl-card border p-5 text-xs">
-                  <h3 className="font-bold mb-3 flex items-center gap-2">
-                    <ShieldCheck size={18} className="" />
-                    <span>Meta Account Quality Status</span>
+              {/* Meta Account Status Card & Setup Guide */}
+              <div className="space-y-4 sm:space-y-6">
+                <div className="hl-card border p-5 text-xs space-y-4">
+                  <h3 className="font-bold flex items-center gap-2">
+                    <ShieldCheck size={18} className="text-emerald-500" />
+                    <span>Meta Account Quality & Tier</span>
                   </h3>
-                  <div className={`hl-card p-4 ${qualityInfo.bg} mb-4`}>
-                    <span className={`${qualityInfo.badge}`}>
-                      {qualityInfo.label}
-                    </span>
-                    <p className="text-[11px] mt-2">
-                      Messaging Tier 1: 1,000 business-initiated conversations / 24 hours.
+
+                  <div className={`hl-card p-4 border rounded-xl ${qualityInfo.bg} space-y-2`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold">Quality Status:</span>
+                      <span className={qualityInfo.badge}>{qualityInfo.label}</span>
+                    </div>
+                    <p className="text-[11px] opacity-80">
+                      High quality rating ensures your messages are delivered reliably without rate throttling.
                     </p>
                   </div>
+
+                  <div className="space-y-2 pt-2 border-t">
+                    <span className="font-bold block">Meta Connection Checklist:</span>
+                    <ul className="space-y-2 text-[11px] opacity-90">
+                      <li className="flex items-center gap-2">
+                        <CheckCircle2 size={14} className={metaForm.phone_number_id ? "text-emerald-500" : "text-gray-300"} />
+                        <span>Phone Number ID configured</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <CheckCircle2 size={14} className={metaForm.access_token ? "text-emerald-500" : "text-gray-300"} />
+                        <span>Permanent System Token provided</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <CheckCircle2 size={14} className={metaForm.waba_id ? "text-emerald-500" : "text-gray-300"} />
+                        <span>WABA ID configured for templates</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <CheckCircle2 size={14} className={metaForm.app_secret ? "text-emerald-500" : "text-gray-300"} />
+                        <span>App Secret set for HMAC verification</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="hl-card border p-5 text-xs space-y-3">
+                  <h4 className="font-bold flex items-center gap-2">
+                    <Globe size={16} className="text-blue-500" />
+                    <span>Meta Developer Portal Guide</span>
+                  </h4>
+                  <ol className="list-decimal list-inside space-y-2 text-[11px] opacity-80">
+                    <li>Go to developers.facebook.com → My Apps</li>
+                    <li>Select your WhatsApp App → Configuration</li>
+                    <li>Paste Webhook Callback URL & Verify Token</li>
+                    <li>Subscribe to the <span className="font-mono font-bold">messages</span> field</li>
+                    <li>Click Verify and Save in Meta Developer Console</li>
+                  </ol>
                 </div>
               </div>
             </div>

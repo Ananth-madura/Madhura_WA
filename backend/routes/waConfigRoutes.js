@@ -18,14 +18,22 @@ router.get("/user-config", verifyToken, async (req, res) => {
   const userId = req.user.id;
   try {
     const [rows] = await db.promise().query(
-      "SELECT id, phone_number_id, waba_id, verify_token, business_account_id, is_enabled FROM user_wa_configs WHERE user_id = ?",
+      "SELECT id, phone_number_id, waba_id, verify_token, business_account_id, is_enabled, app_secret, access_token FROM user_wa_configs WHERE user_id = ?",
       [userId]
     );
     if (!rows.length) return res.json({ hasConfig: false });
+    const row = rows[0];
     res.json({
       hasConfig: true,
       config: {
-        ...rows[0],
+        id: row.id,
+        phone_number_id: row.phone_number_id,
+        waba_id: row.waba_id,
+        verify_token: row.verify_token,
+        business_account_id: row.business_account_id,
+        is_enabled: row.is_enabled,
+        has_app_secret: Boolean(row.app_secret),
+        has_access_token: Boolean(row.access_token),
         display_phone_number: wa.displayPhoneNumber || null,
         verified_name: wa.verifiedName || null,
       },
@@ -124,7 +132,7 @@ router.post("/test-connection", verifyToken, async (req, res) => {
   let { phone_number_id, access_token, waba_id } = req.body;
 
   if (!phone_number_id) {
-    return res.status(400).json({ message: "Phone Number ID is required" });
+    return res.status(400).json({ success: false, message: "Phone Number ID is required" });
   }
 
   if (!access_token || access_token === "••••••••••••••••") {
@@ -135,23 +143,91 @@ router.post("/test-connection", verifyToken, async (req, res) => {
     if (existing.length && existing[0].access_token) {
       access_token = decrypt(existing[0].access_token);
     } else {
-      return res.status(400).json({ message: "Access Token is required" });
+      return res.status(400).json({ success: false, message: "Access Token is required" });
     }
   }
 
   try {
+    const result = await wa.testCredentials(phone_number_id, access_token, waba_id);
     wa.phoneNumberId = phone_number_id.trim();
     wa.accessToken = access_token.trim();
     wa.wabaId = waba_id?.trim() || "";
+    if (result.phoneInfo?.display_phone_number) wa.displayPhoneNumber = result.phoneInfo.display_phone_number;
+    if (result.phoneInfo?.verified_name) wa.verifiedName = result.phoneInfo.verified_name;
 
-    const phoneInfo = await wa.getPhoneNumberInfo();
-    wa.displayPhoneNumber = phoneInfo?.display_phone_number || "";
-    wa.verifiedName = phoneInfo?.verified_name || "";
-    res.json({ success: true, message: "Connection verified!", phoneInfo });
+    res.json({
+      success: true,
+      message: "Meta Cloud API connection verified successfully!",
+      phoneInfo: result.phoneInfo,
+      businessProfile: result.businessProfile,
+      wabaInfo: result.wabaInfo,
+      templateCount: result.templateCount,
+    });
   } catch (err) {
     await configureForUser(userId).catch(() => resetToEnvConfig());
-    const errMsg = err.response?.data?.error?.message || err.message;
+    const errMsg = err.message || "Meta API connection failed";
     res.status(400).json({ success: false, message: `Connection failed: ${errMsg}` });
+  }
+});
+
+router.post("/subscribe-webhook", verifyToken, async (req, res) => {
+  const userId = req.user.id;
+  let { waba_id } = req.body;
+  try {
+    await configureForUser(userId);
+    const targetWabaId = waba_id || wa.wabaId;
+    if (!targetWabaId) {
+      return res.status(400).json({ success: false, message: "WABA ID is required to auto-subscribe webhooks" });
+    }
+    const result = await wa.subscribeWabaApp(targetWabaId);
+    res.json({
+      success: true,
+      message: "Successfully subscribed Meta WABA app to Webhooks!",
+      result,
+    });
+  } catch (err) {
+    const errMsg = err.message || "Failed to subscribe webhook";
+    res.status(400).json({ success: false, message: `Webhook subscription failed: ${errMsg}` });
+  }
+});
+
+router.post("/send-meta-test", verifyToken, async (req, res) => {
+  const userId = req.user.id;
+  const { phone, message } = req.body;
+  if (!phone) {
+    return res.status(400).json({ success: false, message: "Recipient phone number is required" });
+  }
+
+  try {
+    await configureForUser(userId);
+    if (!wa.isConfigured()) {
+      return res.status(400).json({
+        success: false,
+        message: "Meta WhatsApp Cloud API is not configured. Please save credentials first.",
+      });
+    }
+
+    const testMsg = message || `Hello! 🚀 This is a live test message from Madhura CRM via Meta WhatsApp Cloud API. Sent at ${new Date().toLocaleTimeString()}.`;
+    const sendRes = await wa.testSend(phone, testMsg);
+    const metaMessageId = sendRes?.messages?.[0]?.id || "sent";
+
+    // Log outbound message in database
+    const cleanPhone = String(phone).replace(/\D/g, "");
+    await db.promise().query(
+      `INSERT INTO wa_message_logs (phone, direction, message_type, message_text, wa_message_id, status, created_at)
+       VALUES (?, 'outbound', 'text', ?, ?, 'sent', NOW())`,
+      [cleanPhone, testMsg, metaMessageId]
+    ).catch(() => {});
+
+    res.json({
+      success: true,
+      message: "Test message sent successfully via Meta Cloud API!",
+      metaMessageId,
+      recipient: cleanPhone,
+    });
+  } catch (err) {
+    const errMsg = err.message || "Failed to send test message";
+    res.status(400).json({ success: false, message: `Send test failed: ${errMsg}` });
   }
 });
 
@@ -167,11 +243,11 @@ router.post("/test-template", verifyToken, async (req, res) => {
     wa.wabaId = waba_id;
 
     const templates = await wa.getTemplates();
-    resetToEnvConfig();
+    await configureForUser(userId).catch(() => resetToEnvConfig());
     res.json({ success: true, templateCount: templates.data?.length || 0 });
   } catch (err) {
-    resetToEnvConfig();
-    const errMsg = err.response?.data?.error?.message || err.message;
+    await configureForUser(userId).catch(() => resetToEnvConfig());
+    const errMsg = err.message || "Template fetch failed";
     res.status(400).json({ success: false, message: `Template fetch failed: ${errMsg}` });
   }
 });
@@ -248,7 +324,7 @@ router.post("/test-interactive", verifyToken, async (req, res) => {
     const errMsg = err.response?.data?.error?.message || err.message;
     res.status(400).json({ success: false, message: errMsg });
   } finally {
-    resetToEnvConfig();
+    await configureForUser(req.user.id).catch(() => resetToEnvConfig());
   }
 });
 

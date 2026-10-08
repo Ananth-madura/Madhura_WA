@@ -27,9 +27,9 @@ export default function WAConfigPrompt({ onClose }) {
         if (data.hasConfig && data.config) {
           const c = data.config;
           setPhoneNumberId(c.phone_number_id || "");
-          setAccessToken("••••••••••••••••");
+          setAccessToken(c.has_access_token !== false && c.phone_number_id ? "••••••••••••••••" : "");
           setWabaId(c.waba_id || "");
-          setAppSecret(c.app_secret ? "••••••••••••••••" : "");
+          setAppSecret(c.has_app_secret || c.app_secret ? "••••••••••••••••" : "");
           setVerifyToken(c.verify_token || "crm_verify_123");
           setBusinessAccountId(c.business_account_id || "");
           setIsEnabled(c.is_enabled !== 0);

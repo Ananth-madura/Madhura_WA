@@ -2230,7 +2230,7 @@ class WhatsAppService {
       const db = require("../config/database");
       const dbLimit = Math.max(numericLimit, 50);
       const [rows] = await db.promise().query(
-        `SELECT id, phone, direction, message_type, message_text as body, created_at, wa_message_id, status
+        `SELECT id, phone, direction, message_type, message_text as body, created_at, wa_message_id, status, media_url, media_filename, media_mime_type
          FROM wa_message_logs
          WHERE (session_key = ? OR session_key IS NULL OR session_key = '1' OR session_key = 'default')
            AND (phone LIKE ? OR phone LIKE ? OR phone LIKE ? OR phone = ?)
@@ -2238,7 +2238,7 @@ class WhatsAppService {
         [this.key, `%${clean10}%`, `%${digitsOnly}%`, `%${chatId}%`, digitsOnly, dbLimit]
       );
       rows.forEach((r) => {
-        const isFile = (r.message_type && r.message_type !== "text" && r.message_type !== "location") || /\.(md|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|zip|rar|png|jpg|jpeg|webp|mp4|mp3|ogg|wav)$/i.test(r.body || "");
+        const isFile = (r.message_type && r.message_type !== "text" && r.message_type !== "location") || Boolean(r.media_url) || /\.(md|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|zip|rar|png|jpg|jpeg|webp|mp4|mp3|ogg|wav)$/i.test(r.body || "");
         dbMsgs.push({
           id: r.wa_message_id || `db_${r.id}`,
           from: r.direction === "inbound" ? r.phone : "me",
@@ -2247,7 +2247,9 @@ class WhatsAppService {
           isMe: r.direction === "outbound",
           hasMedia: Boolean(isFile),
           type: r.message_type || (isFile ? "document" : "text"),
-          filename: r.body || "",
+          filename: r.media_filename || r.body || "",
+          mediaUrl: r.media_url || null,
+          mimetype: r.media_mime_type || null,
           status: r.direction === "outbound" ? (r.status || "sent") : null,
         });
       });

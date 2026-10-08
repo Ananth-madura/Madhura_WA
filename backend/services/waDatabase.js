@@ -731,6 +731,8 @@ async function ensureWATables() {
   await addColumnIfNotExists("wa_message_logs", "media_mime_type", "VARCHAR(100) DEFAULT NULL");
   await addColumnIfNotExists("wa_message_logs", "media_size", "INT DEFAULT NULL");
   await addColumnIfNotExists("wa_message_logs", "has_media", "TINYINT(1) DEFAULT 0");
+  await addColumnIfNotExists("wa_message_logs", "media_url", "TEXT DEFAULT NULL");
+  await addColumnIfNotExists("wa_message_logs", "media_filename", "VARCHAR(255) DEFAULT NULL");
   await addColumnIfNotExists("wa_message_logs", "is_read", "TINYINT(1) DEFAULT 0");
   await addColumnIfNotExists("wa_message_logs", "is_starred", "TINYINT(1) DEFAULT 0");
   await addColumnIfNotExists("wa_message_logs", "assigned_agent_id", "INT DEFAULT NULL");

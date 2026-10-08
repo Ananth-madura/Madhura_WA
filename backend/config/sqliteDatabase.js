@@ -889,6 +889,9 @@ class SQLiteDatabaseAdapter {
         status TEXT DEFAULT 'sent',
         session_key TEXT DEFAULT NULL,
         wa_message_id TEXT DEFAULT NULL,
+        media_url TEXT DEFAULT NULL,
+        media_filename TEXT DEFAULT NULL,
+        media_mime_type TEXT DEFAULT NULL,
         error TEXT DEFAULT NULL,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       )`,
