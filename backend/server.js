@@ -374,7 +374,20 @@ ensureRuntimeDirs();
 
 // Absolute path: express.static("uploads") resolves against process.cwd(), so
 // uploaded media 404'd whenever the server was started from anywhere but backend/.
-app.use("/uploads", express.static(uploadsDir));
+app.use(
+  "/uploads",
+  (req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    next();
+  },
+  express.static(uploadsDir, {
+    maxAge: "7d",
+    setHeaders: (res) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    },
+  })
+);
 
 // Make the resolved locations visible in the boot log. A deployment mistake
 // here (state written inside the deploy dir) must be obvious in the first

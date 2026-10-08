@@ -354,6 +354,33 @@ function MediaBubble({ chatId, messageId, serializedId = null, filename = "", me
     ? (media.url.startsWith("http") || media.url.startsWith("blob:") ? media.url : `${API || ""}${media.url.startsWith("/") ? "" : "/"}${media.url}`)
     : (media?.data ? `data:${media.mimetype || "application/octet-stream"};base64,${media.data}` : null);
 
+  const triggerDownload = async (fileUrl, name) => {
+    if (!fileUrl) return;
+    try {
+      if (fileUrl.startsWith("data:") || fileUrl.startsWith("blob:")) {
+        const a = document.createElement("a");
+        a.href = fileUrl;
+        a.download = name || "download";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+      const res = await fetch(fileUrl);
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = name || "download";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 2000);
+    } catch (_) {
+      window.open(fileUrl, "_blank");
+    }
+  };
+
   if (media && src) {
     if (media.mimetype?.startsWith("audio/") || media.mimetype?.includes("ogg") || ["mp3", "ogg", "wav", "m4a", "aac"].includes(fileExt)) {
       return (
@@ -361,9 +388,9 @@ function MediaBubble({ chatId, messageId, serializedId = null, filename = "", me
           <audio src={src} controls className="w-[270px] max-w-[min(270px,60vw)] h-9 rounded-lg" />
           <div className="hl-section-label flex items-center justify-between text-[11px] font-bold text-[var(--color-ink)] px-1">
             <span className="hl-id text-[var(--color-ink-2)] text-[10px] truncate max-w-[min(160px,40vw)]">{rawFilename}</span>
-            <a href={src} download={rawFilename} target="_blank" rel="noreferrer" className="hover:underline">
+            <button type="button" onClick={() => triggerDownload(src, rawFilename)} className="hover:underline cursor-pointer">
               Download ⬇️
-            </a>
+            </button>
           </div>
         </div>
       );
@@ -374,9 +401,9 @@ function MediaBubble({ chatId, messageId, serializedId = null, filename = "", me
           <video src={src} controls className="w-[290px] max-w-[min(290px,62vw)] max-h-[340px] max-h-[38dvh] rounded-xl shadow-md border border-[var(--color-rule)]" />
           <div className="hl-section-label flex items-center justify-between text-[11px] font-bold text-[var(--color-ink)] px-1">
             <span className="hl-id text-[var(--color-ink-2)] text-[10px] truncate max-w-[min(180px,45vw)]">{rawFilename}</span>
-            <a href={src} download={rawFilename} target="_blank" rel="noreferrer" className="hover:underline">
+            <button type="button" onClick={() => triggerDownload(src, rawFilename)} className="hover:underline cursor-pointer">
               Download ⬇️
-            </a>
+            </button>
           </div>
         </div>
       );
@@ -392,12 +419,12 @@ function MediaBubble({ chatId, messageId, serializedId = null, filename = "", me
             onClick={handleView}
           />
           <div className="hl-section-label flex items-center justify-between text-xs font-bold text-[var(--color-ink)] pt-1 px-1">
-            <button onClick={handleView} className="hover:underline flex items-center gap-1">
+            <button onClick={handleView} className="hover:underline flex items-center gap-1 cursor-pointer">
               🔍 Preview
             </button>
-            <a href={src} download={rawFilename} target="_blank" rel="noreferrer" className="hover:underline flex items-center gap-1">
+            <button type="button" onClick={() => triggerDownload(src, rawFilename)} className="hover:underline flex items-center gap-1 cursor-pointer">
               Download ⬇️
-            </a>
+            </button>
           </div>
         </div>
       );
@@ -419,23 +446,23 @@ function MediaBubble({ chatId, messageId, serializedId = null, filename = "", me
       <div className="flex items-center justify-between border-t border-[var(--color-rule)] pt-2 text-xs font-bold text-[var(--color-ink)]">
         {src ? (
           <>
-            <button onClick={() => window.open(src, "_blank")} className="hover:underline flex items-center gap-1">
+            <button onClick={() => window.open(src, "_blank")} className="hover:underline flex items-center gap-1 cursor-pointer">
               Open ↗
             </button>
-            <a href={src} download={rawFilename} target="_blank" rel="noreferrer" className="hover:underline flex items-center gap-1">
+            <button type="button" onClick={() => triggerDownload(src, rawFilename)} className="hover:underline flex items-center gap-1 cursor-pointer">
               Download ⬇️
-            </a>
+            </button>
           </>
         ) : error ? (
-          <button onClick={load} className="text-[var(--color-ink)] hover:underline flex items-center gap-1">
+          <button onClick={load} className="text-[var(--color-ink)] hover:underline flex items-center gap-1 cursor-pointer">
             ⚠️ Retry Loading
           </button>
         ) : (
           <>
-            <button onClick={load} disabled={loading} className="hover:underline flex items-center gap-1">
+            <button onClick={load} disabled={loading} className="hover:underline flex items-center gap-1 cursor-pointer">
               {loading ? "Loading..." : "Open ↗"}
             </button>
-            <button onClick={load} disabled={loading} className="hover:underline flex items-center gap-1">
+            <button onClick={load} disabled={loading} className="hover:underline flex items-center gap-1 cursor-pointer">
               {loading ? "Loading..." : "Download ⬇️"}
             </button>
           </>
