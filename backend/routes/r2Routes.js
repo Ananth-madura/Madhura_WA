@@ -10,6 +10,8 @@ const r2Storage = require("../services/r2StorageService");
 const sqliteAdapter = require("../config/sqliteDatabase");
 const { mediaDir } = require("../config/runtimePaths");
 
+const { verifyToken: auth } = require("../middleware/authMiddleware");
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
@@ -19,7 +21,7 @@ const upload = multer({
  * GET /api/storage/status
  * Returns Cloudflare R2 connection & sync status
  */
-router.get("/status", (req, res) => {
+router.get("/status", auth, (req, res) => {
   const r2Status = r2Storage.getStatus();
   const db = require("../config/database");
 
@@ -39,7 +41,7 @@ router.get("/status", (req, res) => {
  * POST /api/storage/sync
  * Manually trigger SQLite database snapshot upload to Cloudflare R2
  */
-router.post("/sync", async (req, res) => {
+router.post("/sync", auth, async (req, res) => {
   if (!r2Storage.isConfigured()) {
     return res.status(400).json({
       error: "Cloudflare R2 is not configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME in environment.",
@@ -71,7 +73,7 @@ router.post("/sync", async (req, res) => {
  * POST /api/storage/upload
  * Upload media directly to Cloudflare R2 bucket
  */
-router.post("/upload", upload.single("file"), async (req, res) => {
+router.post("/upload", auth, upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file provided" });
   }
@@ -107,7 +109,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
  * GET /api/storage/r2/...
  * Stream file from Cloudflare R2
  */
-router.get(/^\/r2\/(.+)/, async (req, res) => {
+router.get(/^\/r2\/(.+)/, auth, async (req, res) => {
   const key = req.params[0] || (req.params && req.params.key);
   if (!key) return res.status(400).json({ error: "Missing key" });
 

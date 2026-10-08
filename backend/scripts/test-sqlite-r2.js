@@ -79,15 +79,7 @@ async function run() {
     }
     console.log("  PASS 1: Server booted and /health reports database=ready, dbEngine=" + health.data.dbEngine);
 
-    // 2. Storage status endpoint
-    const storage = await request("GET", "/api/storage/status");
-    if (storage.status !== 200 || !storage.data.database.isSqlite) {
-      console.error("❌ /api/storage/status invalid:", storage);
-      process.exit(1);
-    }
-    console.log("  PASS 2: /api/storage/status confirms SQLite engine active");
-
-    // 3. Admin login against SQLite users table
+    // 2. Admin login against SQLite users table
     const login = await request("POST", "/api/auth/login", {
       email: "admin@madhuratech.com",
       password: "Admin@123",
@@ -98,7 +90,17 @@ async function run() {
       process.exit(1);
     }
     const token = login.data.token;
-    console.log("  PASS 3: Admin login succeeded against seeded SQLite user");
+    console.log("  PASS 2: Admin login succeeded against seeded SQLite user");
+
+    // 3. Storage status endpoint (authenticated)
+    const storage = await request("GET", "/api/storage/status", null, {
+      Authorization: `Bearer ${token}`,
+    });
+    if (storage.status !== 200 || !storage.data.database.isSqlite) {
+      console.error("❌ /api/storage/status invalid:", storage);
+      process.exit(1);
+    }
+    console.log("  PASS 3: /api/storage/status confirms SQLite engine active");
 
     // 4. Create a template in SQLite
     const createTpl = await request(

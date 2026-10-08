@@ -49,16 +49,46 @@ async function startWorker() {
   }
   try {
     const { Worker: BWorker } = require("bullmq");
+    const concurrency = Math.max(2, Number(process.env.WA_QUEUE_CONCURRENCY || 10));
+    const rateLimitMax = Math.max(5, Number(process.env.WA_QUEUE_RATE_LIMIT_MAX || 20));
+
     const worker = new BWorker(
       "whatsapp-messages",
       async (job) => {
-        const { campaignId, contactId, phone, message, templateName, templateComponents } = job.data;
-        await processSingleMessage(campaignId, contactId, phone, message, templateName, templateComponents);
+        const {
+          campaignId,
+          contactId,
+          phone,
+          message,
+          templateName,
+          templateComponents,
+          sessionKey = 1,
+          poolId = null,
+          routingStrategy = "round_robin",
+          tenantId = 1,
+        } = job.data || {};
+
+        await processSingleMessage(
+          campaignId,
+          contactId,
+          phone,
+          message,
+          templateName,
+          templateComponents,
+          sessionKey,
+          poolId,
+          routingStrategy,
+          tenantId
+        );
       },
-      { connection: redisConnection, concurrency: 5, limiter: { max: 10, duration: 1000 } }
+      {
+        connection: redisConnection,
+        concurrency,
+        limiter: { max: rateLimitMax, duration: 1000 },
+      }
     );
     worker.on("error", () => {}); // connection loss already logged/handled via redisConnection's own "error" handler
-    console.log("BullMQ worker started");
+    console.log(`🚀 [BullMQ Queue Worker] Active with concurrency ${concurrency} and rate limit ${rateLimitMax}/sec`);
   } catch (e) {
     console.log("BullMQ worker failed to start:", e.message);
   }
@@ -108,7 +138,14 @@ async function addBulkMessages(campaignId, messages, delayMs = 0, customInterval
   if (redisAvailable && messageQueue) {
     const jobs = messages.map((m, i) => ({
       name: `campaign-${campaignId}`,
-      data: { ...m, campaignId },
+      data: {
+        ...m,
+        campaignId,
+        sessionKey: m.sessionKey || m.session_key || 1,
+        poolId: m.poolId || m.pool_id || null,
+        routingStrategy: m.routingStrategy || m.routing_strategy || "round_robin",
+        tenantId: m.tenantId || m.tenant_id || 1,
+      },
       opts: { delay: delayMs + i * interval },
     }));
     return messageQueue.addBulk(jobs);
@@ -119,17 +156,47 @@ async function addBulkMessages(campaignId, messages, delayMs = 0, customInterval
     if (delayMs || i > 0) {
       await new Promise((r) => setTimeout(r, i === 0 ? delayMs : interval));
     }
-    await processSingleMessage(campaignId, m.contactId, m.phone, m.message, m.templateName, m.templateComponents);
+    await processSingleMessage(
+      campaignId,
+      m.contactId,
+      m.phone,
+      m.message,
+      m.templateName,
+      m.templateComponents,
+      m.sessionKey || m.session_key || 1,
+      m.poolId || m.pool_id || null,
+      m.routingStrategy || m.routing_strategy || "round_robin",
+      m.tenantId || m.tenant_id || 1
+    );
   }
   return { success: true, count: messages.length };
 }
 
 async function addSingleMessage(data, delayMs = 0) {
+  const payload = {
+    ...data,
+    sessionKey: data.sessionKey || data.session_key || 1,
+    poolId: data.poolId || data.pool_id || null,
+    routingStrategy: data.routingStrategy || data.routing_strategy || "round_robin",
+    tenantId: data.tenantId || data.tenant_id || 1,
+  };
+
   if (redisAvailable && messageQueue) {
-    return messageQueue.add("single-message", data, { delay: delayMs });
+    return messageQueue.add("single-message", payload, { delay: delayMs });
   }
   if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
-  await processSingleMessage(data.campaignId, data.contactId, data.phone, data.message, data.templateName, data.templateComponents);
+  await processSingleMessage(
+    payload.campaignId,
+    payload.contactId,
+    payload.phone,
+    payload.message,
+    payload.templateName,
+    payload.templateComponents,
+    payload.sessionKey,
+    payload.poolId,
+    payload.routingStrategy,
+    payload.tenantId
+  );
   return { success: true };
 }
 

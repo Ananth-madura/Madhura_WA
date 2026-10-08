@@ -410,29 +410,37 @@ async function runCampaign(campaignId) {
     // guard a re-queued failure is picked straight back up on the next iteration
     // (it still has the lowest id), so the backoff never happens and one bad
     // number burns all its retries back-to-back while blocking the whole campaign.
+    const maxBatch = Math.min(
+      4,
+      Math.max(1, Number(campaign.parallel_streams || process.env.WA_CAMPAIGN_CONCURRENCY || (pool_id ? 2 : 1)))
+    );
+
     const [queuedRows] = await db.promise().query(
       `SELECT * FROM wa_campaign_messages
        WHERE campaign_id=? AND status='queued'
          AND (next_retry_at IS NULL OR next_retry_at <= NOW())
-       ORDER BY id ASC LIMIT 1`,
-      [campaignId]
+       ORDER BY id ASC LIMIT ?`,
+      [campaignId, maxBatch]
     );
 
-    let nextMsg = queuedRows[0] || null;
+    let batch = queuedRows || [];
 
-    // Retryable failed messages check
-    if (!nextMsg && retry_failed) {
+    // Retryable failed messages check if batch is not full
+    if (batch.length < maxBatch && retry_failed) {
+      const needed = maxBatch - batch.length;
       const [retryRows] = await db.promise().query(
         `SELECT * FROM wa_campaign_messages 
          WHERE campaign_id=? AND status='failed' AND attempts < ? 
          AND (next_retry_at IS NULL OR next_retry_at <= NOW()) 
-         ORDER BY id ASC LIMIT 1`,
-        [campaignId, max_retries]
+         ORDER BY id ASC LIMIT ?`,
+        [campaignId, max_retries, needed]
       );
-      nextMsg = retryRows[0] || null;
+      if (retryRows && retryRows.length > 0) {
+        batch = [...batch, ...retryRows];
+      }
     }
 
-    if (!nextMsg) {
+    if (batch.length === 0) {
       const [remaining] = await db.promise().query(
         "SELECT COUNT(*) as cnt FROM wa_campaign_messages WHERE campaign_id=? AND status IN ('queued','sending')",
         [campaignId]
@@ -446,8 +454,6 @@ async function runCampaign(campaignId) {
         break;
       }
 
-      // Nothing due right now, but retries are still pending — waiting them out
-      // instead of exiting, which used to strand every scheduled retry.
       idleWaits++;
       if (idleWaits > MAX_IDLE_WAITS) {
         console.warn(`⚠️ Campaign ${campaignId}: ${remaining[0].cnt} message(s) stuck for ${MAX_IDLE_WAITS} min — exiting loop.`);
@@ -459,70 +465,68 @@ async function runCampaign(campaignId) {
     }
     idleWaits = 0;
 
-    // Duplicate check
-    // Key on the last 10 digits. The `phone` column is written inconsistently —
-    // "(country_code||'91') + phone" from some routes, bare last-10 from others
-    // — so keying on the raw value let "919876543210" and "9876543210" both send
-    // to the same person.
-    const dedupeKey = String(nextMsg.phone || "").replace(/\D/g, "").slice(-10);
-    if (duplicate_filter && seenPhones.has(dedupeKey)) {
-      await db.promise().query(
-        "UPDATE wa_campaign_messages SET status='skipped', error='Duplicate phone in campaign' WHERE id=?",
-        [nextMsg.id]
-      );
-      continue;
-    }
-    if (duplicate_filter) seenPhones.add(dedupeKey);
+    // Process the batch (in parallel across pool senders with safe locking)
+    await Promise.all(batch.map(async (nextMsg) => {
+      const dedupeKey = String(nextMsg.phone || "").replace(/\D/g, "").slice(-10);
+      if (duplicate_filter && seenPhones.has(dedupeKey)) {
+        await db.promise().query(
+          "UPDATE wa_campaign_messages SET status='skipped', error='Duplicate phone in campaign' WHERE id=?",
+          [nextMsg.id]
+        );
+        return;
+      }
+      if (duplicate_filter) seenPhones.add(dedupeKey);
 
-    // Opt-out check
-    const optedOut = await isOptedOut(nextMsg.phone, tenant_id);
-    if (optedOut) {
-      await db.promise().query(
-        "UPDATE wa_campaign_messages SET status='opted_out', error='Contact opted out', opt_out=1 WHERE id=?",
-        [nextMsg.id]
-      );
-      await db.promise().query(
-        "UPDATE wa_campaigns SET failed_count=failed_count+1 WHERE id=?",
-        [campaignId]
-      );
-      continue;
-    }
+      // Opt-out check
+      const optedOut = await isOptedOut(nextMsg.phone, tenant_id);
+      if (optedOut) {
+        await db.promise().query(
+          "UPDATE wa_campaign_messages SET status='opted_out', error='Contact opted out', opt_out=1 WHERE id=?",
+          [nextMsg.id]
+        );
+        await db.promise().query(
+          "UPDATE wa_campaigns SET failed_count=failed_count+1 WHERE id=?",
+          [campaignId]
+        );
+        return;
+      }
 
-    // Blocked check
-    const blocked = await isBlocked(nextMsg.phone, tenant_id);
-    if (blocked) {
-      await db.promise().query(
-        "UPDATE wa_campaign_messages SET status='skipped', error='Contact blocked or unsubscribed' WHERE id=?",
-        [nextMsg.id]
-      );
-      continue;
-    }
+      // Blocked check
+      const blocked = await isBlocked(nextMsg.phone, tenant_id);
+      if (blocked) {
+        await db.promise().query(
+          "UPDATE wa_campaign_messages SET status='skipped', error='Contact blocked or unsubscribed' WHERE id=?",
+          [nextMsg.id]
+        );
+        return;
+      }
 
-    // Dispatch message via Load Balancer
-    console.log(`📤 Campaign ${campaignId}: Sending message to ${nextMsg.phone} (attempt ${(nextMsg.attempts || 0) + 1})`);
-    const sendResult = await sendOneCampaignMessage(
-      { ...nextMsg, campaign_id: campaignId },
-      session_key,
-      pool_id,
-      routing_strategy,
-      spintax_enabled !== 0,
-      tenant_id
-    );
-
-    sentThisSession++;
-    totalProcessed++;
-
-    if (!sendResult.success && retry_failed && (nextMsg.attempts || 0) < max_retries - 1) {
-      const retryDelay = randomInt(
-        campaign.retry_delay_min || retry_delay_min,
-        campaign.retry_delay_max || retry_delay_max
+      // Dispatch message via Load Balancer
+      console.log(`📤 Campaign ${campaignId}: Sending message to ${nextMsg.phone} (attempt ${(nextMsg.attempts || 0) + 1})`);
+      const sendResult = await sendOneCampaignMessage(
+        { ...nextMsg, campaign_id: campaignId },
+        session_key,
+        pool_id,
+        routing_strategy,
+        spintax_enabled !== 0,
+        tenant_id
       );
-      await db.promise().query(
-        `UPDATE wa_campaign_messages SET status='queued', next_retry_at=DATE_ADD(NOW(), INTERVAL ? MINUTE) WHERE id=?`,
-        [retryDelay, nextMsg.id]
-      );
-      console.log(`🔄 Campaign ${campaignId}: Message ${nextMsg.id} scheduled to retry in ${retryDelay} min`);
-    }
+
+      sentThisSession++;
+      totalProcessed++;
+
+      if (!sendResult.success && retry_failed && (nextMsg.attempts || 0) < max_retries - 1) {
+        const retryDelay = randomInt(
+          campaign.retry_delay_min || retry_delay_min,
+          campaign.retry_delay_max || retry_delay_max
+        );
+        await db.promise().query(
+          `UPDATE wa_campaign_messages SET status='queued', next_retry_at=DATE_ADD(NOW(), INTERVAL ? MINUTE) WHERE id=?`,
+          [retryDelay, nextMsg.id]
+        );
+        console.log(`🔄 Campaign ${campaignId}: Message ${nextMsg.id} scheduled to retry in ${retryDelay} min`);
+      }
+    }));
 
     // Micro-batch cooling pause (Anti-Ban Guard)
     const pauseEvery = campaign.pause_every || pause_every;

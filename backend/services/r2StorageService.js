@@ -15,18 +15,6 @@ const {
   HeadObjectCommand,
 } = require("@aws-sdk/client-s3");
 
-const DEFAULT_R2 = {
-  accountId: "7107deaae02b66284b790bfb60c66191",
-  accessKeyId: "8d826b1250997ad83c7d9d9ba5e2c8b8",
-  secretAccessKey: "a0fbaa1af69d23cac64aed6a057ecf549dae13456058d69b246674e0f0ea4319",
-  bucket: "madhurawa",
-};
-
-const USER_TOKEN_FALLBACK = {
-  accessKeyId: "666a913fff525e19b92e7a625625ecd0",
-  secretAccessKey: "2abd6b58bff4bad0873933f549771b068a330339508bc9398f49e9bdf1318688",
-};
-
 class R2StorageService {
   constructor() {
     this.client = null;
@@ -38,44 +26,55 @@ class R2StorageService {
     this.isSyncing = false;
     this.syncDebounceTimer = null;
     this.periodicTimer = null;
+    this.authFailed = false;
+    this.authError = null;
+    this.disabled = false;
 
     this.init();
   }
 
   init() {
+    this.authFailed = false;
+    this.authError = null;
+
     if (["1", "true", "yes"].includes(String(process.env.DISABLE_R2 || process.env.SKIP_R2 || "").toLowerCase())) {
       this.client = null;
+      this.disabled = true;
+      console.log("ℹ️ [Cloudflare R2] Cloud backup disabled by environment (DISABLE_R2=1). SQLite operating in local mode.");
       return;
     }
 
-    this.accountId = (
+    const accountId = (
       process.env.R2_ACCOUNT_ID ||
       process.env.CLOUDFLARE_ACCOUNT_ID ||
-      DEFAULT_R2.accountId
+      ""
     ).trim();
 
     const accessKeyId = (
       process.env.R2_ACCESS_KEY_ID ||
       process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ||
-      DEFAULT_R2.accessKeyId
+      ""
     ).trim();
 
     const secretAccessKey = (
       process.env.R2_SECRET_ACCESS_KEY ||
       process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY ||
-      DEFAULT_R2.secretAccessKey
+      ""
     ).trim();
 
-    this.bucket = (
+    const bucket = (
       process.env.R2_BUCKET_NAME ||
       process.env.CLOUDFLARE_R2_BUCKET ||
       process.env.R2_BUCKET ||
-      DEFAULT_R2.bucket
+      ""
     ).trim();
 
     this.publicDomain = (process.env.R2_PUBLIC_DOMAIN || "").trim().replace(/\/+$/, "");
 
-    if (this.accountId && accessKeyId && secretAccessKey && this.bucket) {
+    // Only attempt S3 client connection when valid credentials are explicitly provided in environment
+    if (accountId && accessKeyId && secretAccessKey && bucket) {
+      this.accountId = accountId;
+      this.bucket = bucket;
       try {
         this.client = new S3Client({
           region: "auto",
@@ -85,23 +84,66 @@ class R2StorageService {
             secretAccessKey,
           },
         });
-        console.log(`☁️ [Cloudflare R2] Connected to bucket "${this.bucket}" (Account: ${this.accountId.slice(0, 8)}...)`);
+        console.log(`☁️ [Cloudflare R2] Configured for bucket "${this.bucket}" (Account: ${this.accountId.slice(0, 8)}...)`);
       } catch (err) {
         console.error("❌ [Cloudflare R2] Failed to initialize S3 client:", err.message);
         this.client = null;
       }
     } else {
       this.client = null;
+      this.bucket = null;
+      this.accountId = null;
+      console.log("ℹ️ [Cloudflare R2] Cloud backup credentials not set. SQLite operating in local persistence mode.");
     }
   }
 
+  isAuthError(err) {
+    if (!err) return false;
+    const msg = String(err.message || "").toLowerCase();
+    const code = String(err.name || err.code || "").toLowerCase();
+    const status = err.$metadata?.httpStatusCode;
+    return (
+      status === 403 ||
+      status === 401 ||
+      code.includes("accessdenied") ||
+      code.includes("signaturedoesnotmatch") ||
+      code.includes("invalidaccesskey") ||
+      code.includes("auth") ||
+      msg.includes("access denied") ||
+      msg.includes("forbidden") ||
+      msg.includes("unauthorized")
+    );
+  }
+
+  handleAuthFailure(err) {
+    if (this.authFailed) return;
+    this.authFailed = true;
+    this.authError = err.message || "Access Denied";
+    if (this.syncDebounceTimer) {
+      clearTimeout(this.syncDebounceTimer);
+      this.syncDebounceTimer = null;
+    }
+    if (this.periodicTimer) {
+      clearInterval(this.periodicTimer);
+      this.periodicTimer = null;
+    }
+    console.warn(
+      `⚠️ [Cloudflare R2] Access Denied: Cloudflare R2 credentials for bucket "${this.bucket || "unknown"}" are invalid or expired.\n` +
+      `   Automatic sync has been paused to protect performance. Local SQLite database is safe and operating.\n` +
+      `   To enable cloud backup, set valid R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY in backend/.env, or set DISABLE_R2=1.`
+    );
+  }
+
   isConfigured() {
-    return Boolean(this.client && this.bucket);
+    return Boolean(this.client && this.bucket && !this.authFailed && !this.disabled);
   }
 
   getStatus() {
     return {
       configured: this.isConfigured(),
+      disabled: Boolean(this.disabled),
+      authFailed: Boolean(this.authFailed),
+      authError: this.authError || null,
       bucket: this.bucket || null,
       accountId: this.accountId ? `${this.accountId.slice(0, 6)}...` : null,
       publicDomain: this.publicDomain || null,
@@ -154,12 +196,18 @@ class R2StorageService {
 
       fs.writeFileSync(localDbPath, buffer);
       this.lastRestoreAt = new Date().toISOString();
+      this.authFailed = false;
+      this.authError = null;
       console.log(`✅ [Cloudflare R2] Successfully restored SQLite database (${(buffer.length / 1024).toFixed(1)} KB) from Cloudflare R2!`);
       return { restored: true, size: buffer.length };
     } catch (err) {
       if (err.name === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) {
         console.log("ℹ️ [Cloudflare R2] No existing 'database.sqlite' found in bucket. Will create on first sync.");
         return { restored: false, reason: "not_found" };
+      }
+      if (this.isAuthError(err)) {
+        this.handleAuthFailure(err);
+        return { restored: false, error: err.message, authFailed: true };
       }
       console.warn("⚠️ [Cloudflare R2] Restore warning:", err.message);
       return { restored: false, error: err.message };
@@ -169,9 +217,13 @@ class R2StorageService {
   /**
    * Uploads the local SQLite database to Cloudflare R2
    * @param {string} localDbPath - Source local file path
+   * @param {boolean} [isManual=false] - If triggered manually by user action
    * @returns {Promise<{ synced: boolean, size?: number, error?: string }>}
    */
-  async uploadDatabaseToR2(localDbPath) {
+  async uploadDatabaseToR2(localDbPath, isManual = false) {
+    if (this.authFailed && !isManual) {
+      return { synced: false, reason: "r2_auth_failed", error: this.authError };
+    }
     if (!this.isConfigured()) return { synced: false, reason: "r2_not_configured" };
     if (!fs.existsSync(localDbPath)) return { synced: false, reason: "local_file_not_found" };
     if (this.isSyncing) return { synced: false, reason: "sync_in_progress" };
@@ -195,10 +247,16 @@ class R2StorageService {
 
       await this.client.send(putCommand);
       this.lastSyncAt = new Date().toISOString();
+      this.authFailed = false;
+      this.authError = null;
       console.log(`⬆️ [Cloudflare R2] SQLite database successfully backed up to Cloudflare R2 (${(fileBuffer.length / 1024).toFixed(1)} KB) at ${this.lastSyncAt}`);
       return { synced: true, size: fileBuffer.length, lastSyncAt: this.lastSyncAt };
     } catch (err) {
-      console.error("❌ [Cloudflare R2] Database sync failed:", err.message);
+      if (this.isAuthError(err)) {
+        this.handleAuthFailure(err);
+      } else {
+        console.error("❌ [Cloudflare R2] Database sync failed:", err.message);
+      }
       return { synced: false, error: err.message };
     } finally {
       this.isSyncing = false;
@@ -211,9 +269,10 @@ class R2StorageService {
    * @param {number} delayMs
    */
   triggerDebouncedSync(localDbPath, delayMs = 5000) {
-    if (!this.isConfigured()) return;
+    if (!this.isConfigured() || this.authFailed || this.disabled) return;
     if (this.syncDebounceTimer) clearTimeout(this.syncDebounceTimer);
     this.syncDebounceTimer = setTimeout(() => {
+      if (!this.isConfigured() || this.authFailed || this.disabled) return;
       this.uploadDatabaseToR2(localDbPath).catch(() => {});
     }, delayMs);
   }
@@ -225,13 +284,19 @@ class R2StorageService {
    */
   startSyncSchedule(localDbPath, intervalMs = 120000) {
     if (this.periodicTimer) clearInterval(this.periodicTimer);
+    if (!this.isConfigured() || this.authFailed || this.disabled) return;
+
     this.periodicTimer = setInterval(() => {
+      if (!this.isConfigured() || this.authFailed || this.disabled) {
+        if (this.periodicTimer) clearInterval(this.periodicTimer);
+        return;
+      }
       this.uploadDatabaseToR2(localDbPath).catch(() => {});
     }, intervalMs);
 
     // Graceful shutdown sync flush
     const onExit = async () => {
-      if (this.isConfigured() && fs.existsSync(localDbPath)) {
+      if (this.isConfigured() && !this.authFailed && !this.disabled && fs.existsSync(localDbPath)) {
         console.log("🛑 [Cloudflare R2] Process shutting down — flushing final SQLite snapshot to R2...");
         try {
           await this.uploadDatabaseToR2(localDbPath);
@@ -270,7 +335,11 @@ class R2StorageService {
 
       return { success: true, url, key };
     } catch (err) {
-      console.error("❌ [Cloudflare R2] Media upload failed:", err.message);
+      if (this.isAuthError(err)) {
+        this.handleAuthFailure(err);
+      } else {
+        console.error("❌ [Cloudflare R2] Media upload failed:", err.message);
+      }
       return { success: false, error: err.message };
     }
   }

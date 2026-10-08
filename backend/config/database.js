@@ -48,35 +48,56 @@ const isR2OrSqliteRequested =
 
 const sqliteAdapter = require("./sqliteDatabase");
 
-let db;
-if (isR2OrSqliteRequested) {
-  db = {
-    isSqlite: true,
-    r2Enabled: false,
-    query: (...args) => sqliteAdapter.query(...args),
-    promise: () => sqliteAdapter.promise(),
-    on: () => db,
-    connect: (cb) => { if (typeof cb === "function") cb(null); },
-    end: (cb) => { if (typeof cb === "function") cb(null); },
-    changeUser: (opts, cb) => { if (typeof cb === "function") cb(null); },
-    escape: (val) => (typeof val === "string" ? `'${val.replace(/'/g, "''")}'` : String(val)),
-  };
-} else {
-  db = mysql.createConnection({
-    host: process.env.DB_HOST,
-    port: dbPort,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: dbName || undefined,
-    charset: "utf8mb4",
-    multipleStatements: true
-  });
+let activePool = null;
 
-  db.on("error", (err) => {
-    if (db.isSqlite || isR2OrSqliteRequested) return;
-    console.warn("⚠️ [MySQL Socket Warning]:", err && err.message);
-  });
-}
+let db = {
+  isSqlite: Boolean(isR2OrSqliteRequested),
+  r2Enabled: false,
+  isPool: true,
+  query: (...args) => {
+    if (db.isSqlite) return sqliteAdapter.query(...args);
+    if (activePool) return activePool.query(...args);
+    const cb = typeof args[args.length - 1] === "function" ? args[args.length - 1] : null;
+    if (cb) cb(new Error("Database connection pool not initialized yet"));
+  },
+  promise: () => {
+    if (db.isSqlite) return sqliteAdapter.promise();
+    if (activePool) return activePool.promise();
+    return {
+      query: async () => {
+        throw new Error("Database connection pool not initialized yet");
+      },
+    };
+  },
+  escape: (val) => (typeof val === "string" ? `'${val.replace(/'/g, "''")}'` : mysql.escape(val)),
+  on: (event, handler) => {
+    if (activePool) activePool.on(event, handler);
+    return db;
+  },
+  connect: (cb) => {
+    if (db.isSqlite) return cb ? cb(null) : null;
+    if (activePool) {
+      activePool.getConnection((err, conn) => {
+        if (err) return cb ? cb(err) : null;
+        conn.release();
+        if (cb) cb(null);
+      });
+      return;
+    }
+    if (cb) cb(null);
+  },
+  changeUser: (opts, cb) => {
+    if (typeof cb === "function") cb(null);
+  },
+  end: (cb) => {
+    if (activePool) return activePool.end(cb);
+    if (typeof cb === "function") cb(null);
+  },
+  getConnection: (cb) => {
+    if (activePool) return activePool.getConnection(cb);
+    if (cb) cb(new Error("Database pool not active"));
+  },
+};
 
 const schemaPath = path.join(__dirname, "../schema.sql");
 
@@ -1060,13 +1081,22 @@ const ready = new Promise((resolve, reject) => {
 
   function attemptConnect() {
     attempts++;
-    db.connect((err) => {
+
+    // 1. Test bootstrap connection to verify server availability and create database if missing
+    const bootstrapConn = mysql.createConnection({
+      host: process.env.DB_HOST,
+      port: dbPort,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASS,
+      charset: "utf8mb4",
+    });
+
+    bootstrapConn.connect((err) => {
       if (err) {
+        try { bootstrapConn.destroy(); } catch (_) {}
         if (isR2OrSqliteRequested && (attempts >= 2 || err.code === "ECONNREFUSED" || err.code === "ENOTFOUND")) {
           console.warn("⚠️ MySQL unreachable — instantly activating Embedded SQLite + Cloudflare R2 engine!");
           return sqliteAdapter.initialize().then(() => {
-            db.query = sqliteAdapter.query.bind(sqliteAdapter);
-            db.promise = sqliteAdapter.promise.bind(sqliteAdapter);
             db.isSqlite = true;
             db.r2Enabled = sqliteAdapter.r2Enabled;
             return resolve(db);
@@ -1080,8 +1110,6 @@ const ready = new Promise((resolve, reject) => {
         if (isR2OrSqliteRequested) {
           console.warn("⚠️ MySQL unreachable — falling back to Embedded SQLite + Cloudflare R2 engine!");
           return sqliteAdapter.initialize().then(() => {
-            db.query = sqliteAdapter.query.bind(sqliteAdapter);
-            db.promise = sqliteAdapter.promise.bind(sqliteAdapter);
             db.isSqlite = true;
             db.r2Enabled = sqliteAdapter.r2Enabled;
             return resolve(db);
@@ -1090,22 +1118,42 @@ const ready = new Promise((resolve, reject) => {
         console.error("❌ MySQL connection failed after max retries:", err.message);
         return reject(err);
       }
+
       console.log(`✅ MySQL Connected (${process.env.DB_HOST}:${dbPort})`);
 
-      db.query(
+      bootstrapConn.query(
         `CREATE DATABASE IF NOT EXISTS \`${escapedDbName}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
-        async (err) => {
-        if (err) {
-          console.error(`Database creation failed for ${dbName}:`, err.message);
-          return reject(err);
-        }
-
-        db.changeUser({ database: dbName }, async (err) => {
-          if (err) {
-            console.error(`Database selection failed for ${dbName}:`, err.message);
-            return reject(err);
+        async (dbErr) => {
+          try { bootstrapConn.end(); } catch (_) {}
+          if (dbErr) {
+            console.error(`Database creation failed for ${dbName}:`, dbErr.message);
+            return reject(dbErr);
           }
+
           console.log(`Using database ${dbName}`);
+
+          // 2. Initialize High-Performance Production Connection Pool
+          const poolLimit = Math.max(10, Number(process.env.DB_POOL_LIMIT || process.env.DB_CONNECTION_LIMIT || 25));
+          activePool = mysql.createPool({
+            host: process.env.DB_HOST,
+            port: dbPort,
+            user: process.env.DB_USER,
+            password: process.env.DB_PASS,
+            database: dbName,
+            charset: "utf8mb4",
+            multipleStatements: true,
+            waitForConnections: true,
+            connectionLimit: poolLimit,
+            queueLimit: 0,
+            enableKeepAlive: true,
+            keepAliveInitialDelay: 10000,
+          });
+
+          activePool.on("error", (poolErr) => {
+            console.warn("⚠️ [MySQL Pool Warning]:", poolErr && poolErr.message);
+          });
+
+          console.log(`🚀 [MySQL Connection Pool] Active with ${poolLimit} parallel connection limit & keepalive enabled`);
 
           if (fs.existsSync(schemaPath)) {
             const schema = fs.readFileSync(schemaPath, "utf8");
@@ -1117,12 +1165,12 @@ const ready = new Promise((resolve, reject) => {
                 return reject(fkErr);
               }
               
-              db.query(schema, (err) => {
+              db.query(schema, (schemaErr) => {
                 // Always restore foreign key checks
                 db.query("SET FOREIGN_KEY_CHECKS = 1;", async (fkRestoreErr) => {
-                  if (err) {
-                    console.error("Database initialization failed:", err.message);
-                    return reject(err);
+                  if (schemaErr) {
+                    console.error("Database initialization failed:", schemaErr.message);
+                    return reject(schemaErr);
                   }
                   if (fkRestoreErr) {
                     console.error("Failed to re-enable foreign key checks:", fkRestoreErr.message);
@@ -1149,11 +1197,10 @@ const ready = new Promise((resolve, reject) => {
               reject(migrationErr);
             }
           }
-        });
-      }
-    );
-  });
-}
+        }
+      );
+    });
+  }
 
 attemptConnect();
 });

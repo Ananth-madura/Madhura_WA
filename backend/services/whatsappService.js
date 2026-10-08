@@ -95,6 +95,49 @@ function getExecutablePath() {
   return undefined;
 }
 
+function mimeToExtension(mime, defaultExt = "bin") {
+  if (!mime) return defaultExt;
+  const cleanMime = String(mime).toLowerCase().split(";")[0].trim();
+  const map = {
+    "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.ms-excel": "xls",
+    "text/csv": "csv",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "application/vnd.ms-powerpoint": "ppt",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/svg+xml": "svg",
+    "video/mp4": "mp4",
+    "video/3gpp": "3gp",
+    "video/quicktime": "mov",
+    "video/webm": "webm",
+    "video/x-matroska": "mkv",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/ogg": "ogg",
+    "audio/wav": "wav",
+    "audio/webm": "webm",
+    "audio/aac": "aac",
+    "audio/mp4": "m4a",
+    "application/zip": "zip",
+    "application/x-zip-compressed": "zip",
+    "application/x-rar-compressed": "rar",
+    "application/x-7z-compressed": "7z",
+    "text/plain": "txt",
+    "application/json": "json",
+  };
+  if (map[cleanMime]) return map[cleanMime];
+  const sub = cleanMime.split("/")[1];
+  if (sub && sub.length <= 5 && /^[a-z0-9]+$/.test(sub)) return sub;
+  return defaultExt;
+}
+
 // Media/location messages often have an empty .body — showing that blank made
 // the chat list read as "Tap to start chatting" (no messages yet) for chats
 // that actually have history, which was confusing. Give the preview a label.
@@ -483,8 +526,12 @@ class WhatsAppService {
   //
   // ponytail: fixed gap, not a token bucket — WA_MIN_SEND_GAP_MS is the
   // calibration knob. Swap for a bucket only if bursts need to be allowed.
-  async _paceSend() {
-    const gap = Number(process.env.WA_MIN_SEND_GAP_MS || 4000);
+  async _paceSend(isManual = false) {
+    const gap = Number(
+      isManual
+        ? (process.env.WA_MANUAL_SEND_GAP_MS || 350)
+        : (process.env.WA_MIN_SEND_GAP_MS || 3000)
+    );
     const wait = gap - (Date.now() - this._lastSendAt);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     this._lastSendAt = Date.now();
@@ -972,6 +1019,20 @@ class WhatsAppService {
             : null,
         };
 
+        if (isMedia) {
+          const safeId = String(liveMsg.id).replace(/[^a-zA-Z0-9_-]/g, "");
+          try {
+            const { mediaDir } = require("../config/runtimePaths");
+            const cacheDir = path.join(mediaDir, this.key);
+            if (fs.existsSync(cacheDir)) {
+              const hit = fs.readdirSync(cacheDir).find((f) => f.startsWith(safeId + "."));
+              if (hit) {
+                liveMsg.mediaUrl = `/uploads/wa-media/${this.key}/${hit}`;
+              }
+            }
+          } catch (_) {}
+        }
+
         if (!this.messagesCache[chatId]) this.messagesCache[chatId] = [];
         if (!this.messagesCache[chatId].some((m) => m.id === liveMsg.id)) {
           this.messagesCache[chatId].unshift(liveMsg);
@@ -985,6 +1046,26 @@ class WhatsAppService {
         const eventName = msg.fromMe ? "wa_message_sent" : "wa_message_received";
         this.emitWaEvent(eventName, chatId, cleanPhone, liveMsg);
         this.emitWaEvent("wa_message", chatId, cleanPhone, liveMsg);
+
+        // 1c. Eager background download for inbound attachments so they are instantly accessible
+        if (isMedia && !msg.fromMe && !liveMsg.mediaUrl) {
+          process.nextTick(() => {
+            this.getMediaForMessage(chatId, liveMsg.id, liveMsg.serializedId)
+              .then((res) => {
+                if (res?.url) {
+                  liveMsg.mediaUrl = res.url;
+                  if (res.filename) liveMsg.filename = res.filename;
+                  this.emitWaEvent("wa_message_updated", chatId, cleanPhone, {
+                    id: liveMsg.id,
+                    serializedId: liveMsg.serializedId,
+                    mediaUrl: res.url,
+                    filename: res.filename,
+                  });
+                }
+              })
+              .catch(() => {});
+          });
+        }
 
         // 1b. Forward to connected External CRM webhook
         try {
@@ -1319,10 +1400,11 @@ class WhatsAppService {
         if (this.ready && this.client) {
           const sendOpts = {};
           if (quotedId) sendOpts.quotedMessageId = quotedId;
+          const isManual = options?.isManual !== false && !options?.isCampaign;
 
           try {
             await this.ensureWWebJSInjected().catch(() => {});
-            await this._paceSend();
+            await this._paceSend(isManual);
             sentResult = await this.enqueueSend(() =>
               this.withTimeout(
                 this.client.sendMessage(formattedJid, message, sendOpts),
@@ -1634,6 +1716,16 @@ class WhatsAppService {
   // the QR code in-place using Puppeteer instead of restarting the whole browser engine!
   async refreshQr() {
     if (this.ready) return { connected: true, qr: null, message: "Already connected" };
+    const now = Date.now();
+    if (this._lastQrRefreshAt && now - this._lastQrRefreshAt < 2500) {
+      return {
+        connected: false,
+        qr: this.qrCode || null,
+        refreshed: false,
+        message: "QR refreshed recently (throttled)",
+      };
+    }
+    this._lastQrRefreshAt = now;
     if (this._isRefreshingQr) {
       return {
         connected: false,
@@ -2518,16 +2610,36 @@ class WhatsAppService {
   // meant ten full chat scans and a frozen UI. Now: resolve the message
   // directly, download once, cache to disk, and let the browser HTTP-cache it.
   async getMediaForMessage(chatId, messageId, serializedId) {
-    const cacheDir = path.join(__dirname, "..", "uploads", "wa-media", this.key);
+    const { mediaDir, cloudMediaDir } = require("../config/runtimePaths");
+    const cacheDir = path.join(mediaDir, this.key);
     const safeId = String(messageId).replace(/[^a-zA-Z0-9_-]/g, "");
 
-    // Cache hit: no Puppeteer at all.
+    // 1. Web session cache hit: no Puppeteer at all.
     try {
-      const hit = fs.readdirSync(cacheDir).find((f) => f.startsWith(safeId + "."));
-      if (hit) return { url: `/uploads/wa-media/${this.key}/${hit}`, filename: hit };
+      if (fs.existsSync(cacheDir)) {
+        const hit = fs.readdirSync(cacheDir).find((f) => f.startsWith(safeId + "."));
+        if (hit) return { url: `/uploads/wa-media/${this.key}/${hit}`, filename: hit };
+      }
     } catch (_) {}
 
-    if (!this.ready || !this.client) throw new Error("WhatsApp Web session not connected");
+    // 2. Cloud Media cache hit check
+    try {
+      if (fs.existsSync(cloudMediaDir)) {
+        const hit = fs.readdirSync(cloudMediaDir).find((f) => f.startsWith(safeId + "."));
+        if (hit) return { url: `/uploads/wa-media/cloud/${hit}`, filename: hit };
+      }
+    } catch (_) {}
+
+    // 3. Fallback to Meta Cloud API if web session not connected
+    if (!this.ready || !this.client) {
+      const waCloud = require("./whatsappCloudApi");
+      if (waCloud.isConfigured()) {
+        try {
+          return await waCloud.downloadMedia(messageId);
+        } catch (_) {}
+      }
+      throw new Error("WhatsApp Web session not connected");
+    }
 
     let msg = null;
     // getMessageById is O(1) against the Store; the chat scan below is the
@@ -2548,8 +2660,13 @@ class WhatsAppService {
     const media = await this.enqueue(() => this.withTimeout(msg.downloadMedia(), 20000, "downloadMedia"));
     if (!media) throw new Error("Media could not be downloaded");
 
-    const ext = (media.mimetype || "application/octet-stream").split("/")[1]?.split(";")[0] || "bin";
-    const filename = `${safeId}.${ext}`;
+    let ext = mimeToExtension(media.mimetype);
+    if (!ext || ext === "bin") {
+      const parsedExt = path.extname(media.filename || msg.body || "").replace(".", "").toLowerCase();
+      if (parsedExt) ext = parsedExt;
+    }
+    const safeExt = (ext || "bin").replace(/[^a-zA-Z0-9]/g, "");
+    const filename = `${safeId}.${safeExt}`;
     fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(path.join(cacheDir, filename), Buffer.from(media.data, "base64"));
 
@@ -2587,14 +2704,19 @@ class WhatsAppService {
         // Fast-path: Check if mediaUrl refers to a local file on disk to avoid network loopback & 504 timeouts
         let localFilePath = null;
         if (typeof mediaUrl === "string") {
+          const { mediaDir, uploadsDir } = require("../config/runtimePaths");
+          const baseName = path.basename(mediaUrl.split("?")[0]);
           if (fs.existsSync(mediaUrl)) {
             localFilePath = mediaUrl;
           } else if (mediaUrl.includes("/uploads/")) {
             const relPath = mediaUrl.substring(mediaUrl.indexOf("/uploads/"));
             const candidates = [
+              path.join(mediaDir, this.key, baseName),
+              path.join(mediaDir, baseName),
+              path.join(uploadsDir, baseName),
               path.join(__dirname, "..", relPath),
-              path.join(__dirname, "..", "uploads", "wa-media", path.basename(mediaUrl)),
-              path.join(__dirname, "..", "uploads", path.basename(mediaUrl)),
+              path.join(__dirname, "..", "uploads", "wa-media", baseName),
+              path.join(__dirname, "..", "uploads", baseName),
               path.join(__dirname, "../../", relPath),
             ];
             for (const cand of candidates) {
@@ -2604,8 +2726,37 @@ class WhatsAppService {
               }
             }
           } else if (!mediaUrl.startsWith("http://") && !mediaUrl.startsWith("https://") && !mediaUrl.startsWith("data:")) {
-            const cand = path.join(__dirname, "..", "uploads", "wa-media", path.basename(mediaUrl));
-            if (fs.existsSync(cand)) localFilePath = cand;
+            const candidates = [
+              path.join(mediaDir, this.key, baseName),
+              path.join(mediaDir, baseName),
+              path.join(uploadsDir, baseName),
+              path.join(__dirname, "..", "uploads", "wa-media", baseName),
+            ];
+            for (const cand of candidates) {
+              if (fs.existsSync(cand)) {
+                localFilePath = cand;
+                break;
+              }
+            }
+          } else if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) {
+            try {
+              const parsed = new URL(mediaUrl);
+              if (parsed.pathname.includes("/uploads/")) {
+                const parsedBase = path.basename(parsed.pathname);
+                const candidates = [
+                  path.join(mediaDir, this.key, parsedBase),
+                  path.join(mediaDir, parsedBase),
+                  path.join(uploadsDir, parsedBase),
+                  path.join(__dirname, "..", "uploads", "wa-media", parsedBase),
+                ];
+                for (const cand of candidates) {
+                  if (fs.existsSync(cand)) {
+                    localFilePath = cand;
+                    break;
+                  }
+                }
+              }
+            } catch (_) {}
           }
         }
 
@@ -2624,6 +2775,7 @@ class WhatsAppService {
               ".png": "image/png",
               ".webp": "image/webp",
               ".gif": "image/gif",
+              ".svg": "image/svg+xml",
               ".pdf": "application/pdf",
               ".doc": "application/msword",
               ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -2632,12 +2784,19 @@ class WhatsAppService {
               ".csv": "text/csv",
               ".txt": "text/plain",
               ".mp4": "video/mp4",
+              ".3gp": "video/3gpp",
+              ".mov": "video/quicktime",
+              ".webm": "video/webm",
+              ".mkv": "video/x-matroska",
               ".mp3": "audio/mpeg",
               ".ogg": "audio/ogg",
               ".wav": "audio/wav",
               ".m4a": "audio/mp4",
               ".zip": "application/zip",
               ".rar": "application/x-rar-compressed",
+              ".7z": "application/x-7z-compressed",
+              ".ppt": "application/vnd.ms-powerpoint",
+              ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             };
             const mimeType = mimeMap[ext] || "application/octet-stream";
             const fileData = fs.readFileSync(localFilePath, { encoding: "base64" });

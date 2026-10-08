@@ -1,11 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
-import { Loader2, LogOut, XCircle, CheckCircle2, X, ChevronLeft, FlaskConical } from "lucide-react";
+import {
+  Loader2,
+  LogOut,
+  XCircle,
+  CheckCircle2,
+  X,
+  ChevronLeft,
+  CreditCard,
+  RefreshCw,
+  Settings,
+} from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { describeDemoReason } from "../auth/demoSession";
 import { API } from "../config/api";
 import socket from "../socket/socket";
+import WAConfigPrompt from "../components/WAConfigPrompt";
+import WAAccountBalanceModal from "../components/WAAccountBalanceModal";
 
 // Corporate Shell for Whatsapp_CRM — Hallmark Workbench shell (design.md).
 // Deep-navy slab, yellow hairline, quiet type. Routes and logic untouched.
@@ -19,6 +31,12 @@ export default function WALayout() {
      disconnected one, where a wedged session previously left no way out. */
   const [disconnecting, setDisconnecting] = useState(false);
   const [notice, setNotice] = useState(null); // { type: "success" | "error", text }
+  const [status, setStatus] = useState(null);
+  const [showConfig, setShowConfig] = useState(false);
+  const [showBalance, setShowBalance] = useState(false);
+  const [balanceData, setBalanceData] = useState(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const isChatView = location.pathname === "/whatsapp" || location.pathname === "/whatsapp/";
 
@@ -47,6 +65,75 @@ export default function WALayout() {
     return () => clearTimeout(timer);
   }, [notice]);
 
+  const fetchStatus = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      let res;
+      try {
+        res = await axios.get(`${API}/api/whatsapp/unified-status`, { headers, timeout: 6000 });
+      } catch (e1) {
+        res = await axios.get(`/api/whatsapp/unified-status`, { headers, timeout: 6000 });
+      }
+      if (res && res.data) {
+        setStatus(res.data);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 10000);
+    const handleRealtime = () => fetchStatus();
+    socket.on("wa_ready", handleRealtime);
+    socket.on("wa_disconnected", handleRealtime);
+    socket.on("wa_authenticated", handleRealtime);
+    window.addEventListener("wa_session_disconnected", handleRealtime);
+    window.addEventListener("wa_sync_completed", handleRealtime);
+
+    return () => {
+      clearInterval(interval);
+      socket.off("wa_ready", handleRealtime);
+      socket.off("wa_disconnected", handleRealtime);
+      socket.off("wa_authenticated", handleRealtime);
+      window.removeEventListener("wa_session_disconnected", handleRealtime);
+      window.removeEventListener("wa_sync_completed", handleRealtime);
+    };
+  }, [fetchStatus]);
+
+  const onSyncWhatsApp = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const token = localStorage.getItem("token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      await axios.post(`${API}/api/whatsapp/sync-contacts`, {}, { headers }).catch(() => {});
+      await axios.post(`${API}/api/whatsapp/sync-chats`, {}, { headers }).catch(() => {});
+      window.dispatchEvent(new CustomEvent("wa_sync_completed", { detail: { ts: Date.now() } }));
+      setNotice({ type: "success", text: "Synced WhatsApp contacts & chat history." });
+    } catch (err) {
+      setNotice({ type: "error", text: `Sync failed: ${err?.response?.data?.error || err.message}` });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const fetchAccountBalance = async () => {
+    setShowBalance(true);
+    setBalanceLoading(true);
+    setBalanceData(null);
+    try {
+      const token = localStorage.getItem("token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const { data } = await axios.get(`${API}/api/whatsapp/account-balance`, { headers, timeout: 8000 });
+      setBalanceData(data);
+    } catch (err) {
+      setBalanceData({ error: err?.response?.data?.error || "Failed to fetch WhatsApp account stats" });
+    } finally {
+      setBalanceLoading(false);
+    }
+  };
+
   const onDisconnectWhatsApp = async () => {
     if (disconnecting) return;
     const confirmed = window.confirm(
@@ -69,6 +156,9 @@ export default function WALayout() {
         ["wa_cached_status", "wa_cached_chats", "wa_active_chat"].forEach((key) => {
           sessionStorage.removeItem(key);
           localStorage.removeItem(key);
+        });
+        Object.keys(localStorage).forEach((k) => {
+          if (k.startsWith("wa_chat_messages_")) localStorage.removeItem(k);
         });
       } catch (_) {}
 
@@ -107,13 +197,6 @@ export default function WALayout() {
           : "crm-layout-shell wa-page-mode wa-dvh flex flex-col overflow-hidden"
       }
     >
-      {/*
-        Offline demo session.
-        An offline demo session has no token, so every API call below this point
-        will fail. Without this banner the screen simply looks broken — empty
-        tables, spinners that never resolve — which reads as a bug rather than as
-        "there is no backend". Stated once, here, where it cannot be missed.
-      */}
       {demoMode && (
         <div
           role="status"
@@ -151,33 +234,79 @@ export default function WALayout() {
             </span>
           </span>
           {user && (
-            <span className="hl-shell-meta hidden md:inline-flex truncate">
+            <span className="hl-shell-meta hidden lg:inline-flex truncate">
               {user.name || user.email} · {user.role}
             </span>
           )}
         </div>
-        {/* Fixed 140x40 so it reads as a real action button and stays on the
-            same row as Logout at every viewport. */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {/* Back to the main CRM app. Lives in the shell, not the WhatsApp tab
-              strip, so it stays reachable on every page without scrolling the
-              tab row — the tab row is a horizontal scroller on narrow screens
-              and this button used to scroll off with it. Icon-only below lg so
-              it never squeezes the wordmark on a phone. */}
+
+        {/* Global Action Controls: Dashboard, Status, Quota, Sync, Config, Disconnect, Logout */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap">
           <button
             onClick={() => window.location.assign("https://crm.madhuratech.com")}
             className="hl-shell-link shrink-0"
-            style={{ height: 40, padding: "0 0.75rem", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+            style={{ height: 38, padding: "0 0.75rem", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
             title="Return to CRM Dashboard"
           >
             <ChevronLeft size={14} />
-            <span className="hidden lg:inline whitespace-nowrap">CRM Dashboard</span>
+            <span className="hidden xl:inline whitespace-nowrap">CRM Dashboard</span>
           </button>
+
+          {/* Status Badge */}
+          {status?.cloud?.configured || status?.isCloud ? (
+            <span className="hl-badge hl-badge-info hidden md:inline-flex" style={{ height: 32 }}>
+              <span>Meta API: {status?.phone ? `+${status.phone}` : "Active"}</span>
+            </span>
+          ) : status?.web?.connected || status?.isWeb || status?.phone ? (
+            <span className="hl-badge hl-badge-success hidden md:inline-flex" style={{ height: 32 }}>
+              <span>+{status?.phone}</span>
+            </span>
+          ) : (
+            <span className="hl-badge hidden md:inline-flex" style={{ height: 32 }}>
+              <span>Offline</span>
+            </span>
+          )}
+
+          {/* Quota & Balance */}
+          <button
+            onClick={fetchAccountBalance}
+            className="hl-btn-secondary shrink-0"
+            style={{ height: 38, padding: "0 0.65rem", fontSize: 12 }}
+            title="View WhatsApp Engine & Messaging Quota Balance"
+          >
+            <CreditCard size={14} />
+            <span className="hidden lg:inline whitespace-nowrap">Quota & Balance</span>
+          </button>
+
+          {/* Sync All */}
+          <button
+            onClick={onSyncWhatsApp}
+            disabled={syncing}
+            className="hl-btn-secondary shrink-0"
+            style={{ height: 38, padding: "0 0.65rem", fontSize: 12 }}
+            title="Sync Contacts & Chat History"
+          >
+            <RefreshCw size={14} className={syncing ? "animate-spin" : undefined} />
+            <span className="hidden sm:inline whitespace-nowrap">{syncing ? "Syncing..." : "Sync All"}</span>
+          </button>
+
+          {/* API Config */}
+          <button
+            onClick={() => setShowConfig(true)}
+            className="hl-btn-secondary shrink-0"
+            style={{ height: 38, padding: "0 0.65rem", fontSize: 12 }}
+            title="Configure Meta Cloud API"
+          >
+            <Settings size={14} />
+            <span className="hidden md:inline whitespace-nowrap">API Config</span>
+          </button>
+
+          {/* Disconnect WhatsApp */}
           <button
             onClick={onDisconnectWhatsApp}
             disabled={disconnecting}
-            className="hl-btn-danger-ghost hl-shell-disconnect"
-            style={{ width: 140, height: 40, padding: "0 0.75rem", fontSize: 12 }}
+            className="hl-btn-danger-ghost hl-shell-disconnect shrink-0"
+            style={{ width: 130, height: 38, padding: "0 0.75rem", fontSize: 12 }}
             title="Disconnect WhatsApp Session — logs out the linked account and deletes its saved session"
             aria-busy={disconnecting || undefined}
           >
@@ -190,16 +319,15 @@ export default function WALayout() {
               {disconnecting ? "Disconnecting…" : "Disconnect"}
             </span>
           </button>
-          <button onClick={onLogout} className="hl-logout shrink-0" title="Sign out of CRM">
+
+          {/* Sign out */}
+          <button onClick={onLogout} className="hl-logout shrink-0" style={{ height: 38 }} title="Sign out of CRM">
             Logout
           </button>
         </div>
       </header>
 
-      {/*
-        Fixed rather than in-flow: the chat view is height-constrained, so an
-        inserted strip would reflow the message pane. Auto-dismisses in 6s.
-      */}
+      {/* Notice Toast */}
       {notice && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] px-3 pointer-events-none">
           <div
@@ -220,11 +348,26 @@ export default function WALayout() {
         </div>
       )}
 
-      {/*
-        Chat view: main is a fixed-height flex column and every pane owns
-        its own scroll axis (the page never scrolls).
-        All other views: main is the single document scroller.
-      */}
+      {/* Meta API Config Modal */}
+      {showConfig && (
+        <WAConfigPrompt
+          onClose={() => {
+            setShowConfig(false);
+            fetchStatus();
+          }}
+        />
+      )}
+
+      {/* Quota & Balance Modal */}
+      {showBalance && (
+        <WAAccountBalanceModal
+          isOpen={showBalance}
+          onClose={() => setShowBalance(false)}
+          balance={balanceData}
+          loading={balanceLoading}
+        />
+      )}
+
       <main
         className={
           isChatView

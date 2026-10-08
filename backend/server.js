@@ -179,8 +179,19 @@ if (corsOrigin.isProd && corsOrigin.allowedOrigins.length === 0) {
 }
 
 
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  next();
+});
+
 app.use(express.json({ limit: "50mb", verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
+server.requestTimeout = 120000;
 
 app.get(["/health", "/api/health"], (req, res) => {
   // Truth over green ticks. The status stays 200 so orchestrators do not
@@ -510,6 +521,31 @@ function startServer() {
 }
 
 app.startServer = startServer;
+
+function setupGracefulShutdown() {
+  const shutdown = (signal) => {
+    console.log(`\n🛑 [Server Guard] Received ${signal} — draining connections and shutting down gracefully...`);
+    server.close(async () => {
+      console.log("  HTTP/WebSocket servers closed to new connections.");
+      try {
+        const { messageQueue } = require("./services/waQueue");
+        if (messageQueue && messageQueue.close) await messageQueue.close().catch(() => {});
+        if (db && db.end) await new Promise((r) => db.end(r)).catch(() => {});
+      } catch (_) {}
+      console.log("  Clean shutdown completed.");
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.error("  Forced exit after 10s shutdown timeout.");
+      process.exit(1);
+    }, 10000).unref();
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+}
+
+setupGracefulShutdown();
 
 if (process.env.NODE_ENV !== "test") {
   startServer();

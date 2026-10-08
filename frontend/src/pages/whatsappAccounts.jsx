@@ -529,12 +529,13 @@ export default function WhatsAppAccounts() {
     try {
       await axios.post(`${API}/api/whatsapp/logout`, { purge: true }, { headers: headers() });
       try {
-        sessionStorage.removeItem("wa_cached_status");
-        sessionStorage.removeItem("wa_cached_chats");
-        sessionStorage.removeItem("wa_active_chat");
-        localStorage.removeItem("wa_cached_status");
-        localStorage.removeItem("wa_cached_chats");
-        localStorage.removeItem("wa_active_chat");
+        ["wa_cached_status", "wa_cached_chats", "wa_active_chat"].forEach((key) => {
+          sessionStorage.removeItem(key);
+          localStorage.removeItem(key);
+        });
+        Object.keys(localStorage).forEach((k) => {
+          if (k.startsWith("wa_chat_messages_")) localStorage.removeItem(k);
+        });
       } catch (_) {}
       setQrCode(null);
       fetchAll();

@@ -211,6 +211,10 @@ class SQLiteDatabaseAdapter {
     this.sqlite.exec("PRAGMA journal_mode = WAL;");
     this.sqlite.exec("PRAGMA synchronous = NORMAL;");
     this.sqlite.exec("PRAGMA foreign_keys = ON;");
+    this.sqlite.exec("PRAGMA busy_timeout = 5000;");
+    this.sqlite.exec("PRAGMA cache_size = -64000;");
+    this.sqlite.exec("PRAGMA temp_store = MEMORY;");
+    this.sqlite.exec("PRAGMA mmap_size = 268435456;");
 
     // 3. Register MySQL-compatible user-defined SQL functions
     this.sqlite.function("now", () => new Date().toISOString().replace("T", " ").substring(0, 19));

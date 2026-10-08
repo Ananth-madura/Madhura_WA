@@ -7,7 +7,7 @@ const { encrypt, decrypt } = require("../backendutil/cryptoHelper");
 const { generateOtp } = require("../backendutil/otp");
 const sendEmailOtp = require("../backendutil/sendSms");
 const { verifyToken, isAdmin, isAdminOnly } = require("../middleware/authMiddleware");
-const { createRateLimiter } = require("../middleware/waRateLimiter");
+const { createRateLimiter, loginLimiter, otpLimiter } = require("../middleware/waRateLimiter");
 const { getNotificationIO } = require("../sockets/notifications");
 
 const router = express.Router();
@@ -29,7 +29,7 @@ router.get("/users", verifyToken, isAdmin, (req, res) => {
 });
 
 /* ================= SEND EMAIL OTP ================= */
-router.post("/send-email-otp", (req, res) => {
+router.post("/send-email-otp", otpLimiter, (req, res) => {
   const email = req.body.email?.trim().toLowerCase();
 
   if (!email) {
@@ -305,7 +305,7 @@ router.post("/demo-login", (req, res) => {
 });
 
 /* ================= LOGIN with Password or OTP ================= */
-router.post("/login", (req, res) => {
+router.post("/login", loginLimiter, (req, res) => {
   const { email, password, otp } = req.body;
   if (!email) return res.status(400).json({ message: "Email / Employee Code required" });
   const emailLower = email.trim().toLowerCase();

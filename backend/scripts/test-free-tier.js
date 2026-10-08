@@ -53,10 +53,12 @@ console.log("config/webEngine.js\n" + "=".repeat(68) + "\n");
 const env = { ...process.env };
 for (const k of ["DB_HOST", "DB_PORT", "DB_USER", "DB_PASS", "DB_NAME", "JWT_SECRET",
                  "PUBLIC_BASE_URL", "ALLOWED_ORIGINS", "ALLOWED_ORIGIN", "WA_DATA_DIR",
-                 "WA_ENABLE_WEB_ENGINE", "ALLOW_START_WITHOUT_DB", "PORT"]) delete env[k];
+                 "WA_ENABLE_WEB_ENGINE", "ALLOW_START_WITHOUT_DB", "PORT", "USE_SQLITE", "DB_ENGINE"]) delete env[k];
 Object.assign(env, {
   NODE_ENV: "production",
   PORT: "5611",
+  WA_SKIP_DOTENV: "1",
+  DISABLE_R2: "1",
   // No database at all, exactly like a free MySQL that has not finished booting.
   DB_HOST: "", DB_PORT: "3306", DB_USER: "", DB_PASS: "", DB_NAME: "",
   JWT_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",

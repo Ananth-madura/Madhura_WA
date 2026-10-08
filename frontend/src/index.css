@@ -1721,6 +1721,99 @@ select.hidden {
 .hl-tab.is-active { color: var(--color-ink); font-weight: 600; }
 .hl-tab.is-active::after { content: ""; position: absolute; left: 0.5rem; right: 0.5rem; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: var(--color-accent); }
 
+/* WhatsApp full-width responsive tab bar: fits all 10 tabs cleanly without horizontal scrolling */
+.wa-nav-tabs-bar {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 2px;
+  border-bottom: none;
+}
+@media (max-width: 1023px) {
+  .wa-nav-tabs-bar {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .wa-nav-tabs-bar::-webkit-scrollbar {
+    display: none;
+    height: 0;
+  }
+}
+@media (min-width: 1024px) {
+  .wa-nav-tabs-bar {
+    overflow: hidden;
+  }
+}
+
+.wa-nav-tab-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  min-height: 36px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--color-ink-2);
+  transition: color var(--dur-short, 0.15s) ease, background var(--dur-short, 0.15s) ease;
+  border-radius: 4px;
+  user-select: none;
+  text-decoration: none;
+}
+@media (max-width: 1023px) {
+  .wa-nav-tab-btn {
+    flex: 0 0 auto;
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+}
+@media (min-width: 1024px) {
+  .wa-nav-tab-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 6px 3px;
+    font-size: 12px;
+  }
+}
+@media (min-width: 1280px) {
+  .wa-nav-tab-btn {
+    padding: 6px 5px;
+    font-size: 12.5px;
+  }
+}
+@media (min-width: 1536px) {
+  .wa-nav-tab-btn {
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+}
+
+.wa-nav-tab-btn:hover {
+  color: var(--color-ink);
+  background: var(--color-paper-2, rgba(0, 0, 0, 0.03));
+}
+
+.wa-nav-tab-btn.is-active {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.wa-nav-tab-btn.is-active::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 0px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--color-accent);
+}
+
 /* Empty states */
 .hl-empty { text-align: center; padding: var(--space-xl) var(--space-md); color: var(--color-ink-2); }
 .hl-empty-title { font-family: var(--font-display); font-weight: 600; color: var(--color-ink); font-size: var(--text-md); margin-bottom: var(--space-3xs); }

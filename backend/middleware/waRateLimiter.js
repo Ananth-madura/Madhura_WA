@@ -2,41 +2,60 @@
  * waRateLimiter.js
  *
  * Enterprise Multi-Tenant Rate Limiting, Flood Protection & Webhook Security
- * Protects VPS resources against noisy neighbor tenants and high-volume burst attacks.
+ * Protects VPS resources against noisy neighbor tenants, burst attacks, and resource exhaustion.
  */
 
 const crypto = require("crypto");
 
 // Sliding window in-memory rate tracker
-// Key: `${tenantId}:${userId}:${endpointCategory}` -> [timestamps]
+// Key: `${tenantId}:${identifier}:${category}` -> [timestamps]
 const requestWindows = new Map();
+const throttleMap = new Map();
 
-// Periodic cleanup of expired window buckets every 5 minutes
+// Periodic cleanup of expired window buckets every 3 minutes
 setInterval(() => {
   const now = Date.now();
-  const cutoff = now - 15 * 60 * 1000;
+  const windowCutoff = now - 15 * 60 * 1000;
   for (const [key, timestamps] of requestWindows.entries()) {
-    const valid = timestamps.filter((t) => t > cutoff);
+    const valid = timestamps.filter((t) => t > windowCutoff);
     if (valid.length === 0) {
       requestWindows.delete(key);
     } else {
       requestWindows.set(key, valid);
     }
   }
-}, 5 * 60 * 1000);
+
+  for (const [key, timestamp] of throttleMap.entries()) {
+    if (timestamp < now - 60 * 1000) {
+      throttleMap.delete(key);
+    }
+  }
+}, 3 * 60 * 1000);
 
 /**
- * Creates a rate limiting middleware for a specific endpoint category.
+ * Extracts a dependable unique client identifier accounting for reverse proxies (Render, Vercel, Cloudflare, nginx)
+ */
+function getClientIdentifier(req) {
+  if (req.user?.id) return `u:${req.user.id}`;
+  const cfIp = req.headers["cf-connecting-ip"];
+  const xRealIp = req.headers["x-real-ip"];
+  const xForwarded = req.headers["x-forwarded-for"]?.split(",")[0]?.trim();
+  const rawIp = req.ip || req.connection?.remoteAddress;
+  return `ip:${cfIp || xRealIp || xForwarded || rawIp || "anon"}`;
+}
+
+/**
+ * Creates a sliding-window rate limiting middleware for a specific endpoint category.
  * @param {Object} options
  * @param {number} options.windowMs - Time window in milliseconds (default 60000 / 1 min)
  * @param {number} options.maxRequests - Max requests allowed per window (default 120)
- * @param {string} options.category - Category identifier (e.g., 'campaign_launch', 'api_send', 'qr_scan')
+ * @param {string} options.category - Category identifier (e.g., 'campaign_launch', 'message_send', 'qr_refresh')
  */
 function createRateLimiter({ windowMs = 60000, maxRequests = 120, category = "default" } = {}) {
   return (req, res, next) => {
     const tenantId = req.user?.tenant_id || 1;
-    const userId = req.user?.id || req.ip || "anon";
-    const key = `${tenantId}:${userId}:${category}`;
+    const identifier = getClientIdentifier(req);
+    const key = `${tenantId}:${identifier}:${category}`;
     const now = Date.now();
     const windowStart = now - windowMs;
 
@@ -44,11 +63,15 @@ function createRateLimiter({ windowMs = 60000, maxRequests = 120, category = "de
     const recentRequests = existingTimestamps.filter((t) => t > windowStart);
 
     if (recentRequests.length >= maxRequests) {
-      const retryAfterSec = Math.ceil((recentRequests[0] + windowMs - now) / 1000);
-      res.setHeader("Retry-After", Math.max(1, retryAfterSec));
+      const oldestInWindow = recentRequests[0] || now;
+      const retryAfterSec = Math.max(1, Math.ceil((oldestInWindow + windowMs - now) / 1000));
+      res.setHeader("Retry-After", retryAfterSec);
+      res.setHeader("X-RateLimit-Limit", maxRequests);
+      res.setHeader("X-RateLimit-Remaining", 0);
+      res.setHeader("X-RateLimit-Reset", Math.ceil((oldestInWindow + windowMs) / 1000));
       return res.status(429).json({
         error: "Too Many Requests",
-        message: `Tenant rate limit exceeded for ${category}. Maximum ${maxRequests} requests per ${windowMs / 1000}s. Please retry in ${retryAfterSec}s.`,
+        message: `Rate limit reached for ${category}. Maximum ${maxRequests} requests per ${windowMs / 1000}s. Please retry in ${retryAfterSec}s.`,
         retryAfter: retryAfterSec,
       });
     }
@@ -58,6 +81,34 @@ function createRateLimiter({ windowMs = 60000, maxRequests = 120, category = "de
 
     res.setHeader("X-RateLimit-Limit", maxRequests);
     res.setHeader("X-RateLimit-Remaining", Math.max(0, maxRequests - recentRequests.length));
+    res.setHeader("X-RateLimit-Reset", Math.ceil((now + windowMs) / 1000));
+    next();
+  };
+}
+
+/**
+ * Creates a lightweight throttle middleware that ensures a cooldown period between requests.
+ * @param {Object} options
+ * @param {number} options.cooldownMs - Minimum milliseconds between calls
+ * @param {string} options.category - Action category
+ */
+function createThrottle({ cooldownMs = 1500, category = "throttle" } = {}) {
+  return (req, res, next) => {
+    const identifier = getClientIdentifier(req);
+    const key = `${identifier}:${category}`;
+    const now = Date.now();
+    const lastCalled = throttleMap.get(key) || 0;
+
+    if (now - lastCalled < cooldownMs) {
+      const waitMs = cooldownMs - (now - lastCalled);
+      return res.status(429).json({
+        error: "Action Throttled",
+        message: `Please wait ${Math.ceil(waitMs / 1000)}s before repeating this action.`,
+        retryAfter: Math.ceil(waitMs / 1000),
+      });
+    }
+
+    throttleMap.set(key, now);
     next();
   };
 }
@@ -90,8 +141,13 @@ function verifyMetaWebhookSignature(req, res, next) {
 
 module.exports = {
   createRateLimiter,
-  campaignLaunchLimiter: createRateLimiter({ windowMs: 60000, maxRequests: 20, category: "campaign_launch" }),
-  messageSendLimiter: createRateLimiter({ windowMs: 60000, maxRequests: 200, category: "message_send" }),
-  generalApiLimiter: createRateLimiter({ windowMs: 60000, maxRequests: 600, category: "general_api" }),
+  createThrottle,
+  campaignLaunchLimiter: createRateLimiter({ windowMs: 60000, maxRequests: 40, category: "campaign_launch" }),
+  messageSendLimiter: createRateLimiter({ windowMs: 60000, maxRequests: 350, category: "message_send" }),
+  qrRefreshLimiter: createRateLimiter({ windowMs: 15000, maxRequests: 6, category: "qr_refresh" }),
+  loginLimiter: createRateLimiter({ windowMs: 15 * 60 * 1000, maxRequests: 35, category: "login" }),
+  otpLimiter: createRateLimiter({ windowMs: 10 * 60 * 1000, maxRequests: 10, category: "email_otp" }),
+  generalApiLimiter: createRateLimiter({ windowMs: 60000, maxRequests: 1000, category: "general_api" }),
+  sessionResetThrottle: createThrottle({ cooldownMs: 4000, category: "session_reset" }),
   verifyMetaWebhookSignature,
 };

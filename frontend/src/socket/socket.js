@@ -77,10 +77,29 @@ const joinMainRooms = () => {
 };
 
 socket.on("connect", () => {
+  console.log("⚡ [Socket] Real-time link established:", socket.id);
   joinMainRooms();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("wa_socket_connected", { detail: { id: socket.id } }));
+  }
+});
+
+socket.on("disconnect", (reason) => {
+  console.log("🔌 [Socket] Real-time link disconnected:", reason);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("wa_socket_disconnected", { detail: { reason } }));
+  }
+});
+
+socket.on("connect_error", (err) => {
+  if (!socket._lastLoggedError || Date.now() - socket._lastLoggedError > 15000) {
+    console.warn("⚠️ [Socket] Connection notice:", err.message);
+    socket._lastLoggedError = Date.now();
+  }
 });
 
 socket.on("reconnect", () => {
+  console.log("🔄 [Socket] Reconnected successfully:", socket.id);
   joinMainRooms();
 });
 
@@ -108,6 +127,14 @@ notificationSocket.on("reconnect", () => {
   joinNotificationRooms();
 });
 
+// Automatic network recovery when browser detects network reconnection
+if (typeof window !== "undefined") {
+  window.addEventListener("online", () => {
+    console.log("🌐 [Network] Device online — refreshing real-time link...");
+    connectSocket();
+  });
+}
+
 // Connect helper when logging in
 export const connectSocket = () => {
   const token = readToken();
@@ -125,6 +152,8 @@ export const disconnectSocket = () => {
     if (!notificationSocket.connected) notificationSocket.disconnect();
   } catch (_) {}
 };
+
+export const isSocketConnected = () => Boolean(socket.connected);
 
 export { socket, notificationSocket };
 export default socket;

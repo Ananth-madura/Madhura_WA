@@ -5,7 +5,7 @@ const multer = require("multer");
 const db = require("../config/database");
 const mgr = require("../services/whatsappService");
 const qrcode = require("qrcode");
-const { messageSendLimiter } = require("../middleware/waRateLimiter");
+const { messageSendLimiter, qrRefreshLimiter, sessionResetThrottle } = require("../middleware/waRateLimiter");
 
 const toDataUrl = async (qr) => {
   if (!qr) return null;
@@ -229,7 +229,7 @@ router.post("/test-send", async (req, res) => {
   }
 });
 
-router.get("/qr", async (req, res) => {
+router.get("/qr", qrRefreshLimiter, async (req, res) => {
   try {
     if (req.query.mock === "true") {
       const demoQr = "2@madhura-demo-qr-token-" + Date.now();
@@ -994,7 +994,8 @@ router.post("/upload-media", upload.single("file"), async (req, res) => {
     media_type = "document";
   }
 
-  const url = `${req.protocol}://${req.get("host")}/uploads/wa-media/${req.file.filename}`;
+  const baseUrl = (process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+  const url = `${baseUrl}/uploads/wa-media/${req.file.filename}`;
   res.json({
     url,
     media_type,
@@ -1011,12 +1012,21 @@ router.post("/send-media", messageSendLimiter, async (req, res) => {
     const session = s(req);
     const cloudConfigured = waCloud.isConfigured();
 
+    let resolvedType = mediaType;
+    if (!resolvedType || resolvedType === "media") {
+      const ext = path.extname(filename || mediaUrl || "").toLowerCase();
+      if ([".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"].includes(ext)) resolvedType = "image";
+      else if ([".mp4", ".mov", ".3gp", ".webm", ".mkv"].includes(ext)) resolvedType = "video";
+      else if ([".mp3", ".ogg", ".wav", ".m4a", ".aac"].includes(ext)) resolvedType = "audio";
+      else resolvedType = "document";
+    }
+
     if (session && session.ready) {
       try {
         const result = await session.sendMediaMessage(
           chatId,
           mediaUrl,
-          mediaType || "document",
+          resolvedType,
           caption || "",
           filename || "",
           { idempotencyKey: idempotencyKey || null }
@@ -1033,7 +1043,12 @@ router.post("/send-media", messageSendLimiter, async (req, res) => {
       try {
         let cleanPhone = String(chatId).replace(/\D/g, "");
         if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
-        const sent = await waCloud.sendMedia(cleanPhone, mediaType || "image", mediaUrl, caption || "", filename || "");
+        let cloudUrl = mediaUrl;
+        if (typeof cloudUrl === "string" && cloudUrl.startsWith("/")) {
+          const base = (process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+          cloudUrl = `${base}${cloudUrl}`;
+        }
+        const sent = await waCloud.sendMedia(cleanPhone, resolvedType, cloudUrl, caption || "", filename || "");
         const msgId = sent?.messages?.[0]?.id || ("cloud_" + Date.now());
         return res.json({ success: true, id: msgId, activeEngine: "Meta Cloud API" });
       } catch (cloudErr) {
@@ -1178,7 +1193,7 @@ router.post("/reconnect", async (req, res) => {
   }
 });
 
-router.post("/reset-session", async (req, res) => {
+router.post("/reset-session", sessionResetThrottle, async (req, res) => {
   try {
     const session = userSession(req);
     await session.logout(true).catch(() => {});

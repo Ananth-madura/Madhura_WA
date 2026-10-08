@@ -3,6 +3,49 @@ const axios = require("axios");
 const WA_API_VERSION = "v22.0";
 const BASE_URL = `https://graph.facebook.com/${WA_API_VERSION}`;
 
+function mimeToExtension(mime, defaultExt = "bin") {
+  if (!mime) return defaultExt;
+  const cleanMime = String(mime).toLowerCase().split(";")[0].trim();
+  const map = {
+    "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.ms-excel": "xls",
+    "text/csv": "csv",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "application/vnd.ms-powerpoint": "ppt",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/svg+xml": "svg",
+    "video/mp4": "mp4",
+    "video/3gpp": "3gp",
+    "video/quicktime": "mov",
+    "video/webm": "webm",
+    "video/x-matroska": "mkv",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/ogg": "ogg",
+    "audio/wav": "wav",
+    "audio/webm": "webm",
+    "audio/aac": "aac",
+    "audio/mp4": "m4a",
+    "application/zip": "zip",
+    "application/x-zip-compressed": "zip",
+    "application/x-rar-compressed": "rar",
+    "application/x-7z-compressed": "7z",
+    "text/plain": "txt",
+    "application/json": "json",
+  };
+  if (map[cleanMime]) return map[cleanMime];
+  const sub = cleanMime.split("/")[1];
+  if (sub && sub.length <= 5 && /^[a-z0-9]+$/.test(sub)) return sub;
+  return defaultExt;
+}
+
 class WhatsAppCloudApi {
   constructor() {
     this.phoneNumberId = process.env.WA_PHONE_NUMBER_ID || "";
@@ -214,9 +257,15 @@ class WhatsAppCloudApi {
       cleanType = "document";
     }
 
-    const mediaObj = mediaIdOrLink.startsWith("http")
-      ? { link: mediaIdOrLink }
-      : { id: mediaIdOrLink };
+    let finalMediaTarget = mediaIdOrLink;
+    if (typeof finalMediaTarget === "string" && finalMediaTarget.startsWith("/")) {
+      const base = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+      if (base) finalMediaTarget = `${base}${finalMediaTarget}`;
+    }
+
+    const mediaObj = (typeof finalMediaTarget === "string" && finalMediaTarget.startsWith("http"))
+      ? { link: finalMediaTarget }
+      : { id: finalMediaTarget };
 
     if (cleanType === "document") {
       if (filename) mediaObj.filename = filename;
@@ -312,8 +361,9 @@ class WhatsAppCloudApi {
     });
 
     const mimetype = meta.mime_type || bin.headers["content-type"] || "application/octet-stream";
-    const ext = (mimetype.split("/")[1] || "bin").split(";")[0];
-    const filename = `${safeId}.${ext}`;
+    const ext = mimeToExtension(mimetype, (mimetype.split("/")[1] || "bin").split(";")[0]);
+    const safeExt = (ext || "bin").replace(/[^a-zA-Z0-9]/g, "");
+    const filename = `${safeId}.${safeExt}`;
     fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(path.join(cacheDir, filename), Buffer.from(bin.data));
 

@@ -23,12 +23,10 @@ import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { API } from "../config/api";
 import socket from "../socket/socket";
-import WAConfigPrompt from "./WAConfigPrompt";
 
-export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, isSyncing, statusPhone }) {
+export default function WhatsAppNav() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [showConfig, setShowConfig] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
   const [status, setStatus] = useState(null);
   const [totalUnread, setTotalUnread] = useState(0);
@@ -153,7 +151,8 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, isSyncin
   const tabs = [
     {
       id: "chats",
-      label: "Live Chats & QR",
+      label: "Live Chats",
+      title: "Live Chats & QR Scan",
       path: "/whatsapp",
       icon: MessageCircle,
       exact: true,
@@ -161,54 +160,66 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, isSyncin
     {
       id: "contacts",
       label: "Contacts",
+      title: "WhatsApp Contacts Directory",
       path: "/whatsapp/contacts",
       icon: UserCheck,
     },
     {
       id: "templates",
       label: "Templates",
+      title: "Message & Media Templates",
       path: "/whatsapp/templates",
       icon: FileText,
     },
     {
       id: "groups",
-      label: "Contact Groups",
+      label: "Groups",
+      fullPrefix: "Contact ",
+      title: "Contact Groups & Segments",
       path: "/whatsapp/groups",
       icon: Users,
     },
     {
       id: "campaigns",
-      label: "Bulk Campaigns",
+      label: "Campaigns",
+      fullPrefix: "Bulk ",
+      title: "Bulk Broadcast Campaigns",
       path: "/whatsapp/campaigns",
       icon: Send,
     },
     {
       id: "automations",
       label: "Automations",
+      title: "Automation Rules & Auto-Replies",
       path: "/whatsapp/automations",
       icon: Zap,
     },
     {
       id: "reminders",
       label: "Reminders",
+      title: "Scheduled Task & Message Reminders",
       path: "/whatsapp/reminders",
       icon: Bell,
     },
     {
       id: "flows",
-      label: "Chatbot Flows",
+      label: "Flows",
+      fullPrefix: "Chatbot ",
+      title: "Visual Chatbot Conversation Flows",
       path: "/whatsapp/flows",
       icon: AutomationIcon,
     },
     {
       id: "analytics",
       label: "Analytics",
+      title: "Campaign & Message Analytics",
       path: "/whatsapp/analytics",
       icon: BarChart3,
     },
     {
       id: "accounts",
       label: "Accounts",
+      title: "WhatsApp Accounts & Cloud Setup",
       path: "/whatsapp/accounts",
       icon: Smartphone,
     },
@@ -228,35 +239,12 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, isSyncin
       className="hl-card hl-reveal w-full min-w-0"
       style={{
         marginBottom: isChatView ? 4 : 12,
-        padding: isChatView ? "4px 6px" : 8,
+        padding: isChatView ? "4px 6px" : "6px 8px",
       }}
     >
-      {/*
-          Chat view on a phone has very little vertical budget, so the whole
-          navigation collapses into ONE row instead of stacking tabs over
-          actions. Document pages keep the two-row layout because they are not
-          height-constrained.
-
-          In chat view the tab strip is the ONLY scrollable part — the action
-          buttons (Disconnect in particular) are pinned outside it so they can
-          never be scrolled off-screen and hidden behind the 10 tabs.
-        */}
-      <div
-        className={
-          isChatView
-            ? "flex items-center gap-1.5 min-w-0"
-            : "flex flex-col lg:flex-row lg:flex-wrap lg:items-center lg:justify-between gap-2"
-        }
-      >
-        {/* Top Tabs — scrolls horizontally in chat view, pinned actions beside it */}
-        <div
-          className={
-            isChatView
-              ? "hl-tabs min-w-0 flex-1 overflow-x-auto wa-no-scrollbar"
-              : "hl-tabs w-full lg:w-auto lg:flex-1"
-          }
-          style={{ borderBottom: "none", minWidth: 0 }}
-        >
+      <div className="flex items-center min-w-0 w-full overflow-hidden">
+        {/* Top Tabs — responsive full-width strip with zero horizontal scroll on desktop */}
+        <div className="wa-nav-tabs-bar">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = isTabActive(tab);
@@ -264,81 +252,49 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, isSyncin
               <button
                 key={tab.id}
                 onClick={() => navigate(tab.path)}
-                className={`hl-tab${active ? " is-active" : ""}`}
+                className={`wa-nav-tab-btn${active ? " is-active" : ""}`}
+                title={tab.title}
+                type="button"
               >
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                  <Icon size={16} />
-                  <span>{tab.label}</span>
+                <span className="inline-flex items-center justify-center gap-1.5 min-w-0">
+                  <Icon size={15} className="shrink-0" />
+                  <span className="truncate">
+                    {tab.fullPrefix && (
+                      <span className="hidden 2xl:inline">{tab.fullPrefix}</span>
+                    )}
+                    {tab.label}
+                  </span>
                 </span>
                 {tab.id === "chats" && totalUnread > 0 && (
-                  <span className="hl-badge" style={active
-                    ? { marginLeft: 4, background: "var(--color-accent)", borderColor: "var(--color-focus)", color: "var(--color-accent-ink)" }
-                    : { marginLeft: 4, color: "var(--color-error)", borderColor: "var(--color-error)" }}>
+                  <span
+                    className="hl-badge shrink-0"
+                    style={
+                      active
+                        ? {
+                            marginLeft: 4,
+                            padding: "1px 5px",
+                            fontSize: 10,
+                            lineHeight: "12px",
+                            background: "var(--color-accent)",
+                            borderColor: "var(--color-focus)",
+                            color: "var(--color-accent-ink)",
+                          }
+                        : {
+                            marginLeft: 4,
+                            padding: "1px 5px",
+                            fontSize: 10,
+                            lineHeight: "12px",
+                            color: "var(--color-error)",
+                            borderColor: "var(--color-error)",
+                          }
+                    }
+                  >
                     {totalUnread > 99 ? "99+" : totalUnread}
                   </span>
                 )}
               </button>
             );
           })}
-        </div>
-
-        {/* Action & Config Buttons — icon-only below sm, full labels above */}
-        <div
-          className={
-            isChatView
-              ? "flex items-center gap-1.5 shrink-0 pl-2 border-l"
-              : "flex items-center gap-2 lg:ml-auto lg:pr-1 flex-wrap"
-          }
-          style={isChatView ? { borderColor: "var(--color-rule)" } : undefined}
-        >
-          {status?.cloud?.configured || status?.isCloud ? (
-            <span className="hl-badge hl-badge-info hidden sm:inline-flex">
-              <span>Meta API: {status?.phone ? `+${status.phone}` : "Active"}</span>
-            </span>
-          ) : status?.web?.connected || status?.isWeb || statusPhone ? (
-            <span className="hl-badge hl-badge-success hidden sm:inline-flex">
-              <span>+{status?.phone || statusPhone}</span>
-            </span>
-          ) : (
-            <span className="hl-badge hidden sm:inline-flex">
-              <span>Offline</span>
-            </span>
-          )}
-
-          {onAccountBalance && (
-            <button
-              onClick={onAccountBalance}
-              className="hl-btn-secondary"
-              style={{ padding: isChatView ? "0.4rem 0.55rem" : "0.5rem 0.75rem", fontSize: 12, minHeight: isChatView ? 36 : 42 }}
-              title="View WhatsApp Engine & Messaging Quota Balance"
-            >
-              <CreditCard size={14} />
-              <span className="hidden lg:inline">Quota & Balance</span>
-            </button>
-          )}
-
-          {onSyncWhatsApp && (
-            <button
-              onClick={onSyncWhatsApp}
-              disabled={isSyncing}
-              className="hl-btn-secondary"
-              style={{ padding: isChatView ? "0.4rem 0.55rem" : "0.5rem 0.75rem", fontSize: 12, minHeight: isChatView ? 36 : 42 }}
-              title="Sync Contacts & Chat History"
-            >
-              <RefreshCw size={14} className={isSyncing ? "animate-spin" : undefined} />
-              <span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Sync All"}</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => setShowConfig(true)}
-            className="hl-btn-secondary"
-            style={{ padding: isChatView ? "0.4rem 0.55rem" : "0.5rem 0.75rem", fontSize: 12, minHeight: isChatView ? 36 : 42 }}
-            title="Configure Meta Cloud API"
-          >
-            <Settings size={14} />
-            <span className="hidden md:inline">API Config</span>
-          </button>
         </div>
       </div>
 
@@ -348,8 +304,6 @@ export default function WhatsAppNav({ onAccountBalance, onSyncWhatsApp, isSyncin
           {stopResult.message}
         </div>
       )}
-
-      {showConfig && <WAConfigPrompt onClose={() => setShowConfig(false)} />}
 
       {/* Test Send Modal */}
       {showTestModal && (

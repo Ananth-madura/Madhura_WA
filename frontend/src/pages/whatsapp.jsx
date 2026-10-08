@@ -58,6 +58,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Columns,
+  Upload,
 } from "lucide-react";
 import axios from "axios";
 import { API, LIVE_BACKEND_URL } from "../config/api";
@@ -126,7 +127,7 @@ const EMOJI_GROUPS = [
   {
     label: "Smileys",
     emojis: ["😀", "😃", "😄", "😁", "😅", "🤣", "🙂", "😉", "😇", "🥰", "😘", "😋", "😎", "🤩", "🥳", "🤔",
-             "😐", "😴", "😢", "😭", "😤", "😠", "😱", "🤗", "🤫", "😬", "🙄", "😌", "😷", "🤒", "🥺", "😳"],
+      "😐", "😴", "😢", "😭", "😤", "😠", "😱", "🤗", "🤫", "😬", "🙄", "😌", "😷", "🤒", "🥺", "😳"],
   },
   {
     label: "Gestures & People",
@@ -135,7 +136,7 @@ const EMOJI_GROUPS = [
   {
     label: "Business",
     emojis: ["📅", "📆", "⏰", "📞", "📱", "💬", "📩", "📄", "📎", "📷", "📍", "🏠", "🏢", "🛠️", "⚡", "🧾",
-             "💳", "💰", "📊", "📈", "🚚", "🔧", "❄️", "🧯", "🔔", "🎁", "🚀", "🏆", "❌", "⚠️", "🆗", "🔴"],
+      "💳", "💰", "📊", "📈", "🚚", "🔧", "❄️", "🧯", "🔔", "🎁", "🚀", "🏆", "❌", "⚠️", "🆗", "🔴"],
   },
 ];
 
@@ -265,7 +266,27 @@ function previewText(message) {
   return "";
 }
 
-function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimetype = null, isMe = false, onPreview = null }) {
+function safeLocalStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (err) {
+    if (err && (err.name === "QuotaExceededError" || err.code === 22 || err.number === -2147024882)) {
+      try {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith("wa_chat_messages_") && k !== key) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.slice(0, Math.max(1, Math.ceil(keysToRemove.length / 2))).forEach((k) => localStorage.removeItem(k));
+        localStorage.setItem(key, value);
+      } catch (_) {}
+    }
+  }
+}
+
+function MediaBubble({ chatId, messageId, serializedId = null, filename = "", mediaUrl = null, mimetype = null, isMe = false, onPreview = null }) {
   const [media, setMedia] = useState(mediaUrl ? { url: mediaUrl, filename, mimetype } : null);
   const [loading, setLoading] = useState(!mediaUrl);
   const [error, setError] = useState(false);
@@ -277,7 +298,8 @@ function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimety
     setError(false);
     try {
       const token = localStorage.getItem("token");
-      const { data } = await axios.get(`${API}/api/whatsapp/chat/${encodeURIComponent(chatId)}/media/${messageId}`, {
+      const url = `${API}/api/whatsapp/chat/${encodeURIComponent(chatId)}/media/${encodeURIComponent(messageId)}${serializedId ? `?serializedId=${encodeURIComponent(serializedId)}` : ""}`;
+      const { data } = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (data && (data.url || data.data)) {
@@ -289,7 +311,7 @@ function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimety
       setError(true);
     }
     setLoading(false);
-  }, [chatId, messageId, mediaUrl]);
+  }, [chatId, messageId, mediaUrl, serializedId]);
 
   useEffect(() => {
     if (mediaUrl) {
@@ -390,7 +412,7 @@ function MediaBubble({ chatId, messageId, filename = "", mediaUrl = null, mimety
           {fileExt.slice(0, 4)}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold text-[var(--color-paper-2)] truncate" title={rawFilename}>{rawFilename}</p>
+          <p className="text-xs font-bold text-[var(--color-ink)] truncate" title={rawFilename}>{rawFilename}</p>
           <p className="hl-id text-[10px] text-[var(--color-ink-2)] mt-0.5 uppercase">{fileExt} Attachment</p>
         </div>
       </div>
@@ -440,7 +462,7 @@ const playNotificationSound = () => {
     gain.connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 0.35);
-  } catch (_) {}
+  } catch (_) { }
 };
 
 const formatPhoneNumber = (phone) => {
@@ -472,13 +494,22 @@ export default function WhatsAppPage() {
       const saved = localStorage.getItem("wa_workspace_mode");
       if (saved === "true") return true;
       if (saved === "false") return false;
-      const cached = sessionStorage.getItem("wa_cached_chats");
+      const cached = localStorage.getItem("wa_cached_chats");
       return Boolean(cached && JSON.parse(cached).length > 0);
     } catch {
       return false;
     }
   });
-  const [status, setStatus] = useState({ connected: false, initializing: true, hasQr: false });
+  const [status, setStatus] = useState(() => {
+    try {
+      const saved = localStorage.getItem("wa_cached_status");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") return parsed;
+      }
+    } catch (_) {}
+    return { connected: false, initializing: true, hasQr: false };
+  });
   const [qrCode, setQrCode] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState(null);
   const [qrLoading, setQrLoading] = useState(false);
@@ -490,19 +521,39 @@ export default function WhatsAppPage() {
   const qrRetryCountRef = useRef(0);
   const [chats, setChats] = useState(() => {
     try {
-      const saved = sessionStorage.getItem("wa_cached_chats");
+      const saved = localStorage.getItem("wa_cached_chats");
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
   });
-  const [selectedChat, setSelectedChat] = useState(null);
+  const [selectedChat, setSelectedChat] = useState(() => {
+    try {
+      const saved = localStorage.getItem("wa_active_chat");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   // Bot pause state for the open chat. The bot mutes itself for 24h whenever an
   // agent replies by hand, so the operator needs to see that and be able to
   // hand the conversation back.
   const [botStatus, setBotStatus] = useState(null);
   const [botResuming, setBotResuming] = useState(false);
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => {
+    try {
+      const savedChat = localStorage.getItem("wa_active_chat");
+      if (savedChat) {
+        const parsed = JSON.parse(savedChat);
+        if (parsed?.id) {
+          const cachedMsgs = localStorage.getItem(`wa_chat_messages_${parsed.id}`);
+          if (cachedMsgs) return JSON.parse(cachedMsgs);
+        }
+      }
+    } catch (_) {}
+    return [];
+  });
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [messageInput, setMessageInput] = useState("");
   const [chatsLoading, setChatsLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -515,6 +566,16 @@ export default function WhatsAppPage() {
   const [error, setError] = useState(null);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  const lastSendTimestampRef = useRef(0);
+  const lastQrRefreshClickRef = useRef(0);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 150);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [newChatPhone, setNewChatPhone] = useState("");
   const [newChatName, setNewChatName] = useState("");
@@ -526,7 +587,7 @@ export default function WhatsAppPage() {
   const [locationSending, setLocationSending] = useState(false);
   const [accountDetails, setAccountDetails] = useState(null);
   const [syncing, setSyncing] = useState(false);
-  
+
 
   // Performance & On-Demand Balance States
   const [msgLimit, setMsgLimit] = useState(10);
@@ -548,7 +609,7 @@ export default function WhatsAppPage() {
   const toggleSidebarMode = useCallback(() => {
     setSidebarMode((prev) => {
       const next = prev === "normal" ? "compact" : prev === "compact" ? "wide" : "normal";
-      try { localStorage.setItem("wa_sidebar_mode", next); } catch (_) {}
+      try { localStorage.setItem("wa_sidebar_mode", next); } catch (_) { }
       return next;
     });
   }, []);
@@ -712,25 +773,42 @@ export default function WhatsAppPage() {
   useEffect(() => {
     chatsRef.current = chats;
     if (Array.isArray(chats) && chats.length > 0) {
-      try {
-        sessionStorage.setItem("wa_cached_chats", JSON.stringify(chats));
-      } catch (_) {}
+      safeLocalStorageSet("wa_cached_chats", JSON.stringify(chats));
     } else if (Array.isArray(chats) && chats.length === 0) {
       try {
-        sessionStorage.removeItem("wa_cached_chats");
-      } catch (_) {}
+        localStorage.removeItem("wa_cached_chats");
+      } catch (_) { }
     }
   }, [chats]);
 
   useEffect(() => {
     try {
       if (status && status.connected) {
-        sessionStorage.setItem("wa_cached_status", JSON.stringify(status));
+        safeLocalStorageSet("wa_cached_status", JSON.stringify(status));
       } else {
-        sessionStorage.removeItem("wa_cached_status");
+        localStorage.removeItem("wa_cached_status");
       }
-    } catch (_) {}
+    } catch (_) { }
   }, [status]);
+
+  useEffect(() => {
+    try {
+      if (selectedChat) {
+        safeLocalStorageSet("wa_active_chat", JSON.stringify(selectedChat));
+      } else {
+        localStorage.removeItem("wa_active_chat");
+      }
+    } catch (_) { }
+  }, [selectedChat]);
+
+  useEffect(() => {
+    if (selectedChat?.id && Array.isArray(messages) && messages.length > 0) {
+      const toStore = messages.slice(0, 100);
+      safeLocalStorageSet(`wa_chat_messages_${selectedChat.id}`, JSON.stringify(toStore));
+      if (!messagesCacheRef.current) messagesCacheRef.current = {};
+      messagesCacheRef.current[selectedChat.id] = messages;
+    }
+  }, [messages, selectedChat?.id]);
 
   // Clean, deterministic scroll to bottom targeting threadRef directly without window jitter
   const scrollToBottom = useCallback((smooth = true) => {
@@ -836,7 +914,7 @@ export default function WhatsAppPage() {
       });
 
       if (flat.connected) {
-        try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) {}
+        try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
         setQrCode(null);
         setQrDataUrl(null);
@@ -940,28 +1018,40 @@ export default function WhatsAppPage() {
     }
   }, [demoMode, fetchStatus]);
 
-  // QR auto-countdown timer (25s visual indicator)
+  // QR auto-countdown timer (25s visual indicator) with auto-refresh on expire
   useEffect(() => {
     let timer;
     if (!status.connected && qrCode) {
       timer = setInterval(() => {
-        setQrCountdown((prev) => (prev <= 1 ? 25 : prev - 1));
+        setQrCountdown((prev) => {
+          if (prev <= 1) {
+            // Silently trigger fresh QR code so the user never scans a dead code
+            if (!qrLoading && !qrFetchInFlightRef.current) {
+              fetchQr(true);
+            }
+            return 25;
+          }
+          return prev - 1;
+        });
       }, 1000);
     }
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [status.connected, qrCode]);
+  }, [status.connected, qrCode, qrLoading, fetchQr]);
 
   const handleForceDisconnectToQr = useCallback(() => {
     try {
-      sessionStorage.removeItem("wa_cached_status");
-      sessionStorage.removeItem("wa_cached_chats");
-      sessionStorage.removeItem("wa_active_chat");
       localStorage.removeItem("wa_cached_status");
       localStorage.removeItem("wa_cached_chats");
       localStorage.removeItem("wa_active_chat");
-    } catch (_) {}
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("wa_chat_messages_")) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch (_) { }
     messagesCacheRef.current = {};
     setStatus((prev) => ({
       ...prev,
@@ -1116,8 +1206,21 @@ export default function WhatsAppPage() {
     }
     const hasCached = Boolean(messagesCacheRef.current[chatId] && messagesCacheRef.current[chatId].length > 0);
     if (!hasCached) {
-      if (limit === 10) setMessagesLoading(true);
-      else setLoadingMore(true);
+      try {
+        const stored = localStorage.getItem(`wa_chat_messages_${chatId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            messagesCacheRef.current[chatId] = parsed;
+            setMessages(parsed);
+          }
+        }
+      } catch (_) {}
+      const nowHasCached = Boolean(messagesCacheRef.current[chatId] && messagesCacheRef.current[chatId].length > 0);
+      if (!nowHasCached) {
+        if (limit === 10) setMessagesLoading(true);
+        else setLoadingMore(true);
+      }
     }
     try {
       const token = localStorage.getItem("token");
@@ -1127,6 +1230,9 @@ export default function WhatsAppPage() {
       const data = res.data || [];
       messagesCacheRef.current[chatId] = data;
       setMessages(data);
+      if (Array.isArray(data) && data.length > 0) {
+        safeLocalStorageSet(`wa_chat_messages_${chatId}`, JSON.stringify(data.slice(0, 100)));
+      }
       if (limit === 10) scrollToBottom(false);
     } catch { }
     setMessagesLoading(false);
@@ -1229,6 +1335,7 @@ export default function WhatsAppPage() {
 
   const handleSelectChat = (chat) => {
     setSelectedChat(chat);
+    safeLocalStorageSet("wa_active_chat", JSON.stringify(chat));
     setChats((prev) => prev.map((c) => (c.id === chat.id ? { ...c, unreadCount: 0 } : c)));
     setShowMobileChat(true);
     setMsgLimit(10);
@@ -1237,28 +1344,41 @@ export default function WhatsAppPage() {
     setAddClientResult(null);
     setAddClientData({ name: "", company_name: "", email: "", city: "", service: "", notes: "" });
 
-    // Instant message display from cache in 0ms!
+    // Instant message display from memory cache or localStorage in 0ms!
     if (messagesCacheRef.current[chat.id]) {
       setMessages(messagesCacheRef.current[chat.id]);
       setTimeout(() => scrollToBottom(false), 20);
+    } else {
+      try {
+        const stored = localStorage.getItem(`wa_chat_messages_${chat.id}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            messagesCacheRef.current[chat.id] = parsed;
+            setMessages(parsed);
+            setTimeout(() => scrollToBottom(false), 20);
+          }
+        }
+      } catch (_) {}
     }
 
     // Mark as read on WhatsApp server & DB
     try {
       const token = localStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      axios.post(`${API}/api/whatsapp/chat/${encodeURIComponent(chat.id)}/read`, {}, { headers }).catch(() => {});
-    } catch (_) {}
+      axios.post(`${API}/api/whatsapp/chat/${encodeURIComponent(chat.id)}/read`, {}, { headers }).catch(() => { });
+    } catch (_) { }
 
     fetchMessages(chat.id, 10);
   };
 
   const handleSend = async () => {
     if (!messageInput.trim() || !selectedChat) return;
-    // Hard stop on a second send while one is open. Without this the button
-    // re-enabled instantly (the input is cleared below) and a double-click or
-    // Enter-then-click put the same text in front of the customer twice.
+    // Hard stop on a second send while one is open or rapid hardware click bouncing (<250ms)
     if (sendInFlightRef.current) return;
+    const now = Date.now();
+    if (now - lastSendTimestampRef.current < 250) return;
+    lastSendTimestampRef.current = now;
 
     const textToSend = messageInput.trim();
     sendInFlightRef.current = true;
@@ -1789,7 +1909,7 @@ export default function WhatsAppPage() {
     let localBlobUrl = "";
     try {
       localBlobUrl = URL.createObjectURL(file);
-    } catch (_) {}
+    } catch (_) { }
 
     const optimisticMsg = {
       id: tempId,
@@ -1806,12 +1926,29 @@ export default function WhatsAppPage() {
     setMessages((prev) => [optimisticMsg, ...prev]);
     scrollToBottom();
 
+    // Immediately update sidebar chat preview and timestamp
+    setChats((prev) => {
+      const idx = prev.findIndex((c) => c.id === selectedChat.id);
+      if (idx !== -1) {
+        const current = prev[idx];
+        const updated = {
+          ...current,
+          hasMessages: true,
+          lastMessage: { body: file.name, timestamp: Math.floor(Date.now() / 1000), fromMe: true },
+          timestamp: Math.floor(Date.now() / 1000),
+          unreadCount: 0,
+        };
+        return [updated, ...prev.slice(0, idx), ...prev.slice(idx + 1)];
+      }
+      return prev;
+    });
+
     try {
       const token = localStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       const formData = new FormData();
       formData.append("file", file);
-      
+
       let uploaded = null;
       try {
         const resUp = await axios.post(`${API}/api/whatsapp/upload-media`, formData, { headers, timeout: 60000 });
@@ -1847,11 +1984,15 @@ export default function WhatsAppPage() {
       );
 
       const realId = res.data?.id || tempId;
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages((prev) => {
+        const next = prev.map((m) =>
           m.id === tempId ? { ...m, id: realId, mediaUrl: uploaded.url, status: "sent" } : m
-        )
-      );
+        );
+        if (selectedChat?.id) {
+          safeLocalStorageSet(`wa_chat_messages_${selectedChat.id}`, JSON.stringify(next.slice(0, 100)));
+        }
+        return next;
+      });
     } catch (err) {
       const payload = err.response?.data;
       if (payload?.deliveryUnknown) {
@@ -1869,6 +2010,47 @@ export default function WhatsAppPage() {
     e.target.value = "";
     setShowAttachMenu(false);
     await sendFileToChat(file, customMediaType);
+  };
+
+  const handleDropFiles = async (e) => {
+    e.preventDefault();
+    setIsDraggingFile(false);
+    if (!selectedChat) return;
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        let mediaType = "document";
+        const mime = (file.type || "").toLowerCase();
+        const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+        if (mime.startsWith("image/") || [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"].includes(ext)) {
+          mediaType = "image";
+        } else if (mime.startsWith("video/") || [".mp4", ".mov", ".3gp", ".webm"].includes(ext)) {
+          mediaType = "video";
+        } else if (mime.startsWith("audio/") || [".mp3", ".ogg", ".wav", ".m4a"].includes(ext)) {
+          mediaType = "audio";
+        }
+        await sendFileToChat(file, mediaType);
+      }
+    }
+  };
+
+  const handlePasteComposer = async (e) => {
+    if (!selectedChat) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          let mediaType = file.type?.startsWith("image/") ? "image" : "document";
+          await sendFileToChat(file, mediaType);
+          return;
+        }
+      }
+    }
   };
 
   // ── Voice notes ────────────────────────────────────────────────────────────
@@ -1936,7 +2118,7 @@ export default function WhatsAppPage() {
           active.recorder.stop();
         }
         active?.stream?.getTracks?.().forEach((t) => t.stop());
-      } catch (_) {}
+      } catch (_) { }
     };
   }, []);
 
@@ -2500,40 +2682,108 @@ export default function WhatsAppPage() {
   const [pairingLoading, setPairingLoading] = useState(false);
   const [pairingError, setPairingError] = useState(null);
   const [checkingLogin, setCheckingLogin] = useState(false);
+  const [loginCheckState, setLoginCheckState] = useState("idle"); // 'idle' | 'checking' | 'success' | 'failed'
+  const [loginCheckMessage, setLoginCheckMessage] = useState("");
+
+  const handleEnterWorkspace = useCallback(() => {
+    setWorkspaceMode(true);
+    try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
+    setStatus((prev) => ({
+      ...DEMO_STATUS,
+      ...prev,
+      connected: true,
+      activeEngine: "Interactive Chat Workspace",
+    }));
+    setQrCode(null);
+    setQrDataUrl(null);
+    setError(null);
+    setLoginCheckState("idle");
+    setLoginCheckMessage("");
+    if (!chats || chats.length === 0) {
+      setChats([...DEMO_CHATS]);
+      if (DEMO_CHATS.length > 0) {
+        setSelectedChat(DEMO_CHATS[0]);
+        const initMsgs = DEMO_MESSAGES_MAP[DEMO_CHATS[0].id] || [];
+        setMessages(initMsgs);
+      }
+    }
+  }, [chats]);
 
   const handleCheckLogin = async () => {
+    if (checkingLogin) return;
     setCheckingLogin(true);
+    setLoginCheckState("checking");
+    setLoginCheckMessage("Connecting to WhatsApp server to verify device handshake...");
+
     try {
-      const res = await fetchStatus();
-      if (res && res.connected) {
-        setQrCode(null);
-        setQrDataUrl(null);
-        await fetchChats(true);
-        await fetchAccountDetails();
-        return;
-      }
-      // Check direct status endpoint in case unified status was cached
-      const token = localStorage.getItem("token");
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      try {
-        const direct = await axios.get(`${API}/api/whatsapp/status`, { headers, timeout: 5000 });
-        if (direct.data?.connected) {
-          setStatus((s) => ({ ...s, connected: true, isWeb: true, phone: direct.data?.phone || s.phone }));
+      const maxAttempts = 5;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        setLoginCheckMessage(`Checking device link (attempt ${attempt}/${maxAttempts})...`);
+
+        const token = localStorage.getItem("token");
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+        let isLinked = false;
+        let detectedPhone = null;
+
+        // 1. Unified status check
+        try {
+          const res = await fetchStatus();
+          if (res && res.connected) {
+            isLinked = true;
+            detectedPhone = res.phone;
+          }
+        } catch (_) { }
+
+        // 2. Direct status fallback
+        if (!isLinked) {
+          try {
+            const direct = await axios.get(`${API}/api/whatsapp/status`, { headers, timeout: 4000 });
+            if (direct.data?.connected) {
+              isLinked = true;
+              detectedPhone = direct.data?.phone;
+              setStatus((s) => ({ ...s, connected: true, isWeb: true, phone: direct.data?.phone || s.phone }));
+            }
+          } catch (_) { }
+        }
+
+        if (isLinked) {
+          setLoginCheckState("success");
+          setLoginCheckMessage(`Linked successfully${detectedPhone ? ` to +${detectedPhone}` : ""}! Opening workspace...`);
           setQrCode(null);
           setQrDataUrl(null);
+          try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
           await fetchChats(true);
+          await fetchAccountDetails();
+          setTimeout(() => {
+            setCheckingLogin(false);
+            setLoginCheckState("idle");
+          }, 1200);
           return;
         }
-      } catch (_) {}
+
+        if (attempt < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+      }
 
       // If user is in dev test / demoMode and device hasn't finished pairing, enter chat workspace directly
       if (demoMode) {
-        setStatus((s) => ({ ...DEMO_STATUS, ...s, connected: true }));
-        setQrCode(null);
-        setQrDataUrl(null);
-        setChats([...DEMO_CHATS]);
-        if (DEMO_CHATS.length > 0) setSelectedChat(DEMO_CHATS[0]);
+        setLoginCheckState("success");
+        setLoginCheckMessage("Opening Interactive Demo Workspace...");
+        handleEnterWorkspace();
+        setTimeout(() => {
+          setCheckingLogin(false);
+          setLoginCheckState("idle");
+        }, 800);
+        return;
       }
+
+      setLoginCheckState("failed");
+      setLoginCheckMessage("Phone not detected yet. Ensure you tapped 'Link a Device' on WhatsApp and pointed your camera at the QR code, or click Refresh QR Code.");
+    } catch (err) {
+      setLoginCheckState("failed");
+      setLoginCheckMessage(err?.response?.data?.error || err.message || "Failed to verify WhatsApp login. Please try refreshing the QR code.");
     } finally {
       setCheckingLogin(false);
     }
@@ -2560,10 +2810,19 @@ export default function WhatsAppPage() {
   }, [demoMode, fetchStatus, fetchChats, fetchAccountDetails]);
 
   useEffect(() => {
-    // Status polling in background
-    const interval = setInterval(fetchStatus, status.connected ? 15000 : 4000);
+    // Status polling in background: 15s when active/workspace, 3.5s when QR is active to auto-detect scan, 8s otherwise
+    const pollInterval = (status.connected || workspaceMode) ? 15000 : (qrCode ? 3500 : 8000);
+    const interval = setInterval(async () => {
+      const res = await fetchStatus();
+      if (res && res.connected && qrCode) {
+        setLoginCheckState("success");
+        setLoginCheckMessage("Scan detected! Opening workspace...");
+        setQrCode(null);
+        setQrDataUrl(null);
+      }
+    }, pollInterval);
     return () => clearInterval(interval);
-  }, [fetchStatus, status.connected]);
+  }, [fetchStatus, status.connected, workspaceMode, qrCode]);
 
   // Auto-fetch QR code once when entering QR mode and disconnected
   useEffect(() => {
@@ -2679,7 +2938,7 @@ export default function WhatsAppPage() {
               silent: true,
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
 
       if (isCurrentChat && msgObj) {
@@ -2687,7 +2946,11 @@ export default function WhatsAppPage() {
           if (prev.some((m) => m.id === msgObj.id || (m.serializedId && m.serializedId === msgObj.serializedId))) {
             return prev;
           }
-          return [msgObj, ...prev];
+          const next = [msgObj, ...prev];
+          if (activeSelected?.id) {
+            safeLocalStorageSet(`wa_chat_messages_${activeSelected.id}`, JSON.stringify(next.slice(0, 100)));
+          }
+          return next;
         });
         const isNearBottom = threadRef.current
           ? threadRef.current.scrollHeight - threadRef.current.scrollTop - threadRef.current.clientHeight <= 220
@@ -2697,6 +2960,14 @@ export default function WhatsAppPage() {
         } else {
           setUnreadWhileScrolled((prev) => prev + 1);
         }
+      } else if (!isCurrentChat && targetChatId && msgObj) {
+        try {
+          const stored = localStorage.getItem(`wa_chat_messages_${targetChatId}`);
+          const parsed = stored ? JSON.parse(stored) : [];
+          if (!parsed.some((m) => m.id === msgObj.id || (m.serializedId && m.serializedId === msgObj.serializedId))) {
+            safeLocalStorageSet(`wa_chat_messages_${targetChatId}`, JSON.stringify([msgObj, ...parsed].slice(0, 100)));
+          }
+        } catch (_) {}
       }
 
       setChats((prev) => {
@@ -2782,6 +3053,29 @@ export default function WhatsAppPage() {
     socket.on("wa_message_reaction", handleReaction);
     socket.on("wa_message_revoked", handleRevoked);
     socket.on("wa_chat_history_updated", handleChatHistoryUpdated);
+
+    const handleMessageUpdated = (data) => {
+      const { id, serializedId, mediaUrl, filename } = data || {};
+      if (!id && !serializedId) return;
+      setMessages((prev) => {
+        const next = prev.map((m) => {
+          if (m.id === id || (serializedId && m.serializedId === serializedId)) {
+            return {
+              ...m,
+              ...(mediaUrl ? { mediaUrl } : {}),
+              ...(filename ? { filename } : {}),
+            };
+          }
+          return m;
+        });
+        const activeSel = selectedChatRef.current;
+        if (activeSel?.id) {
+          safeLocalStorageSet(`wa_chat_messages_${activeSel.id}`, JSON.stringify(next.slice(0, 100)));
+        }
+        return next;
+      });
+    };
+    socket.on("wa_message_updated", handleMessageUpdated);
 
     const handleHandoffAlert = (data) => {
       if (data?.phone) {
@@ -2943,6 +3237,7 @@ export default function WhatsAppPage() {
       socket.off("wa_message_received", handleRealtimeUpdate);
       socket.off("wa_message_sent", handleRealtimeUpdate);
       socket.off("wa_message", handleRealtimeUpdate);
+      socket.off("wa_message_updated", handleMessageUpdated);
       socket.off("wa_message_reaction", handleReaction);
       socket.off("wa_message_revoked", handleRevoked);
       socket.off("wa_chat_history_updated", handleChatHistoryUpdated);
@@ -3086,7 +3381,7 @@ export default function WhatsAppPage() {
   const addRecentEmoji = useCallback((emoji) => {
     setRecentEmojis((prev) => {
       const next = [emoji, ...prev.filter((e) => e !== emoji)].slice(0, 16);
-      try { localStorage.setItem("wa_recent_emojis", JSON.stringify(next)); } catch {}
+      try { localStorage.setItem("wa_recent_emojis", JSON.stringify(next)); } catch { }
       return next;
     });
   }, []);
@@ -3094,7 +3389,7 @@ export default function WhatsAppPage() {
   // Copy message text
   const handleCopyMessage = useCallback((text) => {
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(text).catch(() => {});
+      navigator.clipboard.writeText(text).catch(() => { });
     }
   }, []);
 
@@ -3156,7 +3451,7 @@ export default function WhatsAppPage() {
   );
 
   let displayChats = [];
-  const searchLower = (searchTerm || "").toLowerCase().trim();
+  const searchLower = (debouncedSearchTerm || "").toLowerCase().trim();
   let baseList = allChatsList;
   if (sidebarTab === "all") {
     baseList = allChatsList;
@@ -3216,11 +3511,10 @@ export default function WhatsAppPage() {
         )}
 
         {error && (
-          <div className={`hl-card mb-4 p-3 text-xs font-semibold flex items-center justify-between gap-2 max-w-2xl mx-auto w-full ${
-            error.includes("warming up") || error.includes("initializing")
+          <div className={`hl-card mb-4 p-3 text-xs font-semibold flex items-center justify-between gap-2 max-w-2xl mx-auto w-full ${error.includes("warming up") || error.includes("initializing")
               ? "border-[var(--color-accent)] bg-[var(--color-paper-2)] text-[var(--color-ink)]"
               : "border-[var(--color-error)] text-[var(--color-error)]"
-          }`}>
+            }`}>
             <div className="flex items-center gap-2">
               {(error.includes("warming up") || error.includes("initializing")) && (
                 <Loader2 size={15} className="animate-spin text-[var(--color-accent)] shrink-0" />
@@ -3232,7 +3526,7 @@ export default function WhatsAppPage() {
                 type="button"
                 onClick={() => {
                   setWorkspaceMode(true);
-                  try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) {}
+                  try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
                   setStatus((prev) => ({ ...DEMO_STATUS, ...prev, connected: true, activeEngine: "Interactive Workspace" }));
                   setQrCode(null);
                   setQrDataUrl(null);
@@ -3260,7 +3554,7 @@ export default function WhatsAppPage() {
               type="button"
               onClick={() => {
                 setWorkspaceMode(true);
-                try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) {}
+                try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
                 setStatus({ ...DEMO_STATUS, connected: true, activeEngine: "Interactive Workspace" });
                 setChats([...DEMO_CHATS]);
                 if (DEMO_CHATS.length > 0) setSelectedChat(DEMO_CHATS[0]);
@@ -3303,76 +3597,184 @@ export default function WhatsAppPage() {
 
           {/* Mode 1: QR Code Scan */}
           {connectMode === "qr" && (
-            <div className="flex flex-col items-center justify-center text-center py-4">
+            <div className="flex flex-col items-center justify-center text-center py-2">
               {qrLoading && !qrCode ? (
                 <div className="py-10 text-center max-w-sm mx-auto">
-                  <Loader2 size={44} className="animate-spin text-[var(--color-ink)] mx-auto mb-4" />
-                  <p className="hl-empty-title">Generating WhatsApp QR Code...</p>
-                  <p className="hl-subtitle mt-1 mb-5">Starting WhatsApp browser engine. If this takes more than a few seconds, click Force Fresh below.</p>
+                  <div className="relative w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                    <div className="absolute inset-0 rounded-full border-4 border-[var(--color-rule)] opacity-30"></div>
+                    <div className="absolute inset-0 rounded-full border-4 border-[var(--color-accent)] border-t-transparent animate-spin"></div>
+                    <Smartphone size={24} className="text-[var(--color-ink)]" />
+                  </div>
+                  <p className="hl-empty-title font-bold text-base">Generating WhatsApp QR Code...</p>
+                  <p className="hl-subtitle mt-1 mb-5 text-xs">
+                    Starting WhatsApp browser engine. If this takes more than a few seconds, click Force Fresh below.
+                  </p>
                   <button
                     onClick={() => fetchQr(true)}
-                    className="hl-btn-secondary text-xs px-3 py-1.5"
+                    className="hl-btn-secondary text-xs px-3.5 py-2 inline-flex items-center gap-1.5 shadow-sm"
                   >
-                    Force Fresh QR Code 🔄
+                    <RefreshCw size={13} className="animate-spin" />
+                    <span>Force Fresh QR Code 🔄</span>
                   </button>
                 </div>
               ) : qrCode ? (
-                <div>
-                  <div className="hl-card p-4 inline-block mb-2 shadow-md bg-white border-2 border-[var(--color-rule)]">
+                <div className="w-full flex flex-col items-center">
+                  {/* Step-by-step guidance pill strip */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full max-w-lg mb-5 text-left">
+                    <div className="p-2.5 rounded-xl border border-[var(--color-rule)] bg-[var(--color-paper)] flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-full bg-[var(--color-ink)] text-[var(--color-paper-2)] font-bold text-[11px] flex items-center justify-center shrink-0">1</span>
+                      <span className="text-[11px] leading-tight text-[var(--color-ink)]">Open WhatsApp on your phone</span>
+                    </div>
+                    <div className="p-2.5 rounded-xl border border-[var(--color-rule)] bg-[var(--color-paper)] flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-full bg-[var(--color-ink)] text-[var(--color-paper-2)] font-bold text-[11px] flex items-center justify-center shrink-0">2</span>
+                      <span className="text-[11px] leading-tight text-[var(--color-ink)]">Menu (⋮) or Settings → <strong>Linked Devices</strong></span>
+                    </div>
+                    <div className="p-2.5 rounded-xl border border-[var(--color-rule)] bg-[var(--color-paper)] flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-full bg-[var(--color-ink)] text-[var(--color-paper-2)] font-bold text-[11px] flex items-center justify-center shrink-0">3</span>
+                      <span className="text-[11px] leading-tight text-[var(--color-ink)]">Tap <strong>Link a Device</strong> & point camera here</span>
+                    </div>
+                  </div>
+
+                  {/* QR Box with Viewfinder Corners */}
+                  <div className="relative p-4 rounded-2xl bg-white border-2 border-[var(--color-rule)] shadow-lg inline-block mb-3 transition-all">
+                    {/* Viewfinder corner brackets */}
+                    <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-emerald-500 rounded-tl-sm pointer-events-none" />
+                    <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-emerald-500 rounded-tr-sm pointer-events-none" />
+                    <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-emerald-500 rounded-bl-sm pointer-events-none" />
+                    <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-emerald-500 rounded-br-sm pointer-events-none" />
+
                     {qrDataUrl ? (
-                      <img src={qrDataUrl} alt="WhatsApp Web QR Code" className="w-[240px] h-[240px] object-contain mx-auto" />
+                      <img src={qrDataUrl} alt="WhatsApp Web QR Code" className="w-[230px] h-[230px] sm:w-[250px] sm:h-[250px] object-contain mx-auto select-none" />
                     ) : (
-                      <QRCodeSVG value={qrCode} size={240} level="M" className="mx-auto" />
+                      <QRCodeSVG value={qrCode} size={240} level="M" className="mx-auto select-none" />
+                    )}
+
+                    {/* Active Verification Overlay */}
+                    {loginCheckState === "checking" && (
+                      <div className="absolute inset-0 bg-white/85 backdrop-blur-[2px] rounded-2xl flex flex-col items-center justify-center p-4">
+                        <Loader2 size={36} className="animate-spin text-emerald-600 mb-2" />
+                        <span className="text-xs font-bold text-[var(--color-ink)]">Verifying Link...</span>
+                        <span className="text-[10px] text-[var(--color-ink-2)] mt-1">Checking handshake with phone</span>
+                      </div>
+                    )}
+                    {loginCheckState === "success" && (
+                      <div className="absolute inset-0 bg-emerald-500/95 rounded-2xl flex flex-col items-center justify-center p-4 text-white animate-in fade-in">
+                        <CheckCircle2 size={44} className="mb-2" />
+                        <span className="text-sm font-bold">Linked Successfully!</span>
+                        <span className="text-xs opacity-90 mt-0.5">Opening chat workspace...</span>
+                      </div>
                     )}
                   </div>
-                  <div className="text-[11px] font-semibold text-[var(--color-ink-2)] mb-3">
-                    QR Code active • Refresh in <span className="font-bold text-emerald-600">{qrCountdown}s</span>
+
+                  {/* QR Validity Progress Bar & Indicator */}
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="text-[11px] font-semibold text-[var(--color-ink-2)]">
+                      QR active • Auto-refreshes in <strong className="text-emerald-700">{qrCountdown}s</strong>
+                    </span>
+                    <div className="w-16 h-1.5 bg-[var(--color-rule)] rounded-full overflow-hidden ml-1">
+                      <div
+                        className="h-full bg-emerald-500 transition-all duration-1000 ease-linear rounded-full"
+                        style={{ width: `${Math.max(0, Math.min(100, (qrCountdown / 25) * 100))}%` }}
+                      />
+                    </div>
                   </div>
-                  <h3 className="hl-empty-title mb-1">Scan with your WhatsApp App</h3>
-                  <p className="hl-subtitle max-w-md mx-auto mb-4">
-                    Open WhatsApp on your phone → Settings / Menu (⋮) → <strong>Linked Devices</strong> → <strong>Link a Device</strong> and point your camera here.
-                  </p>
-                  <div className="flex flex-wrap items-center justify-center gap-3">
-                    <button
-                      onClick={() => fetchQr(true)}
-                      disabled={qrLoading}
-                      className="hl-btn-secondary px-4 py-2 text-xs font-semibold transition flex items-center gap-2"
-                    >
-                      <RefreshCw size={14} className={qrLoading ? "animate-spin" : ""} />
-                      <span>{qrLoading ? "Refreshing..." : "Refresh QR Code"}</span>
-                    </button>
-                    <button
-                      onClick={handleCheckLogin}
-                      disabled={checkingLogin}
-                      className="hl-btn-primary px-4 py-2 text-xs font-semibold transition flex items-center gap-1.5"
-                    >
-                      {checkingLogin ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin" />
-                          <span>Checking Login...</span>
-                        </>
-                      ) : (
-                        <span>I Scanned It → Check Login ⚡</span>
-                      )}
-                    </button>
+
+                  {/* Actions Bar (.hl-card > .flex > div > .flex) */}
+                  <div className="flex flex-wrap items-center justify-center gap-2.5 max-w-xl w-full mb-3">
                     <button
                       type="button"
                       onClick={() => {
-                        setWorkspaceMode(true);
-                        try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) {}
-                        setStatus((prev) => ({ ...DEMO_STATUS, ...prev, connected: true, activeEngine: "Interactive Chat Workspace" }));
-                        setQrCode(null);
-                        setQrDataUrl(null);
-                        if (!chats || chats.length === 0) {
-                          setChats([...DEMO_CHATS]);
-                          if (DEMO_CHATS.length > 0) setSelectedChat(DEMO_CHATS[0]);
-                        }
+                        const now = Date.now();
+                        if (now - lastQrRefreshClickRef.current < 2000) return;
+                        lastQrRefreshClickRef.current = now;
+                        fetchQr(true);
                       }}
-                      className="hl-btn-ghost px-3 py-2 text-xs font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] transition flex items-center gap-1.5"
+                      disabled={qrLoading || checkingLogin}
+                      className="hl-btn-secondary px-3.5 py-2 text-xs font-semibold transition flex items-center gap-2 hover:bg-[var(--color-paper)]"
+                      title="Fetch a brand-new QR code immediately"
+                    >
+                      <RefreshCw size={13} className={qrLoading ? "animate-spin" : ""} />
+                      <span>{qrLoading ? "Refreshing..." : "Refresh QR Code"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleCheckLogin}
+                      disabled={checkingLogin || loginCheckState === "checking"}
+                      className="hl-btn-primary px-4 py-2 text-xs font-bold transition flex items-center gap-2 shadow-sm bg-emerald-700 hover:bg-emerald-800 text-white border-transparent"
+                      title="Verify if your phone has successfully scanned the QR code"
+                    >
+                      {checkingLogin || loginCheckState === "checking" ? (
+                        <>
+                          <Loader2 size={13} className="animate-spin text-white" />
+                          <span>Verifying Connection...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={13} />
+                          <span>I Scanned It → Check Login ⚡</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleEnterWorkspace}
+                      className="hl-btn-secondary px-3.5 py-2 text-xs font-semibold text-[var(--color-ink)] hover:bg-[var(--color-paper)] transition flex items-center gap-1.5 border border-dashed border-[var(--color-rule)]"
+                      title="Open chat workspace in test mode without pairing phone"
                     >
                       <span>💬 Open Chat Workspace</span>
                     </button>
                   </div>
+
+                  {/* Real-time Verification Feedback Box */}
+                  {loginCheckMessage && (
+                    <div
+                      className={`w-full max-w-lg p-3 rounded-xl text-xs flex items-start gap-2.5 transition-all text-left ${loginCheckState === "checking"
+                          ? "bg-blue-50 border border-blue-200 text-blue-900"
+                          : loginCheckState === "success"
+                            ? "bg-emerald-50 border border-emerald-300 text-emerald-900"
+                            : loginCheckState === "failed"
+                              ? "bg-amber-50 border border-amber-300 text-amber-900"
+                              : "bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]"
+                        }`}
+                    >
+                      {loginCheckState === "checking" && <Loader2 size={15} className="animate-spin shrink-0 text-blue-600 mt-0.5" />}
+                      {loginCheckState === "success" && <CheckCircle2 size={15} className="shrink-0 text-emerald-600 mt-0.5" />}
+                      {loginCheckState === "failed" && <Info size={15} className="shrink-0 text-amber-600 mt-0.5" />}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-xs leading-snug">{loginCheckMessage}</p>
+                        {loginCheckState === "failed" && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleCheckLogin}
+                              className="px-2.5 py-1 rounded-lg bg-amber-600 text-white font-bold text-[11px] hover:bg-amber-700 transition"
+                            >
+                              Retry Check
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleEnterWorkspace}
+                              className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 font-semibold text-[11px] text-amber-900 hover:bg-amber-100 transition"
+                            >
+                              Explore in Workspace
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {loginCheckState !== "checking" && (
+                        <button
+                          type="button"
+                          onClick={() => setLoginCheckMessage("")}
+                          className="shrink-0 opacity-60 hover:opacity-100"
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="py-6 text-center">
@@ -3504,7 +3906,7 @@ export default function WhatsAppPage() {
                       setSelectedChat(prev => ({ ...prev, profilePicUrl: res.data.profilePicUrl }));
                       setChats(prev => prev.map(c => c.id === selectedChat.id ? { ...c, profilePicUrl: res.data.profilePicUrl } : c));
                     }
-                  } catch (_) {}
+                  } catch (_) { }
                 }}
                 className="mt-2 text-[10px] text-[var(--color-ink)] font-bold hover:underline flex items-center gap-1 cursor-pointer"
               >
@@ -3789,7 +4191,7 @@ export default function WhatsAppPage() {
           {/* Quick Actions & Instant Bot Tools */}
           <div className="py-2 space-y-2">
             <h4 className="hl-section-label text-xs font-bold text-[var(--color-ink-2)] uppercase tracking-wider">Execute for this Contact</h4>
-            
+
             <button
               onClick={() => {
                 setShowContactInfoDrawer(false);
@@ -3928,110 +4330,40 @@ export default function WhatsAppPage() {
   return (
     <div className="w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-[var(--color-paper-2)] text-[var(--color-ink)] rounded-xl border border-[var(--color-rule)] shadow-sm overflow-hidden select-text wa-parallel-container">
       <div className="shrink-0 px-2 pt-2">
-        <WhatsAppNav
-          onAccountBalance={fetchAccountBalance}
-          onSyncWhatsApp={handleSyncWhatsApp}
-          isSyncing={syncing}
-          statusPhone={status.phone}
-        />
+        <WhatsAppNav />
       </div>
 
-{deliveryWarning && (
-              <div className="p-2.5 text-xs font-semibold flex items-start justify-between gap-3 shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-brand-orange)] text-[var(--color-ink)]">
-                <span>
-                  <strong className="block">Delivery not confirmed</strong>
-                  {deliveryWarning} Check the chat before sending again — the message may already have been delivered.
-                </span>
-                <button onClick={() => setDeliveryWarning(null)} className="shrink-0 hover:opacity-80">
-                  <X size={14} />
-                </button>
-              </div>
-            )}
-      {error && (
-              <div className="p-2.5 text-xs font-semibold flex items-center justify-between shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-error)] text-[var(--color-error)]">
-                <span>{error}</span>
-                <button onClick={() => setError(null)} className="text-[var(--color-error)] hover:opacity-80">
-                  <X size={14} />
-                </button>
-              </div>
-      )}
-
-      {/* Sound & Status Bar */}
-      <div className="flex items-center justify-between gap-1.5 px-2 sm:px-3 py-1 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] shrink-0">
-        <div className="flex items-center gap-2">
-          {status.connected && status.phone ? (
-            <span className="hl-badge hl-badge-success text-[10px] font-bold flex items-center gap-1.5 py-0.5 px-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>WhatsApp Live ({status.phone})</span>
-            </span>
-          ) : status.connected && status.isCloud ? (
-            <span className="hl-badge hl-badge-info text-[10px] font-bold flex items-center gap-1.5 py-0.5 px-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-              <span>Meta Cloud API Active</span>
-            </span>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="hl-badge hl-badge-accent text-[10px] font-bold flex items-center gap-1.5 py-0.5 px-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                <span>Interactive Workspace (Send & Receive Live)</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setWorkspaceMode(false);
-                  try { localStorage.setItem("wa_workspace_mode", "false"); } catch (_) {}
-                  setConnectMode("qr");
-                  hasTriggeredQrFetch.current = true;
-                  fetchQr();
-                }}
-                className="hl-btn-ghost text-[10px] px-2 py-0.5 font-semibold text-[var(--color-brand-blue)] hover:underline flex items-center gap-1"
-                title="Pair phone via QR code"
-              >
-                📱 Link Phone (QR Code)
-              </button>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setSoundEnabled((v) => !v)}
-            className={`hl-badge flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold transition ${soundEnabled ? "hl-badge-accent" : ""}`}
-            title={soundEnabled ? "Mute notification sounds" : "Unmute notification sounds"}
-          >
-            {soundEnabled ? <Volume2 size={12} /> : <VolumeX size={12} />}
-            <span className="hidden sm:inline">{soundEnabled ? "Sound On" : "Muted"}</span>
+      {deliveryWarning && (
+        <div className="p-2.5 text-xs font-semibold flex items-start justify-between gap-3 shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-brand-orange)] text-[var(--color-ink)]">
+          <span>
+            <strong className="block">Delivery not confirmed</strong>
+            {deliveryWarning} Check the chat before sending again — the message may already have been delivered.
+          </span>
+          <button onClick={() => setDeliveryWarning(null)} className="shrink-0 hover:opacity-80">
+            <X size={14} />
           </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (desktopNotifs) {
-              setDesktopNotifs(false);
-            } else {
-              requestNotifPermission();
-            }
-          }}
-          className={`hl-badge flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold transition ${desktopNotifs ? "hl-badge-info" : ""}`}
-          title={desktopNotifs ? "Disable desktop notifications" : "Enable desktop notifications"}
-        >
-          <Bell size={12} />
-          <span className="hidden sm:inline">{desktopNotifs ? "Notifs On" : "Notifs Off"}</span>
-        </button>
         </div>
-      </div>
+      )}
+      {error && (
+        <div className="p-2.5 text-xs font-semibold flex items-center justify-between shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-error)] text-[var(--color-error)]">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-[var(--color-error)] hover:opacity-80">
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Main WhatsApp App Canvas */}
       <div className="flex-1 min-h-0 flex overflow-hidden w-full relative bg-[var(--color-paper)]">
 
         {/* Chats Sidebar Column (Independent Parallel Scrolling) */}
         <div
-          className={`border-r border-[var(--color-rule)] bg-[var(--color-paper-2)] flex flex-col h-full min-h-0 shrink-0 select-none transition-all duration-200 ${
-            sidebarMode === "compact"
+          className={`border-r border-[var(--color-rule)] bg-[var(--color-paper-2)] flex flex-col h-full min-h-0 shrink-0 select-none transition-all duration-200 ${sidebarMode === "compact"
               ? "wa-sidebar-compact"
               : sidebarMode === "wide"
-              ? "wa-sidebar-wide"
-              : "w-full md:w-80 lg:w-[21rem] xl:w-[360px]"
-          } ${showMobileChat ? "hidden md:flex" : "flex"}`}
+                ? "wa-sidebar-wide"
+                : "w-full md:w-80 lg:w-[21rem] xl:w-[360px]"
+            } ${showMobileChat ? "hidden md:flex" : "flex"}`}
         >
           {/* Search Bar & Action Buttons */}
           <div className="p-2.5 border-b border-[var(--color-rule)] flex items-center gap-1.5 shrink-0 bg-[var(--color-paper-2)]">
@@ -4191,14 +4523,14 @@ export default function WhatsAppPage() {
                   {searchTerm
                     ? "No chats match your search"
                     : sidebarTab === "unread"
-                    ? "No unread messages"
-                    : sidebarTab === "direct"
-                    ? "No 1-on-1 direct conversations"
-                    : sidebarTab === "favourites"
-                    ? "No starred or pinned chats"
-                    : sidebarTab === "groups"
-                    ? "No group chats found"
-                    : "No WhatsApp chats yet"}
+                      ? "No unread messages"
+                      : sidebarTab === "direct"
+                        ? "No 1-on-1 direct conversations"
+                        : sidebarTab === "favourites"
+                          ? "No starred or pinned chats"
+                          : sidebarTab === "groups"
+                            ? "No group chats found"
+                            : "No WhatsApp chats yet"}
                 </p>
                 <p className="hl-subtitle mb-4 max-w-xs">
                   {searchTerm
@@ -4224,11 +4556,10 @@ export default function WhatsAppPage() {
                     <div
                       key={chat.id}
                       onClick={() => handleSelectChat(chat)}
-                      className={`w-full py-3 flex flex-col items-center justify-center cursor-pointer relative group transition-all duration-150 border-l-2 ${
-                        isActive
+                      className={`w-full py-3 flex flex-col items-center justify-center cursor-pointer relative group transition-all duration-150 border-l-2 ${isActive
                           ? "bg-[var(--color-paper)] border-[var(--color-accent)]"
                           : "border-transparent hover:bg-[var(--color-paper)]/70"
-                      }`}
+                        }`}
                       title={`${chat.name || chat.phoneNumber || "Contact"}\n${chat.lastMessage?.body || "Open conversation"}`}
                     >
                       <div className="relative">
@@ -4307,11 +4638,11 @@ export default function WhatsAppPage() {
                             const t = lm.type;
                             const icon =
                               lm.location ? "📍" :
-                              t === "image" ? "📷" :
-                              t === "video" ? "🎥" :
-                              t === "audio" || t === "ptt" ? "🎤" :
-                              t === "sticker" ? "🩹" :
-                              (lm.hasMedia || t === "document") ? "📄" : null;
+                                t === "image" ? "📷" :
+                                  t === "video" ? "🎥" :
+                                    t === "audio" || t === "ptt" ? "🎤" :
+                                      t === "sticker" ? "🩹" :
+                                        (lm.hasMedia || t === "document") ? "📄" : null;
                             return icon ? <span className="shrink-0">{icon}</span> : null;
                           })()}
                           <span className="truncate">
@@ -4620,11 +4951,10 @@ export default function WhatsAppPage() {
                         setShowContactInfoDrawer(true);
                       }
                     }}
-                    className={`p-2 rounded-lg transition flex items-center gap-1.5 text-xs font-semibold ${
-                      showContactInfoDrawer
+                    className={`p-2 rounded-lg transition flex items-center gap-1.5 text-xs font-semibold ${showContactInfoDrawer
                         ? "bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-rule)] shadow-xs"
                         : "text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper)]"
-                    }`}
+                      }`}
                     title="Toggle Contact Profile, CRM Inquiries & Quick Links"
                   >
                     <Info size={17} />
@@ -4639,41 +4969,58 @@ export default function WhatsAppPage() {
                   independently scrollable strips on a single line. */}
               <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] text-xs shrink-0 min-w-0 overflow-hidden">
                 <div className="flex items-center gap-2 min-w-0 flex-1 md:flex-none overflow-x-auto wa-no-scrollbar">
-                  {/* Ticket Status Selector — scrolls rather than clipping or wrapping */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="hl-section-label text-[11px] font-bold text-[var(--color-ink-2)] uppercase tracking-wider shrink-0">Status:</span>
-                    {["open", "pending", "resolved", "spam"].map((st) => (
-                      <button
-                        key={st}
-                        type="button"
-                        onClick={() => handleUpdateTicketStatus(st)}
-                        className={`hl-badge px-2.5 py-0.5 text-[10px] font-extrabold uppercase transition shrink-0 ${
-                          ticketStatus === st
-                            ? st === "open"
-                              ? "hl-badge-success"
-                              : st === "pending"
-                              ? "hl-badge-warn"
-                              : st === "resolved"
-                              ? "hl-badge-info"
-                              : "hl-badge-error"
-                            : ""
+                  {/* Ticket Status Dropdown */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="hl-section-label text-[11px] font-bold text-[var(--color-ink-2)] uppercase tracking-wider shrink-0">
+                      Status:
+                    </span>
+                    <div className="relative inline-flex items-center">
+                      <select
+                        id="wa-ticket-status-select"
+                        value={ticketStatus}
+                        onChange={(e) => handleUpdateTicketStatus(e.target.value)}
+                        className={`hl-select py-1 pl-6 pr-7 text-xs font-bold rounded-lg cursor-pointer transition shadow-xs border ${
+                          ticketStatus === "open"
+                            ? "bg-emerald-50/80 border-emerald-400 text-emerald-800 focus:ring-emerald-500"
+                            : ticketStatus === "pending"
+                            ? "bg-amber-50/80 border-amber-400 text-amber-800 focus:ring-amber-500"
+                            : ticketStatus === "resolved"
+                            ? "bg-blue-50/80 border-blue-400 text-blue-800 focus:ring-blue-500"
+                            : "bg-red-50/80 border-red-400 text-red-800 focus:ring-red-500"
                         }`}
+                        title="Conversation ticket status"
                       >
-                        {st}
-                      </button>
-                    ))}
+                        <option value="open">Open (Active)</option>
+                        <option value="pending">Pending (Waiting)</option>
+                        <option value="resolved">Resolved (Closed)</option>
+                        <option value="spam">Spam (Junk)</option>
+                      </select>
+                      <span
+                        className={`absolute left-2.5 w-2 h-2 rounded-full pointer-events-none ${
+                          ticketStatus === "open"
+                            ? "bg-emerald-500 animate-pulse"
+                            : ticketStatus === "pending"
+                            ? "bg-amber-500"
+                            : ticketStatus === "resolved"
+                            ? "bg-blue-500"
+                            : "bg-red-500"
+                        }`}
+                      />
+                    </div>
                   </div>
 
                   {/* Agent Assignment Selector */}
                   <div className="flex items-center gap-1.5 border-l border-[var(--color-rule)] pl-2 shrink-0">
-                    <span className="text-[11px] font-bold text-[var(--color-ink-2)] shrink-0">Agent:</span>
+                    <span className="hl-section-label text-[11px] font-bold text-[var(--color-ink-2)] uppercase tracking-wider shrink-0">
+                      Agent:
+                    </span>
                     <select
                       value={assignedAgentName}
                       onChange={(e) => {
                         const sel = teamMembers.find((m) => `${m.first_name} ${m.last_name || ""}`.trim() === e.target.value);
                         handleAssignAgent(sel?.id || null, e.target.value);
                       }}
-                      className="hl-select px-2 py-1 text-xs cursor-pointer"
+                      className="hl-select px-2.5 py-1 text-xs cursor-pointer font-semibold rounded-lg bg-[var(--color-paper)] border-[var(--color-rule)]"
                     >
                       <option value="">👤 Unassigned</option>
                       {teamMembers.map((m) => {
@@ -4713,9 +5060,8 @@ export default function WhatsAppPage() {
                         setShowNotesDrawer(true);
                       }
                     }}
-                    className={`hl-badge flex items-center gap-1.5 px-2.5 py-1 font-bold text-[11px] transition ${
-                      showNotesDrawer ? "hl-badge-accent shadow-xs ring-1 ring-[var(--color-accent)]" : "hl-badge-warn"
-                    }`}
+                    className={`hl-badge flex items-center gap-1.5 px-2.5 py-1 font-bold text-[11px] transition ${showNotesDrawer ? "hl-badge-accent shadow-xs ring-1 ring-[var(--color-accent)]" : "hl-badge-warn"
+                      }`}
                     title="Toggle Team Internal Collaboration Notes"
                   >
                     <span>📝 Team Notes</span>
@@ -4787,249 +5133,270 @@ export default function WhatsAppPage() {
                 <div
                   ref={threadRef}
                   onScroll={handleThreadScroll}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDraggingFile(true);
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget)) {
+                      setIsDraggingFile(false);
+                    }
+                  }}
+                  onDrop={handleDropFiles}
                   className="relative z-10 flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-4 overscroll-contain wa-parallel-scroll wa-custom-scrollbar scroll-smooth"
                 >
-                {messages.length >= msgLimit && (
-                  <div className="flex justify-center mb-3">
-                    <button
-                      onClick={handleLoadMoreMessages}
-                      disabled={loadingMore}
-                      className="hl-btn-secondary px-4 py-1.5 bg-[var(--color-paper-2)] border border-[var(--color-rule)] text-xs font-semibold text-[var(--color-ink-2)] rounded-full hover:bg-[var(--color-paper-2)] transition shadow flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                      {loadingMore ? <Loader2 size={13} className="animate-spin text-[var(--color-ink)]" /> : <RefreshCw size={13} />}
-                      <span>Load older messages</span>
-                    </button>
-                  </div>
-                )}
-                {messagesLoading ? (
-                  <div className="flex items-center justify-center h-full">
-                    <Loader2 size={28} className="animate-spin text-[var(--color-ink)]" />
-                  </div>
-                ) : messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-[var(--color-ink-2)] text-sm">
-                    <MessageSquare size={44} className="mb-2 text-[var(--color-ink)] opacity-80" />
-                    <p className="font-bold text-[var(--color-ink)] text-base">No message history yet</p>
-                    <p className="text-xs text-[var(--color-ink-2)]">Send a message below to start chatting with {selectedChat.name}</p>
-                  </div>
-                ) : (
-                  [...messages].reverse().map((msg, mIdx, ordered) => {
-                    const prev = ordered[mIdx - 1];
-                    const next = ordered[mIdx + 1];
-                    // WhatsApp stacks a run of messages from the same sender:
-                    // the tail sits only on the first bubble, the rest tuck in tight.
-                    const startsRun = !prev || prev.isMe !== msg.isMe || !sameDay(prev.timestamp, msg.timestamp);
-                    const endsRun = !next || next.isMe !== msg.isMe || !sameDay(next.timestamp, msg.timestamp);
-                    const showDayDivider = !prev || !sameDay(prev.timestamp, msg.timestamp);
-
-                    return (
-                    <React.Fragment key={msg.id || msg.timestamp}>
-                    {showDayDivider && (
-                      <div className="wa-sticky-date-chip">
-                        <span className="hl-badge px-3.5 py-1 text-[11px] font-bold tracking-wide uppercase bg-[var(--color-paper-2)]/95 backdrop-blur-md shadow-xs border border-[var(--color-rule)]">
-                          {formatDayDivider(msg.timestamp)}
-                        </span>
+                  {isDraggingFile && (
+                    <div className="absolute inset-0 z-50 bg-[var(--color-paper)]/90 backdrop-blur-xs flex flex-col items-center justify-center border-2 border-dashed border-[var(--color-ink)] m-3 rounded-2xl pointer-events-none transition-all animate-in fade-in">
+                      <div className="w-16 h-16 rounded-full bg-[var(--color-paper-2)] border border-[var(--color-rule)] flex items-center justify-center text-[var(--color-ink)] mb-3 shadow-lg">
+                        <Upload size={32} className="animate-bounce" />
                       </div>
-                    )}
-                    <div
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        setContextMenu({
-                          x: Math.min(e.clientX, window.innerWidth - 230),
-                          y: Math.min(e.clientY, window.innerHeight - 270),
-                          message: msg,
-                        });
-                      }}
-                      className={`flex ${msg.isMe ? "justify-end" : "justify-start"} group relative wa-bubble-enter ${endsRun ? "mb-2.5" : "mb-0.5"}`}
-                    >
-                      {/* Hover action toolbar for reactions & quote reply */}
-                      <div className="hl-badge opacity-0 group-hover:opacity-100 transition flex items-center gap-1 px-2 py-0.5 absolute -top-3 z-10 select-none">
-                        {["👍", "❤️", "😂", "😮", "🙏"].map((emoji) => (
-                          <button
-                            key={emoji}
-                            onClick={() => handleReact(msg.id, emoji)}
-                            className="hover:scale-125 transition text-xs p-0.5"
-                            title={`React ${emoji}`}
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                        <button
-                          onClick={() => setReplyingTo(msg)}
-                          className="text-[var(--color-ink-2)] hover:text-[var(--color-ink)] ml-1 text-xs px-1 hover:bg-[var(--color-paper-2)] rounded"
-                          title="Quote reply"
-                        >
-                          ↩️
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            setContextMenu({
-                              x: Math.min(rect.left, window.innerWidth - 230),
-                              y: Math.min(rect.bottom + 5, window.innerHeight - 270),
-                              message: msg,
-                            });
-                          }}
-                          className="text-[var(--color-ink-2)] hover:text-[var(--color-ink)] ml-0.5 text-xs px-1 hover:bg-[var(--color-paper-2)] rounded"
-                          title="More options"
-                        >
-                          <MoreVertical size={12} />
-                        </button>
-                      </div>
-
-                      <div
-                        className={`max-w-[75%] md:max-w-[65%] px-2.5 py-1.5 rounded-lg text-sm shadow-sm relative ${msg.isMe
-                            ? `bg-[var(--color-accent-soft)] text-[var(--color-ink)] ${startsRun ? "rounded-tr-none" : ""}`
-                            : `bg-[var(--color-paper-2)] text-[var(--color-ink)] border border-[var(--color-rule)] ${startsRun ? "rounded-tl-none" : ""}`
-                          }`}
+                      <p className="text-base font-bold text-[var(--color-ink)]">Drop files here to send instantly</p>
+                      <p className="text-xs text-[var(--color-ink-2)] mt-1">Images, PDFs, Word docs, Excel sheets (.xlsx, .xls, .csv), audio & video</p>
+                    </div>
+                  )}
+                  {messages.length >= msgLimit && (
+                    <div className="flex justify-center mb-3">
+                      <button
+                        onClick={handleLoadMoreMessages}
+                        disabled={loadingMore}
+                        className="hl-btn-secondary px-4 py-1.5 bg-[var(--color-paper-2)] border border-[var(--color-rule)] text-xs font-semibold text-[var(--color-ink-2)] rounded-full hover:bg-[var(--color-paper-2)] transition shadow flex items-center gap-1.5 disabled:opacity-50"
                       >
-                        {/* Bubble tail — only on the first message of a run */}
-                        {startsRun && (
-                          <span
-                            aria-hidden="true"
-                            className={`absolute top-0 w-2 h-3 ${msg.isMe ? "-right-2" : "-left-2"}`}
-                            style={{
-                              backgroundColor: msg.isMe ? "var(--color-accent-soft)" : "var(--color-paper-2)",
-                              clipPath: msg.isMe ? "polygon(0 0, 100% 0, 0 100%)" : "polygon(0 0, 100% 0, 100% 100%)",
-                            }}
-                          />
-                        )}
-                        {/* Quoted Message Preview in bubble */}
-                        {msg.quotedMsg && (
-                          <div className="mb-2 p-1.5 rounded-lg border-l-2 border-[var(--color-accent)] bg-[var(--color-paper)] text-xs text-[var(--color-ink-2)]">
-                            <p className="hl-section-label">Quoted Message</p>
-                            <p className="truncate text-[var(--color-ink)]">{msg.quotedMsg.body || "Attachment"}</p>
-                          </div>
-                        )}
+                        {loadingMore ? <Loader2 size={13} className="animate-spin text-[var(--color-ink)]" /> : <RefreshCw size={13} />}
+                        <span>Load older messages</span>
+                      </button>
+                    </div>
+                  )}
+                  {messagesLoading ? (
+                    <div className="flex items-center justify-center h-full">
+                      <Loader2 size={28} className="animate-spin text-[var(--color-ink)]" />
+                    </div>
+                  ) : messages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-[var(--color-ink-2)] text-sm">
+                      <MessageSquare size={44} className="mb-2 text-[var(--color-ink)] opacity-80" />
+                      <p className="font-bold text-[var(--color-ink)] text-base">No message history yet</p>
+                      <p className="text-xs text-[var(--color-ink-2)]">Send a message below to start chatting with {selectedChat.name}</p>
+                    </div>
+                  ) : (
+                    [...messages].reverse().map((msg, mIdx, ordered) => {
+                      const prev = ordered[mIdx - 1];
+                      const next = ordered[mIdx + 1];
+                      // WhatsApp stacks a run of messages from the same sender:
+                      // the tail sits only on the first bubble, the rest tuck in tight.
+                      const startsRun = !prev || prev.isMe !== msg.isMe || !sameDay(prev.timestamp, msg.timestamp);
+                      const endsRun = !next || next.isMe !== msg.isMe || !sameDay(next.timestamp, msg.timestamp);
+                      const showDayDivider = !prev || !sameDay(prev.timestamp, msg.timestamp);
 
-                        {(() => {
-                          const msgButtons = extractMessageButtons(msg);
-                          const displayBody = getMessageDisplayBody(msg, msgButtons);
-                          return (
-                            <>
-                              {msg.location ? (
-                                <a
-                                  href={`https://www.google.com/maps?q=${msg.location.lat},${msg.location.lng}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="flex items-center gap-2 underline font-semibold text-[var(--color-ink)]"
+                      return (
+                        <React.Fragment key={msg.id || msg.timestamp}>
+                          {showDayDivider && (
+                            <div className="wa-sticky-date-chip">
+                              <span className="hl-badge px-3.5 py-1 text-[11px] font-bold tracking-wide uppercase bg-[var(--color-paper-2)]/95 backdrop-blur-md shadow-xs border border-[var(--color-rule)]">
+                                {formatDayDivider(msg.timestamp)}
+                              </span>
+                            </div>
+                          )}
+                          <div
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              setContextMenu({
+                                x: Math.min(e.clientX, window.innerWidth - 230),
+                                y: Math.min(e.clientY, window.innerHeight - 270),
+                                message: msg,
+                              });
+                            }}
+                            className={`flex ${msg.isMe ? "justify-end" : "justify-start"} group relative wa-bubble-enter ${endsRun ? "mb-2.5" : "mb-0.5"}`}
+                          >
+                            {/* Hover action toolbar for reactions & quote reply */}
+                            <div className="hl-badge opacity-0 group-hover:opacity-100 transition flex items-center gap-1 px-2 py-0.5 absolute -top-3 z-10 select-none">
+                              {["👍", "❤️", "😂", "😮", "🙏"].map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => handleReact(msg.id, emoji)}
+                                  className="hover:scale-125 transition text-xs p-0.5"
+                                  title={`React ${emoji}`}
                                 >
-                                  <MapPin size={14} /> {msg.location.name || "Shared location"}
-                                </a>
-                              ) : (msg.hasMedia || msg.type === "image" || msg.type === "video" || msg.type === "audio" || msg.type === "ptt" || msg.type === "document" || msg.type === "sticker" || isFilename(msg.body) || isFilename(msg.filename)) ? (
-                                <div className="space-y-1">
-                                  <MediaBubble
-                                    chatId={selectedChat.id}
-                                    messageId={msg.id}
-                                    filename={msg.filename || msg.body}
-                                    isMe={msg.isMe}
-                                    onPreview={(src, title) => openLightbox({ src, title })}
-                                  />
-                                  {msg.body && !isFilename(msg.body) && !msg.body.startsWith("http") ? (
-                                    <p className="whitespace-pre-wrap break-words">{displayBody || msg.body}</p>
-                                  ) : null}
-                                </div>
-                              ) : (
-                                <RichMessageContent
-                                  text={displayBody || previewText(msg) || (msg.isMe ? "Sent message" : "Incoming message")}
-                                  isMe={msg.isMe}
+                                  {emoji}
+                                </button>
+                              ))}
+                              <button
+                                onClick={() => setReplyingTo(msg)}
+                                className="text-[var(--color-ink-2)] hover:text-[var(--color-ink)] ml-1 text-xs px-1 hover:bg-[var(--color-paper-2)] rounded"
+                                title="Quote reply"
+                              >
+                                ↩️
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setContextMenu({
+                                    x: Math.min(rect.left, window.innerWidth - 230),
+                                    y: Math.min(rect.bottom + 5, window.innerHeight - 270),
+                                    message: msg,
+                                  });
+                                }}
+                                className="text-[var(--color-ink-2)] hover:text-[var(--color-ink)] ml-0.5 text-xs px-1 hover:bg-[var(--color-paper-2)] rounded"
+                                title="More options"
+                              >
+                                <MoreVertical size={12} />
+                              </button>
+                            </div>
+
+                            <div
+                              className={`max-w-[75%] md:max-w-[65%] px-2.5 py-1.5 rounded-lg text-sm shadow-sm relative ${msg.isMe
+                                ? `bg-[var(--color-accent-soft)] text-[var(--color-ink)] ${startsRun ? "rounded-tr-none" : ""}`
+                                : `bg-[var(--color-paper-2)] text-[var(--color-ink)] border border-[var(--color-rule)] ${startsRun ? "rounded-tl-none" : ""}`
+                                }`}
+                            >
+                              {/* Bubble tail — only on the first message of a run */}
+                              {startsRun && (
+                                <span
+                                  aria-hidden="true"
+                                  className={`absolute top-0 w-2 h-3 ${msg.isMe ? "-right-2" : "-left-2"}`}
+                                  style={{
+                                    backgroundColor: msg.isMe ? "var(--color-accent-soft)" : "var(--color-paper-2)",
+                                    clipPath: msg.isMe ? "polygon(0 0, 100% 0, 0 100%)" : "polygon(0 0, 100% 0, 100% 100%)",
+                                  }}
                                 />
                               )}
-
-                              {/* Reaction badges on bubble */}
-                              {Array.isArray(msg.reactions) && msg.reactions.length > 0 && (
-                                <div className="flex gap-1 mt-1 -mb-1">
-                                  {msg.reactions.map((r, rIdx) => (
-                                    <span key={rIdx} className="hl-badge px-1.5 py-0.2 text-[11px]">
-                                      {r.emoji}
-                                    </span>
-                                  ))}
+                              {/* Quoted Message Preview in bubble */}
+                              {msg.quotedMsg && (
+                                <div className="mb-2 p-1.5 rounded-lg border-l-2 border-[var(--color-accent)] bg-[var(--color-paper)] text-xs text-[var(--color-ink-2)]">
+                                  <p className="hl-section-label">Quoted Message</p>
+                                  <p className="truncate text-[var(--color-ink)]">{msg.quotedMsg.body || "Attachment"}</p>
                                 </div>
                               )}
 
-                              <div className="hl-id flex items-center justify-end gap-1 -mt-0.5 -mb-0.5 font-normal leading-none pt-1">
-                                <span>
-                                  {msg.timestamp
-                                    ? new Date(msg.timestamp * 1000).toLocaleTimeString([], {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })
-                                    : ""}
-                                </span>
-                                {starredMsgIds.has(msg.id) && (
-                                  <Star size={10} className="text-[var(--color-focus)] fill-[var(--color-focus)] inline" />
-                                )}
-                                {msg.isMe && <MessageTicks status={msg.status || "sent"} />}
-                              </div>
+                              {(() => {
+                                const msgButtons = extractMessageButtons(msg);
+                                const displayBody = getMessageDisplayBody(msg, msgButtons);
+                                return (
+                                  <>
+                                    {msg.location ? (
+                                      <a
+                                        href={`https://www.google.com/maps?q=${msg.location.lat},${msg.location.lng}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex items-center gap-2 underline font-semibold text-[var(--color-ink)]"
+                                      >
+                                        <MapPin size={14} /> {msg.location.name || "Shared location"}
+                                      </a>
+                                    ) : (msg.hasMedia || msg.type === "image" || msg.type === "video" || msg.type === "audio" || msg.type === "ptt" || msg.type === "document" || msg.type === "sticker" || isFilename(msg.body) || isFilename(msg.filename)) ? (
+                                      <div className="space-y-1">
+                                        <MediaBubble
+                                          chatId={selectedChat.id}
+                                          messageId={msg.id}
+                                          serializedId={msg.serializedId}
+                                          mediaUrl={msg.mediaUrl}
+                                          mimetype={msg.mimetype}
+                                          filename={msg.filename || msg.body}
+                                          isMe={msg.isMe}
+                                          onPreview={(src, title) => openLightbox({ src, title })}
+                                        />
+                                        {msg.body && !isFilename(msg.body) && !msg.body.startsWith("http") ? (
+                                          <p className="whitespace-pre-wrap break-words">{displayBody || msg.body}</p>
+                                        ) : null}
+                                      </div>
+                                    ) : (
+                                      <RichMessageContent
+                                        text={displayBody || previewText(msg) || (msg.isMe ? "Sent message" : "Incoming message")}
+                                        isMe={msg.isMe}
+                                      />
+                                    )}
 
-                              {/* WhatsApp Authentic Full-Width Action Buttons (Call Now / Apply Now / Quick Replies) */}
-                              {msgButtons && msgButtons.length > 0 && (
-                                <div className="mt-2 -mx-2.5 -mb-1.5 border-t border-[var(--color-rule)] divide-y divide-[var(--color-rule)] overflow-hidden rounded-b-lg select-none bg-[var(--color-paper)]">
-                                  {msgButtons.map((btn, bIdx) => (
-                                    <button
-                                      key={bIdx}
-                                      type="button"
-                                      onClick={() => {
-                                        if (btn.type === "url" && btn.url) {
-                                          window.open(btn.url, "_blank", "noopener,noreferrer");
-                                        } else if (btn.type === "call" && btn.phone) {
-                                          window.location.href = `tel:${btn.phone.replace(/\s+/g, "")}`;
-                                        } else {
-                                          handleSendDirect(btn.title || btn.text || btn);
-                                        }
-                                      }}
-                                      className="w-full py-2.5 px-3 flex items-center justify-center gap-2 text-xs font-semibold text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] active:bg-[var(--color-paper-2)] transition-colors text-center group/btn"
-                                      title={btn.type === "call" ? `Call ${btn.phone || ""}` : btn.type === "url" ? `Open link ${btn.url || ""}` : `Send "${btn.title || btn.text || btn}"`}
-                                    >
-                                      {btn.type === "call" ? (
-                                        <Phone size={14} className="text-[var(--color-ink)] shrink-0" />
-                                      ) : btn.type === "url" ? (
-                                        <ExternalLink size={14} className="text-[var(--color-ink)] shrink-0" />
-                                      ) : (
-                                        <CornerDownLeft size={14} className="text-[var(--color-ink)] shrink-0" />
+                                    {/* Reaction badges on bubble */}
+                                    {Array.isArray(msg.reactions) && msg.reactions.length > 0 && (
+                                      <div className="flex gap-1 mt-1 -mb-1">
+                                        {msg.reactions.map((r, rIdx) => (
+                                          <span key={rIdx} className="hl-badge px-1.5 py-0.2 text-[11px]">
+                                            {r.emoji}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    <div className="hl-id flex items-center justify-end gap-1 -mt-0.5 -mb-0.5 font-normal leading-none pt-1">
+                                      <span>
+                                        {msg.timestamp
+                                          ? new Date(msg.timestamp * 1000).toLocaleTimeString([], {
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                          })
+                                          : ""}
+                                      </span>
+                                      {starredMsgIds.has(msg.id) && (
+                                        <Star size={10} className="text-[var(--color-focus)] fill-[var(--color-focus)] inline" />
                                       )}
-                                      <span className="truncate group-hover/btn:underline">{btn.title || btn.text || btn}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                    </React.Fragment>
-                    );
-                  })
-                )}
-                {contactTyping && <TypingIndicator />}
-                <div ref={messagesEndRef} />
-              </div>
+                                      {msg.isMe && <MessageTicks status={msg.status || "sent"} />}
+                                    </div>
 
-              {/* Jump to latest floating pill with badge & smooth spring transition */}
-              <div
-                className={`absolute bottom-4 right-4 sm:right-6 z-30 transition-all duration-300 transform ${
-                  isScrolledUp ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-4 scale-90 pointer-events-none"
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    scrollToBottom(true);
-                    setUnreadWhileScrolled(0);
-                  }}
-                  className="hl-btn-secondary relative w-10 h-10 rounded-full hover:scale-105 active:scale-95 transition flex items-center justify-center group"
-                  title="Jump to latest messages"
-                >
-                  <ChevronDown size={20} className="group-hover:translate-y-0.5 transition-transform text-[var(--color-ink-2)]" />
-                  {unreadWhileScrolled > 0 && (
-                    <span className="hl-badge hl-badge-accent absolute -top-1.5 -right-1.5 text-[10px] font-extrabold px-1.5 py-0.5 min-w-[18px] text-center animate-pulse">
-                      {unreadWhileScrolled}
-                    </span>
+                                    {/* WhatsApp Authentic Full-Width Action Buttons (Call Now / Apply Now / Quick Replies) */}
+                                    {msgButtons && msgButtons.length > 0 && (
+                                      <div className="mt-2 -mx-2.5 -mb-1.5 border-t border-[var(--color-rule)] divide-y divide-[var(--color-rule)] overflow-hidden rounded-b-lg select-none bg-[var(--color-paper)]">
+                                        {msgButtons.map((btn, bIdx) => (
+                                          <button
+                                            key={bIdx}
+                                            type="button"
+                                            onClick={() => {
+                                              if (btn.type === "url" && btn.url) {
+                                                window.open(btn.url, "_blank", "noopener,noreferrer");
+                                              } else if (btn.type === "call" && btn.phone) {
+                                                window.location.href = `tel:${btn.phone.replace(/\s+/g, "")}`;
+                                              } else {
+                                                handleSendDirect(btn.title || btn.text || btn);
+                                              }
+                                            }}
+                                            className="w-full py-2.5 px-3 flex items-center justify-center gap-2 text-xs font-semibold text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] active:bg-[var(--color-paper-2)] transition-colors text-center group/btn"
+                                            title={btn.type === "call" ? `Call ${btn.phone || ""}` : btn.type === "url" ? `Open link ${btn.url || ""}` : `Send "${btn.title || btn.text || btn}"`}
+                                          >
+                                            {btn.type === "call" ? (
+                                              <Phone size={14} className="text-[var(--color-ink)] shrink-0" />
+                                            ) : btn.type === "url" ? (
+                                              <ExternalLink size={14} className="text-[var(--color-ink)] shrink-0" />
+                                            ) : (
+                                              <CornerDownLeft size={14} className="text-[var(--color-ink)] shrink-0" />
+                                            )}
+                                            <span className="truncate group-hover/btn:underline">{btn.title || btn.text || btn}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        </React.Fragment>
+                      );
+                    })
                   )}
-                </button>
+                  {contactTyping && <TypingIndicator />}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Jump to latest floating pill with badge & smooth spring transition */}
+                <div
+                  className={`absolute bottom-4 right-4 sm:right-6 z-30 transition-all duration-300 transform ${isScrolledUp ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-4 scale-90 pointer-events-none"
+                    }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      scrollToBottom(true);
+                      setUnreadWhileScrolled(0);
+                    }}
+                    className="hl-btn-secondary relative w-10 h-10 rounded-full hover:scale-105 active:scale-95 transition flex items-center justify-center group"
+                    title="Jump to latest messages"
+                  >
+                    <ChevronDown size={20} className="group-hover:translate-y-0.5 transition-transform text-[var(--color-ink-2)]" />
+                    {unreadWhileScrolled > 0 && (
+                      <span className="hl-badge hl-badge-accent absolute -top-1.5 -right-1.5 text-[10px] font-extrabold px-1.5 py-0.5 min-w-[18px] text-center animate-pulse">
+                        {unreadWhileScrolled}
+                      </span>
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
 
               {/* Quote Reply Banner above composer */}
               {replyingTo && (
@@ -5150,233 +5517,233 @@ export default function WhatsAppPage() {
                         </button>
                       </div>
 
-                    <div className="p-1.5 space-y-1">
-                      {/* Document / PDF */}
-                      <button
-                        onClick={() => {
-                          setShowAttachMenu(false);
-                          document.getElementById("wa-doc-upload-input")?.click();
-                        }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
-                          <FileText size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-error)]">PDF & Document</p>
-                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">.pdf, .doc, .docx, .txt, .zip</p>
-                        </div>
-                      </button>
+                      <div className="p-1.5 space-y-1">
+                        {/* Document / PDF */}
+                        <button
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            document.getElementById("wa-doc-upload-input")?.click();
+                          }}
+                          className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
+                            <FileText size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-error)]">PDF & Document</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">.pdf, .doc, .docx, .txt, .zip</p>
+                          </div>
+                        </button>
 
-                      {/* Excel / Spreadsheet */}
-                      <button
-                        onClick={() => {
-                          setShowAttachMenu(false);
-                          document.getElementById("wa-excel-upload-input")?.click();
-                        }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
-                          <Database size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Excel / Spreadsheet</p>
-                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">.xlsx, .xls, .csv spreadsheets</p>
-                        </div>
-                      </button>
+                        {/* Excel / Spreadsheet */}
+                        <button
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            document.getElementById("wa-excel-upload-input")?.click();
+                          }}
+                          className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
+                            <Database size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Excel / Spreadsheet</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">.xlsx, .xls, .csv spreadsheets</p>
+                          </div>
+                        </button>
 
-                      {/* Photos & Videos */}
-                      <button
-                        onClick={() => {
-                          setShowAttachMenu(false);
-                          document.getElementById("wa-media-upload-input")?.click();
-                        }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
-                          <Image size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Photos & Videos</p>
-                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Images (.png, .jpg), Videos (.mp4)</p>
-                        </div>
-                      </button>
+                        {/* Photos & Videos */}
+                        <button
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            document.getElementById("wa-media-upload-input")?.click();
+                          }}
+                          className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
+                            <Image size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Photos & Videos</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">Images (.png, .jpg), Videos (.mp4)</p>
+                          </div>
+                        </button>
 
-                      {/* Audio / Voice Note */}
-                      <button
-                        onClick={() => {
-                          setShowAttachMenu(false);
-                          document.getElementById("wa-audio-upload-input")?.click();
-                        }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
-                          <Music size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Audio / Voice</p>
-                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">.mp3, .ogg, .wav audio files</p>
-                        </div>
-                      </button>
+                        {/* Audio / Voice Note */}
+                        <button
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            document.getElementById("wa-audio-upload-input")?.click();
+                          }}
+                          className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
+                            <Music size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Audio / Voice</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">.mp3, .ogg, .wav audio files</p>
+                          </div>
+                        </button>
 
-                      {/* Trigger Chatbot Flow */}
-                      <button
-                        onClick={() => {
-                          setShowAttachMenu(false);
-                          setShowFlowModal(true);
-                        }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
-                          <Zap size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Trigger Chatbot Flow</p>
-                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Automated customer flow & bot reply</p>
-                        </div>
-                      </button>
+                        {/* Trigger Chatbot Flow */}
+                        <button
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            setShowFlowModal(true);
+                          }}
+                          className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
+                            <Zap size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Trigger Chatbot Flow</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">Automated customer flow & bot reply</p>
+                          </div>
+                        </button>
 
-                      {/* Trigger CRM Automation */}
-                      <button
-                        onClick={() => {
-                          setShowAttachMenu(false);
-                          fetchAutomations();
-                          setShowAutomationModal(true);
-                        }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
-                          <Sparkles size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Trigger CRM Automation</p>
-                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Run automated invoice, receipt, or welcome rule</p>
-                        </div>
-                      </button>
+                        {/* Trigger CRM Automation */}
+                        <button
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            fetchAutomations();
+                            setShowAutomationModal(true);
+                          }}
+                          className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
+                            <Sparkles size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Trigger CRM Automation</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">Run automated invoice, receipt, or welcome rule</p>
+                          </div>
+                        </button>
 
-                      {/* Send Interactive Reminder */}
-                      <button
-                        onClick={() => {
-                          setShowAttachMenu(false);
-                          setShowReminderModal(true);
-                        }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
-                          <Bell size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Send Interactive Reminder</p>
-                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">2-way buttons: Confirm, Reschedule, Call</p>
-                        </div>
-                      </button>
+                        {/* Send Interactive Reminder */}
+                        <button
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            setShowReminderModal(true);
+                          }}
+                          className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
+                            <Bell size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Send Interactive Reminder</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">2-way buttons: Confirm, Reschedule, Call</p>
+                          </div>
+                        </button>
 
-                      {/* Enroll in Campaign Group */}
-                      <button
-                        onClick={() => {
-                          setShowAttachMenu(false);
-                          fetchCampaignGroups();
-                          setShowAddToGroupModal(true);
-                        }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
-                          <Users size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Enroll in Campaign Group</p>
-                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Add contact to bulk campaign target audience</p>
-                        </div>
-                      </button>
+                        {/* Enroll in Campaign Group */}
+                        <button
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            fetchCampaignGroups();
+                            setShowAddToGroupModal(true);
+                          }}
+                          className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
+                            <Users size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Enroll in Campaign Group</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">Add contact to bulk campaign target audience</p>
+                          </div>
+                        </button>
 
-                      {/* Send Inquiry Options Menu */}
-                      <button
-                        onClick={() => {
-                          setShowAttachMenu(false);
-                          setShowOptionsModal(true);
-                        }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
-                          <ListOrdered size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Send Options / Inquiry Menu</p>
-                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Numbered inquiry buttons & quick replies</p>
-                        </div>
-                      </button>
+                        {/* Send Inquiry Options Menu */}
+                        <button
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            setShowOptionsModal(true);
+                          }}
+                          className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
+                            <ListOrdered size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Send Options / Inquiry Menu</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">Numbered inquiry buttons & quick replies</p>
+                          </div>
+                        </button>
 
-                      {/* Insert Template */}
-                      <button
-                        onClick={() => {
-                          setShowAttachMenu(false);
-                          setShowTemplatePicker(true);
-                        }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
-                          <FileText size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Approved Template</p>
-                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Insert WhatsApp formatted template</p>
-                        </div>
-                      </button>
+                        {/* Insert Template */}
+                        <button
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            setShowTemplatePicker(true);
+                          }}
+                          className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
+                            <FileText size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Approved Template</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">Insert WhatsApp formatted template</p>
+                          </div>
+                        </button>
 
-                      {/* Request WhatsApp Payment */}
-                      <button
-                        onClick={() => {
-                          setShowAttachMenu(false);
-                          setShowPaymentModal(true);
-                        }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
-                          <CreditCard size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Request WhatsApp Payment</p>
-                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Generate 0% markup UPI / payment link</p>
-                        </div>
-                      </button>
+                        {/* Request WhatsApp Payment */}
+                        <button
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            setShowPaymentModal(true);
+                          }}
+                          className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
+                            <CreditCard size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Request WhatsApp Payment</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">Generate 0% markup UPI / payment link</p>
+                          </div>
+                        </button>
 
-                      {/* Enroll in Drip Sequence */}
-                      <button
-                        onClick={() => {
-                          setShowAttachMenu(false);
-                          fetchDripSequences();
-                          setShowDripModal(true);
-                        }}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
-                          <Sparkles size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Enroll in Drip Sequence</p>
-                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Automated multi-day lead nurturing</p>
-                        </div>
-                      </button>
+                        {/* Enroll in Drip Sequence */}
+                        <button
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            fetchDripSequences();
+                            setShowDripModal(true);
+                          }}
+                          className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
+                            <Sparkles size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Enroll in Drip Sequence</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">Automated multi-day lead nurturing</p>
+                          </div>
+                        </button>
 
-                      {/* Share Location */}
-                      <button
-                        onClick={() => {
-                          setShowAttachMenu(false);
-                          handleShareLocation();
-                        }}
-                        disabled={locationSending}
-                        className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
-                          <Navigation size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-error)]">Share GPS Location</p>
-                          <p className="text-[10px] text-[var(--color-ink-2)] truncate">Send current office / live coordinates</p>
-                        </div>
-                      </button>
+                        {/* Share Location */}
+                        <button
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            handleShareLocation();
+                          }}
+                          disabled={locationSending}
+                          className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] flex items-center justify-center group-hover:scale-105 transition">
+                            <Navigation size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-error)]">Share GPS Location</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">Send current office / live coordinates</p>
+                          </div>
+                        </button>
+                      </div>
                     </div>
-                  </div>
                   </>
                 )}
 
@@ -5625,6 +5992,7 @@ export default function WhatsAppPage() {
                       e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
                     }}
                     onKeyDown={handleKeyDown}
+                    onPaste={handlePasteComposer}
                     placeholder={`Message ${selectedChat.name}... (Type / for quick replies, Shift+Enter for new line)`}
                     className="hl-card wa-composer-input flex-1 min-w-[8rem] basis-[10rem] px-4 py-2 rounded-2xl text-sm wa-auto-textarea leading-relaxed max-h-32 transition-[height] duration-75"
                     disabled={sending}
@@ -5646,8 +6014,8 @@ export default function WhatsAppPage() {
                     onClick={() => (recording ? stopRecording(false) : startRecording())}
                     disabled={mediaSending}
                     className={`hl-btn-primary p-2.5 rounded-full transition disabled:opacity-50 ${recording
-                        ? "hl-btn-danger-ghost"
-                        : ""
+                      ? "hl-btn-danger-ghost"
+                      : ""
                       }`}
                     title={recording ? "Send voice note" : "Record voice note"}
                   >
@@ -6507,11 +6875,10 @@ export default function WhatsAppPage() {
                       key={cat.id}
                       type="button"
                       onClick={() => handleReminderTypeChange(cat.id)}
-                      className={`hl-card p-2.5 text-xs font-semibold text-left transition ${
-                        reminderType === cat.id
+                      className={`hl-card p-2.5 text-xs font-semibold text-left transition ${reminderType === cat.id
                           ? "border-[var(--color-accent)]"
                           : ""
-                      }`}
+                        }`}
                     >
                       {cat.label}
                     </button>
@@ -6652,11 +7019,10 @@ export default function WhatsAppPage() {
                               prev.includes(grp.id) ? prev.filter((id) => id !== grp.id) : [...prev, grp.id]
                             );
                           }}
-                          className={`hl-card p-3 cursor-pointer transition flex items-center justify-between ${
-                            isSelected
+                          className={`hl-card p-3 cursor-pointer transition flex items-center justify-between ${isSelected
                               ? "border-[var(--color-accent)]"
                               : ""
-                          }`}
+                            }`}
                         >
                           <div>
                             <p className="text-xs font-bold">{grp.name}</p>
@@ -6768,11 +7134,10 @@ export default function WhatsAppPage() {
                       <div
                         key={rule.id}
                         onClick={() => setSelectedAutomationId(rule.id)}
-                        className={`hl-card p-3 cursor-pointer transition flex items-center justify-between ${
-                          isSelected
+                        className={`hl-card p-3 cursor-pointer transition flex items-center justify-between ${isSelected
                             ? "border-[var(--color-accent)]"
                             : ""
-                        }`}
+                          }`}
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
