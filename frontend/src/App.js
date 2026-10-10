@@ -17,6 +17,7 @@ import WAReminders from "./pages/whatsappReminders";
 import WAFlows from "./pages/whatsappFlows";
 import WAAnalytics from "./pages/whatsappAnalytics";
 import WAAccounts from "./pages/whatsappAccounts";
+import WAEmployees from "./pages/whatsappEmployees";
 const ClientPortal = lazy(() => import("./pages/ClientPortal"));
 const ClientPortalManage = lazy(() => import("./pages/ClientPortalManage"));
 
@@ -112,6 +113,7 @@ export default function App() {
             <Route path="flows/builder/:flowId" element={<WAFlows />} />
             <Route path="analytics" element={<WAAnalytics />} />
             <Route path="accounts" element={<WAAccounts />} />
+            <Route path="employees" element={<WAEmployees />} />
             <Route path="client-portal" element={<Suspense fallback={<p className="p-8">Loading portal management…</p>}><ClientPortalManage /></Suspense>} />
           </Route>
           <Route path="*" element={<Navigate to="/whatsapp" replace />} />

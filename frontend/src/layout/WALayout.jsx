@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Settings,
   Layers,
+  Users,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import useWALocalInbox from "../hooks/useWALocalInbox";
@@ -272,6 +273,19 @@ export default function WALayout() {
             <span className="hl-badge hidden md:inline-flex" style={{ height: 32 }}>
               <span>Offline</span>
             </span>
+          )}
+
+          {/* Manage Employees (Admin only) */}
+          {(user?.role === "admin" || user?.role === "subadmin") && (
+            <button
+              onClick={() => navigate("/whatsapp/employees")}
+              className={`hl-btn-secondary shrink-0 ${location.pathname === "/whatsapp/employees" ? "border-emerald-600 bg-emerald-50 text-emerald-800 font-semibold" : ""}`}
+              style={{ height: 38, padding: "0 0.65rem", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+              title="Manage Employees, Access Codes & Staff Activity Analytics"
+            >
+              <Users size={14} className="text-emerald-700" />
+              <span className="hidden sm:inline whitespace-nowrap">Employees</span>
+            </button>
           )}
 
           {/* Quota & Balance */}

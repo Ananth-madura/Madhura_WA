@@ -281,6 +281,8 @@ class SQLiteDatabaseAdapter {
         status TEXT DEFAULT 'active',
         two_factor_enabled INTEGER DEFAULT 0,
         tenant_id INTEGER DEFAULT 1,
+        access_code TEXT DEFAULT NULL,
+        whatsapp_access_level TEXT DEFAULT 'full',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       )`,
       `CREATE TABLE IF NOT EXISTS tenants (
@@ -310,6 +312,9 @@ class SQLiteDatabaseAdapter {
         emp_role TEXT DEFAULT 'Admin',
         quotation_count INTEGER DEFAULT 0,
         user_id INTEGER DEFAULT NULL,
+        tenant_id INTEGER DEFAULT 1,
+        access_code TEXT DEFAULT NULL,
+        whatsapp_access_level TEXT DEFAULT 'full',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       )`,
       `CREATE TABLE IF NOT EXISTS email_otp (
@@ -1241,6 +1246,22 @@ class SQLiteDatabaseAdapter {
         const info = this.sqlite.prepare("PRAGMA table_info(users)").all();
         if (!info.some((c) => c.name === "tenant_id")) {
           this.sqlite.prepare("ALTER TABLE users ADD COLUMN tenant_id INTEGER DEFAULT 1").run();
+        }
+        if (!info.some((c) => c.name === "access_code")) {
+          this.sqlite.prepare("ALTER TABLE users ADD COLUMN access_code TEXT DEFAULT NULL").run();
+        }
+        if (!info.some((c) => c.name === "whatsapp_access_level")) {
+          this.sqlite.prepare("ALTER TABLE users ADD COLUMN whatsapp_access_level TEXT DEFAULT 'full'").run();
+        }
+        const teamInfo = this.sqlite.prepare("PRAGMA table_info(teammember)").all();
+        if (!teamInfo.some((c) => c.name === "tenant_id")) {
+          this.sqlite.prepare("ALTER TABLE teammember ADD COLUMN tenant_id INTEGER DEFAULT 1").run();
+        }
+        if (!teamInfo.some((c) => c.name === "access_code")) {
+          this.sqlite.prepare("ALTER TABLE teammember ADD COLUMN access_code TEXT DEFAULT NULL").run();
+        }
+        if (!teamInfo.some((c) => c.name === "whatsapp_access_level")) {
+          this.sqlite.prepare("ALTER TABLE teammember ADD COLUMN whatsapp_access_level TEXT DEFAULT 'full'").run();
         }
       } catch (_) {}
 

@@ -315,6 +315,21 @@ app.use((req, res, next) => {
 // the WA frontend can log in against the cloned users table. See README.
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/client-portal", require("./routes/clientPortalRoutes"));
+app.use("/api/teammember", require("./middleware/authMiddleware").verifyToken, (req, res) => {
+  const tenantId = req.user?.tenant_id || 1;
+  const db = require("./config/database");
+  db.query(
+    `SELECT id, first_name, last_name, emp_email, mobile, job_title, emp_role, emp_id, user_id, whatsapp_access_level
+     FROM teammember
+     WHERE (tenant_id = ? OR tenant_id IS NULL)
+     ORDER BY first_name ASC`,
+    [tenantId],
+    (err, rows) => {
+      if (err) return res.json([]);
+      res.json(rows || []);
+    }
+  );
+});
 
 // WhatsApp session engine (QR / chats / send / media). Every route is behind
 // verifyToken — supports JWT tokens as well as X-API-Key for external CRM connection.

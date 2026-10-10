@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
-import { ArrowLeft, Zap, Shield, Sparkles, Check, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Zap, Shield, Sparkles, Check, CheckCircle2, KeyRound } from "lucide-react";
 import { useAuth } from "./AuthContext";
 import { API } from "../config/api";
 import { startDirectDemoSession } from "./demoSession";
@@ -171,7 +171,7 @@ export default function Login() {
 
         <form onSubmit={submit} noValidate>
           <label htmlFor="hl-email" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
-            Email or Employee Code
+            Work Email, Employee ID, or Access Code
           </label>
           <input
             id="hl-email"
@@ -208,6 +208,28 @@ export default function Login() {
           >
             {loading ? "Signing in…" : "Sign in to Dashboard"}
           </button>
+
+          {/* Employee Access Code First-Time Activation Banner */}
+          <div
+            className="mt-3 p-2.5 rounded-lg flex items-center justify-between gap-2"
+            style={{
+              background: "rgba(16, 185, 129, 0.08)",
+              border: "1px solid rgba(16, 185, 129, 0.25)",
+              fontSize: 12,
+            }}
+          >
+            <div className="flex items-center gap-1.5 text-emerald-900 min-w-0">
+              <KeyRound size={14} className="text-emerald-700 shrink-0" />
+              <span className="truncate">First-time login with admin Access Code?</span>
+            </div>
+            <Link
+              to="/signup?tab=access_code"
+              className="font-bold text-emerald-700 hover:underline shrink-0"
+              style={{ fontSize: 11 }}
+            >
+              Activate Code →
+            </Link>
+          </div>
         </form>
 
         {/* Quick autofill chips for dev test */}

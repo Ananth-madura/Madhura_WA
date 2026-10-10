@@ -23,10 +23,18 @@ const fieldLabels = {
 
 /* ================= GET ALL USERS (for admin) ================= */
 router.get("/users", verifyToken, isAdmin, (req, res) => {
-  db.query(`SELECT id, first_name, email, role, status, emp_id, created_at FROM users ORDER BY created_at DESC`, (err, rows) => {
-    if (err) return res.status(500).json({ message: "Failed to fetch users" });
-    res.json({ users: rows });
-  });
+  const tenantId = req.user?.tenant_id || 1;
+  db.query(
+    `SELECT id, first_name, last_name, email, role, status, emp_id, access_code, whatsapp_access_level, created_at 
+     FROM users 
+     WHERE (tenant_id = ? OR tenant_id IS NULL)
+     ORDER BY created_at DESC`,
+    [tenantId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ message: "Failed to fetch users" });
+      res.json({ users: rows });
+    }
+  );
 });
 
 /* ================= SEND EMAIL OTP ================= */
@@ -328,8 +336,8 @@ router.post("/login", loginLimiter, (req, res) => {
   const emailLower = email.trim().toLowerCase();
 
   db.query(
-    `SELECT id, first_name, last_name, email, role, status, user_password, two_factor_enabled, tenant_id FROM users WHERE email=? OR emp_id=?`,
-    [emailLower, emailLower],
+    `SELECT id, first_name, last_name, email, role, status, user_password, two_factor_enabled, tenant_id, access_code, whatsapp_access_level FROM users WHERE email=? OR emp_id=? OR UPPER(access_code)=?`,
+    [emailLower, emailLower, emailLower.toUpperCase()],
     (err, rows) => {
       if (err || !rows.length) {
         return res.status(404).json({ message: "No account found with this email or employee code" });
@@ -347,7 +355,7 @@ router.post("/login", loginLimiter, (req, res) => {
 
         const secret = process.env.JWT_SECRET || "wa_crm_jwt_default_secret_dev_access_2026";
         const token = jwt.sign(
-          { id: user.id, role: user.role, name: user.first_name, email: user.email, tenant_id: tid, plan: tInfo.plan || "starter" },
+          { id: user.id, role: user.role, name: user.first_name, email: user.email, tenant_id: tid, whatsapp_access_level: user.whatsapp_access_level || "full", plan: tInfo.plan || "starter" },
           secret,
           { expiresIn: "14d" }
         );
@@ -361,6 +369,7 @@ router.post("/login", loginLimiter, (req, res) => {
             role: user.role,
             tenant_id: tid,
             tenant_name: tInfo.name || "Workspace",
+            whatsapp_access_level: user.whatsapp_access_level || "full",
             plan: tInfo.plan || "starter",
           },
           tenant: tInfo,
@@ -582,6 +591,452 @@ router.post("/create-user", verifyToken, isAdmin, (req, res) => {
       });
   });
 });
+
+/* ================= EMPLOYEE MANAGEMENT, ACCESS CODES & MULTI-DYNAMIC ANALYTICS ================= */
+
+// Generate secure random access code e.g. AC-X9B2-4821
+function generateEmployeeAccessCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let part1 = "";
+  for (let i = 0; i < 4; i++) {
+    part1 += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  const part2 = Math.floor(1000 + Math.random() * 9000);
+  return `AC-${part1}-${part2}`;
+}
+
+// 1. GET /api/auth/employees — Admin only. Strictly scoped to current tenant.
+router.get("/employees", verifyToken, isAdmin, async (req, res) => {
+  try {
+    const tenantId = req.user?.tenant_id || 1;
+
+    // Strict employee isolation: employees can NEVER list or view other employees
+    if (req.user?.role === "employee") {
+      return res.status(403).json({ message: "Access denied. Employee accounts cannot view other employees." });
+    }
+
+    db.query(
+      `SELECT 
+        u.id, 
+        u.first_name, 
+        u.last_name, 
+        u.email, 
+        u.role, 
+        u.status, 
+        u.emp_id, 
+        u.access_code, 
+        u.whatsapp_access_level, 
+        u.created_at,
+        t.mobile,
+        t.job_title,
+        t.emp_role
+       FROM users u
+       LEFT JOIN teammember t ON (t.user_id = u.id OR (u.email IS NOT NULL AND t.emp_email = u.email))
+       WHERE u.tenant_id = ?
+       ORDER BY u.created_at DESC`,
+      [tenantId],
+      (err, rows) => {
+        if (err) {
+          console.error("fetch employees error:", err.message);
+          return res.status(500).json({ message: "Failed to fetch employees" });
+        }
+
+        const employees = rows || [];
+
+        // Multi-dynamic analytics calculation
+        const total = employees.length;
+        const active = employees.filter((e) => e.status === "active").length;
+        const pending = employees.filter((e) => e.status === "pending" || !e.user_password).length;
+
+        const accessLevels = {
+          full: employees.filter((e) => !e.whatsapp_access_level || e.whatsapp_access_level === "full").length,
+          chat_only: employees.filter((e) => e.whatsapp_access_level === "chat_only").length,
+          read_only: employees.filter((e) => e.whatsapp_access_level === "read_only").length,
+          campaign_only: employees.filter((e) => e.whatsapp_access_level === "campaign_only").length,
+        };
+
+        // Query total messages dispatched in this tenant
+        db.query(
+          `SELECT COUNT(*) as total_dispatched FROM wa_message_logs WHERE (tenant_id = ? OR tenant_id IS NULL)`,
+          [tenantId],
+          (logErr, logRows) => {
+            const totalDispatched = (logRows && logRows[0] && logRows[0].total_dispatched) || 0;
+
+            res.json({
+              employees,
+              analytics: {
+                total_employees: total,
+                active_employees: active,
+                pending_activation: pending,
+                access_levels: accessLevels,
+                total_messages_dispatched: totalDispatched,
+              },
+            });
+          }
+        );
+      }
+    );
+  } catch (err) {
+    console.error("GET /employees exception:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// 2. POST /api/auth/employees — Admin creates employee & generates Access Code
+router.post("/employees", verifyToken, isAdmin, async (req, res) => {
+  try {
+    const tenantId = req.user?.tenant_id || 1;
+    const { first_name, last_name, email, role, whatsapp_access_level, mobile, job_title } = req.body || {};
+
+    const cleanFirst = (first_name || "").trim();
+    const cleanLast = (last_name || "").trim();
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const cleanRole = role === "agent" ? "agent" : (role === "admin" ? "admin" : "employee");
+    const cleanAccessLevel = ["full", "chat_only", "read_only", "campaign_only"].includes(whatsapp_access_level)
+      ? whatsapp_access_level
+      : "full";
+    const cleanJob = (job_title || "").trim() || (cleanRole === "admin" ? "Administrator" : "WhatsApp Support Executive");
+    const cleanMobile = (mobile || "").trim();
+
+    if (!cleanFirst || !cleanEmail) {
+      return res.status(400).json({ message: "Employee first name and email address are required" });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
+      return res.status(400).json({ message: "Please enter a valid work email address" });
+    }
+
+    // Check if email already exists
+    db.query(`SELECT id, tenant_id FROM users WHERE email = ? LIMIT 1`, [cleanEmail], (chkErr, existing) => {
+      if (chkErr) return res.status(500).json({ message: "Database query failed" });
+      if (existing && existing.length) {
+        return res.status(409).json({ message: "An account with this email address already exists." });
+      }
+
+      const accessCode = generateEmployeeAccessCode();
+      const empId = `EMP-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      db.query(
+        `INSERT INTO users (first_name, last_name, email, role, status, emp_id, tenant_id, access_code, whatsapp_access_level)
+         VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
+        [cleanFirst, cleanLast || null, cleanEmail, cleanRole, empId, tenantId, accessCode, cleanAccessLevel],
+        (insErr, result) => {
+          if (insErr) {
+            console.error("insert employee user error:", insErr.message);
+            return res.status(500).json({ message: "Failed to create employee account" });
+          }
+
+          const newUserId = result.insertId || result.lastID;
+
+          try {
+            db.query(
+              `INSERT INTO teammember (first_name, last_name, emp_email, mobile, job_title, emp_role, emp_id, user_id, tenant_id, access_code, whatsapp_access_level)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [cleanFirst, cleanLast || null, cleanEmail, cleanMobile || null, cleanJob, cleanRole === "admin" ? "Admin" : "Sales", empId, newUserId, tenantId, accessCode, cleanAccessLevel]
+            );
+          } catch (_) {}
+
+          res.status(201).json({
+            message: `Employee "${cleanFirst}" created! Access Code: ${accessCode}`,
+            employee: {
+              id: newUserId,
+              first_name: cleanFirst,
+              last_name: cleanLast,
+              email: cleanEmail,
+              role: cleanRole,
+              status: "pending",
+              emp_id: empId,
+              access_code: accessCode,
+              whatsapp_access_level: cleanAccessLevel,
+              job_title: cleanJob,
+              tenant_id: tenantId,
+              created_at: new Date().toISOString(),
+            },
+          });
+        }
+      );
+    });
+  } catch (err) {
+    console.error("POST /employees exception:", err);
+    res.status(500).json({ message: "Failed to create employee" });
+  }
+});
+
+// 3. POST /api/auth/employees/:id/regenerate-code — Admin regenerates a fresh access code
+router.post("/employees/:id/regenerate-code", verifyToken, isAdmin, (req, res) => {
+  const tenantId = req.user?.tenant_id || 1;
+  const targetId = parseInt(req.params.id, 10);
+
+  if (!targetId) return res.status(400).json({ message: "Invalid employee ID" });
+
+  db.query(`SELECT id, first_name, email FROM users WHERE id = ? AND tenant_id = ?`, [targetId, tenantId], (err, rows) => {
+    if (err || !rows || !rows.length) {
+      return res.status(404).json({ message: "Employee not found in your workspace" });
+    }
+
+    const newCode = generateEmployeeAccessCode();
+
+    db.query(`UPDATE users SET access_code = ? WHERE id = ? AND tenant_id = ?`, [newCode, targetId, tenantId], (upErr) => {
+      if (upErr) return res.status(500).json({ message: "Failed to update access code" });
+
+      try {
+        db.query(`UPDATE teammember SET access_code = ? WHERE user_id = ?`, [newCode, targetId]);
+      } catch (_) {}
+
+      res.json({
+        message: "New Access Code generated successfully!",
+        access_code: newCode,
+      });
+    });
+  });
+});
+
+// 4. PUT /api/auth/employees/:id — Admin updates role, status, name, access level
+router.put("/employees/:id", verifyToken, isAdmin, (req, res) => {
+  const tenantId = req.user?.tenant_id || 1;
+  const targetId = parseInt(req.params.id, 10);
+  const { first_name, last_name, whatsapp_access_level, role, status, job_title } = req.body || {};
+
+  if (!targetId) return res.status(400).json({ message: "Invalid employee ID" });
+
+  db.query(`SELECT id, email, role FROM users WHERE id = ? AND tenant_id = ?`, [targetId, tenantId], (err, rows) => {
+    if (err || !rows || !rows.length) {
+      return res.status(404).json({ message: "Employee not found in your workspace" });
+    }
+
+    const updates = [];
+    const params = [];
+
+    if (first_name !== undefined) {
+      updates.push("first_name = ?");
+      params.push(first_name.trim());
+    }
+    if (last_name !== undefined) {
+      updates.push("last_name = ?");
+      params.push(last_name.trim());
+    }
+    if (whatsapp_access_level !== undefined && ["full", "chat_only", "read_only", "campaign_only"].includes(whatsapp_access_level)) {
+      updates.push("whatsapp_access_level = ?");
+      params.push(whatsapp_access_level);
+    }
+    if (role !== undefined && ["admin", "employee", "agent"].includes(role)) {
+      updates.push("role = ?");
+      params.push(role);
+    }
+    if (status !== undefined && ["active", "pending", "banned"].includes(status)) {
+      updates.push("status = ?");
+      params.push(status);
+    }
+
+    if (!updates.length) {
+      return res.status(400).json({ message: "No valid fields provided for update" });
+    }
+
+    params.push(targetId);
+    params.push(tenantId);
+
+    db.query(`UPDATE users SET ${updates.join(", ")} WHERE id = ? AND tenant_id = ?`, params, (upErr) => {
+      if (upErr) return res.status(500).json({ message: "Failed to update employee details" });
+
+      try {
+        if (job_title) {
+          db.query(`UPDATE teammember SET job_title = ? WHERE user_id = ?`, [job_title.trim(), targetId]);
+        }
+        if (whatsapp_access_level) {
+          db.query(`UPDATE teammember SET whatsapp_access_level = ? WHERE user_id = ?`, [whatsapp_access_level, targetId]);
+        }
+      } catch (_) {}
+
+      res.json({ message: "Employee updated successfully!" });
+    });
+  });
+});
+
+// 5. DELETE /api/auth/employees/:id — Admin deletes employee (cannot delete self)
+router.delete("/employees/:id", verifyToken, isAdmin, (req, res) => {
+  const tenantId = req.user?.tenant_id || 1;
+  const targetId = parseInt(req.params.id, 10);
+
+  if (!targetId) return res.status(400).json({ message: "Invalid employee ID" });
+  if (req.user?.id === targetId) {
+    return res.status(400).json({ message: "You cannot delete your own admin account" });
+  }
+
+  db.query(`SELECT id, email FROM users WHERE id = ? AND tenant_id = ?`, [targetId, tenantId], (err, rows) => {
+    if (err || !rows || !rows.length) {
+      return res.status(404).json({ message: "Employee not found in your workspace" });
+    }
+
+    const email = rows[0].email;
+    db.query(`DELETE FROM users WHERE id = ? AND tenant_id = ?`, [targetId, tenantId], (delErr) => {
+      if (delErr) return res.status(500).json({ message: "Failed to delete employee" });
+
+      try {
+        db.query(`DELETE FROM teammember WHERE user_id = ? OR emp_email = ?`, [targetId, email]);
+      } catch (_) {}
+
+      res.json({ message: "Employee deleted successfully." });
+    });
+  });
+});
+
+// 6. POST /api/auth/verify-access-code — Public code preview for employee signup/activation
+router.post("/verify-access-code", (req, res) => {
+  const code = (req.body?.access_code || "").trim().toUpperCase();
+  if (!code) return res.status(400).json({ valid: false, message: "Access code is required" });
+
+  db.query(
+    `SELECT u.id, u.first_name, u.email, u.role, u.whatsapp_access_level, u.tenant_id, t.name as tenant_name
+     FROM users u
+     LEFT JOIN tenants t ON t.id = u.tenant_id
+     WHERE UPPER(u.access_code) = ? LIMIT 1`,
+    [code],
+    (err, rows) => {
+      if (err || !rows || !rows.length) {
+        return res.status(404).json({ valid: false, message: "Invalid access code. Please check with your administrator." });
+      }
+
+      const u = rows[0];
+      res.json({
+        valid: true,
+        email: u.email,
+        first_name: u.first_name,
+        role: u.role,
+        whatsapp_access_level: u.whatsapp_access_level || "full",
+        tenant_name: u.tenant_name || "Workspace",
+      });
+    }
+  );
+});
+
+// 7. POST /api/auth/join-with-access-code — Employee logs in & activates account with admin Access Code
+router.post("/join-with-access-code", async (req, res) => {
+  try {
+    const { access_code, email, password, full_name } = req.body || {};
+    const code = (access_code || "").trim().toUpperCase();
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const cleanPass = password || "";
+    const cleanName = (full_name || "").trim();
+
+    if (!code) return res.status(400).json({ message: "Access code is required" });
+    if (!cleanEmail) return res.status(400).json({ message: "Email address is required" });
+    if (!cleanPass || cleanPass.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters long" });
+    }
+
+    db.query(
+      `SELECT u.id, u.first_name, u.email, u.role, u.status, u.user_password, u.tenant_id, u.whatsapp_access_level, u.emp_id, t.name as tenant_name, t.plan
+       FROM users u
+       LEFT JOIN tenants t ON t.id = u.tenant_id
+       WHERE UPPER(u.access_code) = ? LIMIT 1`,
+      [code],
+      async (err, rows) => {
+        if (err || !rows || !rows.length) {
+          return res.status(404).json({ message: "Invalid access code. Please obtain a valid code from your workspace admin." });
+        }
+
+        const user = rows[0];
+
+        // Check if email matches the assigned invitation email
+        if (user.email && user.email.toLowerCase() !== cleanEmail) {
+          return res.status(400).json({
+            message: `This access code was issued for ${user.email}. Please use that email to activate.`,
+          });
+        }
+
+        const hash = await bcrypt.hash(cleanPass, 10);
+        const displayName = cleanName || user.first_name || "Employee";
+
+        db.query(
+          `UPDATE users SET user_password = ?, status = 'active', first_name = ? WHERE id = ?`,
+          [hash, displayName, user.id],
+          (upErr) => {
+            if (upErr) {
+              console.error("join-with-access-code update error:", upErr.message);
+              return res.status(500).json({ message: "Failed to activate employee account" });
+            }
+
+            try {
+              db.query(`UPDATE teammember SET first_name = ? WHERE user_id = ?`, [displayName, user.id]);
+            } catch (_) {}
+
+            const tid = user.tenant_id || 1;
+            const secret = process.env.JWT_SECRET || "wa_crm_jwt_default_secret_dev_access_2026";
+            const token = jwt.sign(
+              {
+                id: user.id,
+                role: user.role || "employee",
+                name: displayName,
+                email: cleanEmail,
+                tenant_id: tid,
+                whatsapp_access_level: user.whatsapp_access_level || "full",
+                plan: user.plan || "starter",
+              },
+              secret,
+              { expiresIn: "14d" }
+            );
+
+            res.status(200).json({
+              token,
+              user: {
+                id: user.id,
+                name: displayName,
+                email: cleanEmail,
+                role: user.role || "employee",
+                tenant_id: tid,
+                tenant_name: user.tenant_name || "Workspace",
+                whatsapp_access_level: user.whatsapp_access_level || "full",
+                plan: user.plan || "starter",
+              },
+              message: "Access code verified! Your employee account is activated.",
+            });
+          }
+        );
+      }
+    );
+  } catch (err) {
+    console.error("join-with-access-code exception:", err);
+    res.status(500).json({ message: "Server error during employee activation" });
+  }
+});
+
+// 8. GET /api/auth/my-employee-profile — Strictly personal profile, deep isolation for employees
+router.get("/my-employee-profile", verifyToken, (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+  db.query(
+    `SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.status, u.emp_id, u.whatsapp_access_level, u.tenant_id, t.name as tenant_name, t.plan
+     FROM users u
+     LEFT JOIN tenants t ON t.id = u.tenant_id
+     WHERE u.id = ? LIMIT 1`,
+    [userId],
+    (err, rows) => {
+      if (err || !rows || !rows.length) {
+        return res.status(404).json({ message: "User profile not found" });
+      }
+      res.json({ profile: rows[0] });
+    }
+  );
+});
+
+// 9. GET /api/auth/teammember — Returns team members of current tenant for live chat assignments
+router.get("/teammember", verifyToken, (req, res) => {
+  const tenantId = req.user?.tenant_id || 1;
+  db.query(
+    `SELECT id, first_name, last_name, emp_email, mobile, job_title, emp_role, emp_id, user_id, whatsapp_access_level
+     FROM teammember
+     WHERE (tenant_id = ? OR tenant_id IS NULL)
+     ORDER BY first_name ASC`,
+    [tenantId],
+    (err, rows) => {
+      if (err) return res.json([]);
+      res.json(rows || []);
+    }
+  );
+});
+
+
 
 /* ================= ADMIN: UPDATE USER ================= */
 router.put("/update-user/:id", verifyToken, isAdmin, (req, res) => {

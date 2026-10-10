@@ -894,6 +894,12 @@ async function ensureWATables() {
     await addColumnIfNotExists(tbl, "tenant_id", "INT DEFAULT 1");
     await addIndexIfNotExists(tbl, `idx_${tbl}_tenant`, "tenant_id");
   }
+  await addColumnIfNotExists("users", "access_code", "VARCHAR(64) DEFAULT NULL");
+  await addColumnIfNotExists("users", "whatsapp_access_level", "VARCHAR(50) DEFAULT 'full'");
+  await addIndexIfNotExists("users", "idx_users_access_code", "access_code");
+  await addColumnIfNotExists("teammember", "tenant_id", "INT DEFAULT 1");
+  await addColumnIfNotExists("teammember", "access_code", "VARCHAR(64) DEFAULT NULL");
+  await addColumnIfNotExists("teammember", "whatsapp_access_level", "VARCHAR(50) DEFAULT 'full'");
 
   // Load balancing & Anti-ban columns on campaigns & message logs
   await addColumnIfNotExists("wa_campaigns", "pool_id", "INT DEFAULT NULL");

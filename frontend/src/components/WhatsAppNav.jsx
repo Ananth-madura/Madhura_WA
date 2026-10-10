@@ -225,7 +225,24 @@ export default function WhatsAppNav() {
       path: "/whatsapp/accounts",
       icon: Smartphone,
     },
-    ...(user?.role === "admin" ? [{ id: "client-portal", label: "Client portal", title: "Client access, documents and service requests", path: "/whatsapp/client-portal", icon: UserCheck }] : []),
+    ...(user?.role === "admin" || user?.role === "subadmin"
+      ? [
+          {
+            id: "employees",
+            label: "Employees",
+            title: "Manage Employees, Access Codes & Staff Activity Analytics",
+            path: "/whatsapp/employees",
+            icon: Users,
+          },
+          {
+            id: "client-portal",
+            label: "Client portal",
+            title: "Client access, documents and service requests",
+            path: "/whatsapp/client-portal",
+            icon: UserCheck,
+          },
+        ]
+      : []),
   ];
 
   const isTabActive = (tab) => {
