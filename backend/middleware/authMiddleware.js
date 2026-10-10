@@ -56,35 +56,15 @@ const verifyToken = (req, res, next) => {
     return res.status(401).json({ message: "No token or API key provided" });
   }
 
-  // 3. Demo / Dev test token support - Grants full Admin authorization for testing
-  if (token === "demo-jwt-session-token" || token === "demo-jwt-admin-token" || token.startsWith("demo-")) {
-    req.user = {
-      id: 1,
-      emp_id: "EMP001",
-      role: "admin",
-      name: "Admin",
-      first_name: "Admin",
-      email: "admin@madhuratech.com",
-      status: "active",
-      isAdmin: true,
-    };
-    return next();
-  }
-
-  const jwtSecret = process.env.JWT_SECRET || "ephemeral-secret-demo";
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) return res.status(503).json({ message: "Authentication is not configured" });
 
   try {
-    const decoded = jwt.verify(token, jwtSecret);
+    const decoded = jwt.verify(token, jwtSecret, { algorithms: ["HS256"] });
+    if (decoded.portal || decoded.role === "client" || [decoded.aud].flat().includes("client-portal")) return res.status(403).json({ message: "Client portal sessions cannot access the staff workspace" });
     req.user = decoded;
     next();
   } catch (err) {
-    try {
-      const decodedFallback = jwt.decode(token);
-      if (decodedFallback && decodedFallback.id && (decodedFallback.role === "admin" || decodedFallback.isAdmin)) {
-        req.user = decodedFallback;
-        return next();
-      }
-    } catch (_) {}
     return res.status(403).json({ message: "Invalid token" });
   }
 };

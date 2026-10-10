@@ -65,7 +65,6 @@ const requireReadySession = (req, res) => {
 };
 
 const { configureForUser } = require("../services/waConfigHelper");
-const waCloud = require("../services/whatsappCloudApi");
 
 // Cloud sends must appear in the same conversation history as Web sends.
 // Recording errors never turn a confirmed provider send into a retryable failure.
@@ -91,6 +90,7 @@ async function recordCloudSend(req, chatId, phone, messageId, body, type = "text
 }
 
 router.get("/status", async (req, res) => {
+  const waCloud = await require("../services/waConfigHelper").cloudClientForUser(req.user.id);
   if (req.user?.id) {
     await configureForUser(req.user.id).catch(() => {});
   }
@@ -184,6 +184,7 @@ router.get("/diagnostics", async (req, res) => {
 
 router.get("/account", async (req, res) => {
   try {
+    const waCloud = await require("../services/waConfigHelper").cloudClientForUser(req.user.id);
     if (req.user?.id) {
       await configureForUser(req.user.id).catch(() => {});
     }
@@ -212,7 +213,7 @@ router.get("/account", async (req, res) => {
         pushname: waCloud.verifiedName || phoneInfo?.verified_name || "Meta WhatsApp Business",
         profilePicUrl: null,
         platform: "Meta Cloud API (Official v22.0)",
-        qualityRating: phoneInfo?.quality_rating || "GREEN",
+        qualityRating: phoneInfo?.quality_rating || null,
         contactsCount,
         chatsCount: 0,
       });
@@ -226,7 +227,7 @@ router.get("/account", async (req, res) => {
 router.post("/sync-contacts", async (req, res) => {
   try {
     const result = await s(req).syncWhatsAppContacts();
-    res.json(result);
+    res.status(result.success ? 200 : 503).json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -234,11 +235,23 @@ router.post("/sync-contacts", async (req, res) => {
 
 router.post("/sync-chats", async (req, res) => {
   try {
-    const result = await s(req).syncWhatsAppChatsAndMessages();
-    res.json(result);
+    const session = s(req);
+    if (!session.ready) return res.status(409).json({ error: "Link your QR/Web session to import its chats and address book." });
+    session.syncWhatsAppChatsAndMessages().catch(() => {});
+    res.status(202).json({ accepted: true, status: "running" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+router.get("/sync-status", async (req, res) => res.json(s(req).syncState || { status: "idle" }));
+router.get("/interactive-capabilities", async (req, res) => {
+  try {
+    const engines = await require("../services/waLoadBalancer").getActiveEngines(String(req.user?.id || mgr.defaultKey));
+    res.json({ nativeButtons: engines.some((engine) => engine.supportsInteractive), webConnected: !!s(req).ready,
+      chatStorage: "browser", serverChatStorage: require("../services/waChatPrivacy").serverChatStorageEnabled(),
+      senders: engines.map((engine) => ({ id: engine.id, name: engine.name, phone: engine.phone, type: engine.type, nativeButtons: !!engine.supportsInteractive })) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.post("/test-send", async (req, res) => {
@@ -413,7 +426,7 @@ router.post("/chat/:chatId/read", async (req, res) => {
     try {
       const io = req.app.get("io");
       if (io) {
-        io.emit("wa_chat_read", { chatId: rawChatId, phone: clean10 });
+        io.to(`user:${req.user.id}`).emit("wa_chat_read", { chatId: rawChatId, phone: clean10 });
       }
     } catch (_) {}
 
@@ -564,6 +577,64 @@ router.patch("/chat/:phone/ai", async (req, res) => {
   }
 });
 
+router.post("/send-interactive", messageSendLimiter, async (req, res) => {
+  try {
+    const { chatId, message, buttons = [] } = req.body;
+    if (!chatId || typeof message !== "string" || !message.trim() || !Array.isArray(buttons) || !buttons.length || buttons.length > 10) {
+      return res.status(400).json({ error: "A chat, message, and between 1 and 10 options are required." });
+    }
+    if (String(chatId).includes("@g.us")) return res.status(400).json({ error: "Interactive menus require an individual chat." });
+    if (buttons.some((button) => !button || typeof button !== "object")) return res.status(400).json({ error: "Each menu option must have a label and action." });
+    const items = buttons.map((button, index) => ({
+      id: String(button.id || `option_${index + 1}`), title: String(button.title || button.text || "").trim(),
+      type: button.type || "reply", url: button.url, phone: button.phone,
+    }));
+    if (items.some((item) => !item.title || !["reply", "url", "call"].includes(item.type)) || new Set(items.map((item) => item.id)).size !== items.length) {
+      return res.status(400).json({ error: "Each option needs a label, unique ID, and a supported action." });
+    }
+    if (items.some((item) => item.type === "url" && !/^https?:\/\//i.test(item.url || "") || item.type === "call" && !/^\+?[\d\s()-]{7,20}$/.test(item.phone || ""))) {
+      return res.status(400).json({ error: "Link and call options need a valid HTTP(S) URL or phone number." });
+    }
+    const sessionKey = String(req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || mgr.defaultKey);
+    let phone = String(chatId).replace(/\D/g, "");
+    if (String(chatId).endsWith("@lid")) {
+      phone = await s(req).resolveLidToPhone(chatId).catch(() => null);
+      if (!phone) return res.status(400).json({ error: "This chat's phone number could not be resolved." });
+    }
+    if (phone.length === 10) phone = `91${phone}`;
+    const balancer = require("../services/waLoadBalancer");
+    const interactive = require("../services/waInteractive");
+    let result, payload, historyText;
+    if (items.every((item) => item.type === "reply")) {
+      const asList = items.length > 3;
+      const sections = interactive.normalizeSections(items);
+      const normalized = asList ? interactive.flattenSections(sections) : interactive.normalizeButtons(items);
+      historyText = interactive.buildNumberedText({ body: message, items: normalized });
+      const options = { phone, body: message, sessionKey, requireNative: !!req.body.requireNative, preferredEngine: req.body.preferredEngine || null };
+      result = asList
+        ? await balancer.sendInteractiveList({ ...options, sections })
+        : await balancer.sendInteractiveButtons({ ...options, buttons: normalized });
+      payload = { type: asList ? "list" : "buttons", text: message, ...(asList ? { sections } : { buttons: normalized }) };
+    } else if (items.length === 1 && items[0].type === "url") {
+      result = await balancer.sendCTAButtonMessage({ phone, body: message, displayText: items[0].title, url: items[0].url, sessionKey });
+      payload = { type: "cta_url", text: message, button_text: items[0].title, url: items[0].url };
+      historyText = `${message}\n${items[0].url}`;
+    } else {
+      // Mixed URL/call/reply actions cannot be one free-form native menu.
+      // Deliver their actual links and phone numbers, retaining the CRM actions.
+      historyText = `${message}\n\n${items.map((item, index) => `${index + 1}. ${item.title}${item.url ? `: ${item.url}` : item.phone ? `: ${item.phone}` : ""}`).join("\n")}`;
+      result = await balancer.sendTextMessage(phone, historyText, sessionKey);
+      payload = { type: "buttons", text: message, buttons: items };
+    }
+    const id = await require("../services/waFlowEngine").recordAndEmitBotMessage(phone, historyText, "interactive", { ...payload, native: !!result.native }, sessionKey, chatId,
+      { id: interactive.deliveryMessageId(result), status: "sent" });
+    await require("../services/waBotGate").pauseBot(chatId, undefined, "manual menu reply").catch(() => {});
+    return res.json({ success: true, id, native: !!result.native, interactive: payload });
+  } catch (err) {
+    return res.status(err.deliveryUnknown ? 504 : 502).json({ error: err.message, deliveryUnknown: !!err.deliveryUnknown });
+  }
+});
+
 router.post("/send", messageSendLimiter, async (req, res) => {
   try {
     const { chatId, message, quotedMessageId, replyToMessageId, idempotencyKey } = req.body;
@@ -572,7 +643,8 @@ router.post("/send", messageSendLimiter, async (req, res) => {
     }
 
     const session = s(req);
-    const cloudConfigured = waCloud.isConfigured();
+    const cloudClient = await require("../services/waConfigHelper").cloudClientForUser(req.user?.id || mgr.defaultKey);
+    const cloudConfigured = cloudClient.isConfigured();
 
     // 1. If physical WhatsApp Web session is ready, send through it
     if (session && session.ready) {
@@ -597,7 +669,7 @@ router.post("/send", messageSendLimiter, async (req, res) => {
       try {
         let cleanPhone = String(chatId).replace(/\D/g, "");
         if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
-        const sent = await waCloud.sendText(cleanPhone, message);
+        const sent = await cloudClient.sendText(cleanPhone, message);
         const msgId = sent?.messages?.[0]?.id || ("cloud_" + Date.now());
         await recordCloudSend(req, chatId, cleanPhone, msgId, message).catch(() => {});
         return res.json({ success: true, id: msgId, activeEngine: "Meta Cloud API" });
@@ -883,7 +955,8 @@ router.get("/chat/:chatId/media/:messageId", async (req, res) => {
     const media = await s(req).getMediaForMessage(
       req.params.chatId,
       req.params.messageId,
-      req.query.serializedId
+      req.query.serializedId,
+      req.query.cloudMediaId
     );
     res.json(media);
   } catch (err) {
@@ -922,12 +995,39 @@ router.post("/upload-media", upload.single("file"), async (req, res) => {
   });
 });
 
+const privateAttachmentUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+router.post("/send-media-upload", messageSendLimiter, privateAttachmentUpload.single("file"), async (req, res) => {
+  try {
+    if (!req.file || !req.body.chatId) return res.status(400).json({ error: "A file and chat are required." });
+    const { chatId, idempotencyKey } = req.body;
+    const type = req.body.mediaType || (req.file.mimetype.startsWith("image/") ? "image" : req.file.mimetype.startsWith("video/") ? "video" : req.file.mimetype.startsWith("audio/") ? "audio" : "document");
+    const session = s(req);
+    let result;
+    if (session?.ready) {
+      result = await session.sendMediaMessage(chatId, `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`, type, "", req.file.originalname, { idempotencyKey });
+    } else {
+      const cloud = await require("../services/waConfigHelper").cloudClientForUser(req.user?.id || mgr.defaultKey);
+      if (!cloud.isConfigured()) return res.status(503).json({ error: "Connect QR/Web or configure Cloud API before sending an attachment." });
+      const uploaded = await cloud.uploadMedia(req.file.buffer, req.file.mimetype, req.file.originalname);
+      if (!uploaded?.id) throw new Error("Cloud API did not accept the attachment upload.");
+      const sent = await cloud.sendMedia(chatId, type, uploaded.id, "", req.file.originalname);
+      const id = require("../services/waInteractive").deliveryMessageId(sent);
+      if (!id) throw Object.assign(new Error("Attachment delivery could not be confirmed."), { deliveryUnknown: true });
+      result = { success: true, id };
+      await recordCloudSend(req, chatId, String(chatId).replace(/\D/g, ""), id, req.file.originalname, type, { hasMedia: true, filename: req.file.originalname, mimetype: req.file.mimetype }).catch(() => {});
+    }
+    await require("../services/waBotGate").pauseBot(chatId, undefined, "manual attachment reply").catch(() => {});
+    res.json({ success: true, id: result.id, filename: req.file.originalname, mimetype: req.file.mimetype });
+  } catch (error) { res.status(error.deliveryUnknown ? 504 : 502).json({ error: error.message, deliveryUnknown: !!error.deliveryUnknown }); }
+});
+
 router.post("/send-media", messageSendLimiter, async (req, res) => {
   try {
     const { chatId, mediaUrl, mediaType, filename, caption, idempotencyKey } = req.body;
     if (!chatId || !mediaUrl) return res.status(400).json({ error: "chatId and mediaUrl required" });
     const session = s(req);
-    const cloudConfigured = waCloud.isConfigured();
+    const cloudClient = await require("../services/waConfigHelper").cloudClientForUser(req.user?.id || mgr.defaultKey);
+    const cloudConfigured = cloudClient.isConfigured();
 
     let resolvedType = mediaType;
     if (!resolvedType || resolvedType === "media") {
@@ -965,7 +1065,7 @@ router.post("/send-media", messageSendLimiter, async (req, res) => {
           const base = (process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
           cloudUrl = `${base}${cloudUrl}`;
         }
-        const sent = await waCloud.sendMedia(cleanPhone, resolvedType, cloudUrl, caption || "", filename || "");
+        const sent = await cloudClient.sendMedia(cleanPhone, resolvedType, cloudUrl, caption || "", filename || "");
         const msgId = sent?.messages?.[0]?.id || ("cloud_" + Date.now());
         await recordCloudSend(req, chatId, cleanPhone, msgId, caption || filename || "Attachment", resolvedType, { hasMedia: true, mediaUrl: cloudUrl, filename }).catch(() => {});
         return res.json({ success: true, id: msgId, activeEngine: "Meta Cloud API" });
@@ -988,7 +1088,8 @@ router.post("/send-location", messageSendLimiter, async (req, res) => {
     const { chatId, lat, lng, name, idempotencyKey } = req.body;
     if (!chatId || lat == null || lng == null) return res.status(400).json({ error: "chatId, lat and lng required" });
     const session = s(req);
-    const cloudConfigured = waCloud.isConfigured();
+    const cloudClient = await require("../services/waConfigHelper").cloudClientForUser(req.user?.id || mgr.defaultKey);
+    const cloudConfigured = cloudClient.isConfigured();
 
     if (session && session.ready) {
       try {
@@ -1007,7 +1108,7 @@ router.post("/send-location", messageSendLimiter, async (req, res) => {
       try {
         let cleanPhone = String(chatId).replace(/\D/g, "");
         if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
-        const sent = await waCloud.sendLocation(cleanPhone, lat, lng, name || "");
+        const sent = await cloudClient.sendLocation(cleanPhone, lat, lng, name || "");
         const msgId = sent?.messages?.[0]?.id || ("cloud_" + Date.now());
         await recordCloudSend(req, chatId, cleanPhone, msgId, name || `Location (${lat}, ${lng})`, "location", { location: { lat, lng, name } }).catch(() => {});
         return res.json({ success: true, id: msgId, activeEngine: "Meta Cloud API" });
@@ -1150,7 +1251,8 @@ router.post("/chat/:chatId/notes", async (req, res) => {
 // ── Multi-Account Manager: List & Switch ──────────────────────────────────────
 router.get("/accounts/list", async (req, res) => {
   try {
-    const [accounts] = await db.promise().query("SELECT * FROM wa_accounts ORDER BY is_default DESC, created_at ASC");
+    const cloud = await require("../services/waConfigHelper").cloudClientForUser(req.user.id);
+    const [accounts] = await db.promise().query("SELECT id, account_name, phone_number, phone_number_id, waba_id, connection_type, is_active, is_default, quality_rating, messaging_limit, created_at FROM wa_accounts WHERE created_by = ? OR (created_by IS NULL AND phone_number_id = ?) ORDER BY is_default DESC, created_at ASC", [req.user.id, cloud.phoneNumberId || ""]);
     res.json(accounts);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1159,9 +1261,20 @@ router.get("/accounts/list", async (req, res) => {
 
 router.post("/accounts/switch-default", async (req, res) => {
   try {
-    const { accountId } = req.body;
-    await db.promise().query("UPDATE wa_accounts SET is_default = 0");
-    await db.promise().query("UPDATE wa_accounts SET is_default = 1 WHERE id = ?", [accountId]);
+    const accountId = Number(req.body.accountId);
+    if (!Number.isSafeInteger(accountId) || accountId < 1) return res.status(400).json({ error: "Valid accountId required" });
+    const cloud = await require("../services/waConfigHelper").cloudClientForUser(req.user.id);
+    const [accounts] = await db.promise().query("SELECT * FROM wa_accounts WHERE id = ? AND is_active = 1 AND (created_by = ? OR (created_by IS NULL AND phone_number_id = ?))", [accountId, req.user.id, cloud.phoneNumberId || ""]);
+    if (!accounts.length) return res.status(404).json({ error: "Account not found" });
+    const account = accounts[0];
+    if (account.connection_type === "cloud_api") {
+      if (!account.phone_number_id || !account.access_token) return res.status(409).json({ error: "This account has no usable Cloud API credentials" });
+      await db.promise().query(
+        "INSERT INTO user_wa_configs (user_id, phone_number_id, access_token, waba_id, app_secret, verify_token, business_account_id, is_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, 1) ON DUPLICATE KEY UPDATE phone_number_id=VALUES(phone_number_id), access_token=VALUES(access_token), waba_id=VALUES(waba_id), app_secret=VALUES(app_secret), verify_token=VALUES(verify_token), business_account_id=VALUES(business_account_id), is_enabled=1",
+        [req.user.id, account.phone_number_id, account.access_token, account.waba_id, account.app_secret, account.verify_token, account.business_account_id]
+      );
+    }
+    await db.promise().query("UPDATE wa_accounts SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END WHERE created_by = ? OR (created_by IS NULL AND phone_number_id = ?)", [accountId, req.user.id, cloud.phoneNumberId || ""]);
     res.json({ success: true, message: "Default WhatsApp account switched" });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -315,6 +315,15 @@ const run = async () => {
     });
   })();
 
+  await (async () => {
+    const calls = [];
+    await withEngines([webEngine("web", { calls })], () => assert.rejects(
+      waLoadBalancer.sendCTAButtonMessage({ phone: "919876543210", body: "Native link required", displayText: "Open", url: "https://example.test", requireNative: true }),
+      { code: "WA_NATIVE_INTERACTIVE_UNAVAILABLE" }
+    ));
+    ok("native-required CTA never silently falls back to a text link", () => assert.strictEqual(calls.length, 0));
+  })();
+
   console.log(`\n${process.exitCode ? "❌ FAILURES above" : "✅ all"} — ${passed} checks passed\n`);
 };
 

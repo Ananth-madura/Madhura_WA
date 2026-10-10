@@ -51,8 +51,10 @@ class WALoadBalancer {
    * Resolve healthy senders for a tenant / user or specific pool
    */
   async getActiveEngines(sessionKey, preferredEngine = null, poolId = null, tenantId = 1) {
+    // Regression suites may inspect a real CRM database, but must never send to its customers.
+    if (process.env.NODE_ENV === "test" && process.env.WA_DISABLE_OUTBOUND === "1") return [];
     const engines = [];
-    const waCloud = require("./whatsappCloudApi");
+    const waCloud = await require("./waConfigHelper").cloudClientForUser(sessionKey);
     const waService = require("./whatsappService");
 
     // 1. If poolId is provided, fetch active pool members from database
@@ -62,9 +64,9 @@ class WALoadBalancer {
           `SELECT m.*, p.routing_strategy, p.pool_name 
            FROM wa_sender_pool_members m
            JOIN wa_sender_pools p ON m.pool_id = p.id
-           WHERE m.pool_id = ? AND m.is_active = 1 AND p.is_active = 1
+           WHERE m.pool_id = ? AND p.tenant_id = ? AND m.is_active = 1 AND p.is_active = 1
            ORDER BY m.weight DESC, m.id ASC`,
-          [poolId]
+          [poolId, tenantId]
         );
 
         const now = new Date();
@@ -91,6 +93,10 @@ class WALoadBalancer {
           }
 
           if (member.sender_type === "cloud_api") {
+            const [accounts] = member.account_id
+              ? await db.promise().query("SELECT * FROM wa_accounts WHERE id = ? AND is_active = 1 LIMIT 1", [member.account_id]) : [[]];
+            const poolClient = accounts[0] ? waCloud.withAccount(accounts[0]) : waCloud;
+            if (!poolClient.isConfigured()) continue;
             engines.push({
               id: `pool_member_${member.id}`,
               memberId: member.id,
@@ -101,13 +107,13 @@ class WALoadBalancer {
               weight: member.weight || 1,
               sentToday,
               sentThisHour,
-              sendText: async (phone, text) => waCloud.sendText(phone, text),
-              sendTemplate: async (phone, tmplName, lang, components) => waCloud.sendTemplate(phone, tmplName, lang, components),
-              sendMedia: async (phone, mediaType, mediaUrl, caption, filename) => waCloud.sendMedia(phone, mediaType, mediaUrl, caption, filename),
+              sendText: async (phone, text) => poolClient.sendText(phone, text),
+              sendTemplate: async (phone, tmplName, lang, components) => poolClient.sendTemplate(phone, tmplName, lang, components),
+              sendMedia: async (phone, mediaType, mediaUrl, caption, filename) => poolClient.sendMedia(phone, mediaType, mediaUrl, caption, filename),
               supportsInteractive: true,
-              sendButtons: async (phone, body, buttons, header, footer) => waCloud.sendInteractiveButtons(phone, body, buttons, header, footer),
-              sendList: async (phone, body, buttonLabel, sections, header, footer) => waCloud.sendInteractiveList(phone, body, buttonLabel, sections, header, footer),
-              sendCTA: async (phone, body, displayText, url, header, footer) => waCloud.sendCTAUrl(phone, body, displayText, url, header, footer),
+              sendButtons: async (phone, body, buttons, header, footer) => poolClient.sendInteractiveButtons(phone, body, buttons, header, footer),
+              sendList: async (phone, body, buttonLabel, sections, header, footer) => poolClient.sendInteractiveList(phone, body, buttonLabel, sections, header, footer),
+              sendCTA: async (phone, body, displayText, url, header, footer) => poolClient.sendCTAUrl(phone, body, displayText, url, header, footer),
             });
           } else if (member.sender_type === "web_session") {
             const memberSessionKey = member.session_key || String(member.account_id || member.id);
@@ -229,7 +235,9 @@ class WALoadBalancer {
           [tenantId || 1]
         );
         rows.forEach((acc) => {
+          if (acc.phone_number_id !== waCloud.phoneNumberId) return;
           if (acc.phone_number_id && acc.access_token && !engines.some((e) => e.id === `acc_${acc.id}`)) {
+            const accountClient = waCloud.withAccount(acc);
             engines.push({
               id: `acc_${acc.id}`,
               name: acc.account_name || `Cloud Account +${acc.phone_number}`,
@@ -238,19 +246,21 @@ class WALoadBalancer {
               weight: 1,
               sentToday: 0,
               sentThisHour: 0,
-              sendText: async (phone, text) => waCloud.sendText(phone, text),
-              sendTemplate: async (phone, tmplName, lang, components) => waCloud.sendTemplate(phone, tmplName, lang, components),
-              sendMedia: async (phone, mediaType, mediaUrl, caption) => waCloud.sendMedia(phone, mediaType, mediaUrl, caption),
+              sendText: async (phone, text) => accountClient.sendText(phone, text),
+              sendTemplate: async (phone, tmplName, lang, components) => accountClient.sendTemplate(phone, tmplName, lang, components),
+              sendMedia: async (phone, mediaType, mediaUrl, caption) => accountClient.sendMedia(phone, mediaType, mediaUrl, caption),
               supportsInteractive: true,
-              sendButtons: async (phone, body, buttons, header, footer) => waCloud.sendInteractiveButtons(phone, body, buttons, header, footer),
-              sendList: async (phone, body, buttonLabel, sections, header, footer) => waCloud.sendInteractiveList(phone, body, buttonLabel, sections, header, footer),
-              sendCTA: async (phone, body, displayText, url, header, footer) => waCloud.sendCTAUrl(phone, body, displayText, url, header, footer),
+              sendButtons: async (phone, body, buttons, header, footer) => accountClient.sendInteractiveButtons(phone, body, buttons, header, footer),
+              sendList: async (phone, body, buttonLabel, sections, header, footer) => accountClient.sendInteractiveList(phone, body, buttonLabel, sections, header, footer),
+              sendCTA: async (phone, body, displayText, url, header, footer) => accountClient.sendCTAUrl(phone, body, displayText, url, header, footer),
             });
           }
         });
       } catch (_) {}
     }
 
+    if (["web", "web_session"].includes(preferredEngine)) return engines.filter((engine) => engine.type === "web_session");
+    if (["cloud_api", "meta"].includes(preferredEngine)) return engines.filter((engine) => engine.type === "cloud_api");
     return engines;
   }
 
@@ -479,6 +489,7 @@ class WALoadBalancer {
       footer = null,
       buttonText = "View Options",
       fallbackText = null,
+      requireNative = false,
       sessionKey = null,
       preferredEngine = null,
       poolId = null,
@@ -505,8 +516,9 @@ class WALoadBalancer {
 
     const engines = await this.getActiveEngines(sessionKey, preferredEngine, poolId, tenantId);
     const poolKey = poolId ? `pool_${poolId}` : `session_${sessionKey || "def"}`;
-    const interactiveEngines = engines.filter((e) => e.supportsInteractive);
+    const interactiveEngines = engines.filter((e) => e.supportsInteractive && !["web", "web_session"].includes(preferredEngine));
 
+    let lastInteractiveError = null;
     if (interactiveEngines.length) {
       // Keep round-robin/least-loaded semantics, but only across capable senders.
       const primary = this.selectEngine(interactiveEngines, routingStrategy, `${poolKey}_interactive`);
@@ -528,6 +540,7 @@ class WALoadBalancer {
             result,
           };
         } catch (err) {
+          lastInteractiveError = err;
           if (isDeliveryUnknown(err)) {
             console.error(
               `⛔ [WA LoadBalancer] Interactive delivery unknown via '${engine.name}' — not trying another sender.`
@@ -547,6 +560,11 @@ class WALoadBalancer {
     console.warn(
       `↩️ [WA LoadBalancer] No interactive-capable sender delivered ${kind} to +${phone}; falling back to numbered text.`
     );
+    if (requireNative) {
+      const error = new Error(`Native buttons/list could not be delivered.${lastInteractiveError ? ` ${lastInteractiveError.message}` : " Configure a valid Cloud API sender or explicitly choose text fallback."} No text menu was sent.`);
+      error.code = "WA_NATIVE_INTERACTIVE_UNAVAILABLE";
+      throw error;
+    }
     const res = await this.sendTextMessage(phone, text, sessionKey, preferredEngine, poolId, routingStrategy, tenantId);
     return { ...res, native: false, kind, fallbackText: text };
   }
@@ -582,6 +600,7 @@ class WALoadBalancer {
       header = null,
       footer = null,
       fallbackText = null,
+      requireNative = false,
       sessionKey = null,
       preferredEngine = null,
       poolId = null,
@@ -638,6 +657,7 @@ class WALoadBalancer {
       }
     }
 
+    if (requireNative) throw Object.assign(new Error("No Cloud API sender delivered the native URL button."), { code: "WA_NATIVE_INTERACTIVE_UNAVAILABLE" });
     console.warn(
       `↩️ [WA LoadBalancer] No CTA-capable sender delivered to +${phone}; falling back to a plain link.`
     );

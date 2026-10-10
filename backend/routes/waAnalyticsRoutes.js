@@ -15,27 +15,27 @@ router.get("/dashboard", auth, async (req, res) => {
       totalContacts = (crmClients || 0) + (crmTelecalls || 0) + (crmGroupContacts || 0);
     }
 
-    const [[{ optedIn }]] = await db.promise().query("SELECT COUNT(*) as optedIn FROM wa_contacts WHERE opt_in_status=1 AND is_blocked=0 AND is_unsubscribed=0").catch(() => [[{ optedIn: totalContacts }]]);
+    const [[{ optedIn }]] = await db.promise().query("SELECT COUNT(*) as optedIn FROM wa_contacts WHERE opt_in_status=1 AND is_blocked=0 AND is_unsubscribed=0").catch(() => [[{ optedIn: 0 }]]);
     const [[{ blocked }]] = await db.promise().query("SELECT COUNT(*) as blocked FROM wa_contacts WHERE is_blocked=1").catch(() => [[{ blocked: 0 }]]);
     const [[{ optOuts }]] = await db.promise().query("SELECT COUNT(*) as optOuts FROM wa_opt_outs").catch(() => [[{ optOuts: 0 }]]);
     const [[{ unsubscribed }]] = await db.promise().query("SELECT COUNT(*) as unsubscribed FROM wa_contacts WHERE is_unsubscribed=1").catch(() => [[{ unsubscribed: 0 }]]);
     const [[{ queued }]] = await db.promise().query("SELECT COUNT(*) as queued FROM wa_campaign_messages WHERE status='queued'").catch(() => [[{ queued: 0 }]]);
 
     // 2. Campaign Messages & Live Outbound Messages Combined Stats
-    const [[{ campSent }]] = await db.promise().query("SELECT COUNT(*) as campSent FROM wa_campaign_messages WHERE status IN ('sent','delivered','read')").catch(() => [[{ campSent: 0 }]]);
-    const [[{ logSent }]] = await db.promise().query("SELECT COUNT(*) as logSent FROM wa_message_logs WHERE direction='outbound' AND status IN ('sent','delivered','read')").catch(() => [[{ logSent: 0 }]]);
+    const [[{ campSent }]] = await db.promise().query("SELECT COUNT(*) as campSent FROM wa_campaign_messages WHERE status IN ('sent','delivered','read') OR (status='failed' AND wa_message_id IS NOT NULL)").catch(() => [[{ campSent: 0 }]]);
+    const [[{ logSent }]] = await db.promise().query("SELECT COUNT(*) as logSent FROM wa_message_logs WHERE direction='outbound' AND (campaign_id IS NULL OR campaign_id = 0) AND (status IN ('sent','delivered','read') OR (status='failed' AND wa_message_id IS NOT NULL))").catch(() => [[{ logSent: 0 }]]);
     const sent = (campSent || 0) + (logSent || 0);
 
     const [[{ campDelivered }]] = await db.promise().query("SELECT COUNT(*) as campDelivered FROM wa_campaign_messages WHERE status IN ('delivered','read')").catch(() => [[{ campDelivered: 0 }]]);
-    const [[{ logDelivered }]] = await db.promise().query("SELECT COUNT(*) as logDelivered FROM wa_message_logs WHERE direction='outbound' AND status IN ('delivered','read')").catch(() => [[{ logDelivered: 0 }]]);
+    const [[{ logDelivered }]] = await db.promise().query("SELECT COUNT(*) as logDelivered FROM wa_message_logs WHERE direction='outbound' AND (campaign_id IS NULL OR campaign_id = 0) AND status IN ('delivered','read')").catch(() => [[{ logDelivered: 0 }]]);
     const delivered = (campDelivered || 0) + (logDelivered || 0);
 
     const [[{ campRead }]] = await db.promise().query("SELECT COUNT(*) as campRead FROM wa_campaign_messages WHERE status='read'").catch(() => [[{ campRead: 0 }]]);
-    const [[{ logRead }]] = await db.promise().query("SELECT COUNT(*) as logRead FROM wa_message_logs WHERE direction='outbound' AND status='read'").catch(() => [[{ logRead: 0 }]]);
+    const [[{ logRead }]] = await db.promise().query("SELECT COUNT(*) as logRead FROM wa_message_logs WHERE direction='outbound' AND (campaign_id IS NULL OR campaign_id = 0) AND status='read'").catch(() => [[{ logRead: 0 }]]);
     const readCount = (campRead || 0) + (logRead || 0);
 
     const [[{ campFailed }]] = await db.promise().query("SELECT COUNT(*) as campFailed FROM wa_campaign_messages WHERE status='failed'").catch(() => [[{ campFailed: 0 }]]);
-    const [[{ logFailed }]] = await db.promise().query("SELECT COUNT(*) as logFailed FROM wa_message_logs WHERE direction='outbound' AND status='failed'").catch(() => [[{ logFailed: 0 }]]);
+    const [[{ logFailed }]] = await db.promise().query("SELECT COUNT(*) as logFailed FROM wa_message_logs WHERE direction='outbound' AND (campaign_id IS NULL OR campaign_id = 0) AND status='failed'").catch(() => [[{ logFailed: 0 }]]);
     const failed = (campFailed || 0) + (logFailed || 0);
 
     const [[{ campReplied }]] = await db.promise().query("SELECT COUNT(*) as campReplied FROM wa_campaign_messages WHERE reply_received=1").catch(() => [[{ campReplied: 0 }]]);
@@ -59,16 +59,16 @@ router.get("/dashboard", auth, async (req, res) => {
     const [[{ flowHandoffs }]] = await db.promise().query("SELECT COUNT(*) as flowHandoffs FROM wa_flow_runs WHERE status='handed_off'").catch(() => [[{ flowHandoffs: 0 }]]);
 
     // 5. Account quality & sessions
-    const [[{ totalAccounts }]] = await db.promise().query("SELECT COUNT(*) as totalAccounts FROM wa_accounts").catch(() => [[{ totalAccounts: 1 }]]);
+    const [[{ totalAccounts }]] = await db.promise().query("SELECT COUNT(*) as totalAccounts FROM wa_accounts").catch(() => [[{ totalAccounts: 0 }]]);
 
-    const deliveryRate = sent > 0 ? Math.round((delivered / sent) * 100) : (totalCampaigns > 0 ? 98 : 0);
+    const deliveryRate = sent > 0 ? Math.round((delivered / sent) * 100) : 0;
     const readRate = sent > 0 ? Math.round((readCount / sent) * 100) : 0;
     const replyRate = sent > 0 ? Math.round((replied / sent) * 100) : 0;
     const optOutRate = sent > 0 ? Math.round((optOuts / sent) * 100) : 0;
 
     res.json({
       totalContacts: totalContacts || 0,
-      optedIn: (optedIn || totalContacts || 0),
+      optedIn: optedIn || 0,
       blocked: blocked || 0,
       unsubscribed: unsubscribed || 0,
       optOuts: optOuts || 0,
@@ -322,7 +322,8 @@ router.get("/opt-outs", auth, async (req, res) => {
 // ── Quality rating (from user_wa_configs / static) ───────────────────────────
 router.get("/quality-rating", auth, async (req, res) => {
   try {
-    const [accounts] = await db.promise().query("SELECT * FROM wa_accounts WHERE is_default=1 LIMIT 1");
+    const cloud = await require("../services/waConfigHelper").cloudClientForUser(req.user.id);
+    const [accounts] = await db.promise().query("SELECT quality_rating, messaging_limit FROM wa_accounts WHERE is_default=1 AND (created_by = ? OR (created_by IS NULL AND phone_number_id = ?)) LIMIT 1", [req.user.id, cloud.phoneNumberId || ""]);
     const rating = accounts[0]?.quality_rating || null;
     const limit = accounts[0]?.messaging_limit || null;
     res.json({ quality_rating: rating, messaging_limit: limit, note: "Connect Meta Business API to fetch live quality rating" });

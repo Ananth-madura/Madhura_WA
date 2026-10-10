@@ -3,7 +3,10 @@ import { useNavigate, useLocation, useParams, useSearchParams } from "react-rout
 import { createPortal } from "react-dom";
 import axios from "axios";
 import { API } from "../config/api";
+import WAStorageAndSenders from "../components/WAStorageAndSenders";
 import WhatsAppNav from "../components/WhatsAppNav";
+import WAInteractiveOptions from "../components/WAInteractiveOptions";
+import { getInteractiveMessage } from "../utils/waInteractiveMessage";
 import WAVariablePicker from "../components/WAVariablePicker";
 import {
   Bot, Plus, Play, Edit2, Trash2, Loader2, GitFork, Send, X,
@@ -55,7 +58,7 @@ const PALETTE_CATEGORIES = [
     icon: MessageSquare,
     color: "text-emerald-500",
     items: [
-      { type: "interactive_menu", label: "Interactive Menu", icon: "📱", desc: "Multi-section button options", color: "border-emerald-500 bg-emerald-50 text-emerald-900" },
+      { type: "interactive_menu", label: "Interactive Menu", icon: "📱", desc: "Grouped lists and reply buttons", color: "border-emerald-500 bg-emerald-50 text-emerald-900" },
       { type: "send_buttons", label: "Reply Buttons", icon: "🔘", desc: "Quick reply buttons (max 3)", color: "border-teal-500 bg-teal-50 text-teal-900" },
       { type: "send_list", label: "List Menu", icon: "📋", desc: "WhatsApp popup list selector", color: "border-cyan-500 bg-cyan-50 text-cyan-900" },
       { type: "send_message", label: "Text Message", icon: "💬", desc: "Standard text message", color: "border-blue-500 bg-blue-50 text-blue-900" },
@@ -172,6 +175,8 @@ export default function WhatsAppFlows() {
   const [simCurrentNode, setSimCurrentNode] = useState(null);
   const [simLogs, setSimLogs] = useState([]);
   const [simTyping, setSimTyping] = useState(false);
+  const simRequestRef = useRef(false);
+  const simGenerationRef = useRef(0);
   const [simInputText, setSimInputText] = useState("");
   const [simEnded, setSimEnded] = useState(false);
   const [showPalette, setShowPalette] = useState(true);
@@ -1309,17 +1314,21 @@ export default function WhatsAppFlows() {
 
   // ── Interactive In-Phone Simulator Engine ───────────────────────────────────
   const resetSimulation = () => {
+    simGenerationRef.current++;
+    simRequestRef.current = false;
     setSimMessages([]);
     setSimLogs([]);
     setSimEnded(false);
     setSimCurrentNode(null);
     setSimTyping(false);
     // Auto-execute from start
-    executeSimStep("");
+    executeSimStep("", "", true);
   };
 
-  const executeSimStep = async (userInput = "") => {
-    if (simTyping) return;
+  const executeSimStep = async (userInput = "", displayInput = userInput, restart = false) => {
+    if (simRequestRef.current) return;
+    simRequestRef.current = true;
+    const generation = simGenerationRef.current;
     setSimTyping(true);
 
     const activeFlowDraft = {
@@ -1334,7 +1343,7 @@ export default function WhatsAppFlows() {
     if (userInput) {
       setSimMessages(prev => [
         ...prev,
-        { sender: "user", text: userInput, at: new Date() }
+        { sender: "user", text: displayInput, at: new Date() }
       ]);
     }
 
@@ -1345,7 +1354,7 @@ export default function WhatsAppFlows() {
       const payload = {
         flow: activeFlowDraft,
         input: userInput,
-        state: simCurrentNode ? {
+        state: !restart && simCurrentNode ? {
           currentNodeKey: simCurrentNode,
           vars: simVars
         } : null
@@ -1355,6 +1364,7 @@ export default function WhatsAppFlows() {
       const result = res.data;
 
       setTimeout(() => {
+        if (generation !== simGenerationRef.current) return;
         if (result.messages && result.messages.length > 0) {
           setSimMessages(prev => [...prev, ...result.messages]);
         }
@@ -1367,11 +1377,14 @@ export default function WhatsAppFlows() {
         setSimCurrentNode(result.currentNodeKey);
         setSimEnded(result.isEnded || false);
         setSimTyping(false);
+        simRequestRef.current = false;
       }, 400);
 
     } catch (err) {
+      if (generation !== simGenerationRef.current) return;
       console.error("Simulation error:", err);
       setSimTyping(false);
+      simRequestRef.current = false;
     }
   };
 
@@ -2080,6 +2093,14 @@ export default function WhatsAppFlows() {
         </div>
 
         {/* ── INTERACTIVE MENU CONFIGURATION ────────────────────────── */}
+        {["interactive_menu", "send_buttons", "send_list"].includes(selectedNode.node_type) && <label className="block text-sm space-y-1">
+          <span>Customer menu delivery</span>
+          <select className="hl-input w-full p-2" value={cfg.delivery_mode || "native_required"} onChange={(e) => updateConfig({ delivery_mode: e.target.value })}>
+            <option value="native_required">Require native buttons/list (Cloud API)</option>
+            <option value="allow_text">Allow numbered text fallback (QR/Web)</option>
+            <option value="web_text">Use QR/Web numbered text</option>
+          </select>
+        </label>}
         {selectedNode.node_type === "interactive_menu" && (
           <div className="space-y-4">
             <div>
@@ -3245,7 +3266,7 @@ export default function WhatsAppFlows() {
             </div>
             <div>
               <div className="flex items-center gap-1">
-                <span className="text-xs font-bold truncate max-w-[130px]">Madhura Bank Bot</span>
+                <span className="text-xs font-bold truncate max-w-[130px]">{flowName || "Flowbot preview"}</span>
                 <CheckCircle2 size={12} className="text-emerald-400 shrink-0 fill-emerald-400/20" />
               </div>
               <p className="text-[9px] text-emerald-400 font-semibold leading-tight">online • automated</p>
@@ -3278,13 +3299,14 @@ export default function WhatsAppFlows() {
             <span className={`px-2.5 py-1 rounded-md text-[9px] font-medium inline-flex items-center gap-1 shadow-sm ${
               simDarkTheme ? "bg-[#182229] text-[#ffd279]" : "bg-[#ffeecd] text-amber-900"
             }`}>
-              🔒 Messages are end-to-end encrypted
+              🔒 Preview only ? No messages are sent
             </span>
           </div>
 
           {/* Render Messages */}
           {simMessages.map((msg, mIdx) => {
             const isBot = msg.sender === "bot";
+            const interactiveMenu = getInteractiveMessage(msg);
             const timeStr = new Date(msg.at || Date.now()).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 
             return (
@@ -3296,83 +3318,16 @@ export default function WhatsAppFlows() {
                 }`}>
                   {/* Message Main Body */}
                   <p className="whitespace-pre-line leading-relaxed text-[11px] font-sans">
-                    {msg.text}
+                    {interactiveMenu?.header && <strong className="block mb-1">{interactiveMenu.header}</strong>}
+                    {interactiveMenu ? interactiveMenu.body : msg.text}
                   </p>
 
-                  {/* Multi-Section Interactive Buttons Display */}
-                  {msg.type === "interactive_menu" && Array.isArray(msg.sections) && (
-                    <div className="mt-2.5 space-y-2 border-t border-slate-600/30 pt-2">
-                      {msg.sections.map((sec, sIdx) => (
-                        <div key={sIdx} className="space-y-1">
-                          {sec.title && (
-                            <span className={`text-[10px] font-bold tracking-wide block ${
-                              simDarkTheme ? "text-[#00a884]" : "text-emerald-700"
-                            }`}>
-                              {sec.title}
-                            </span>
-                          )}
-                          <div className="space-y-1">
-                            {(sec.buttons || []).map((btn, bIdx) => (
-                              <button
-                                key={bIdx}
-                                type="button"
-                                onClick={() => executeSimStep(btn.label || btn.title || btn.id)}
-                                className={`w-full py-1.5 px-2.5 rounded-xl text-center text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 ${
-                                  simDarkTheme
-                                    ? "bg-[#111b21] hover:bg-[#202c33] text-[#00a884] border border-[#2a3942] active:scale-95"
-                                    : "bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200 active:scale-95"
-                                }`}
-                              >
-                                <span>{btn.label || btn.title}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Standard Reply Buttons Display */}
-                  {msg.type === "buttons" && Array.isArray(msg.buttons) && (
-                    <div className="mt-2 space-y-1 border-t border-slate-600/30 pt-1.5">
-                      {msg.buttons.map((btn, bIdx) => (
-                        <button
-                          key={bIdx}
-                          type="button"
-                          onClick={() => executeSimStep(btn.title || btn.id)}
-                          className={`w-full py-1.5 px-2 rounded-xl text-center text-xs font-bold transition-all ${
-                            simDarkTheme
-                              ? "bg-[#111b21] hover:bg-[#202c33] text-[#00a884] border border-[#2a3942]"
-                              : "bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200"
-                          }`}
-                        >
-                          {btn.title}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* WhatsApp Interactive List Menu Display ("View All Categories" / "View Options") */}
-                  {msg.type === "list" && Array.isArray(msg.rows) && (
-                    <div className="mt-2 border-t border-slate-600/30 pt-1.5 space-y-1">
-                      <button
-                        type="button"
-                        onClick={() => setSimListPopup({
-                          title: msg.title || "Our Categories",
-                          rows: msg.rows || [],
-                          buttonText: msg.button_text || "View Options"
-                        })}
-                        className={`w-full py-2 px-3 rounded-xl text-center text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 active:scale-95 ${
-                          simDarkTheme
-                            ? "bg-[#00a884] hover:bg-[#008f6f] text-white"
-                            : "bg-[#008069] hover:bg-[#006a57] text-white"
-                        }`}
-                      >
-                        <ListOrdered size={14} />
-                        <span>{msg.button_text || "View All Categories"}</span>
-                      </button>
-                    </div>
-                  )}
+                  <WAInteractiveOptions
+                    menu={interactiveMenu}
+                    dark={simDarkTheme}
+                    disabled={simTyping || simEnded || mIdx !== simMessages.length - 1}
+                    onReply={(value, title) => executeSimStep(value, title)}
+                  />
 
                   {/* Timestamp & Double Checkmarks */}
                   <div className="flex items-center justify-end gap-1 mt-1 text-[9px] opacity-60">
@@ -3480,7 +3435,7 @@ export default function WhatsAppFlows() {
                     type="button"
                     onClick={() => {
                       setSimListPopup(null);
-                      executeSimStep(row.title || row.id);
+                      executeSimStep(row.id || row.title, row.title);
                     }}
                     className={`w-full p-2.5 rounded-xl text-left transition-all border flex items-center justify-between ${
                       simDarkTheme
@@ -4208,6 +4163,7 @@ export default function WhatsAppFlows() {
   return (
     <div className="hl-page bg-slate-50 font-sans">
       <WhatsAppNav />
+      <WAStorageAndSenders />
 
       <div className="max-w-7xl mx-auto w-full min-w-0 px-3 sm:px-4 lg:px-6 py-5 sm:py-8 space-y-6">
         {/* Header Hero Banner */}

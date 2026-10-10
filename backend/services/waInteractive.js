@@ -133,11 +133,38 @@ function buildNumberedText({ body, header, footer, items = [], sectioned = false
   // The hint belongs to the text path only — this is the one place options are
   // numbered, so it must always be shown here even when a footer is also set.
   out += "\n_Reply with the option number (1, 2, 3...) or the option name._";
-  if (footer) out += `\n_${footer}_`;
+  if (footer && !/^tap an option or reply with number[.!]?$/i.test(footer.trim())) out += `\n_${footer}_`;
   return out.trim();
 }
 
+function deliveryMessageId(delivery) {
+  const result = delivery?.result || delivery?.response || delivery;
+  const id = result?.messages?.[0]?.id || result?.id || result?.result?.id;
+  return typeof id === "string" ? id : id?.id || id?._serialized || null;
+}
+
+function validateMenuNodes(nodes) {
+  if (!Array.isArray(nodes)) return "Flow nodes must be an array.";
+  for (const node of nodes) {
+    if (!["send_buttons", "send_list", "interactive_menu"].includes(node.node_type)) continue;
+    let config;
+    try { config = typeof node.config === "string" ? JSON.parse(node.config) : node.config || {}; }
+    catch (_) { return `Menu ${node.node_key} has invalid configuration.`; }
+    if (!config || typeof config !== "object" || (config.sections && !Array.isArray(config.sections))) return `Menu ${node.node_key} has invalid sections.`;
+    const items = config.sections?.length
+      ? config.sections.flatMap((section) => section.buttons || section.rows || section.options || [])
+      : config.buttons || config.rows || config.options || [];
+    if (!Array.isArray(items) || !items.length || items.length > LIMITS.maxRows) return `Menu ${node.node_key} needs between 1 and 10 options.`;
+    if (items.some((item) => !item || typeof item !== "object")) return `Menu ${node.node_key} has an invalid option.`;
+    const ids = items.map((item, index) => String(item.reply_id || item.id || `generated_${index + 1}`));
+    if (new Set(ids).size !== ids.length) return `Menu ${node.node_key} has duplicate option IDs. Give each option its own ID.`;
+  }
+  return null;
+}
+
 module.exports = {
+  validateMenuNodes,
+  deliveryMessageId,
   LIMITS,
   normalizeTitle,
   normalizeButtons,

@@ -566,13 +566,13 @@ class WhatsAppService {
   }
 
   emitWaEvent(event, chatId, phone, message) {
+    if (["wa_message_received", "wa_message_sent"].includes(event)) require("./waTransientHistory").remember(phone, this.key, message);
     try {
       const app = require("../server");
       const io = app.get && app.get("io");
       if (io) {
         io.to(`user:${this.key}`).emit(event, { phone, chatId, message, sessionKey: this.key });
-        io.to("whatsapp").emit(event, { phone, chatId, message, sessionKey: this.key });
-        io.emit(event, { phone, chatId, message, sessionKey: this.key });
+
       }
     } catch (_) {}
   }
@@ -1019,7 +1019,7 @@ class WhatsAppService {
             : null,
         };
 
-        if (isMedia) {
+        if (isMedia && require("./waChatPrivacy").serverChatStorageEnabled()) {
           const safeId = String(liveMsg.id).replace(/[^a-zA-Z0-9_-]/g, "");
           try {
             const { mediaDir } = require("../config/runtimePaths");
@@ -1048,7 +1048,7 @@ class WhatsAppService {
         this.emitWaEvent("wa_message", chatId, cleanPhone, liveMsg);
 
         // 1c. Eager background download for inbound attachments so they are instantly accessible
-        if (isMedia && !msg.fromMe && !liveMsg.mediaUrl) {
+        if (isMedia && !msg.fromMe && !liveMsg.mediaUrl && require("./waChatPrivacy").serverChatStorageEnabled()) {
           process.nextTick(() => {
             this.getMediaForMessage(chatId, liveMsg.id, liveMsg.serializedId)
               .then((res) => {
@@ -1331,6 +1331,7 @@ class WhatsAppService {
           }
 
           this.emitWaEvent("wa_message_ack", chatId, cleanPhone, { id: msgId, serializedId, ack, status });
+          require("./waDeliveryReceipts").applyDeliveryReceipt([msgId, serializedId], status).catch(() => {});
 
           const db = require("../config/database");
           const statusColumn = { sent: "sent_at", delivered: "delivered_at", read: "read_at" }[status];
@@ -1378,7 +1379,7 @@ class WhatsAppService {
   }
 
   async sendMessage(chatId, message, options = {}) {
-    const waCloud = require("./whatsappCloudApi");
+    const waCloud = await require("./waConfigHelper").cloudClientForUser(this.key);
     if (!chatId) throw new Error("chatId is required");
 
     let cleanPhone = String(chatId).replace(/\D/g, "");
@@ -1562,7 +1563,6 @@ class WhatsAppService {
 
           // Trigger background sync for contacts & chat history if not already triggered
           setTimeout(() => {
-            this.syncWhatsAppContacts().catch(() => {});
             this.syncWhatsAppChatsAndMessages().catch(() => {});
           }, 1000);
         }
@@ -1632,7 +1632,7 @@ class WhatsAppService {
   }
 
   async getUnifiedStatus() {
-    const waCloud = require("./whatsappCloudApi");
+    const waCloud = await require("./waConfigHelper").cloudClientForUser(this.key);
     const cloudConfigured = waCloud.isConfigured();
     const status = await this.getStatus();
     const webConnected = status.connected;
@@ -1663,7 +1663,7 @@ class WhatsAppService {
   }
 
   async sendTestMessage(targetPhone, text = "Hello! This is a test message from Madhura Tech WhatsApp Engine.", enginePreference = null) {
-    const waCloud = require("./whatsappCloudApi");
+    const waCloud = await require("./waConfigHelper").cloudClientForUser(this.key);
     const formattedPhone = targetPhone.replace(/\D/g, "");
     if (!formattedPhone) throw new Error("Valid phone number required");
 
@@ -1893,16 +1893,16 @@ class WhatsAppService {
   }
 
   async getChats(forceRefresh = false) {
+    if (this.chatsRefresh) return this.chatsRefresh;
+    const refresh = this._getChats(forceRefresh).finally(() => { this.chatsRefresh = null; this.chatsFetching = false; });
+    this.chatsRefresh = refresh;
+    return refresh;
+  }
+
+  async _getChats(forceRefresh = false) {
     const now = Date.now();
     // Fast path 1: Instant cache return (< 1ms)
     if (!forceRefresh && (now - this.lastChatsFetch < 15000) && this.chatsCache.length > 0) {
-      return this.chatsCache;
-    }
-    // Fast path 2: Return existing cache immediately while refreshing in background
-    if (this.chatsCache.length > 0 && !forceRefresh) {
-      if (!this.chatsFetching) {
-        process.nextTick(() => this.getChats(true).catch(() => {}));
-      }
       return this.chatsCache;
     }
     this.chatsFetching = true;
@@ -1914,9 +1914,11 @@ class WhatsAppService {
     if (this.ready && this.client) {
       try {
         const fetchTimeout = forceRefresh ? 25000 : 12000;
+        this.lastChatsError = null;
         let rawChats = await this.enqueue(() =>
           this.withTimeout(this.client.getChats(), fetchTimeout, "WhatsApp Web getChats")
         ).catch((err) => {
+          this.lastChatsError = err?.message || "WhatsApp chats could not be fetched";
           console.warn("⚠️ [WhatsApp Web] getChats took too long or errored:", err?.message || err);
           return [];
         });
@@ -2166,6 +2168,19 @@ class WhatsAppService {
       }
     }
 
+    if (this.lastChatsError && forceRefresh) throw new Error(this.lastChatsError);
+    if (this.lastChatsError && this.chatsCache.length) return this.chatsCache;
+    for (const contact of this.sessionContacts || []) {
+      const id = contact.id?._serialized;
+      if (!id || contact.isGroup || contact.isUser === false) continue;
+      const resolved = id.endsWith("@lid") ? this.lidToPhoneMap.get(id) : contact.number || contact.id?.user;
+      const phone = String(resolved || "").replace(/\D/g, "");
+      const key = phone.length >= 10 && phone.length <= 15 ? phone.slice(-10) : id;
+      if (!chatMap.has(key)) chatMap.set(key, {
+        id, phoneNumber: phone || null, name: contact.name || contact.pushname || contact.shortName || (phone ? formatPhoneDisplay(phone) : "WhatsApp Contact"),
+        isGroup: false, unreadCount: 0, timestamp: 0, lastMessage: null, hasMessages: false, source: "WhatsApp Account",
+      });
+    }
     const finalChats = Array.from(chatMap.values());
     finalChats.sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
@@ -2229,27 +2244,37 @@ class WhatsAppService {
     try {
       const db = require("../config/database");
       const dbLimit = Math.max(numericLimit, 50);
+      const contentColumns = require("./waChatPrivacy").serverChatStorageEnabled()
+        ? "message_text as body, media_url, media_filename, interactive_payload, metadata"
+        : "NULL as body, NULL as media_url, NULL as media_filename, NULL as interactive_payload, NULL as metadata";
       const [rows] = await db.promise().query(
-        `SELECT id, phone, direction, message_type, message_text as body, created_at, wa_message_id, status, media_url, media_filename, media_mime_type
+        `SELECT id, phone, direction, message_type, created_at, wa_message_id, status, media_mime_type, media_id, ${contentColumns}
          FROM wa_message_logs
-         WHERE (session_key = ? OR session_key IS NULL OR session_key = '1' OR session_key = 'default')
+         WHERE (session_key = ? OR session_key IS NULL)
            AND (phone LIKE ? OR phone LIKE ? OR phone LIKE ? OR phone = ?)
          ORDER BY created_at DESC LIMIT ?`,
         [this.key, `%${clean10}%`, `%${digitsOnly}%`, `%${chatId}%`, digitsOnly, dbLimit]
       );
       rows.forEach((r) => {
-        const isFile = (r.message_type && r.message_type !== "text" && r.message_type !== "location") || Boolean(r.media_url) || /\.(md|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|zip|rar|png|jpg|jpeg|webp|mp4|mp3|ogg|wav)$/i.test(r.body || "");
+        const isFile = ["media", "image", "video", "audio", "ptt", "document", "sticker"].includes(r.message_type) || Boolean(r.media_url) || /\.(md|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|zip|rar|png|jpg|jpeg|webp|mp4|mp3|ogg|wav)$/i.test(r.body || "");
+        let interactive = null;
+        try { interactive = typeof r.interactive_payload === "string" ? JSON.parse(r.interactive_payload) : r.interactive_payload; } catch (_) {}
+        let metadata = {};
+        try { metadata = typeof r.metadata === "string" ? JSON.parse(r.metadata) : r.metadata || {}; } catch (_) {}
         dbMsgs.push({
           id: r.wa_message_id || `db_${r.id}`,
+          serializedId: metadata.serializedId || null,
           from: r.direction === "inbound" ? r.phone : "me",
           body: r.body || (r.message_type === "media" ? "📎 Attachment" : r.message_type === "location" ? "📍 Location" : ""),
           timestamp: Math.floor(new Date(r.created_at).getTime() / 1000),
           isMe: r.direction === "outbound",
           hasMedia: Boolean(isFile),
           type: r.message_type || (isFile ? "document" : "text"),
-          filename: r.media_filename || r.body || "",
+          filename: r.media_filename || "",
           mediaUrl: r.media_url || null,
           mimetype: r.media_mime_type || null,
+          interactive,
+          cloudMediaId: r.media_id || null,
           status: r.direction === "outbound" ? (r.status || "sent") : null,
         });
       });
@@ -2260,8 +2285,10 @@ class WhatsAppService {
     let liveMsgs = this.messagesCache[chatId] || [];
 
     // 2. Non-blocking background fetch if empty or forceRefresh to keep UI ultra-fast (< 5ms)
-    if (this.ready && this.client && (forceRefresh || (!liveMsgs.length && dbMsgs.length === 0))) {
-      process.nextTick(async () => {
+    if (this.ready && this.client && (forceRefresh || !liveMsgs.length)) {
+      if (!this.historyRefreshes) this.historyRefreshes = new Map();
+      let refresh = this.historyRefreshes.get(chatId);
+      if (!refresh) refresh = (async () => {
         try {
           const formattedChatId = formatChatJid(chatId);
           let chat = await this.enqueue(() => this.withTimeout(this.client.getChatById(formattedChatId), 3000, "WhatsApp Web getChatById")).catch(() => null);
@@ -2270,7 +2297,7 @@ class WhatsAppService {
           }
           if (chat) {
             const fetchLimit = Math.max(numericLimit, 50);
-            const msgs = await this.enqueue(() => this.withTimeout(chat.fetchMessages({ limit: fetchLimit }), 3000, "WhatsApp Web fetchMessages")).catch(() => []);
+            const msgs = await this.enqueue(() => this.withTimeout(chat.fetchMessages({ limit: fetchLimit }), 10000, "WhatsApp Web fetchMessages"));
             const freshLive = msgs.map((m) => {
               const filename = m._data?.filename || (/\.(md|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|zip|rar|png|jpg|jpeg|webp|mp4|mp3|ogg|wav)$/i.test(m.body || "") ? m.body : "");
               const isMedia = Boolean(m.hasMedia || m.type === "document" || m.type === "image" || m.type === "video" || m.type === "audio" || filename);
@@ -2284,6 +2311,7 @@ class WhatsAppService {
                 type: m.type || (isMedia ? "document" : "text"),
                 hasMedia: isMedia,
                 filename: filename || "",
+                mimetype: m._data?.mimetype || null,
                 ack: typeof m.ack === "number" ? m.ack : null,
                 status: WhatsAppService.ackToStatus(m.ack) || (m.fromMe ? "sent" : null),
                 location: m.type === "location" && m.location
@@ -2298,8 +2326,8 @@ class WhatsAppService {
               const db = require("../config/database");
               for (const m of freshLive) {
                 await db.promise().query(
-                  `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, 'sent', FROM_UNIXTIME(?))`,
+                  `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at, media_filename, media_mime_type, metadata)
+                   VALUES (?, ?, ?, ?, ?, ?, 'sent', FROM_UNIXTIME(?), ?, ?, ?)`,
                   [
                     this.key,
                     digitsOnly,
@@ -2307,15 +2335,19 @@ class WhatsAppService {
                     m.hasMedia ? (m.type || "media") : "text",
                     m.body || describeLastMessage(m) || "",
                     m.id,
-                    m.timestamp || Math.floor(Date.now() / 1000)
+                    m.timestamp || Math.floor(Date.now() / 1000), m.filename || null, m.mimetype || null, JSON.stringify({ serializedId: m.serializedId })
                   ]
                 ).catch(() => {});
               }
               this.emitWaEvent("wa_chat_history_updated", chatId, digitsOnly, { count: freshLive.length });
             }
           }
-        } catch (_) {}
-      });
+        } catch (error) { if (!this.historyErrors) this.historyErrors = new Map(); this.historyErrors.set(chatId, error); }
+      })().finally(() => this.historyRefreshes.delete(chatId));
+      this.historyRefreshes.set(chatId, refresh);
+      if (forceRefresh || !liveMsgs.length) await refresh;
+      if (this.historyErrors?.has(chatId) && (forceRefresh || !liveMsgs.length)) { const error = this.historyErrors.get(chatId); this.historyErrors.delete(chatId); throw error; }
+      liveMsgs = this.messagesCache[chatId] || liveMsgs;
     }
 
     const msgMap = new Map();
@@ -2323,6 +2355,10 @@ class WhatsAppService {
     dbMsgs.forEach((m) => {
       if (!msgMap.has(m.id)) {
         msgMap.set(m.id, m);
+      } else if (m.interactive) {
+        // Live Web messages have only numbered fallback text. Keep the saved
+        // menu metadata when merging those messages with database history.
+        msgMap.set(m.id, { ...msgMap.get(m.id), interactive: m.interactive, hasMedia: m.hasMedia, type: m.type });
       }
     });
 
@@ -2611,34 +2647,57 @@ class WhatsAppService {
   // media bubble, all serialized behind one enqueue chain — ten images in view
   // meant ten full chat scans and a frozen UI. Now: resolve the message
   // directly, download once, cache to disk, and let the browser HTTP-cache it.
-  async getMediaForMessage(chatId, messageId, serializedId) {
+  async getMediaForMessage(chatId, messageId, serializedId, cloudMediaId = null) {
+    if (!this.mediaDownloads) this.mediaDownloads = new Map();
+    const key = `${chatId}:${messageId}`;
+    if (this.mediaDownloads.has(key)) return this.mediaDownloads.get(key);
+    const download = this._getMediaForMessage(chatId, messageId, serializedId, cloudMediaId).finally(() => this.mediaDownloads.delete(key));
+    this.mediaDownloads.set(key, download);
+    return download;
+  }
+
+  async _getMediaForMessage(chatId, messageId, serializedId, cloudMediaId = null) {
     const { mediaDir, cloudMediaDir } = require("../config/runtimePaths");
+    const { cachedMedia, saveMediaMetadata } = require("./waMediaMetadata");
+    const persist = require("./waChatPrivacy").serverChatStorageEnabled();
     const cacheDir = path.join(mediaDir, this.key);
     const safeId = String(messageId).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!messageId || !safeId) throw new Error("A message ID is required to load media.");
+    const db = require("../config/database");
+    const [rows] = await db.promise().query(
+      "SELECT media_url, media_filename, media_mime_type, metadata, media_id FROM wa_message_logs WHERE wa_message_id = ? AND (session_key = ? OR session_key IS NULL) LIMIT 1",
+      [messageId, this.key]
+    ).catch(() => [[]]);
+    const saved = rows[0];
+    if (persist && saved?.media_url) return { url: saved.media_url, filename: saved.media_filename, mimetype: saved.media_mime_type };
 
     // 1. Web session cache hit: no Puppeteer at all.
     try {
-      if (fs.existsSync(cacheDir)) {
-        const hit = fs.readdirSync(cacheDir).find((f) => f.startsWith(safeId + "."));
-        if (hit) return { url: `/uploads/wa-media/${this.key}/${hit}`, filename: hit };
+      if (persist && fs.existsSync(cacheDir)) {
+        const hit = cachedMedia(cacheDir, safeId, `/uploads/wa-media/${this.key}`);
+        if (hit) return hit;
       }
     } catch (_) {}
 
     // 2. Cloud Media cache hit check
     try {
-      if (fs.existsSync(cloudMediaDir)) {
-        const hit = fs.readdirSync(cloudMediaDir).find((f) => f.startsWith(safeId + "."));
-        if (hit) return { url: `/uploads/wa-media/cloud/${hit}`, filename: hit };
+      if (persist && fs.existsSync(cloudMediaDir)) {
+        const hit = cachedMedia(cloudMediaDir, safeId, "/uploads/wa-media/cloud");
+        if (hit) return hit;
       }
     } catch (_) {}
 
     // 3. Fallback to Meta Cloud API if web session not connected
     if (!this.ready || !this.client) {
-      const waCloud = require("./whatsappCloudApi");
+      const waCloud = await require("./waConfigHelper").cloudClientForUser(this.key);
       if (waCloud.isConfigured()) {
         try {
-          return await waCloud.downloadMedia(messageId);
-        } catch (_) {}
+          let metadata = {};
+          try { metadata = typeof saved?.metadata === "string" ? JSON.parse(saved.metadata) : saved?.metadata || {}; } catch (_) {}
+          const mediaId = cloudMediaId || saved?.media_id || metadata.image?.id || metadata.document?.id || metadata.video?.id || metadata.audio?.id || metadata.sticker?.id;
+          if (!mediaId) throw new Error("The Cloud media ID is missing from this message.");
+          return await waCloud.downloadMedia(mediaId, { persist });
+        } catch (error) { throw new Error(`Cloud attachment could not be loaded: ${error.response?.data?.error?.message || error.message}`); }
       }
       throw new Error("WhatsApp Web session not connected");
     }
@@ -2646,6 +2705,8 @@ class WhatsAppService {
     let msg = null;
     // getMessageById is O(1) against the Store; the chat scan below is the
     // fallback for rows logged before serializedId was recorded.
+    const cachedMessage = (this.messagesCache[chatId] || []).find((message) => message.id === messageId || message.serializedId === messageId);
+    serializedId = serializedId || cachedMessage?.serializedId || (String(messageId).startsWith("true_") || String(messageId).startsWith("false_") ? messageId : null);
     if (serializedId) {
       msg = await this.enqueue(() =>
         this.withTimeout(this.client.getMessageById(serializedId), 10000, "getMessageById")
@@ -2661,6 +2722,7 @@ class WhatsAppService {
 
     const media = await this.enqueue(() => this.withTimeout(msg.downloadMedia(), 20000, "downloadMedia"));
     if (!media) throw new Error("Media could not be downloaded");
+    if (!persist) return { data: media.data, filename: media.filename || `${safeId}.${mimeToExtension(media.mimetype) || "bin"}`, mimetype: media.mimetype };
 
     let ext = mimeToExtension(media.mimetype);
     if (!ext || ext === "bin") {
@@ -2671,6 +2733,11 @@ class WhatsAppService {
     const filename = `${safeId}.${safeExt}`;
     fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(path.join(cacheDir, filename), Buffer.from(media.data, "base64"));
+    saveMediaMetadata(path.join(cacheDir, filename), { filename: media.filename || filename, mimetype: media.mimetype });
+    await db.promise().query(
+      "UPDATE wa_message_logs SET media_url = ?, media_filename = ?, media_mime_type = ? WHERE wa_message_id = ? AND (session_key = ? OR session_key IS NULL)",
+      [`/uploads/wa-media/${this.key}/${filename}`, media.filename || filename, media.mimetype, messageId, this.key]
+    ).catch(() => {});
 
     return {
       url: `/uploads/wa-media/${this.key}/${filename}`,
@@ -2690,7 +2757,7 @@ class WhatsAppService {
   }
 
   async _sendMediaMessage(chatId, mediaUrl, mediaType = "document", caption = "", filename = "") {
-    const waCloud = require("./whatsappCloudApi");
+    const waCloud = await require("./waConfigHelper").cloudClientForUser(this.key);
     if (!chatId) throw new Error("chatId is required");
 
     let cleanPhone = String(chatId).replace(/\D/g, "");
@@ -2807,6 +2874,10 @@ class WhatsAppService {
           if (filename && media) {
             media.filename = filename;
           }
+        } else if (typeof mediaUrl === "string" && mediaUrl.startsWith("data:")) {
+          const encoded = mediaUrl.match(/^data:([^;]+);base64,([\s\S]+)$/);
+          if (!encoded) throw new Error("Attachment data is invalid.");
+          media = new MessageMedia(encoded[1], encoded[2], filename || "attachment");
         } else {
           media = await this.withTimeout(
             MessageMedia.fromUrl(mediaUrl, { unsafeMime: true, filename: filename || undefined }),
@@ -2897,7 +2968,7 @@ class WhatsAppService {
       isMe: true,
       hasMedia: true,
       type: mediaType || "document",
-      mediaUrl: mediaUrl,
+      mediaUrl: typeof mediaUrl === "string" && mediaUrl.startsWith("data:") ? null : mediaUrl,
       filename: filename || logText,
     };
     if (!this.messagesCache[chatId]) this.messagesCache[chatId] = [];
@@ -3014,11 +3085,13 @@ class WhatsAppService {
     try {
       const rawContacts = await this.enqueue(() =>
         this.withTimeout(this.client.getContacts(), 25000, "WhatsApp Web getContacts")
-      ).catch(() => []);
+      );
 
       if (!rawContacts || !rawContacts.length) {
         return { success: true, count: 0, inserted: 0, updated: 0 };
       }
+      this.sessionContacts = rawContacts;
+      this.lastChatsFetch = 0;
 
       // 1. Batch resolve any LID contacts to real phone numbers
       const lidContacts = rawContacts.filter(
@@ -3034,7 +3107,7 @@ class WhatsAppService {
       let updated = 0;
 
       for (const c of rawContacts) {
-        if (!c.isUser) continue;
+        if (c.isUser === false || c.isGroup) continue;
 
         let cleanPhone = null;
         if (c.id?._serialized?.includes("@lid") || c.id?.server === "lid") {
@@ -3075,24 +3148,41 @@ class WhatsAppService {
   }
 
   async syncWhatsAppChatsAndMessages() {
+    if (this.syncPromise) return this.syncPromise;
+    const work = this._syncWhatsAppChatsAndMessages().finally(() => { this.syncPromise = null; });
+    this.syncPromise = work;
+    return work;
+  }
+
+  async _syncWhatsAppChatsAndMessages() {
     if (!this.ready || !this.client) {
       return { success: false, message: "WhatsApp client is not ready" };
     }
     try {
+      this.syncState = { status: "running", totalChats: 0, completedChats: 0, syncedMessages: 0, failedChats: 0, startedAt: new Date().toISOString() };
+      const contacts = await this.syncWhatsAppContacts();
+      this.syncState.contacts = contacts.count || 0;
+      if (!contacts.success) this.syncState.contactError = contacts.error;
       const chats = await this.getChats(true);
+      this.syncState.totalChats = chats.filter((chat) => chat.hasMessages !== false).length;
       let syncedMessages = 0;
 
-      for (const chat of (chats || []).slice(0, 30)) {
+      for (const chat of (chats || []).filter((chat) => chat.hasMessages !== false)) {
         if (!chat.id) continue;
         try {
-          const msgs = await this.getMessages(chat.id, true);
+          const msgs = await this.getMessages(chat.id, true, 50);
           syncedMessages += (msgs || []).length;
-        } catch (_) {}
+          this.syncState.syncedMessages = syncedMessages;
+        } catch (_) { this.syncState.failedChats++; }
+        this.syncState.completedChats++;
       }
 
-      return { success: true, syncedChats: (chats || []).length, syncedMessages };
+      this.syncState.status = this.syncState.failedChats || this.syncState.contactError ? "partial" : "completed";
+      this.syncState.finishedAt = new Date().toISOString();
+      return { success: this.syncState.status === "completed", syncedChats: this.syncState.completedChats, syncedMessages, ...this.syncState };
     } catch (err) {
       console.error("syncWhatsAppChatsAndMessages error:", err.message);
+      this.syncState = { ...this.syncState, status: "failed", error: err.message };
       return { success: false, error: err.message };
     }
   }

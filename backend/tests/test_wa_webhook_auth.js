@@ -1,0 +1,37 @@
+const assert = require('assert/strict'), crypto = require('crypto');
+const { authorizeWebhook, verifySignature } = require('../services/waWebhookAuth');
+const request = (ids, secret) => {
+  const body = { entry: [{ changes: ids.map((id) => ({ field: 'messages', value: { metadata: { phone_number_id: id }, messages: [{ id: 'wamid.fixture' }] } })) }] };
+  const rawBody = Buffer.from(JSON.stringify(body));
+  return { body, rawBody, headers: secret ? { 'x-hub-signature-256': 'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex') } : {} };
+};
+const resolve = async (id) => id === 'A' ? { sessionKey: '41', appSecret: 'secret-A' } : id === 'B' ? { sessionKey: '42', appSecret: 'secret-B' } : null;
+(async () => {
+  const production = { NODE_ENV: 'production' };
+  assert.equal((await authorizeWebhook(request(['A']), resolve, production)).valid, false);
+  assert.equal((await authorizeWebhook(request(['A'], 'wrong'), resolve, production)).valid, false);
+  const accepted = await authorizeWebhook(request(['A'], 'secret-A'), resolve, production);
+  assert.equal(accepted.valid, true); assert.equal(accepted.accounts.get('A').sessionKey, '41');
+  assert.equal((await authorizeWebhook(request(['A', 'B'], 'secret-A'), resolve, production)).valid, false, 'One account signature cannot authorize another account in the same request');
+  assert.equal((await authorizeWebhook(request(['unknown'], 'secret-A'), resolve, production)).valid, false);
+  assert.equal((await authorizeWebhook(request(['A']), resolve, { NODE_ENV: 'production', WA_WEBHOOK_ALLOW_UNSIGNED: '1' })).valid, false);
+  assert.equal((await authorizeWebhook(request(['A']), resolve, { NODE_ENV: 'test', WA_WEBHOOK_ALLOW_UNSIGNED: '1' })).valid, true);
+  const modified = request(['A'], 'secret-A'); modified.rawBody = Buffer.from('tampered');
+  assert.equal((await authorizeWebhook(modified, resolve, production)).valid, false);
+  assert.equal(verifySignature(Buffer.from('body'), 'sha256=short', 'secret-A'), false);
+  const { DatabaseSync } = require('node:sqlite'), fs = require('fs'), vm = require('vm');
+  const database = new DatabaseSync(':memory:');
+  database.exec('CREATE TABLE wa_webhook_claims (event_type TEXT, wa_message_id TEXT, status TEXT, PRIMARY KEY (event_type, wa_message_id, status)); CREATE TABLE wa_webhook_events (event_type TEXT, wa_message_id TEXT, phone TEXT, status TEXT, payload TEXT)');
+  const source = fs.readFileSync(require.resolve('../routes/waWebhookRoutes'), 'utf8');
+  const start = source.indexOf('async function claimEvent('), end = source.indexOf('async function handleIncomingMessage(', start);
+  const context = { console, db: { promise: () => ({ query: async (sql, params) => [{ affectedRows: database.prepare(sql.replace('INSERT IGNORE', 'INSERT OR IGNORE')).run(...params).changes }] }) } };
+  vm.runInNewContext(source.slice(start, end) + '\nglobalThis.claim = claimEvent;', context);
+  const results = await Promise.all([context.claim('incoming_message', 'wamid.1', 'fixture-phone', 'received', {}), context.claim('incoming_message', 'wamid.1', 'fixture-phone', 'received', {})]);
+  assert.equal(results.filter(Boolean).length, 1);
+  assert.equal(await context.claim('status_update', 'wamid.1', 'fixture-phone', 'read', {}), true);
+  assert.equal(await context.claim('status_update', 'wamid.1', 'fixture-phone', 'read', {}), false);
+  assert.equal(await context.claim('status_update', 'wamid.1', 'fixture-phone', 'delivered', {}), true);
+  assert.equal(await context.claim('incoming_message', null, 'fixture-phone', 'received', {}), false);
+  database.close();
+  console.log('PASS: unsigned/tampered/foreign webhooks rejected, per-account signatures checked, production cannot bypass verification');
+})().catch((error) => { console.error(error); process.exitCode = 1; });

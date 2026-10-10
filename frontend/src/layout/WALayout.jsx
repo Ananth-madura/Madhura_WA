@@ -1,3 +1,4 @@
+import { waUiStorage } from "../utils/waUiStorage";
 import { useEffect, useState, useCallback } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
@@ -11,13 +12,16 @@ import {
   CreditCard,
   RefreshCw,
   Settings,
+  Layers,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
+import useWALocalInbox from "../hooks/useWALocalInbox";
 import { describeDemoReason } from "../auth/demoSession";
 import { API } from "../config/api";
 import socket from "../socket/socket";
 import WAConfigPrompt from "../components/WAConfigPrompt";
 import WAAccountBalanceModal from "../components/WAAccountBalanceModal";
+import WAPlanModal from "../components/WAPlanModal";
 
 // Corporate Shell for Whatsapp_CRM — Hallmark Workbench shell (design.md).
 // Deep-navy slab, yellow hairline, quiet type. Routes and logic untouched.
@@ -34,11 +38,13 @@ export default function WALayout() {
   const [status, setStatus] = useState(null);
   const [showConfig, setShowConfig] = useState(false);
   const [showBalance, setShowBalance] = useState(false);
+  const [showPlanModal, setShowPlanModal] = useState(false);
   const [balanceData, setBalanceData] = useState(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
   const isChatView = location.pathname === "/whatsapp" || location.pathname === "/whatsapp/";
+  const localCacheWarning = useWALocalInbox();
 
   useEffect(() => {
     if (isChatView) {
@@ -155,10 +161,10 @@ export default function WALayout() {
       try {
         ["wa_cached_status", "wa_cached_chats", "wa_active_chat"].forEach((key) => {
           sessionStorage.removeItem(key);
-          localStorage.removeItem(key);
+          waUiStorage.removeItem(key);
         });
         Object.keys(localStorage).forEach((k) => {
-          if (k.startsWith("wa_chat_messages_")) localStorage.removeItem(k);
+          if (k.startsWith(`wa_user_${user?.id}:wa_chat_messages_`)) localStorage.removeItem(k);
         });
       } catch (_) {}
 
@@ -197,6 +203,7 @@ export default function WALayout() {
           : "crm-layout-shell wa-page-mode wa-dvh flex flex-col overflow-hidden"
       }
     >
+      {localCacheWarning && <div role="alert" className="px-4 py-2 text-sm bg-[var(--color-paper)] text-[var(--color-ink)]">{localCacheWarning}</div>}
       {demoMode && (
         <div
           role="status"

@@ -49,20 +49,28 @@ const isR2OrSqliteRequested =
 const sqliteAdapter = require("./sqliteDatabase");
 
 let activePool = null;
+const { redactChatWrite } = require("../services/waChatPrivacy");
 
 let db = {
   isSqlite: Boolean(isR2OrSqliteRequested),
   r2Enabled: false,
   isPool: true,
   query: (...args) => {
+    const redacted = redactChatWrite(args[0], Array.isArray(args[1]) ? args[1] : []);
+    args[0] = redacted.sql;
+    if (Array.isArray(args[1])) args[1] = redacted.params;
     if (db.isSqlite) return sqliteAdapter.query(...args);
     if (activePool) return activePool.query(...args);
     const cb = typeof args[args.length - 1] === "function" ? args[args.length - 1] : null;
     if (cb) cb(new Error("Database connection pool not initialized yet"));
   },
   promise: () => {
-    if (db.isSqlite) return sqliteAdapter.promise();
-    if (activePool) return activePool.promise();
+    const driver = db.isSqlite ? sqliteAdapter.promise() : activePool?.promise();
+    if (driver) {
+      const scoped = Object.create(driver);
+      scoped.query = (sql, params) => { const safe = redactChatWrite(sql, params); return driver.query(safe.sql, safe.params); };
+      return scoped;
+    }
     return {
       query: async () => {
         throw new Error("Database connection pool not initialized yet");

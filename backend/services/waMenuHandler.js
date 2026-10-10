@@ -40,11 +40,17 @@ async function sendMenu(phone, automationId, sessionKey) {
   const opts = { phone: cleanPhone, body, fallbackText, sessionKey };
 
   try {
+    let delivery;
     if (items.length <= waInteractive.LIMITS.maxButtons) {
-      await waLoadBalancer.sendInteractiveButtons({ ...opts, buttons: items });
+      delivery = await waLoadBalancer.sendInteractiveButtons({ ...opts, buttons: items });
     } else {
-      await waLoadBalancer.sendInteractiveList({ ...opts, sections: items, buttonText: "View Options" });
+      delivery = await waLoadBalancer.sendInteractiveList({ ...opts, sections: items, buttonText: "View Options" });
     }
+    const payload = items.length <= 3
+      ? { type: "buttons", buttons: waInteractive.normalizeButtons(items) }
+      : { type: "list", sections: waInteractive.normalizeSections(items), button_text: "View options" };
+    await require("./waFlowEngine").recordAndEmitBotMessage(cleanPhone, fallbackText, "interactive", { ...payload, text: body, native: !!delivery.native }, sessionKey, null,
+      { id: waInteractive.deliveryMessageId(delivery), status: "sent" });
   } catch (e) {
     console.error(`[WA Menu] Failed to deliver menu for automation #${automationId} to +${cleanPhone}:`, e.message);
     return;
@@ -134,7 +140,7 @@ async function handleMenuReply(phone, msg, sessionKey) {
           status: "sent",
         },
       };
-      io.emit("wa_message_sent", livePayload);
+      io.to(`user:${sessionKey || require("./whatsappService").defaultKey}`).emit("wa_message_sent", { ...livePayload, sessionKey });
     }
   } catch (_) {}
 

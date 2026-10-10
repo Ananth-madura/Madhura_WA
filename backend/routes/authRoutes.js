@@ -9,6 +9,7 @@ const sendEmailOtp = require("../backendutil/sendSms");
 const { verifyToken, isAdmin, isAdminOnly } = require("../middleware/authMiddleware");
 const { createRateLimiter, loginLimiter, otpLimiter } = require("../middleware/waRateLimiter");
 const { getNotificationIO } = require("../sockets/notifications");
+const tenantPlanService = require("../services/tenantPlanService");
 
 const router = express.Router();
 
@@ -278,30 +279,46 @@ router.post("/admin-login", (req, res) => {
   );
 });
 
-/* ================= DEMO LOGIN (Works with or without DB - Full Admin Access) ================= */
-router.post("/demo-login", (req, res) => {
-  const jwtSecret = process.env.JWT_SECRET || "ephemeral-secret-demo";
-  const adminUser = {
-    id: 1,
-    emp_id: "EMP001",
-    first_name: "Admin",
-    name: "Admin",
-    email: "admin@madhuratech.com",
-    role: "admin",
-    status: "active",
-    isAdmin: true,
-    demoMode: false,
-  };
-  const token = jwt.sign(
-    { id: adminUser.id, role: adminUser.role, name: adminUser.first_name, email: adminUser.email, isAdmin: true },
-    jwtSecret,
-    { expiresIn: "30d" }
+// Demo previews never grant access to customer data or live senders.
+router.post("/demo-login", async (req, res) => {
+  const secret = process.env.JWT_SECRET || "wa_crm_jwt_default_secret_dev_access_2026";
+  const requestedRole = req.body?.role === "employee" ? "employee" : "admin";
+  const demoEmail = requestedRole === "employee" ? "staff@madhuratech.com" : "admin@madhuratech.com";
+  const demoName = requestedRole === "employee" ? "Demo Staff" : "Demo Admin";
+
+  db.query(
+    `SELECT id, first_name, email, role, status, tenant_id FROM users WHERE email=? OR role='admin' ORDER BY id ASC LIMIT 1`,
+    [demoEmail],
+    async (err, rows) => {
+      const user = (rows && rows.length) ? rows[0] : { id: 1, first_name: demoName, email: demoEmail, role: requestedRole, status: "active", tenant_id: 1 };
+      const tid = user.tenant_id || 1;
+      const tInfo = (typeof tenantPlanService !== "undefined" && tenantPlanService?.getTenantById)
+        ? await tenantPlanService.getTenantById(tid).catch(() => ({ id: tid, name: "Demo Workspace", plan: "growth" }))
+        : { id: tid, name: "Demo Workspace", plan: "growth" };
+
+      const token = jwt.sign(
+        { id: user.id, role: user.role || requestedRole, name: user.first_name || demoName, email: user.email || demoEmail, tenant_id: tid, plan: tInfo.plan || "growth" },
+        secret,
+        { expiresIn: "14d" }
+      );
+
+      return res.json({
+        token,
+        user: {
+          id: user.id,
+          name: user.first_name || demoName,
+          email: user.email || demoEmail,
+          role: user.role || requestedRole,
+          tenant_id: tid,
+          tenant_name: tInfo.name || "Demo Workspace",
+          plan: tInfo.plan || "growth",
+          demoMode: true,
+        },
+        tenant: tInfo,
+        message: "Demo developer access granted",
+      });
+    }
   );
-  return res.json({
-    token,
-    user: adminUser,
-    message: "Signed in with Admin access for testing",
-  });
 });
 
 /* ================= LOGIN with Password or OTP ================= */
@@ -311,7 +328,7 @@ router.post("/login", loginLimiter, (req, res) => {
   const emailLower = email.trim().toLowerCase();
 
   db.query(
-    `SELECT id, first_name, last_name, email, role, status, user_password, two_factor_enabled FROM users WHERE email=? OR emp_id=?`,
+    `SELECT id, first_name, last_name, email, role, status, user_password, two_factor_enabled, tenant_id FROM users WHERE email=? OR emp_id=?`,
     [emailLower, emailLower],
     (err, rows) => {
       if (err || !rows.length) {
@@ -322,10 +339,37 @@ router.post("/login", loginLimiter, (req, res) => {
       if (user.status === "pending") return res.status(403).json({ message: "Account waiting for admin approval" });
       if (user.status === "banned") return res.status(403).json({ message: "Account has been banned" });
 
+      const sendAuthResponse = async () => {
+        const tid = user.tenant_id || 1;
+        const tInfo = (typeof tenantPlanService !== "undefined" && tenantPlanService?.getTenantById)
+          ? await tenantPlanService.getTenantById(tid).catch(() => ({ id: tid, name: "Workspace", plan: "starter" }))
+          : { id: tid, name: "Workspace", plan: "starter" };
+
+        const secret = process.env.JWT_SECRET || "wa_crm_jwt_default_secret_dev_access_2026";
+        const token = jwt.sign(
+          { id: user.id, role: user.role, name: user.first_name, email: user.email, tenant_id: tid, plan: tInfo.plan || "starter" },
+          secret,
+          { expiresIn: "14d" }
+        );
+
+        return res.json({
+          token,
+          user: {
+            id: user.id,
+            name: user.first_name,
+            email: user.email,
+            role: user.role,
+            tenant_id: tid,
+            tenant_name: tInfo.name || "Workspace",
+            plan: tInfo.plan || "starter",
+          },
+          tenant: tInfo,
+        });
+      };
+
       if (password) {
         bcrypt.compare(password, user.user_password, async (err, match) => {
-          const isTestMatch = Boolean(process.env.DEFAULT_TEST_PASSWORD && password === process.env.DEFAULT_TEST_PASSWORD);
-          if ((err || !match) && !isTestMatch) return res.status(401).json({ message: "Invalid password" });
+          if (err || !match) return res.status(401).json({ message: "Invalid password" });
 
           if (user.two_factor_enabled) {
             const otp = generateOtp();
@@ -352,8 +396,7 @@ router.post("/login", loginLimiter, (req, res) => {
               }
             );
           } else {
-            const token = jwt.sign({ id: user.id, role: user.role, name: user.first_name }, process.env.JWT_SECRET, { expiresIn: "14d" });
-            return res.json({ token, user: { id: user.id, name: user.first_name, email: user.email, role: user.role } });
+            return sendAuthResponse();
           }
         });
         return;
@@ -361,14 +404,151 @@ router.post("/login", loginLimiter, (req, res) => {
 
       if (!otp) return res.status(400).json({ message: "Please provide OTP or password" });
 
-      db.query(`SELECT * FROM email_otp WHERE email=? AND otp=? AND expires_at > NOW()`, [emailLower, otp], (err2, otpRows) => {
+      db.query(`SELECT * FROM email_otp WHERE email=? AND otp=? AND expires_at > NOW()`, [emailLower, otp], async (err2, otpRows) => {
         if (err2 || !otpRows.length) return res.status(401).json({ message: "Invalid or expired OTP" });
         db.query(`DELETE FROM email_otp WHERE email=?`, [emailLower]);
-        const token = jwt.sign({ id: user.id, role: user.role, name: user.first_name }, process.env.JWT_SECRET, { expiresIn: "14d" });
-        return res.json({ token, user: { id: user.id, name: user.first_name, email: user.email, role: user.role } });
+        return sendAuthResponse();
       });
     }
   );
+});
+
+/* ================= SUBSCRIPTION PLANS (PUBLIC) ================= */
+router.get("/plans", (req, res) => {
+  try {
+    const plans = tenantPlanService.getAvailablePlans();
+    res.json({ plans });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to load plans" });
+  }
+});
+
+/* ================= SELF SIGNUP (MULTI-TENANT WORKSPACE ONBOARDING) ================= */
+router.post("/self-signup", async (req, res) => {
+  try {
+    const { first_name, email, password, company_name, plan } = req.body || {};
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const cleanName = (first_name || "").trim();
+    const cleanPassword = password || "";
+    const cleanCompany = (company_name || "").trim() || `${cleanName}'s Workspace`;
+    const cleanPlan = (plan || "starter").toLowerCase();
+
+    if (!cleanName || !cleanEmail || !cleanPassword) {
+      return res.status(400).json({ message: "Name, email and password are required" });
+    }
+
+    if (cleanPassword.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    if (!/^[^s@]+@[^s@]+\.[^s@]{2,}$/.test(cleanEmail)) {
+      return res.status(400).json({ message: "Please provide a valid email address" });
+    }
+
+    db.query(`SELECT id FROM users WHERE email = ? LIMIT 1`, [cleanEmail], async (err, existing) => {
+      if (err) {
+        console.error("self-signup check error:", err.message);
+        return res.status(500).json({ message: "Failed to verify account availability" });
+      }
+
+      if (existing && existing.length > 0) {
+        return res.status(409).json({ message: "An account with this email already exists. Please sign in." });
+      }
+
+      try {
+        const tenant = await tenantPlanService.createTenant({
+          name: cleanCompany,
+          plan: cleanPlan,
+        });
+
+        const hash = await bcrypt.hash(cleanPassword, 10);
+        const empId = `EMP-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        db.query(
+          `INSERT INTO users (first_name, email, user_password, role, status, emp_id, tenant_id) VALUES (?, ?, ?, 'admin', 'active', ?, ?)`,
+          [cleanName, cleanEmail, hash, empId, tenant.id],
+          (insertErr, userRes) => {
+            if (insertErr) {
+              console.error("self-signup insert user error:", insertErr.message);
+              return res.status(500).json({ message: "Failed to create account" });
+            }
+
+            const newUserId = userRes.insertId || userRes.lastID || 1;
+
+            try {
+              db.query(
+                `INSERT INTO teammember (first_name, emp_email, emp_id, job_title, emp_role, user_id) VALUES (?, ?, ?, 'Owner', 'Admin', ?)`,
+                [cleanName, cleanEmail, empId, newUserId]
+              );
+            } catch (_) {}
+
+            const secret = process.env.JWT_SECRET || "wa_crm_jwt_default_secret_dev_access_2026";
+            const token = jwt.sign(
+              {
+                id: newUserId,
+                role: "admin",
+                name: cleanName,
+                email: cleanEmail,
+                tenant_id: tenant.id,
+                plan: tenant.plan,
+              },
+              secret,
+              { expiresIn: "14d" }
+            );
+
+            return res.status(201).json({
+              token,
+              user: {
+                id: newUserId,
+                name: cleanName,
+                email: cleanEmail,
+                role: "admin",
+                tenant_id: tenant.id,
+                tenant_name: tenant.name,
+                plan: tenant.plan,
+              },
+              tenant,
+              message: `Workspace "${tenant.name}" created successfully!`,
+            });
+          }
+        );
+      } catch (tenantErr) {
+        console.error("self-signup error:", tenantErr);
+        return res.status(500).json({ message: "Failed to create tenant workspace" });
+      }
+    });
+  } catch (err) {
+    console.error("self-signup exception:", err);
+    return res.status(500).json({ message: "Server error during registration" });
+  }
+});
+
+/* ================= GET CURRENT TENANT & USAGE ================= */
+router.get("/tenant-info", verifyToken, async (req, res) => {
+  try {
+    const tenantId = req.user?.tenant_id || 1;
+    const usageData = await tenantPlanService.getTenantUsage(tenantId);
+    res.json(usageData);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch tenant info" });
+  }
+});
+
+/* ================= SWITCH / UPGRADE PLAN ================= */
+router.post("/switch-plan", verifyToken, isAdmin, async (req, res) => {
+  try {
+    const tenantId = req.user?.tenant_id || 1;
+    const { plan } = req.body;
+    if (!plan) return res.status(400).json({ message: "Plan is required" });
+
+    const updated = await tenantPlanService.switchTenantPlan(tenantId, plan);
+    res.json({
+      message: `Plan upgraded to ${updated.planMeta?.name || plan}`,
+      tenant: updated,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to update plan" });
+  }
 });
 
 /* ================= ADMIN: CREATE USER ================= */

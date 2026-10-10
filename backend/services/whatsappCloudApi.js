@@ -53,6 +53,10 @@ function cleanRecipient(to) {
 }
 
 function formatMetaError(err) {
+  if (!err?.response && ["ECONNABORTED", "ETIMEDOUT", "ECONNRESET", "ERR_NETWORK", "EPIPE"].includes(err?.code)) {
+    err.deliveryUnknown = true;
+    return err;
+  }
   const metaErr = err?.response?.data?.error;
   if (metaErr) {
     const msg = metaErr.message || "Meta API error";
@@ -82,6 +86,18 @@ class WhatsAppCloudApi {
   isConfigured() {
     return !!(this.phoneNumberId && this.accessToken);
   }
+  withAccount(account) {
+    const scoped = new this.constructor();
+    scoped.phoneNumberId = account.phone_number_id;
+    scoped.accessToken = require("../backendutil/cryptoHelper").decrypt(account.access_token);
+    scoped.wabaId = account.waba_id || "";
+    scoped.displayPhoneNumber = account.phone_number || account.display_phone_number || "";
+    scoped.verifiedName = account.verified_name || "";
+    scoped.appSecret = require("../backendutil/cryptoHelper").decrypt(account.app_secret || "");
+    scoped.verifyToken = account.verify_token || "";
+    scoped.businessAccountId = account.business_account_id || "";
+    return scoped;
+  }
 
   getConfig() {
     return {
@@ -108,7 +124,7 @@ class WhatsAppCloudApi {
           type: "text",
           text: { body: text, preview_url: previewUrl || hasLink },
         },
-        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" } }
+        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
       );
       return data;
     } catch (err) {
@@ -149,7 +165,7 @@ class WhatsAppCloudApi {
           type: "interactive",
           interactive,
         },
-        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" } }
+        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
       );
       return data;
     } catch (err) {
@@ -208,7 +224,7 @@ class WhatsAppCloudApi {
           type: "interactive",
           interactive,
         },
-        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" } }
+        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
       );
       return data;
     } catch (err) {
@@ -261,7 +277,7 @@ class WhatsAppCloudApi {
           type: "interactive",
           interactive,
         },
-        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" } }
+        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
       );
       return data;
     } catch (err) {
@@ -287,7 +303,7 @@ class WhatsAppCloudApi {
       const { data } = await axios.post(
         `${BASE_URL}/${this.phoneNumberId}/messages`,
         body,
-        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" } }
+        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
       );
       return data;
     } catch (err) {
@@ -339,7 +355,7 @@ class WhatsAppCloudApi {
       const { data } = await axios.post(
         `${BASE_URL}/${this.phoneNumberId}/messages`,
         body,
-        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" } }
+        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
       );
       return data;
     } catch (err) {
@@ -358,7 +374,7 @@ class WhatsAppCloudApi {
         type: "location",
         location: { latitude, longitude, name, address },
       },
-      { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" } }
+      { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
     );
     return data;
   }
@@ -372,11 +388,16 @@ class WhatsAppCloudApi {
     return data;
   }
 
-  async uploadMedia(fileUrl, mimeType) {
+  async uploadMedia(fileBytes, mimeType, filename = "attachment") {
+    if (!Buffer.isBuffer(fileBytes)) throw new Error("Media upload requires file bytes.");
+    const form = new FormData();
+    form.set("messaging_product", "whatsapp");
+    form.set("type", mimeType);
+    form.set("file", new Blob([fileBytes], { type: mimeType }), filename);
     const { data } = await axios.post(
       `${BASE_URL}/${this.phoneNumberId}/media`,
-      { messaging_product: "whatsapp", file: fileUrl, type: mimeType },
-      { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" } }
+      form,
+      { headers: { Authorization: `Bearer ${this.accessToken}` }, timeout: 60000 }
     );
     return data;
   }
@@ -386,7 +407,7 @@ class WhatsAppCloudApi {
    * Meta requires two authenticated hops: media id -> temporary URL -> bytes.
    * Returns { url, filename, mimetype } with a URL this server can serve.
    */
-  async downloadMedia(mediaId) {
+  async downloadMedia(mediaId, { persist = require("./waChatPrivacy").serverChatStorageEnabled() } = {}) {
     if (!this.isConfigured()) throw new Error("WhatsApp Cloud API not configured");
     if (!mediaId) throw new Error("mediaId required");
 
@@ -398,8 +419,8 @@ class WhatsAppCloudApi {
     const safeId = String(mediaId).replace(/[^a-zA-Z0-9_-]/g, "");
 
     try {
-      const hit = fs.readdirSync(cacheDir).find((f) => f.startsWith(safeId + "."));
-      if (hit) return { url: `/uploads/wa-media/cloud/${hit}`, filename: hit };
+      const hit = persist && require("./waMediaMetadata").cachedMedia(cacheDir, safeId, "/uploads/wa-media/cloud");
+      if (hit) return hit;
     } catch (_) {}
 
     const meta = await this.getMediaUrl(mediaId);
@@ -412,11 +433,13 @@ class WhatsAppCloudApi {
     });
 
     const mimetype = meta.mime_type || bin.headers["content-type"] || "application/octet-stream";
+    if (!persist) return { data: Buffer.from(bin.data).toString("base64"), filename: `${safeId}.${mimeToExtension(mimetype, "bin")}`, mimetype };
     const ext = mimeToExtension(mimetype, (mimetype.split("/")[1] || "bin").split(";")[0]);
     const safeExt = (ext || "bin").replace(/[^a-zA-Z0-9]/g, "");
     const filename = `${safeId}.${safeExt}`;
     fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(path.join(cacheDir, filename), Buffer.from(bin.data));
+    require("./waMediaMetadata").saveMediaMetadata(path.join(cacheDir, filename), { filename, mimetype });
 
     return { url: `/uploads/wa-media/cloud/${filename}`, filename, mimetype };
   }
@@ -595,7 +618,7 @@ class WhatsAppCloudApi {
     const { data } = await axios.post(
       `${BASE_URL}/${this.phoneNumberId}/whatsapp_business_profile`,
       { messaging_product: "whatsapp", ...profile },
-      { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" } }
+      { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
     );
     return data;
   }
@@ -610,7 +633,7 @@ class WhatsAppCloudApi {
           status: "read",
           message_id: messageId,
         },
-        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" } }
+        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
       );
       return { success: true, data };
     } catch (err) {

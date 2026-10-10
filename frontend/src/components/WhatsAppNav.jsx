@@ -1,4 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 import {
   MessageCircle,
   FileText,
@@ -25,6 +26,7 @@ import { API } from "../config/api";
 import socket from "../socket/socket";
 
 export default function WhatsAppNav() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [showTestModal, setShowTestModal] = useState(false);
@@ -223,6 +225,7 @@ export default function WhatsAppNav() {
       path: "/whatsapp/accounts",
       icon: Smartphone,
     },
+    ...(user?.role === "admin" ? [{ id: "client-portal", label: "Client portal", title: "Client access, documents and service requests", path: "/whatsapp/client-portal", icon: UserCheck }] : []),
   ];
 
   const isTabActive = (tab) => {

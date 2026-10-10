@@ -230,6 +230,18 @@ class SQLiteDatabaseAdapter {
 
     // 4. Create all CRM and WhatsApp tables and seed initial users
     this.createCoreTables();
+    this.sqlite.exec("CREATE TABLE IF NOT EXISTS wa_webhook_claims (event_type TEXT NOT NULL, wa_message_id TEXT NOT NULL, status TEXT NOT NULL, claimed_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (event_type, wa_message_id, status))");
+    this.sqlite.exec("INSERT OR IGNORE INTO wa_webhook_claims (event_type, wa_message_id, status) SELECT event_type, wa_message_id, status FROM wa_webhook_events WHERE event_type IN ('incoming_message', 'status_update') AND wa_message_id IS NOT NULL AND status IN ('received', 'sent', 'delivered', 'read', 'failed')");
+    const mediaColumns = this.sqlite.prepare("PRAGMA table_info(wa_message_logs)").all();
+    if (!mediaColumns.some((column) => column.name === "media_id")) this.sqlite.exec("ALTER TABLE wa_message_logs ADD COLUMN media_id TEXT DEFAULT NULL");
+    const accountColumns = new Set(this.sqlite.prepare("PRAGMA table_info(wa_accounts)").all().map((column) => column.name));
+    for (const [name, definition] of Object.entries({ created_by: "INTEGER DEFAULT NULL", phone_number_id: "TEXT DEFAULT NULL", access_token: "TEXT DEFAULT NULL", waba_id: "TEXT DEFAULT NULL", business_account_id: "TEXT DEFAULT NULL", quality_rating: "TEXT DEFAULT NULL", messaging_limit: "TEXT DEFAULT NULL" })) {
+      if (!accountColumns.has(name)) this.sqlite.exec(`ALTER TABLE wa_accounts ADD COLUMN ${name} ${definition}`);
+    }
+    const automationColumns = new Set(this.sqlite.prepare("PRAGMA table_info(wa_automation_logs)").all().map((column) => column.name));
+    for (const [name, definition] of Object.entries({ execution_step: "INTEGER DEFAULT 1", session_key: "TEXT DEFAULT NULL", target_chat_id: "TEXT DEFAULT NULL", claimed_at: "TEXT DEFAULT NULL", wa_message_id: "TEXT DEFAULT NULL", trigger_data: "TEXT DEFAULT NULL", scheduled_for: "TEXT DEFAULT NULL" })) {
+      if (!automationColumns.has(name)) this.sqlite.exec(`ALTER TABLE wa_automation_logs ADD COLUMN ${name} ${definition}`);
+    }
     await this.seedDefaultAdmin();
 
     // 5. Start Cloudflare R2 automated background sync schedule
@@ -268,7 +280,22 @@ class SQLiteDatabaseAdapter {
         role TEXT DEFAULT 'admin',
         status TEXT DEFAULT 'active',
         two_factor_enabled INTEGER DEFAULT 0,
+        tenant_id INTEGER DEFAULT 1,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS tenants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        slug TEXT UNIQUE,
+        plan TEXT DEFAULT 'growth',
+        plan_status TEXT DEFAULT 'active',
+        max_senders INTEGER DEFAULT 10,
+        max_monthly_messages INTEGER DEFAULT 25000,
+        ai_replies_enabled INTEGER DEFAULT 1,
+        flows_enabled INTEGER DEFAULT 1,
+        sender_pools_enabled INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )`,
       `CREATE TABLE IF NOT EXISTS teammember (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1210,13 +1237,35 @@ class SQLiteDatabaseAdapter {
 
   async seedDefaultAdmin() {
     try {
+      try {
+        const info = this.sqlite.prepare("PRAGMA table_info(users)").all();
+        if (!info.some((c) => c.name === "tenant_id")) {
+          this.sqlite.prepare("ALTER TABLE users ADD COLUMN tenant_id INTEGER DEFAULT 1").run();
+        }
+      } catch (_) {}
+
+      try {
+        const checkTenant = this.sqlite.prepare("SELECT id FROM tenants WHERE id = 1 LIMIT 1").get();
+        if (!checkTenant) {
+          this.sqlite.prepare(`
+            INSERT OR IGNORE INTO tenants (id, name, slug, plan, plan_status, max_senders, max_monthly_messages, ai_replies_enabled, flows_enabled, sender_pools_enabled)
+            VALUES (1, 'Madhura Tech CRM Workspace', 'madhura-primary', 'growth', 'active', 10, 25000, 1, 1, 1)
+          `).run();
+        }
+      } catch (_) {}
+
       const checkStmt = this.sqlite.prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
       const existing = checkStmt.get("admin@madhuratech.com");
       if (!existing) {
-        const hash = await bcrypt.hash("Admin@123", 10);
+        const password = process.env.ADMIN_SEED_PASSWORD;
+        if (!password || password.length < 12 || /CHANGE_ME|REPLACE_ME/i.test(password)) {
+          console.warn("[SQLite Engine] Admin not seeded: configure ADMIN_SEED_PASSWORD (at least 12 characters)");
+          return;
+        }
+        const hash = await bcrypt.hash(password, 10);
         const insertStmt = this.sqlite.prepare(`
-          INSERT INTO users (first_name, last_name, emp_id, email, user_password, role, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO users (first_name, last_name, emp_id, email, user_password, role, status, tenant_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 1)
         `);
         insertStmt.run("Admin", "User", "EMP001", "admin@madhuratech.com", hash, "admin", "active");
 

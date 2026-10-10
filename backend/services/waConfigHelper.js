@@ -1,6 +1,5 @@
 const db = require("../config/database");
 const wa = require("./whatsappCloudApi");
-const { decrypt } = require("../backendutil/cryptoHelper");
 
 // Resolve the Cloud API config for a user.
 //
@@ -11,12 +10,13 @@ const { decrypt } = require("../backendutil/cryptoHelper");
 // single process-wide config from the environment.
 async function loadUserConfig(userId) {
   if (!userId) return false;
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     db.query(
-      "SELECT * FROM user_wa_configs WHERE user_id = ? AND is_enabled = 1 LIMIT 1",
+      "SELECT * FROM user_wa_configs WHERE user_id = ? LIMIT 1",
       [userId],
       (err, rows) => {
-        if (!err && rows && rows.length > 0) return resolve(rows[0]);
+        if (err) return reject(err);
+        if (rows && rows.length > 0) return resolve(rows[0]);
         resolve(false);
       }
     );
@@ -30,40 +30,16 @@ function hasSystemEnvConfig() {
   return Boolean(process.env.WA_PHONE_NUMBER_ID && process.env.WA_ACCESS_TOKEN);
 }
 
+// Legacy readiness call: never mutates the process-wide provider client.
 async function configureForUser(userId) {
+  return (await cloudClientForUser(userId)).isConfigured();
+}
+
+async function cloudClientForUser(userId) {
   const config = await loadUserConfig(userId);
-  if (!config) {
-    if (hasSystemEnvConfig()) {
-      resetToEnvConfig();
-      return true;
-    }
-    return false;
-  }
-
-  wa.phoneNumberId = config.phone_number_id;
-  wa.accessToken = decrypt(config.access_token);
-  wa.wabaId = config.waba_id || "";
-  wa.appSecret = decrypt(config.app_secret || "");
-  wa.verifyToken = config.verify_token || "crm_verify_123";
-  wa.businessAccountId = config.business_account_id || "";
-
-  // Attempt to fetch phone number info if not already cached
-  if (wa.phoneNumberId && wa.accessToken && !wa.displayPhoneNumber) {
-    try {
-      wa.getPhoneNumberInfo()
-        .then((info) => {
-          if (info?.display_phone_number) {
-            wa.displayPhoneNumber = info.display_phone_number;
-          }
-          if (info?.verified_name) {
-            wa.verifiedName = info.verified_name;
-          }
-        })
-        .catch(() => {});
-    } catch (_) {}
-  }
-
-  return true;
+  if (config && (config.is_enabled === 0 || config.is_enabled === false)) return wa.withAccount({});
+  if (config) return wa.withAccount({ ...config, access_token: config.access_token, phone_number: config.display_phone_number });
+  return wa.withAccount({ phone_number_id: process.env.WA_PHONE_NUMBER_ID || "", access_token: process.env.WA_ACCESS_TOKEN || "", waba_id: process.env.WA_WABA_ID || "", phone_number: process.env.WA_DISPLAY_PHONE_NUMBER || "", app_secret: process.env.WA_APP_SECRET || "", verify_token: process.env.WA_VERIFY_TOKEN || "", business_account_id: process.env.WA_BUSINESS_ACCOUNT_ID || "", verified_name: process.env.WA_VERIFIED_NAME || "" });
 }
 
 function resetToEnvConfig() {
@@ -77,4 +53,4 @@ function resetToEnvConfig() {
   wa.verifiedName = process.env.WA_VERIFIED_NAME || "";
 }
 
-module.exports = { loadUserConfig, configureForUser, resetToEnvConfig, hasSystemEnvConfig };
+module.exports = { loadUserConfig, configureForUser, resetToEnvConfig, hasSystemEnvConfig, cloudClientForUser };

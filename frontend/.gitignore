@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/.qa/
 /.pnp
 .pnp.js
 *mov

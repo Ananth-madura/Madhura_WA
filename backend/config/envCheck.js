@@ -54,6 +54,7 @@ const SPEC = [
   { key: "DB_USER", required: true },
   { key: "DB_PASS", required: true, secret: true },
   { key: "JWT_SECRET", required: true, secret: true },
+  { key: "SMTP_ENCRYPTION_KEY", required: true, secret: true },
   { key: "PUBLIC_BASE_URL", required: true, dedicated: true },
   { key: "ALLOWED_ORIGINS", required: true, dedicated: true },
   { key: "ADMIN_SEED_PASSWORD", required: false, secret: true },
@@ -200,20 +201,8 @@ function checkEnv(env = process.env) {
   const warnings = [];
   const infos = [];
 
-  /*
-   * Strict mode is opt-in.
-   *
-   * It used to be the default, which meant a service created by hand rather
-   * than from render.yaml could never start: every variable was reported
-   * missing and the process exited, even though the values were plainly present
-   * in the repository's blueprint. A container that refuses to boot is a poor
-   * diagnostic. Now a missing or defaulted value warns, /health reports it, and
-   * the process starts.
-   *
-   * Set REQUIRE_HARD_CONFIG=1 to restore the fail-fast behaviour once the
-   * environment is genuinely known-good.
-   */
-  const strict = ["1", "true", "yes", "on"].includes(String(env.REQUIRE_HARD_CONFIG || "").toLowerCase());
+  // Production always fails on missing required configuration.
+  const strict = isProd || ["1", "true", "yes", "on"].includes(String(env.REQUIRE_HARD_CONFIG || "").toLowerCase());
 
   // Anything fatal below becomes a warning unless strict mode is on.
   const fail = (message) => (strict ? errors : warnings).push(message);
@@ -271,6 +260,9 @@ function checkEnv(env = process.env) {
   }
 
   if (isProd) {
+    if (String(env.JWT_SECRET || "").length < 32) fail("JWT_SECRET must contain at least 32 characters");
+    const key = String(env.SMTP_ENCRYPTION_KEY || "");
+    if (!(Buffer.byteLength(key) === 32 || /^[a-f0-9]{64}$/i.test(key))) fail("SMTP_ENCRYPTION_KEY must be 32 bytes or 64 hexadecimal characters");
     const pub = checkPublicBaseUrl(env.PUBLIC_BASE_URL);
     if (pub) fail(`PUBLIC_BASE_URL: ${pub.message}`);
 

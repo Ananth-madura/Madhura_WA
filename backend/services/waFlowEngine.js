@@ -9,6 +9,21 @@ const db = require("../config/database");
  */
 
 class WaFlowEngine {
+  getMenuOptions(config = {}, nodeType = "interactive_menu", vars = {}) {
+    const prefix = nodeType === "send_buttons" ? "btn" : nodeType === "send_list" ? "row" : "opt";
+    const sections = Array.isArray(config.sections) && config.sections.length
+      ? config.sections : [{ buttons: config.buttons || config.rows || config.options || [] }];
+    const options = [];
+    for (const section of sections) {
+      for (const option of section.buttons || section.rows || section.options || []) {
+        const id = String(option.reply_id || option.id || `${prefix}_${options.length + 1}`);
+        options.push({ ...option, id, reply_id: id,
+          title: this.interpolate(option.title || option.label || option.text || option.name || `Option ${options.length + 1}`, vars),
+          next_node_key: option.next_node_key || option.nextNodeId || option.next_node || option.target_node });
+      }
+    }
+    return options.slice(0, 10);
+  }
   /**
    * Helper: Escape regex special characters
    */
@@ -126,20 +141,24 @@ class WaFlowEngine {
   /**
    * Record outbound bot message in database & broadcast live WebSocket event to CRM chat
    */
-   async recordAndEmitBotMessage(phone, text, type = "text", interactivePayload = null, sessionKey = null, targetChatId = null) {
+   async recordAndEmitBotMessage(phone, text, type = "text", interactivePayload = null, sessionKey = null, targetChatId = null, delivery = {}) {
     let cleanPhone = String(phone || "").replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
     const waService = require("./whatsappService");
     const activeSessionKey = sessionKey || waService.defaultKey;
     const chatId = targetChatId || `${cleanPhone}@c.us`;
-    const msgId = "bot_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+    const msgId = delivery.id || "bot_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+    const status = delivery.status || "sent";
 
     // 1. Insert DB log for audit & live chat history (with active session_key)
     await db.promise().query(
-      `INSERT INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, interactive_payload, created_at)
-       VALUES (?, ?, 'outbound', ?, ?, ?, 'delivered', ?, NOW())`,
-      [activeSessionKey, cleanPhone, type, text, msgId, interactivePayload ? JSON.stringify(interactivePayload) : null]
+      `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, interactive_payload, created_at)
+       VALUES (?, ?, 'outbound', ?, ?, ?, ?, ?, NOW())`,
+      [activeSessionKey, cleanPhone, type, text, msgId, status, interactivePayload ? JSON.stringify(interactivePayload) : null]
     ).catch(() => {});
+    if (interactivePayload) {
+      await db.promise().query("UPDATE wa_message_logs SET interactive_payload = ?, message_type = ? WHERE wa_message_id = ? AND session_key = ?", [JSON.stringify(interactivePayload), type, msgId, activeSessionKey]).catch(() => {});
+    }
 
     // 2. Update wa_contacts last_message
     await db.promise().query(
@@ -164,14 +183,14 @@ class WaFlowEngine {
           timestamp: Math.floor(Date.now() / 1000),
           isMe: true,
           type: type,
-          status: "delivered",
+          status,
           interactive: interactivePayload,
         };
-        io.emit("wa_message_sent", { phone: cleanPhone, chatId, message: liveMsg });
-        io.emit("wa_message", { phone: cleanPhone, chatId, message: liveMsg });
+        io.to(`user:${activeSessionKey}`).emit("wa_message_sent", { phone: cleanPhone, chatId, sessionKey: activeSessionKey, message: liveMsg });
+        io.to(`user:${activeSessionKey}`).emit("wa_message", { phone: cleanPhone, chatId, sessionKey: activeSessionKey, message: liveMsg });
         if (chatId !== `${cleanPhone}@c.us`) {
-          io.emit("wa_message_sent", { phone: cleanPhone, chatId: `${cleanPhone}@c.us`, message: liveMsg });
-          io.emit("wa_message", { phone: cleanPhone, chatId: `${cleanPhone}@c.us`, message: liveMsg });
+          io.to(`user:${activeSessionKey}`).emit("wa_message_sent", { phone: cleanPhone, chatId: `${cleanPhone}@c.us`, sessionKey: activeSessionKey, message: liveMsg });
+          io.to(`user:${activeSessionKey}`).emit("wa_message", { phone: cleanPhone, chatId: `${cleanPhone}@c.us`, sessionKey: activeSessionKey, message: liveMsg });
         }
       }
     } catch (_) {}
@@ -191,8 +210,10 @@ class WaFlowEngine {
       const app = require("../server");
       const io = app.get && app.get("io");
       if (io) {
-        io.emit("wa_message_failed", { phone: cleanPhone, msgId, error: errorMessage });
-        io.emit("wa_message_status", { id: msgId, status: "failed", error: errorMessage });
+        const [owners] = await db.promise().query("SELECT session_key FROM wa_message_logs WHERE wa_message_id = ? LIMIT 1", [msgId]);
+        if (!owners[0]?.session_key) return;
+        io.to(`user:${owners[0].session_key}`).emit("wa_message_failed", { phone: cleanPhone, msgId, error: errorMessage });
+        io.to(`user:${owners[0].session_key}`).emit("wa_message_status", { id: msgId, status: "failed", error: errorMessage });
       }
     } catch (_) {}
   }
@@ -448,7 +469,7 @@ class WaFlowEngine {
       try {
         const app = require("../server");
         const io = app.get && app.get("io");
-        if (io) io.emit("wa_agent_handoff", { phone: cleanPhone, flowId: run.flow_id, note: "Customer typed 'agent'", vars });
+        if (io) io.to(`user:${activeSessionKey}`).emit("wa_agent_handoff", { phone: cleanPhone, flowId: run.flow_id, note: "Customer typed 'agent'", vars });
       } catch (_) {}
       return true;
     }
@@ -590,34 +611,8 @@ class WaFlowEngine {
       const tappedId = interactiveReplyId || rawText;
       const lowerRaw = rawText.toLowerCase();
       
-      let buttons = [];
-      if (Array.isArray(config.sections) && config.sections.length > 0) {
-        config.sections.forEach(sec => {
-          (sec.buttons || sec.options || sec.rows || []).forEach(b => {
-            const bTitle = b.label || b.title || b.text || b.name || "";
-            buttons.push({
-              ...b,
-              id: b.id || b.reply_id,
-              reply_id: b.reply_id || b.id,
-              title: bTitle,
-              next_node_key: b.nextNodeId || b.next_node_key || b.next_node || b.target_node
-            });
-          });
-        });
-      } else {
-        buttons = (config.buttons || config.rows || config.options || []).map(b => {
-          const bTitle = b.label || b.title || b.text || b.name || "";
-          return {
-            ...b,
-            id: b.id || b.reply_id,
-            reply_id: b.reply_id || b.id,
-            title: bTitle,
-            next_node_key: b.nextNodeId || b.next_node_key || b.next_node || b.target_node
-          };
-        });
-      }
-      
-      if (!Array.isArray(vars._nav_history)) vars._nav_history = [];
+      const buttons = this.getMenuOptions(config, currentNode.node_type, vars);
+            if (!Array.isArray(vars._nav_history)) vars._nav_history = [];
 
       // 1. Navigation Command: Back / Previous Menu
       const isBackCmd = ["0", "back", "previous", "prev", "go back", "return", "undo", "exit", "b", "p", "⬅️", "🔙", "↩️"].includes(lowerRaw);
@@ -901,6 +896,8 @@ class WaFlowEngine {
           const renderedHeader = config.header_text ? this.interpolate(config.header_text, vars) : null;
           const renderedFooter = config.footer_text ? this.interpolate(config.footer_text, vars) : null;
           
+          const menuOptions = this.getMenuOptions(config, "interactive_menu", vars);
+          let optionIndex = 0;
           let sections = [];
           if (Array.isArray(config.sections) && config.sections.length > 0) {
             sections = config.sections.map(sec => ({
@@ -909,8 +906,8 @@ class WaFlowEngine {
                 const bTitle = this.interpolate(b.label || b.title || b.text || b.name || `Option ${bIdx + 1}`, vars);
                 return {
                   ...b,
-                  id: b.id || b.reply_id || `opt_${bIdx + 1}`,
-                  reply_id: b.reply_id || b.id || `opt_${bIdx + 1}`,
+                  id: menuOptions[optionIndex]?.id || `opt_${optionIndex + 1}`,
+                  reply_id: menuOptions[optionIndex++]?.id || `opt_${optionIndex}`,
                   label: bTitle,
                   title: bTitle,
                   description: b.description ? this.interpolate(b.description, vars) : undefined,
@@ -923,8 +920,8 @@ class WaFlowEngine {
               const bTitle = this.interpolate(b.label || b.title || b.text || b.name || `Option ${bIdx + 1}`, vars);
               return {
                 ...b,
-                id: b.id || b.reply_id || `opt_${bIdx + 1}`,
-                reply_id: b.reply_id || b.id || `opt_${bIdx + 1}`,
+                id: menuOptions[optionIndex]?.id || `opt_${optionIndex + 1}`,
+                reply_id: menuOptions[optionIndex++]?.id || `opt_${optionIndex}`,
                 label: bTitle,
                 title: bTitle,
                 description: b.description ? this.interpolate(b.description, vars) : undefined,
@@ -934,7 +931,8 @@ class WaFlowEngine {
             sections = [{ title: null, buttons: flatBtns }];
           }
 
-          await this.sendFlowInteractiveMenu(cleanPhone, renderedText, sections, renderedHeader, renderedFooter, sessionKey, targetChatId);
+          const delivered = await this.sendFlowInteractiveMenu(cleanPhone, renderedText, sections, renderedHeader, renderedFooter, sessionKey, targetChatId, { requireNative: !["allow_text", "web_text"].includes(config.delivery_mode), preferredEngine: config.delivery_mode === "web_text" ? "web_session" : config.preferred_engine || null });
+          if (!delivered) return await this.failInteractiveRun(runId, nodeKey);
           
           // Suspends execution — wait for user reply
           await db.promise().query(
@@ -959,7 +957,8 @@ class WaFlowEngine {
               next_node_key: b.next_node_key || b.nextNodeId || b.target_node || b.next_node
             };
           });
-          await this.sendFlowButtons(cleanPhone, renderedText, buttons, renderedHeader, renderedFooter, sessionKey, targetChatId);
+          const delivered = await this.sendFlowButtons(cleanPhone, renderedText, buttons, renderedHeader, renderedFooter, sessionKey, targetChatId);
+          if (!delivered) return await this.failInteractiveRun(runId, nodeKey);
           
           // Suspends execution — wait for user reply
           await db.promise().query(
@@ -986,7 +985,8 @@ class WaFlowEngine {
             };
           });
           
-          await this.sendFlowList(cleanPhone, renderedText, rows, renderedButtonText, renderedTitle, sessionKey, targetChatId);
+          const delivered = await this.sendFlowList(cleanPhone, renderedText, rows, renderedButtonText, renderedTitle, sessionKey, targetChatId, { requireNative: !["allow_text", "web_text"].includes(config.delivery_mode), preferredEngine: config.delivery_mode === "web_text" ? "web_session" : config.preferred_engine || null });
+          if (!delivered) return await this.failInteractiveRun(runId, nodeKey);
 
           // Suspends execution — wait for user reply
           await db.promise().query(
@@ -1265,7 +1265,7 @@ class WaFlowEngine {
             const app = require("../server");
             const io = app.get && app.get("io");
             if (io) {
-              io.emit("wa_agent_handoff", {
+              io.to(`user:${sessionKey || waService.defaultKey}`).emit("wa_agent_handoff", {
                 phone: cleanPhone,
                 flowId,
                 note: config.note || "Customer requested live support",
@@ -1552,29 +1552,8 @@ class WaFlowEngine {
           vars.last_input = rawTrimmed;
           nextNodeKey = currentNode.config?.next_node_key;
         } else if (currentNode.node_type === "send_buttons" || currentNode.node_type === "send_list" || currentNode.node_type === "interactive_menu") {
-          let buttons = [];
-          if (Array.isArray(currentNode.config?.sections) && currentNode.config.sections.length > 0) {
-            currentNode.config.sections.forEach(sec => {
-              (sec.buttons || sec.options || sec.rows || []).forEach(b => {
-                buttons.push({
-                  ...b,
-                  id: b.id || b.reply_id,
-                  reply_id: b.reply_id || b.id,
-                  title: b.label || b.title || "",
-                  next_node_key: b.nextNodeId || b.next_node_key || b.next_node || b.target_node
-                });
-              });
-            });
-          } else {
-            buttons = (currentNode.config?.buttons || currentNode.config?.rows || currentNode.config?.options || []).map(b => ({
-              ...b,
-              id: b.id || b.reply_id,
-              reply_id: b.reply_id || b.id,
-              title: b.label || b.title || "",
-              next_node_key: b.nextNodeId || b.next_node_key || b.next_node || b.target_node
-            }));
-          }
-          if (!Array.isArray(vars._nav_history)) vars._nav_history = [];
+          const buttons = this.getMenuOptions(currentNode.config, currentNode.node_type, vars);
+                    if (!Array.isArray(vars._nav_history)) vars._nav_history = [];
 
           // Navigation command: Back / Previous
           const isBackCmd = ["0", "back", "previous", "prev", "go back", "return", "undo", "exit", "b", "p", "⬅️", "🔙", "↩️"].includes(lowerText);
@@ -1719,6 +1698,11 @@ class WaFlowEngine {
         const text = this.interpolate(node.config?.text || "", vars);
         simulatedMessages.push({ sender: "bot", type: "text", text, at: new Date() });
         currentNodeKey = node.config?.next_node_key;
+      } else if (node.node_type === "send_cta") {
+        simulatedMessages.push({ sender: "bot", type: "cta_url", text: this.interpolate(node.config?.text || "", vars),
+          button_text: this.interpolate(node.config?.display_text || node.config?.button_text || "Open link", vars),
+          url: this.interpolate(node.config?.url || "", vars), at: new Date() });
+        currentNodeKey = node.config?.next_node_key;
       } else if (node.node_type === "send_media") {
         const caption = this.interpolate(node.config?.caption || node.config?.text || "", vars);
         const rawUrl = this.interpolate(node.config?.media_url || node.config?.url || "", vars);
@@ -1772,6 +1756,9 @@ class WaFlowEngine {
           sections = [{ title: null, buttons: flatBtns }];
         }
 
+        const resolvedOptions = this.getMenuOptions(node.config, "interactive_menu", vars);
+        let optionIndex = 0;
+        sections = sections.map((section) => ({ ...section, buttons: section.buttons.map((button) => ({ ...button, id: resolvedOptions[optionIndex++]?.id || button.id })) }));
         simulatedMessages.push({
           sender: "bot",
           type: "interactive_menu",
@@ -1792,10 +1779,7 @@ class WaFlowEngine {
         };
       } else if (node.node_type === "send_buttons") {
         const text = this.interpolate(node.config?.text || "", vars);
-        const buttons = (node.config?.buttons || []).map(b => ({
-          ...b,
-          title: this.interpolate(b.title, vars)
-        }));
+        const buttons = this.getMenuOptions(node.config, "send_buttons", vars);
         simulatedMessages.push({
           sender: "bot",
           type: "buttons",
@@ -1816,11 +1800,7 @@ class WaFlowEngine {
         };
       } else if (node.node_type === "send_list") {
         const text = this.interpolate(node.config?.text || node.config?.body || "Please choose:", vars);
-        const rows = (node.config?.rows || []).map(r => ({
-          ...r,
-          title: this.interpolate(r.title, vars),
-          description: r.description ? this.interpolate(r.description, vars) : null
-        }));
+        const rows = this.getMenuOptions(node.config, "send_list", vars).map((row) => ({ ...row, description: row.description ? this.interpolate(row.description, vars) : null }));
         simulatedMessages.push({
           sender: "bot",
           type: "list",
@@ -1973,6 +1953,13 @@ class WaFlowEngine {
     return true;
   }
 
+  async failInteractiveRun(runId, nodeKey) {
+    await db.promise().query("UPDATE wa_flow_runs SET status = 'failed', ended_at = NOW(), end_reason = 'menu_delivery_failed' WHERE id = ?", [runId]);
+    await this.logEvent(runId, nodeKey, "menu_delivery_failed");
+    // Consume this inbound event; another automatic reply must not mask the failure.
+    return true;
+  }
+
   async completeRun(runId, reason) {
     try {
       const [runs] = await db.promise().query(
@@ -2084,8 +2071,9 @@ class WaFlowEngine {
    * Titles are normalized centrally so an authored "1. Our Services" reaches
    * Meta as "Our Services" — the ordinal only ever appears in the text fallback.
    */
-  async sendFlowButtons(phone, text, buttons, headerText, footerText, sessionKey = null, targetChatId = null) {
+  async sendFlowButtons(phone, text, buttons, headerText, footerText, sessionKey = null, targetChatId = null, deliveryOptions = {}) {
     return this._dispatchInteractive({
+      ...deliveryOptions,
       phone,
       body: text,
       header: headerText,
@@ -2125,15 +2113,7 @@ class WaFlowEngine {
       .filter(Boolean)
       .join("\n\n");
 
-    const msgId = await this.recordAndEmitBotMessage(
-      cleanPhone,
-      fallbackText,
-      "interactive",
-      { type: "cta_url", header: headerText, footer: footerText, text, button_text: displayText, url },
-      sessionKey,
-      targetChatId
-    );
-
+    const payload = { type: "cta_url", header: headerText, footer: footerText, text, button_text: displayText, url };
     try {
       const sendTarget = (targetChatId && targetChatId.includes("@lid")) ? targetChatId : cleanPhone;
       const res = await waLoadBalancer.sendCTAButtonMessage({
@@ -2146,19 +2126,22 @@ class WaFlowEngine {
         fallbackText,
         sessionKey,
       });
+      await this.recordAndEmitBotMessage(cleanPhone, fallbackText, "interactive", { ...payload, native: !!res.native }, sessionKey, targetChatId,
+        { id: require("./waInteractive").deliveryMessageId(res), status: "sent" });
       console.log(
         `🔗 [WA Flow] cta_url -> +${cleanPhone} via ${res?.engineUsed || "WA"} (${res?.native ? "native button" : "plain link fallback"})`
       );
       return res;
     } catch (err) {
       console.error(`❌ [WA FlowEngine] Failed to deliver cta_url to +${cleanPhone}:`, err?.message || err);
-      await this.markBotMessageFailed(msgId, cleanPhone, err?.message || "Failed to send");
+      await this.recordAndEmitBotMessage(cleanPhone, fallbackText, "interactive", payload, sessionKey, targetChatId, { status: "failed" });
       return null;
     }
   }
 
-  async sendFlowList(phone, text, rows, buttonText = "View Options", title = null, sessionKey = null, targetChatId = null) {
+  async sendFlowList(phone, text, rows, buttonText = "View Options", title = null, sessionKey = null, targetChatId = null, deliveryOptions = {}) {
     return this._dispatchInteractive({
+      ...deliveryOptions,
       phone,
       body: text,
       header: title,
@@ -2173,8 +2156,9 @@ class WaFlowEngine {
     });
   }
 
-  async sendFlowInteractiveMenu(phone, text, sections, headerText = null, footerText = null, sessionKey = null, targetChatId = null) {
+  async sendFlowInteractiveMenu(phone, text, sections, headerText = null, footerText = null, sessionKey = null, targetChatId = null, deliveryOptions = {}) {
     return this._dispatchInteractive({
+      ...deliveryOptions,
       phone,
       body: text,
       header: headerText,
@@ -2192,9 +2176,9 @@ class WaFlowEngine {
   /**
    * Shared interactive dispatcher for the three send_* node types.
    *
-   * Records + broadcasts the bot message to Live Chat first (so the CRM shows
-   * the menu even if delivery later fails), then hands off to waLoadBalancer,
-   * which owns the cloud-vs-text decision, failover and quota accounting.
+   * waLoadBalancer chooses native buttons/list or a numbered fallback.
+   * Save the actual delivered options with the provider ID after dispatch;
+   * unsuccessful menus are recorded with failed status.
    */
   async _dispatchInteractive({
     phone,
@@ -2209,6 +2193,8 @@ class WaFlowEngine {
     targetChatId = null,
     payloadType,
     payloadExtra = {},
+    requireNative = false,
+    preferredEngine = null,
   }) {
     const waLoadBalancer = require("./waLoadBalancer");
     const waInteractive = require("./waInteractive");
@@ -2222,7 +2208,7 @@ class WaFlowEngine {
     const flat = waInteractive.flattenSections(sections);
     const hasDescriptions = flat.some((r) => r.description);
     const asList =
-      forceList || sectioned || hasDescriptions || flat.length > waInteractive.LIMITS.maxButtons || sections.length > 1;
+      forceList || hasDescriptions || flat.length > waInteractive.LIMITS.maxButtons || sections.length > 1;
 
     if (!flat.length) {
       console.warn(`[WA Flow] ${payloadType} node for +${cleanPhone} has no options — nothing to send.`);
@@ -2237,21 +2223,17 @@ class WaFlowEngine {
       sectioned: asList && sections.length > 1,
     });
 
-    const msgId = await this.recordAndEmitBotMessage(
-      cleanPhone,
-      fallbackText,
-      "interactive",
-      { type: payloadType, header, footer, text: body, ...payloadExtra },
-      sessionKey,
-      targetChatId
-    );
+    const payload = { type: asList ? "list" : "buttons", header, footer, text: body, button_text: buttonText,
+      ...(asList ? { sections } : { buttons: waInteractive.normalizeButtons(flat) }) };
 
     try {
       const sendTarget = (targetChatId && targetChatId.includes("@lid")) ? targetChatId : cleanPhone;
-      const opts = { phone: sendTarget, body, header, footer, fallbackText, sessionKey };
+      const opts = { phone: sendTarget, body, header, footer, fallbackText, sessionKey, requireNative, preferredEngine };
       const res = asList
         ? await waLoadBalancer.sendInteractiveList({ ...opts, sections, buttonText })
         : await waLoadBalancer.sendInteractiveButtons({ ...opts, buttons: flat });
+      await this.recordAndEmitBotMessage(cleanPhone, fallbackText, "interactive", { ...payload, native: !!res?.native }, sessionKey, targetChatId,
+        { id: waInteractive.deliveryMessageId(res), status: "sent" });
 
       console.log(
         `🔘 [WA Flow] ${payloadType} -> +${cleanPhone} via ${res?.engineUsed || "WA"} (${res?.native ? "native interactive" : "text fallback"})`
@@ -2259,7 +2241,7 @@ class WaFlowEngine {
       return res;
     } catch (err) {
       console.error(`❌ [WA FlowEngine] Failed to deliver ${payloadType} to +${cleanPhone}:`, err?.message || err);
-      await this.markBotMessageFailed(msgId, cleanPhone, err?.message || "Failed to send");
+      await this.recordAndEmitBotMessage(cleanPhone, fallbackText, "interactive", payload, sessionKey, targetChatId, { status: "failed" });
       return null;
     }
   }

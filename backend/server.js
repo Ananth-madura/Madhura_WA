@@ -314,6 +314,7 @@ app.use((req, res, next) => {
 // Auth plane (login/register/2FA + verifyToken) — duplicated from the CRM so
 // the WA frontend can log in against the cloned users table. See README.
 app.use("/api/auth", require("./routes/authRoutes"));
+app.use("/api/client-portal", require("./routes/clientPortalRoutes"));
 
 // WhatsApp session engine (QR / chats / send / media). Every route is behind
 // verifyToken — supports JWT tokens as well as X-API-Key for external CRM connection.
@@ -425,6 +426,7 @@ function startServer() {
     // Ensure WhatsApp tables exist
     try {
       await require("./services/waDatabase").ensureWATables();
+      await require("./services/tenantPlanService").ensureTenantsTable();
     } catch (e) {
       console.warn("⚠️ WhatsApp tables setup warning:", e.message);
     }

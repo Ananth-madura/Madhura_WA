@@ -58,21 +58,12 @@ const authenticateSocket = (socket, next) => {
     return next(new Error("unauthorized: no token"));
   }
 
-  // Allow admin test tokens so WebSockets connect cleanly for test sessions
-  if (token === "demo-jwt-session-token" || token === "demo-jwt-admin-token" || token.startsWith("demo-")) {
-    socket.data.user = {
-      id: 1,
-      role: "admin",
-      name: "Admin",
-      email: "admin@madhuratech.com",
-    };
-    return next();
-  }
-
-  const jwtSecret = process.env.JWT_SECRET || "ephemeral-secret-demo";
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) return next(new Error("unauthorized: authentication is not configured"));
 
   try {
-    const decoded = jwt.verify(token, jwtSecret);
+    const decoded = jwt.verify(token, jwtSecret, { algorithms: ["HS256"] });
+    if (decoded.portal || decoded.role === "client" || [decoded.aud].flat().includes("client-portal")) return next(new Error("unauthorized: client portal session"));
     if (!decoded || !decoded.id) {
       return next(new Error("unauthorized: token has no subject"));
     }
@@ -85,17 +76,6 @@ const authenticateSocket = (socket, next) => {
 
     return next();
   } catch (err) {
-    try {
-      const fallback = jwt.decode(token);
-      if (fallback && fallback.id && (fallback.role === "admin" || fallback.isAdmin)) {
-        socket.data.user = {
-          id: Number(fallback.id),
-          role: "admin",
-          name: fallback.name || "Admin",
-        };
-        return next();
-      }
-    } catch (_) {}
     return next(new Error(`unauthorized: ${err.message}`));
   }
 };

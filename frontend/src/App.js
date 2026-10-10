@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { Agentation } from "agentation";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
@@ -17,6 +17,8 @@ import WAReminders from "./pages/whatsappReminders";
 import WAFlows from "./pages/whatsappFlows";
 import WAAnalytics from "./pages/whatsappAnalytics";
 import WAAccounts from "./pages/whatsappAccounts";
+const ClientPortal = lazy(() => import("./pages/ClientPortal"));
+const ClientPortalManage = lazy(() => import("./pages/ClientPortalManage"));
 
 function RequireAuth({ children }) {
   const { user } = useAuth();
@@ -55,6 +57,8 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="/portal/*" element={<Suspense fallback={<p className="p-8">Opening client portal…</p>}><ClientPortal /></Suspense>} />
+          <Route path="/client-portal" element={<Navigate to="/portal" replace />} />
           <Route
             path="/"
             element={
@@ -108,6 +112,7 @@ export default function App() {
             <Route path="flows/builder/:flowId" element={<WAFlows />} />
             <Route path="analytics" element={<WAAnalytics />} />
             <Route path="accounts" element={<WAAccounts />} />
+            <Route path="client-portal" element={<Suspense fallback={<p className="p-8">Loading portal management…</p>}><ClientPortalManage /></Suspense>} />
           </Route>
           <Route path="*" element={<Navigate to="/whatsapp" replace />} />
         </Routes>

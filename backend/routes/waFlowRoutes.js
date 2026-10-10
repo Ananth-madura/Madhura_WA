@@ -52,6 +52,8 @@ router.post("/", auth, async (req, res) => {
   try {
     const { name, description, trigger_type = "keyword", trigger_config = {}, entry_node_key = "start", nodes = [] } = req.body;
     if (!name) return res.status(400).json({ error: "Flow name is required" });
+    const menuError = require("../services/waInteractive").validateMenuNodes(nodes);
+    if (menuError) return res.status(400).json({ error: menuError });
 
     const [flowResult] = await db.promise().query(
       `INSERT INTO wa_flows (name, description, status, trigger_type, trigger_config, entry_node_key, created_by)
@@ -110,6 +112,10 @@ router.put("/:id", auth, async (req, res) => {
   try {
     const { name, description, status, trigger_type, trigger_config, entry_node_key = "start", nodes } = req.body;
     const flowId = req.params.id;
+    if (nodes !== undefined) {
+      const menuError = require("../services/waInteractive").validateMenuNodes(nodes);
+      if (menuError) return res.status(400).json({ error: menuError });
+    }
 
     await db.promise().query(
       `UPDATE wa_flows 

@@ -574,7 +574,10 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
     console.log(`⚡ [WA Automation] Trigger '${triggerType}' matched ${rules.length} rule(s) for ${cleanPhone}`);
 
     let triggeredCount = 0;
+    let unknownCount = 0;
     for (const rule of rules) {
+      const ruleSessionKey = opts.sessionKey || eventInfo.sessionKey || rule.created_by || require("./whatsappService").defaultKey;
+      const targetChatId = eventInfo.chatId || null;
       if (!require("./waRuleConditions").matchesConditions(rule.conditions, { ...mergedData, phone: cleanPhone, name: resolvedName })) continue;
       const rawText = rule.message_text || rule.template_body || "Hello {name}! Thank you for reaching out.";
       const messageText = formatMessagePlaceholders(rawText, resolvedName, mergedData);
@@ -584,14 +587,16 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
         // 'scheduled' rather than 'sent' — the old code claimed success before
         // the message had even been attempted.
         const [ins] = await db.promise().query(
-          `INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, scheduled_for)
-           VALUES (?, ?, ?, ?, 'scheduled', DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
+          `INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, scheduled_for, session_key, target_chat_id)
+           VALUES (?, ?, ?, ?, 'scheduled', DATE_ADD(NOW(), INTERVAL ? MINUTE), ?, ?)`,
           [
             rule.id,
             cleanPhone,
             resolvedName,
             JSON.stringify({ triggerType, scheduledDelay: rule.delay_minutes, messageText, ...mergedData }),
             rule.delay_minutes,
+            ruleSessionKey,
+            targetChatId,
           ]
         );
         const logId = ins.insertId;
@@ -602,20 +607,23 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
         // Node timers overflow beyond ~24.8 days; the durable sweeper handles those.
         if (delayMs <= 2147483647) {
           const timer = setTimeout(() => {
-            runScheduledAutomation(logId, rule, cleanPhone, resolvedName, messageText, mergedData).catch(() => {});
+            runDueAutomationsSweep().catch(() => {});
           }, delayMs);
           timer.unref?.();
         }
       } else {
         // Execute immediately
-        const result = await executeAutomationSend(rule, cleanPhone, resolvedName, messageText, mergedData);
-        if (!result?.success) continue;
+        const result = await executeAutomationSend(rule, cleanPhone, resolvedName, messageText, mergedData, ruleSessionKey, targetChatId);
+        if (!result?.success) {
+          if (result?.deliveryUnknown) unknownCount++;
+          continue;
+        }
       }
       triggeredCount++;
     }
 
-    if (!triggeredCount) automationDedupeStore.delete(dedupeKey);
-    return { success: triggeredCount > 0, count: triggeredCount, triggeredCount, reason: triggeredCount ? undefined : "no_rules_dispatched" };
+    if (!triggeredCount && !unknownCount) automationDedupeStore.delete(dedupeKey);
+    return { success: triggeredCount > 0, count: triggeredCount, triggeredCount, deliveryUnknown: unknownCount > 0, reason: triggeredCount ? undefined : unknownCount ? "delivery_unknown" : "no_rules_dispatched" };
   } catch (err) {
     console.error(`❌ [WA Automation] Error handling '${triggerType}':`, err.message);
     return { success: false, error: err.message };
@@ -627,24 +635,36 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
  * The row is claimed atomically, so the in-process timer and the restart
  * sweeper can both point at the same log row without double-sending.
  */
-async function runScheduledAutomation(logId, rule, cleanPhone, contactName, messageText, data) {
+async function runScheduledAutomation(logId, rule, cleanPhone, contactName, messageText, data, context = {}) {
   const [claim] = await db.promise().query(
-    "UPDATE wa_automation_logs SET status = 'sending' WHERE id = ? AND status = 'scheduled'",
+    "UPDATE wa_automation_logs SET status = 'sending', claimed_at = NOW() WHERE id = ? AND status = 'scheduled'",
     [logId]
   );
   if (!claim.affectedRows) return false; // already handled elsewhere
 
   try {
     const [current] = await db.promise().query("SELECT is_active FROM wa_automations WHERE id = ?", [rule.id]);
-    if (!current[0]?.is_active) throw new Error("Automation was paused or deleted before dispatch.");
-    const result = await executeAutomationSend(rule, cleanPhone, contactName, messageText, data);
-    if (!result?.success) throw new Error(result?.error || "Automation send failed.");
-    await db.promise().query("UPDATE wa_automation_logs SET status = 'sent' WHERE id = ?", [logId]);
+    if (!current[0]?.is_active) throw Object.assign(new Error("Automation was paused or deleted before dispatch."), { skipped: true });
+    const phase = Number(context.execution_step || 1);
+    if (phase === 2 && !(rule.followup_message_text || rule.followup_media_url || rule.followup_template_name)) {
+      throw Object.assign(new Error("Follow-up content was removed before dispatch."), { skipped: true });
+    }
+    const dispatchRule = phase === 2 ? {
+      ...rule, message_text: rule.followup_message_text, template_name: rule.followup_template_name,
+      template_body: rule.followup_template_body, media_type: rule.followup_media_type,
+      media_url: rule.followup_media_url, media_filename: rule.followup_media_filename,
+      followup_message_text: null, followup_media_url: null, followup_template_name: null,
+      followup_template_id: null, group_id: null, flow_id: null
+    } : rule;
+    const result = await executeAutomationSend(dispatchRule, cleanPhone, contactName, phase === 2 ? null : messageText, data,
+      context.session_key, context.target_chat_id, { logId, phase });
+    if (!result?.success) throw Object.assign(new Error(result?.error || "Automation send failed."), { deliveryUnknown: result?.deliveryUnknown });
+    await db.promise().query("UPDATE wa_automation_logs SET status = 'sent', trigger_data = NULL WHERE id = ?", [logId]);
     return true;
   } catch (err) {
     await db.promise().query(
-      "UPDATE wa_automation_logs SET status = 'failed', error = ? WHERE id = ?",
-      [String(err.message || err).slice(0, 500), logId]
+      "UPDATE wa_automation_logs SET status = ?, error = ?, trigger_data = NULL WHERE id = ?",
+      [err.deliveryUnknown ? "unknown" : err.skipped ? "skipped" : "failed", String(err.message || err).slice(0, 500), logId]
     ).catch(() => {});
     return false;
   }
@@ -656,6 +676,9 @@ async function runScheduledAutomation(logId, rule, cleanPhone, contactName, mess
  */
 async function runDueAutomationsSweep() {
   try {
+    // Never resend a stale in-flight dispatch: its delivery outcome is uncertain.
+    await db.promise().query("UPDATE wa_automation_logs SET status = 'unknown', error = 'Dispatch interrupted; verify provider delivery before retrying', trigger_data = NULL WHERE status = 'sending' AND (claimed_at IS NULL OR claimed_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))");
+    await db.promise().query("UPDATE wa_automation_logs SET status = 'skipped', error = 'Automation deleted before dispatch', trigger_data = NULL WHERE status = 'scheduled' AND automation_id NOT IN (SELECT id FROM wa_automations)");
     const [due] = await db.promise().query(
       `SELECT l.*, a.*, l.id AS log_id, a.id AS rule_id,
               t.name AS template_name, t.body AS template_body,
@@ -665,7 +688,7 @@ async function runDueAutomationsSweep() {
        LEFT JOIN wa_templates t ON a.template_id = t.id
        LEFT JOIN wa_templates ft ON a.followup_template_id = ft.id
        WHERE l.status = 'scheduled' AND l.scheduled_for IS NOT NULL AND l.scheduled_for <= NOW()
-         AND a.is_active = 1
+
        ORDER BY l.scheduled_for ASC LIMIT 50`
     );
     if (!due.length) return 0;
@@ -682,7 +705,7 @@ async function runDueAutomationsSweep() {
       const messageText = payload.messageText
         || formatMessagePlaceholders(rule.message_text || rule.template_body || "Hello {name}!", row.contact_name, payload);
 
-      const ok = await runScheduledAutomation(row.log_id, rule, row.phone, row.contact_name, messageText, payload);
+      const ok = await runScheduledAutomation(row.log_id, rule, row.phone, row.contact_name, messageText, payload, row);
       if (ok) ran++;
     }
     return ran;
@@ -957,7 +980,13 @@ async function maybeSendWelcomeReply(targetPhoneOrJid, contactName, sessionKey, 
 
     console.log(`👋 [WA Welcome] Sent Welcome Auto-Reply to ${rawTarget} via ${res?.engineUsed || "WA"}`);
 
-    const sentMsgId = res?.result?.id?.id || res?.result?.id?._serialized || res?.result?.messages?.[0]?.id || "welcome_" + Date.now();
+    const sentMsgId = require("./waInteractive").deliveryMessageId(res) || "welcome_" + Date.now();
+    if (settings.welcome_type === "buttons" && settings.welcome_buttons?.length) {
+      const buttons = require("./waInteractive").normalizeButtons(settings.welcome_buttons);
+      await require("./waFlowEngine").recordAndEmitBotMessage(cleanPhone, messageText, "welcome", {
+        type: "buttons", text: messageText, footer: settings.welcome_footer || "", buttons, native: !!res.native,
+      }, sessionKey, rawTarget.includes("@") ? rawTarget : null, { id: sentMsgId, status: "sent" }).catch(() => {});
+    }
 
     // Log outbound welcome message in DB (or update message_type if already logged by session sender)
     const [existingLog] = await db.promise().query(
@@ -995,7 +1024,7 @@ async function maybeSendWelcomeReply(targetPhoneOrJid, contactName, sessionKey, 
             type: "text",
           },
         };
-        io.emit("wa_message_sent", livePayload);
+        io.to(`user:${livePayload.sessionKey || sessionKey || require("./whatsappService").defaultKey}`).emit("wa_message_sent", livePayload);
       }
     } catch (_) {}
 
@@ -1006,7 +1035,7 @@ async function maybeSendWelcomeReply(targetPhoneOrJid, contactName, sessionKey, 
   }
 }
 
-async function executeAutomationSend(rule, cleanPhone, contactName, messageText, data, sessionKey = null, targetChatId = null) {
+async function executeAutomationSend(rule, cleanPhone, contactName, messageText, data, sessionKey = null, targetChatId = null, execution = {}) {
   // Normalize flexible arguments if messageText is omitted and data object is passed in 4th position:
   let actualMessageText = messageText;
   let actualData = data;
@@ -1033,10 +1062,11 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
 
   const waLoadBalancer = require("./waLoadBalancer");
   const waService = require("./whatsappService");
-  const activeSessionKey = actualSessionKey || waService.defaultKey;
+  const activeSessionKey = actualSessionKey || rule.created_by || waService.defaultKey;
 
   let sentResult = null;
   let sendError = null;
+  let deliveryUnknown = false;
   const sendTarget = (actualTargetChatId && actualTargetChatId.includes("@lid")) ? actualTargetChatId : cleanPhone;
   const chatId = actualTargetChatId || `${cleanPhone}@c.us`;
 
@@ -1060,24 +1090,29 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
       sentResult = await waLoadBalancer.sendTextMessage(sendTarget, actualMessageText, activeSessionKey);
     }
 
-    // Increment run count
-    await db.promise().query(
+    const confirmedId = require("./waInteractive").deliveryMessageId(sentResult);
+    if (!confirmedId) throw Object.assign(new Error("Provider acceptance could not be confirmed."), { deliveryUnknown: true });
+
+    // Count an automation once, independent of its follow-up.
+    if (execution.phase !== 2) await db.promise().query(
       "UPDATE wa_automations SET run_count = run_count + 1 WHERE id = ?",
       [rule.id]
     );
 
-    // Log automation execution Step 1
-    await db.promise().query(
-      `INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status)
-       VALUES (?, ?, ?, ?, 'sent')`,
-      [rule.id, cleanPhone, contactName || null, JSON.stringify({ ...actualData, step: 1 })]
-    );
+    if (execution.logId) {
+      await db.promise().query("UPDATE wa_automation_logs SET wa_message_id = ? WHERE id = ?", [confirmedId, execution.logId]);
+    } else {
+      await db.promise().query(
+        "INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, execution_step, session_key, wa_message_id) VALUES (?, ?, ?, NULL, 'sent', ?, ?, ?)",
+        [rule.id, cleanPhone, contactName || null, execution.phase || 1, activeSessionKey, confirmedId]
+      );
+    }
 
     // Also record in wa_message_logs for CRM conversation history & UI display
-    const msgId = sentResult?.result?.id || "auto_" + Date.now();
+    const msgId = confirmedId;
     await db.promise().query(
       `INSERT INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
-       VALUES (?, ?, 'outbound', ?, ?, ?, 'delivered', NOW())`,
+       VALUES (?, ?, 'outbound', ?, ?, ?, 'sent', NOW())`,
       [activeSessionKey, cleanPhone, (rule.media_type && rule.media_url) ? "media" : "text", actualMessageText, msgId]
     ).catch(() => {});
 
@@ -1108,12 +1143,11 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
             mediaType: rule.media_type || null,
           },
         };
-        io.to(`user:${activeSessionKey}`).emit("wa_message_sent", livePayload);
-        io.emit("wa_message_sent", livePayload);
-        io.emit("wa_message", livePayload);
+        io.to(`user:${livePayload.sessionKey || sessionKey || require("./whatsappService").defaultKey}`).emit("wa_message_sent", livePayload);
+        io.to(`user:${livePayload.sessionKey || sessionKey || require("./whatsappService").defaultKey}`).emit("wa_message", livePayload);
         if (chatId !== `${cleanPhone}@c.us`) {
-          io.emit("wa_message_sent", { ...livePayload, chatId: `${cleanPhone}@c.us` });
-          io.emit("wa_message", { ...livePayload, chatId: `${cleanPhone}@c.us` });
+          io.to(`user:${livePayload.sessionKey || require("./whatsappService").defaultKey}`).emit("wa_message_sent", { ...livePayload, chatId: `${cleanPhone}@c.us` });
+          io.to(`user:${livePayload.sessionKey || require("./whatsappService").defaultKey}`).emit("wa_message", { ...livePayload, chatId: `${cleanPhone}@c.us` });
         }
       }
     } catch (_) {}
@@ -1121,7 +1155,7 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
     console.log(`✅ [WA Automation] Step 1 sent for rule '${rule.name}' to ${cleanPhone} (session: ${activeSessionKey})`);
 
     // ── STEP 1.5: Auto Contact Group Enrollment (if configured) ─────────────
-    if (rule.group_id) {
+    if (rule.group_id && execution.phase !== 2) {
       try {
         await db.promise().query(
           `INSERT INTO wa_group_contacts (group_id, name, phone, country_code, notes)
@@ -1136,7 +1170,7 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
     }
 
     // ── STEP 1.6: Auto Trigger Chatbot Flow (if configured) ─────────────────
-    if (rule.flow_id) {
+    if (rule.flow_id && execution.phase !== 2) {
       try {
         const [flowRows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? AND status = 'active' LIMIT 1", [rule.flow_id]);
         if (flowRows.length > 0) {
@@ -1153,95 +1187,37 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
     try {
       const { sendMenu, getOptions } = require("./waMenuHandler");
       const options = await getOptions(rule.id);
-      if (options.length) await sendMenu(cleanPhone, rule.id, activeSessionKey);
+      if (execution.phase !== 2 && options.length) await sendMenu(cleanPhone, rule.id, activeSessionKey);
     } catch (menuErr) {
       console.error(`[WA Automation] Menu send failed for rule '${rule.name}':`, menuErr.message);
     }
 
     // ── STEP 2: Multi-Message Sequence with 7-second Gap (Anti-Ban delay) ──
     const hasFollowup = rule.followup_message_text || rule.followup_media_url || rule.followup_template_name || rule.followup_template_id;
-    if (hasFollowup) {
-      const delaySec = rule.sequence_delay_seconds || 7;
-      console.log(`⏱️ [WA Automation] Rule '${rule.name}': Scheduling Step 2 follow-up with ${delaySec}s gap to ${cleanPhone}`);
-
-      setTimeout(async () => {
-        try {
-          let followupText = "";
-          if (rule.followup_message_text) {
-            followupText = formatMessagePlaceholders(rule.followup_message_text, contactName, actualData);
-          }
-
-          let step2Result = null;
-          if (rule.followup_template_name) {
-            const bodyComponent = buildTemplateBodyComponent(rule.followup_template_body, contactName, actualData);
-            step2Result = await waLoadBalancer.sendTemplateMessage(sendTarget, rule.followup_template_name, "en", bodyComponent ? [bodyComponent] : [], activeSessionKey);
-          } else if (rule.followup_media_type && rule.followup_media_url) {
-            step2Result = await waLoadBalancer.sendMediaMessage(sendTarget, rule.followup_media_type, rule.followup_media_url, followupText || "", rule.followup_media_filename || "", activeSessionKey);
-          } else if (followupText) {
-            step2Result = await waLoadBalancer.sendTextMessage(sendTarget, followupText, activeSessionKey);
-          }
-
-          if (step2Result) {
-            console.log(`✅ [WA Automation] Step 2 follow-up sent after ${delaySec}s gap to ${cleanPhone}`);
-            await db.promise().query(
-              `INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status)
-               VALUES (?, ?, ?, ?, 'sent')`,
-              [rule.id, cleanPhone, contactName || null, JSON.stringify({ ...actualData, step: 2, sequenceDelaySec: delaySec })]
-            );
-
-            const step2MsgId = step2Result?.result?.id || "auto_step2_" + Date.now();
-            await db.promise().query(
-              `INSERT INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
-               VALUES (?, ?, 'outbound', ?, ?, ?, 'delivered', NOW())`,
-              [activeSessionKey, cleanPhone, (rule.followup_media_type && rule.followup_media_url) ? "media" : "text", followupText || "[Attachment]", step2MsgId]
-            ).catch(() => {});
-
-            // Emit live socket event for Step 2
-            try {
-              const app = require("../server");
-              const io = app.get && app.get("io");
-              if (io) {
-                const livePayload = {
-                  phone: cleanPhone,
-                  chatId,
-                  sessionKey: activeSessionKey,
-                  message: {
-                    id: step2MsgId,
-                    from: "me",
-                    body: followupText || (rule.followup_media_url ? "📎 Attachment" : ""),
-                    timestamp: Math.floor(Date.now() / 1000),
-                    isMe: true,
-                    hasMedia: !!(rule.followup_media_type && rule.followup_media_url),
-                    mediaType: rule.followup_media_type || null,
-                  },
-                };
-                io.to(`user:${activeSessionKey}`).emit("wa_message_sent", livePayload);
-                io.emit("wa_message_sent", livePayload);
-                io.emit("wa_message", livePayload);
-                if (chatId !== `${cleanPhone}@c.us`) {
-                  io.emit("wa_message_sent", { ...livePayload, chatId: `${cleanPhone}@c.us` });
-                  io.emit("wa_message", { ...livePayload, chatId: `${cleanPhone}@c.us` });
-                }
-              }
-            } catch (_) {}
-          }
-        } catch (step2Err) {
-          console.error(`❌ [WA Automation] Step 2 follow-up failed for ${cleanPhone}:`, step2Err.message);
-        }
-      }, delaySec * 1000);
+    if (hasFollowup && execution.phase !== 2) {
+      const delaySec = Math.max(0, Number(rule.sequence_delay_seconds ?? 7));
+      if (!Number.isFinite(delaySec)) throw new Error("Invalid automation follow-up delay.");
+      await db.promise().query(
+        "INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, scheduled_for, execution_step, session_key, target_chat_id) VALUES (?, ?, ?, ?, 'scheduled', DATE_ADD(NOW(), INTERVAL ? SECOND), 2, ?, ?)",
+        [rule.id, cleanPhone, contactName || null, JSON.stringify(actualData), delaySec, activeSessionKey, actualTargetChatId]
+      );
+      if (delaySec * 1000 <= 2147483647) {
+        const timer = setTimeout(() => runDueAutomationsSweep().catch(() => {}), delaySec * 1000);
+        timer.unref?.();
+      }
     }
 
   } catch (err) {
     sendError = err.message;
+    deliveryUnknown = !!err.deliveryUnknown || !!sentResult;
     console.error(`❌ [WA Automation] Failed sending rule '${rule.name}' to ${cleanPhone}:`, sendError);
 
-    await db.promise().query(
-      `INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, error)
-       VALUES (?, ?, ?, ?, 'failed', ?)`,
-      [rule.id, cleanPhone, contactName || null, JSON.stringify(actualData), sendError]
+    if (!execution.logId) await db.promise().query(
+      "INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, error, session_key, execution_step) VALUES (?, ?, ?, NULL, ?, ?, ?, ?)",
+      [rule.id, cleanPhone, contactName || null, deliveryUnknown ? "unknown" : "failed", sendError, activeSessionKey, execution.phase || 1]
     ).catch(() => {});
   }
-  return { success: !sendError, error: sendError || undefined, result: sentResult };
+  return { success: !sendError, deliveryUnknown, error: sendError || undefined, result: sentResult };
 }
 
 module.exports = {
@@ -1261,6 +1237,7 @@ module.exports = {
   updateWelcomeSettings,
   maybeSendWelcomeReply,
   executeAutomationSend,
+  runScheduledAutomation,
   runDueAutomationsSweep,
   startAutomationScheduler,
 };

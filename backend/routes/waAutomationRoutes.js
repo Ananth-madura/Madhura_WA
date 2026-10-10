@@ -488,6 +488,9 @@ router.post("/:id/trigger", auth, async (req, res) => {
     const { phone, contact_name, trigger_data, chatId, sessionKey } = req.body;
     if (!phone && !chatId) return res.status(400).json({ error: "phone required" });
 
+    const reqSessionKey = String(sessionKey || req.headers["x-session-key"] || req.query?.sessionKey || req.user.id);
+    if (reqSessionKey !== String(req.user.id)) return res.status(403).json({ error: "Use your own WhatsApp sender session" });
+
     const [rows] = await db.promise().query(
       `SELECT a.*, 
         t.name as template_name, t.body as template_body,
@@ -495,8 +498,8 @@ router.post("/:id/trigger", auth, async (req, res) => {
        FROM wa_automations a
        LEFT JOIN wa_templates t ON a.template_id = t.id
        LEFT JOIN wa_templates ft ON a.followup_template_id = ft.id
-       WHERE a.id=?`,
-      [req.params.id]
+       WHERE a.id=? AND (a.created_by = ? OR a.created_by IS NULL)`,
+      [req.params.id, req.user.id]
     );
     if (!rows.length) return res.status(404).json({ error: "Automation not found" });
 
@@ -508,7 +511,7 @@ router.post("/:id/trigger", auth, async (req, res) => {
     const targetChatId = chatId || null;
 
     // Resolve LID if necessary
-    const waInstance = (sessionKey ? waService.get(sessionKey) : null) || waService.default();
+    const waInstance = waService.get(reqSessionKey);
     if (waInstance && typeof waInstance.resolveLidToPhone === "function") {
       if (targetChatId && targetChatId.includes("@lid")) {
         const resolved = await waInstance.resolveLidToPhone(targetChatId).catch(() => null);
@@ -521,40 +524,26 @@ router.post("/:id/trigger", auth, async (req, res) => {
 
     let cleanPhone = String(targetPhone || "").replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
-
-    let reqSessionKey = sessionKey || req.headers["x-session-key"] || req.query?.sessionKey || null;
-    if (!reqSessionKey || !waService.get(reqSessionKey)?.ready) {
-      reqSessionKey = waInstance?.key || waService.defaultKey;
-    }
+    if (!/^\d{10,15}$/.test(cleanPhone)) return res.status(400).json({ error: "A valid recipient phone number is required" });
 
     const crmData = await lookupCrmDataByPhone(cleanPhone).catch(() => ({}));
-    const mergedData = {
-      invoice_no: "INV-2026-088",
-      quotation_no: "QT-2026-104",
-      amc_contract_no: "AMC-2026-904",
-      amount: "14,500",
-      service: "Comprehensive AMC Maintenance",
-      due_date: "25 Aug 2026",
-      date: new Date().toLocaleDateString("en-IN"),
-      city: "Bangalore",
-      company: "Madhura Tech",
-      ...crmData,
-      ...(trigger_data || {})
-    };
+    const mergedData = { ...crmData, ...(trigger_data || {}) };
     const resolvedName = contact_name || crmData.name || "Customer";
 
     const rawText = automation.message_text || automation.template_body || "Hello {name}!";
     const messageText = formatMessagePlaceholders(rawText, resolvedName, mergedData);
 
     // Run execution with resolved phone, activeSessionKey, and targetChatId
-    await executeAutomationSend(automation, cleanPhone, resolvedName, messageText, mergedData, reqSessionKey, targetChatId);
+    const delivery = await executeAutomationSend(automation, cleanPhone, resolvedName, messageText, mergedData, reqSessionKey, targetChatId);
+
+    if (!delivery?.success) return res.status(delivery?.deliveryUnknown ? 504 : 502).json({ success: false, error: delivery?.error || "Automation send failed", deliveryUnknown: !!delivery?.deliveryUnknown });
 
     const hasSeq = automation.followup_message_text || automation.followup_media_url || automation.followup_template_name;
     res.json({
       success: true,
       phone: cleanPhone,
       message: hasSeq
-        ? `Step 1 sent! Step 2 follow-up will send in ${automation.sequence_delay_seconds || 7} seconds.`
+        ? `Step 1 sent! Step 2 is queued for ${automation.sequence_delay_seconds ?? 7} seconds later.`
         : "Automation message sent successfully!"
     });
   } catch (err) {

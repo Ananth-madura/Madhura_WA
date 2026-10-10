@@ -113,6 +113,7 @@ async function main() {
     },
     './waAutomationService': { formatMessagePlaceholders: format, lookupCrmDataByPhone: async () => ({ service: 'Solar Repair' }) },
     './waLoadBalancer': { sendInteractiveButtons: async () => { if (reminderSendFails) throw Error('Offline'); return { native: true }; } },
+    './waFlowEngine': { recordAndEmitBotMessage: async () => 'reminder-id' },
   });
   assert.equal((await confirmation.sendInteractiveReminder({ phone: '919123456789' })).success, false);
   assert(statuses.some((sql) => sql.includes("status = 'failed'")));
@@ -127,7 +128,7 @@ async function main() {
     '../config/database': { promise: () => ({ query: async () => { writeCalls++; return [[]]; } }) },
     '../services/whatsappService': { get: () => session, default: () => session, defaultKey: '1' },
     '../services/whatsappCloudApi': { isConfigured: () => cloud, sendText: async () => { cloudCalls++; return { messages: [{ id: 'cloud-real' }] }; } },
-    '../services/waConfigHelper': { configureForUser: async () => {} },
+    '../services/waConfigHelper': { configureForUser: async () => {}, cloudClientForUser: async () => ({ isConfigured: () => cloud, sendText: async () => { cloudCalls++; return { messages: [{ id: 'cloud-real' }] }; } }) },
     '../services/waBotGate': { pauseBot: async () => {} },
   });
   async function request(route, body) {

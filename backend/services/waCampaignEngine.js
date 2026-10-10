@@ -240,13 +240,14 @@ if (!claim.affectedRows) {
       result = await waLoadBalancer.sendTextMessage(phone, resolvedText, sessionKey, null, poolId, routingStrategy, tenantId);
     }
 
-    waMessageId = result?.result?.messages?.[0]?.id || result?.result?.id?._serialized || "sent_" + Date.now();
+    waMessageId = require("./waInteractive").deliveryMessageId(result);
+    if (!waMessageId || result?.success === false) throw new Error("The sender did not return a confirmed message ID.");
     senderPhone = result?.senderPhone || null;
 
     // Success
     await db.promise().query(
-      `UPDATE wa_campaign_messages 
-       SET status='sent', wa_message_id=?, sender_phone=?, pool_id=?, sent_at=NOW(), next_retry_at=NULL 
+      `UPDATE wa_campaign_messages
+       SET status='sent', wa_message_id=?, sender_phone=?, pool_id=?, sent_at=NOW(), next_retry_at=NULL
        WHERE id=?`,
       [waMessageId, senderPhone, poolId || null, msgId]
     );
@@ -266,6 +267,7 @@ if (!claim.affectedRows) {
     );
 
     // Update last_contacted in wa_contacts
+    await require("./waDeliveryReceipts").flushDeliveryReceipt(waMessageId).catch(() => {});
     await db.promise().query(
       `UPDATE wa_contacts SET last_contacted=NOW() WHERE phone=? OR phone LIKE ?`,
       [phone, `%${phone.slice(-10)}`]
@@ -294,7 +296,7 @@ if (!claim.affectedRows) {
           },
         };
         io.to(`user:${sessionKey || 1}`).emit("wa_message_sent", livePayload);
-        io.emit("wa_message_sent", livePayload);
+
       }
     } catch (_) {}
 
@@ -302,14 +304,14 @@ if (!claim.affectedRows) {
   } catch (err) {
     const errorMsg = err.response?.data?.error?.message || err.message;
     await db.promise().query(
-      `UPDATE wa_campaign_messages SET status='failed', error=?, next_retry_at=NULL WHERE id=?`,
-      [errorMsg, msgId]
+      `UPDATE wa_campaign_messages SET status=?, error=?, next_retry_at=NULL WHERE id=?`,
+      [err.deliveryUnknown ? "unknown" : "failed", err.deliveryUnknown ? `[DELIVERY_UNKNOWN] ${errorMsg}` : errorMsg, msgId]
     );
-    await db.promise().query(
+    if (!err.deliveryUnknown) await db.promise().query(
       `UPDATE wa_campaigns SET failed_count = failed_count + 1 WHERE id=?`,
       [campaign_id]
     );
-    return { success: false, error: errorMsg };
+    return { success: false, error: errorMsg, deliveryUnknown: !!err.deliveryUnknown };
   }
 }
 
@@ -432,13 +434,14 @@ async function runCampaign(campaignId) {
     if (batch.length < maxBatch && retry_failed) {
       const needed = maxBatch - batch.length;
       const [retryRows] = await db.promise().query(
-        `SELECT * FROM wa_campaign_messages 
-         WHERE campaign_id=? AND status='failed' AND attempts < ? 
-         AND (next_retry_at IS NULL OR next_retry_at <= NOW()) 
+        `SELECT * FROM wa_campaign_messages
+         WHERE campaign_id=? AND status='failed' AND (error IS NULL OR error NOT LIKE '[DELIVERY_UNKNOWN]%') AND attempts < ?
+         AND (next_retry_at IS NULL OR next_retry_at <= NOW())
          ORDER BY id ASC LIMIT ?`,
         [campaignId, max_retries, needed]
       );
       if (retryRows && retryRows.length > 0) {
+        for (const retry of retryRows) await db.promise().query("UPDATE wa_campaign_messages SET status='queued' WHERE id=? AND status='failed'", [retry.id]);
         batch = [...batch, ...retryRows];
       }
     }
@@ -449,7 +452,7 @@ async function runCampaign(campaignId) {
         [campaignId]
       );
       if (remaining[0].cnt === 0) {
-        console.log(`✅ Campaign ${campaignId}: All campaign messages completed successfully!`);
+        console.log(`✅ Campaign ${campaignId}: Dispatch finished; delivery totals depend on provider receipts.`);
         await db.promise().query(
           "UPDATE wa_campaigns SET status='completed', completed_at=NOW() WHERE id=?",
           [campaignId]
@@ -515,10 +518,11 @@ async function runCampaign(campaignId) {
         tenant_id
       );
 
-      sentThisSession++;
+      if (!sendResult.success && !sendResult.deliveryUnknown && !sendResult.skipped) seenPhones.delete(dedupeKey);
+      if (sendResult.success) sentThisSession++;
       totalProcessed++;
 
-      if (!sendResult.success && retry_failed && (nextMsg.attempts || 0) < max_retries - 1) {
+      if (!sendResult.success && !sendResult.deliveryUnknown && !sendResult.skipped && retry_failed && (nextMsg.attempts || 0) < max_retries - 1) {
         const retryDelay = randomInt(
           campaign.retry_delay_min || retry_delay_min,
           campaign.retry_delay_max || retry_delay_max

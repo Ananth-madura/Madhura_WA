@@ -667,10 +667,27 @@ async function ensureWATables() {
   // in an in-process setTimeout, so a restart lost it silently. The row now
   // carries its own due time and the sweeper picks up anything the timer missed.
   await addColumnIfNotExists("wa_automation_logs", "scheduled_for", "DATETIME DEFAULT NULL");
+  await addColumnIfNotExists("wa_automation_logs", "execution_step", "INT DEFAULT 1");
+  await addColumnIfNotExists("wa_automation_logs", "session_key", "VARCHAR(100) DEFAULT NULL");
+  await addColumnIfNotExists("wa_automation_logs", "target_chat_id", "VARCHAR(150) DEFAULT NULL");
+  await addColumnIfNotExists("wa_automation_logs", "claimed_at", "DATETIME DEFAULT NULL");
+  await addColumnIfNotExists("wa_automation_logs", "wa_message_id", "VARCHAR(255) DEFAULT NULL");
   try {
-    await queryAsync("ALTER TABLE wa_automation_logs MODIFY COLUMN status ENUM('scheduled','sending','sent','failed','skipped') DEFAULT 'sent'");
+    await queryAsync("ALTER TABLE wa_automation_logs MODIFY COLUMN status ENUM('scheduled','sending','sent','failed','skipped','unknown') DEFAULT 'sent'");
   } catch (_) {}
   await addIndexIfNotExists("wa_automation_logs", "idx_wa_autolog_due", "status, scheduled_for");
+  await queryAsync(`CREATE TABLE IF NOT EXISTS wa_webhook_claims (
+    event_type VARCHAR(50) NOT NULL,
+    wa_message_id VARCHAR(255) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    claimed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (event_type, wa_message_id, status)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+  await queryAsync(`INSERT IGNORE INTO wa_webhook_claims (event_type, wa_message_id, status)
+    SELECT e.event_type, e.wa_message_id, e.status FROM wa_webhook_events e
+    WHERE e.event_type IN ('incoming_message', 'status_update') AND e.wa_message_id IS NOT NULL
+      AND e.status IN ('received', 'sent', 'delivered', 'read', 'failed')
+      AND NOT EXISTS (SELECT 1 FROM wa_webhook_claims c WHERE c.event_type = e.event_type AND c.wa_message_id = e.wa_message_id AND c.status = e.status)`);
 
   // 2. wa_campaigns column additions
   await addColumnIfNotExists("wa_campaigns", "whatsapp_number", "VARCHAR(30) DEFAULT NULL");
@@ -700,6 +717,7 @@ async function ensureWATables() {
   } catch (_) {}
 
   // 3. wa_campaign_messages column additions
+  try { await queryAsync("ALTER TABLE wa_campaign_messages MODIFY COLUMN status ENUM('queued','sending','sent','delivered','read','failed','skipped','opted_out','unknown') DEFAULT 'queued'"); } catch (_) {}
   await addColumnIfNotExists("wa_campaign_messages", "attempts", "INT DEFAULT 0");
   await addColumnIfNotExists("wa_campaign_messages", "next_retry_at", "DATETIME DEFAULT NULL");
   await addColumnIfNotExists("wa_campaign_messages", "reply_received", "TINYINT(1) DEFAULT 0");
@@ -732,6 +750,7 @@ async function ensureWATables() {
   await addColumnIfNotExists("wa_message_logs", "reply_to_message_id", "VARCHAR(255) DEFAULT NULL");
   await addColumnIfNotExists("wa_message_logs", "interactive_reply_id", "VARCHAR(100) DEFAULT NULL");
   await addColumnIfNotExists("wa_message_logs", "interactive_payload", "JSON DEFAULT NULL");
+  await addColumnIfNotExists("wa_message_logs", "media_id", "VARCHAR(255) DEFAULT NULL");
   await addColumnIfNotExists("wa_message_logs", "media_mime_type", "VARCHAR(100) DEFAULT NULL");
   await addColumnIfNotExists("wa_message_logs", "media_size", "INT DEFAULT NULL");
   await addColumnIfNotExists("wa_message_logs", "has_media", "TINYINT(1) DEFAULT 0");

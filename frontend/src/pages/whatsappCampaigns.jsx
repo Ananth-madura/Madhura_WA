@@ -450,6 +450,7 @@ export default function WACampaigns() {
                     <span className="flex items-center gap-1 font-semibold" style={{ color: "var(--color-ink)" }}>
                       <Eye size={13} /> {c.read_count || 0} Read
                     </span>
+                    {c.unknown_count > 0 && <span className="font-semibold">{c.unknown_count} Delivery unconfirmed</span>}
                     {c.failed_count > 0 && (
                       <span className="flex items-center gap-1 font-semibold" style={{ color: "var(--color-error)" }}>
                         <XCircle size={13} /> {c.failed_count} Failed

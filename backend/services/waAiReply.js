@@ -183,7 +183,8 @@ async function findContactName(phone) {
   return null;
 }
 
-async function getRecentHistory(phone, limit = 8) {
+async function getRecentHistory(phone, limit = 8, sessionKey = "1") {
+  if (!require("./waChatPrivacy").serverChatStorageEnabled()) return require("./waTransientHistory").recent(phone, sessionKey, limit);
   const last10 = phone.replace(/\D/g, "").slice(-10);
   const rows = await queryAsync(
     `SELECT direction, message_text FROM wa_message_logs
@@ -254,7 +255,7 @@ async function logOutbound(phone, messageType, text) {
   } catch (_) {}
 }
 
-async function generateReply(phone, incomingText, contactNameOverride) {
+async function generateReply(phone, incomingText, contactNameOverride, sessionKey = "1") {
   const settings = await getSettings();
   if (!settings.apiKey) {
     console.warn("⚠️ [WA AI Reply] Missing AI API Key. Please configure API Key in WhatsApp Settings.");
@@ -264,7 +265,7 @@ async function generateReply(phone, incomingText, contactNameOverride) {
   const { lookupCrmDataByPhone, formatMessagePlaceholders } = require("./waAutomationService");
   const crmProfile = await lookupCrmDataByPhone(phone).catch(() => ({}));
   const contactName = contactNameOverride || crmProfile.name || (await findContactName(phone).catch(() => null)) || "Customer";
-  const history = await getRecentHistory(phone).catch(() => []);
+  const history = await getRecentHistory(phone, 8, sessionKey).catch(() => []);
   const knowledge = await require("./waKnowledgeBase").buildContext().catch(() => "");
 
   let basePrompt = settings.system_prompt ||
@@ -472,7 +473,7 @@ async function maybeAutoReply(phone, incomingText, contactName, sessionKey) {
     }
 
     // ── Generate AI reply ──
-    const reply = await generateReply(cleanPhone, incomingText, contactName);
+    const reply = await generateReply(cleanPhone, incomingText, contactName, sessionKey);
     if (!reply) return;
 
     if (reply.includes("[[HANDOFF]]")) {

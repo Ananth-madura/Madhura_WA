@@ -241,11 +241,12 @@ export default function Landing() {
             <a href="#lp-accounts">Connecting</a>
           </nav>
           <nav className="lp-header-actions" aria-label="Account">
+            <Link to="/portal" className="hl-btn-secondary lp-btn-outline-dark">Client portal</Link>
             <Link to="/login" className="hl-btn-secondary lp-btn-outline-dark">
               Sign in
             </Link>
             <Link to="/signup" className="hl-btn-primary lp-btn-accent">
-              Request access
+              Get Started & Plans
             </Link>
           </nav>
         </div>
@@ -274,7 +275,7 @@ export default function Landing() {
                 <ArrowRight size={16} />
               </Link>
               <Link to="/signup" className="hl-btn-secondary lp-btn-outline-dark lp-btn-lg">
-                Request access
+                Get Started & Plans
               </Link>
             </div>
             <p className="lp-hero-note">
@@ -522,7 +523,7 @@ export default function Landing() {
               <ArrowRight size={16} />
             </Link>
             <Link to="/signup" className="hl-btn-secondary lp-btn-lg">
-              Request access
+              Get Started & Plans
             </Link>
           </div>
         </div>
@@ -539,7 +540,7 @@ export default function Landing() {
           </span>
           <nav className="lp-footer-links" aria-label="Footer">
             <Link to="/login">Sign in</Link>
-            <Link to="/signup">Request access</Link>
+            <Link to="/signup">Get Started & Plans</Link>
             <a href="https://crm.madhuratech.com">CRM Dashboard</a>
           </nav>
         </div>

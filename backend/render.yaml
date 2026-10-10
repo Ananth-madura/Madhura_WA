@@ -169,8 +169,10 @@ services:
       # the generated value with the CRM's — and rotate both together later.
       - key: JWT_SECRET
         generateValue: true
+      - key: SMTP_ENCRYPTION_KEY
+        sync: false
       - key: DEFAULT_TEST_PASSWORD
-        generateValue: true
+        sync: false
       - key: ADMIN_SEED_EMAIL
         value: admin@madhuratech.com
       - key: ADMIN_SEED_PASSWORD

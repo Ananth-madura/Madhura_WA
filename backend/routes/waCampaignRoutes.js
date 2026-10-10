@@ -25,10 +25,10 @@ const { checkBlastSize } = require("../services/waBlastGuard");
 router.get("/", auth, async (req, res) => {
   try {
     const [rows] = await db.promise().query(`
-      SELECT c.*, 
-             t.name as template_name, 
-             f.name as flow_name, 
-             g.name as group_name 
+      SELECT c.*, (SELECT COUNT(*) FROM wa_campaign_messages cm WHERE cm.campaign_id = c.id AND cm.status = 'unknown') AS unknown_count,
+             t.name as template_name,
+             f.name as flow_name,
+             g.name as group_name
       FROM wa_campaigns c
       LEFT JOIN wa_templates t ON c.template_id = t.id
       LEFT JOIN wa_flows f ON c.flow_id = f.id
@@ -257,7 +257,7 @@ router.post("/", auth, async (req, res) => {
       ]
     );
     const [row] = await db.promise().query(`
-      SELECT c.*, t.name as template_name, f.name as flow_name, g.name as group_name
+      SELECT c.*, (SELECT COUNT(*) FROM wa_campaign_messages cm WHERE cm.campaign_id = c.id AND cm.status = 'unknown') AS unknown_count, t.name as template_name, f.name as flow_name, g.name as group_name
       FROM wa_campaigns c
       LEFT JOIN wa_templates t ON c.template_id = t.id
       LEFT JOIN wa_flows f ON c.flow_id = f.id
@@ -286,7 +286,7 @@ router.post("/stop-all", auth, async (req, res) => {
 router.get("/:id", auth, async (req, res) => {
   try {
     const [rows] = await db.promise().query(`
-      SELECT c.*, t.name as template_name, f.name as flow_name, g.name as group_name
+      SELECT c.*, (SELECT COUNT(*) FROM wa_campaign_messages cm WHERE cm.campaign_id = c.id AND cm.status = 'unknown') AS unknown_count, t.name as template_name, f.name as flow_name, g.name as group_name
       FROM wa_campaigns c
       LEFT JOIN wa_templates t ON c.template_id = t.id
       LEFT JOIN wa_flows f ON c.flow_id = f.id
@@ -341,7 +341,7 @@ router.put("/:id", auth, async (req, res) => {
     }
 
     const [row] = await db.promise().query(`
-      SELECT c.*, t.name as template_name, f.name as flow_name, g.name as group_name
+      SELECT c.*, (SELECT COUNT(*) FROM wa_campaign_messages cm WHERE cm.campaign_id = c.id AND cm.status = 'unknown') AS unknown_count, t.name as template_name, f.name as flow_name, g.name as group_name
       FROM wa_campaigns c
       LEFT JOIN wa_templates t ON c.template_id = t.id
       LEFT JOIN wa_flows f ON c.flow_id = f.id
@@ -560,7 +560,7 @@ router.post("/:id/retry-failed", auth, async (req, res) => {
   try {
     const campaignId = req.params.id;
     const [result] = await db.promise().query(
-      "UPDATE wa_campaign_messages SET status='queued', attempts=0, error=NULL, next_retry_at=NULL WHERE campaign_id=? AND status='failed'",
+      "UPDATE wa_campaign_messages SET status='queued', attempts=0, error=NULL, next_retry_at=NULL WHERE campaign_id=? AND status='failed' AND (error IS NULL OR error NOT LIKE '[DELIVERY_UNKNOWN]%')",
       [campaignId]
     );
     if (result.affectedRows > 0) {

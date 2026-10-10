@@ -1,34 +1,5 @@
-/**
- * runtimeDefaults.js — make the service boot with zero configuration.
- *
- * WHY THIS EXISTS
- * ---------------
- * A Render service can be created by hand rather than from render.yaml, and then
- * NONE of the blueprint's variables reach it. The symptom was a container that
- * built perfectly and then refused to start with every variable reported
- * missing — including PUBLIC_BASE_URL and ALLOWED_ORIGINS, which were plainly
- * set in the file. The fix is not "remember to use the Blueprint"; it is to stop
- * depending on it for values that are not secret.
- *
- * ── What gets a default, and what does not ──────────────────────────────────
- *
- *   DEFAULTED HERE (public, non-secret, safe to commit):
- *     PORT, TZ, WA_MESSAGE_INTERVAL, WA_DATA_DIR, WA_MAX_SESSIONS, WA_HEADLESS,
- *     ALLOWED_ORIGINS, PUBLIC_BASE_URL, ALLOW_START_WITHOUT_DB, DB_HOST, DB_PORT
- *
- *   GENERATED AT BOOT, NEVER COMMITTED:
- *     JWT_SECRET — a fresh random value per process when none is configured.
- *     A hardcoded default would be a public string that anyone could read and
- *     forge tokens with. A generated one is safe by construction. It changes on
- *     every restart, so sessions do not survive, which is logged loudly.
- *
- *   STILL NEVER DEFAULTED:
- *     DB_PASS, WA_ACCESS_TOKEN, WA_APP_SECRET, SMTP/EMAIL credentials. There is
- *     no safe value to invent for these, and inventing one is how credentials
- *     end up in git history.
- *
- * A real environment variable always wins. These are fallbacks, not overrides.
- */
+/** Development defaults only. Production validates the supplied configuration
+ * and requires stable externally configured secrets and deployment URLs. */
 
 const crypto = require("crypto");
 
@@ -51,10 +22,10 @@ function applyDefaults(env = process.env) {
    * validated exactly as provided, which is the only way that check can mean
    * anything.
    */
-  if (["1", "true", "yes", "on"].includes(String(env.REQUIRE_HARD_CONFIG || "").toLowerCase())) {
+  if (env.NODE_ENV === "production" || truthy(env.REQUIRE_HARD_CONFIG)) {
     return {
       applied,
-      ephemeralJwt: ensureJwtSecret(env),
+      ephemeralJwt: { ephemeral: false, reason: null },
       strict: true,
     };
   }

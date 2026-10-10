@@ -137,12 +137,11 @@ async function sendInteractiveReminder({
       `🔔 [WA Interactive Reminder] #${reminderId} -> +${normalizedPhone} via ${res?.engineUsed || "WA"} (${res?.native ? "native interactive" : "text fallback"})`
     );
 
-    // Log outbound message in wa_message_logs
-    await queryAsync(
-      `INSERT INTO wa_message_logs (phone, direction, message_type, message_text, status, created_at)
-       VALUES (?, 'outbound', 'interactive_reminder', ?, 'sent', NOW())`,
-      [normalizedPhone, formattedText]
-    ).catch(() => {});
+    const payload = items.length <= waInteractive.LIMITS.maxButtons
+      ? { type: "buttons", buttons: waInteractive.normalizeButtons(items) }
+      : { type: "list", sections: waInteractive.normalizeSections(items), button_text: "Choose option" };
+    await require("./waFlowEngine").recordAndEmitBotMessage(normalizedPhone, formattedText, "interactive_reminder", { ...payload, text: formattedText, native: !!res.native }, sessionKey, null,
+      { id: waInteractive.deliveryMessageId(res), status: "sent" }).catch(() => {});
 
     console.log(`🔔 [WA Interactive Reminder] Sent reminder #${reminderId} (${reminderType}) to +${normalizedPhone}`);
     return { success: true, reminderId, phone: normalizedPhone, options: finalOptions };
@@ -386,11 +385,11 @@ const activeSessionKey = sessionKey || require("./whatsappService").defaultKey;
         },
       };
       io.to(`user:${activeSessionKey}`).emit("wa_message_sent", livePayload);
-      io.emit("wa_message_sent", livePayload);
-      io.emit("wa_message", livePayload);
+      io.to(`user:${activeSessionKey}`).emit("wa_message_sent", livePayload);
+      io.to(`user:${activeSessionKey}`).emit("wa_message", livePayload);
       if (sendTarget !== `${normalizedPhone}@c.us`) {
-        io.emit("wa_message_sent", { ...livePayload, chatId: `${normalizedPhone}@c.us` });
-        io.emit("wa_message", { ...livePayload, chatId: `${normalizedPhone}@c.us` });
+        io.to(`user:${activeSessionKey}`).emit("wa_message_sent", { ...livePayload, chatId: `${normalizedPhone}@c.us` });
+        io.to(`user:${activeSessionKey}`).emit("wa_message", { ...livePayload, chatId: `${normalizedPhone}@c.us` });
       }
     }
   } catch (_) {}

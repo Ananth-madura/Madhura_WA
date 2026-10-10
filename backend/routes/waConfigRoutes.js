@@ -1,20 +1,34 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../config/database");
-const wa = require("../services/whatsappCloudApi");
+
 const { getQueueStats } = require("../services/waCampaignEngine");
-const { configureForUser, resetToEnvConfig } = require("../services/waConfigHelper");
+const { cloudClientForUser } = require("../services/waConfigHelper");
 const { verifyToken } = require("../middleware/authMiddleware");
 const { encrypt, decrypt } = require("../backendutil/cryptoHelper");
 
+router.use(verifyToken, async (req, res, next) => {
+  try { req.waCloud = await cloudClientForUser(req.user.id); next(); }
+  catch (error) {
+    // An operator must still be able to replace credentials encrypted with an old key.
+    if (["/save-config", "/test-connection", "/test-template", "/user-config"].includes(req.path)) {
+      req.waCloud = require("../services/whatsappCloudApi").withAccount({});
+      return next();
+    }
+    res.status(503).json({ message: error.message });
+  }
+});
+
 router.get("/status", async (req, res) => {
+  let wa = req.waCloud;
   if (req.user?.id) {
-    await configureForUser(req.user.id);
+    wa = await cloudClientForUser(req.user.id);
   }
   res.json(wa.getConfig());
 });
 
 router.get("/user-config", verifyToken, async (req, res) => {
+  let wa = req.waCloud;
   const userId = req.user.id;
   try {
     const [rows] = await db.promise().query(
@@ -44,6 +58,7 @@ router.get("/user-config", verifyToken, async (req, res) => {
 });
 
 router.post("/save-config", verifyToken, async (req, res) => {
+  let wa = req.waCloud;
   const userId = req.user.id;
   const { phone_number_id, access_token, waba_id, app_secret, verify_token, business_account_id, is_enabled } = req.body;
 
@@ -52,6 +67,8 @@ router.post("/save-config", verifyToken, async (req, res) => {
   }
 
   try {
+    const [owners] = await db.promise().query("SELECT created_by FROM wa_accounts WHERE phone_number_id = ? AND created_by IS NOT NULL AND created_by <> ? LIMIT 1", [phone_number_id.trim(), userId]);
+    if (owners.length) return res.status(409).json({ message: "This sender is already assigned to another account" });
     const [existing] = await db.promise().query(
       "SELECT id, access_token, app_secret FROM user_wa_configs WHERE user_id = ?",
       [userId]
@@ -85,7 +102,7 @@ router.post("/save-config", verifyToken, async (req, res) => {
       );
     }
 
-    await configureForUser(userId);
+    wa = await cloudClientForUser(req.user.id);
 
     // Fetch and save phone details into wa_accounts for Multi-Account manager
     try {
@@ -94,8 +111,8 @@ router.post("/save-config", verifyToken, async (req, res) => {
         wa.displayPhoneNumber = phoneInfo.display_phone_number || wa.displayPhoneNumber;
         wa.verifiedName = phoneInfo.verified_name || wa.verifiedName;
         await db.promise().query(
-          `INSERT INTO wa_accounts (account_name, phone_number, phone_number_id, access_token, waba_id, connection_type, is_active, is_default)
-           VALUES (?, ?, ?, ?, ?, 'cloud_api', 1, 1)
+          `INSERT INTO wa_accounts (account_name, phone_number, phone_number_id, access_token, waba_id, connection_type, is_active, is_default, created_by)
+           VALUES (?, ?, ?, ?, ?, 'cloud_api', 1, 1, ?)
            ON DUPLICATE KEY UPDATE
              account_name = VALUES(account_name),
              phone_number = VALUES(phone_number),
@@ -109,6 +126,7 @@ router.post("/save-config", verifyToken, async (req, res) => {
             phone_number_id.trim(),
             encrypted_token,
             waba_id?.trim() || null,
+            userId,
           ]
         );
       }
@@ -128,6 +146,7 @@ router.post("/save-config", verifyToken, async (req, res) => {
 });
 
 router.post("/test-connection", verifyToken, async (req, res) => {
+  let wa = req.waCloud;
   const userId = req.user.id;
   let { phone_number_id, access_token, waba_id } = req.body;
 
@@ -164,17 +183,18 @@ router.post("/test-connection", verifyToken, async (req, res) => {
       templateCount: result.templateCount,
     });
   } catch (err) {
-    await configureForUser(userId).catch(() => resetToEnvConfig());
+    wa = await cloudClientForUser(req.user.id);
     const errMsg = err.message || "Meta API connection failed";
     res.status(400).json({ success: false, message: `Connection failed: ${errMsg}` });
   }
 });
 
 router.post("/subscribe-webhook", verifyToken, async (req, res) => {
+  let wa = req.waCloud;
   const userId = req.user.id;
   let { waba_id } = req.body;
   try {
-    await configureForUser(userId);
+    wa = await cloudClientForUser(req.user.id);
     const targetWabaId = waba_id || wa.wabaId;
     if (!targetWabaId) {
       return res.status(400).json({ success: false, message: "WABA ID is required to auto-subscribe webhooks" });
@@ -192,6 +212,7 @@ router.post("/subscribe-webhook", verifyToken, async (req, res) => {
 });
 
 router.post("/send-meta-test", verifyToken, async (req, res) => {
+  let wa = req.waCloud;
   const userId = req.user.id;
   const { phone, message } = req.body;
   if (!phone) {
@@ -199,7 +220,7 @@ router.post("/send-meta-test", verifyToken, async (req, res) => {
   }
 
   try {
-    await configureForUser(userId);
+    wa = await cloudClientForUser(req.user.id);
     if (!wa.isConfigured()) {
       return res.status(400).json({
         success: false,
@@ -232,6 +253,7 @@ router.post("/send-meta-test", verifyToken, async (req, res) => {
 });
 
 router.post("/test-template", verifyToken, async (req, res) => {
+  let wa = req.waCloud;
   const userId = req.user.id;
   const { phone_number_id, access_token, waba_id } = req.body;
 
@@ -243,10 +265,10 @@ router.post("/test-template", verifyToken, async (req, res) => {
     wa.wabaId = waba_id;
 
     const templates = await wa.getTemplates();
-    await configureForUser(userId).catch(() => resetToEnvConfig());
+    wa = await cloudClientForUser(req.user.id);
     res.json({ success: true, templateCount: templates.data?.length || 0 });
   } catch (err) {
-    await configureForUser(userId).catch(() => resetToEnvConfig());
+    wa = await cloudClientForUser(req.user.id);
     const errMsg = err.message || "Template fetch failed";
     res.status(400).json({ success: false, message: `Template fetch failed: ${errMsg}` });
   }
@@ -263,11 +285,12 @@ router.post("/test-template", verifyToken, async (req, res) => {
  * tells you whether it was a real button or the text fallback.
  */
 router.post("/test-interactive", verifyToken, async (req, res) => {
+  let wa = req.waCloud;
   const { phone, kind = "buttons" } = req.body;
   if (!phone) return res.status(400).json({ success: false, message: "phone is required" });
 
   try {
-    await configureForUser(req.user.id);
+    wa = await cloudClientForUser(req.user.id);
     const waLoadBalancer = require("../services/waLoadBalancer");
     const body = req.body.body || "This is a test interactive message from your CRM.";
     let result;
@@ -276,6 +299,8 @@ router.post("/test-interactive", verifyToken, async (req, res) => {
       const { url, button_text } = req.body;
       if (!url) return res.status(400).json({ success: false, message: "url is required for kind 'cta'" });
       result = await waLoadBalancer.sendCTAButtonMessage({
+        sessionKey: String(req.user.id),
+        requireNative: req.body.allowTextFallback !== true,
         phone,
         body,
         displayText: button_text || "Open Link",
@@ -285,6 +310,8 @@ router.post("/test-interactive", verifyToken, async (req, res) => {
       });
     } else if (kind === "list") {
       result = await waLoadBalancer.sendInteractiveList({
+        sessionKey: String(req.user.id),
+        requireNative: req.body.allowTextFallback !== true,
         phone,
         body,
         header: req.body.header || null,
@@ -298,6 +325,8 @@ router.post("/test-interactive", verifyToken, async (req, res) => {
       });
     } else if (kind === "buttons") {
       result = await waLoadBalancer.sendInteractiveButtons({
+        sessionKey: String(req.user.id),
+        requireNative: req.body.allowTextFallback !== true,
         phone,
         body,
         header: req.body.header || null,
@@ -324,11 +353,12 @@ router.post("/test-interactive", verifyToken, async (req, res) => {
     const errMsg = err.response?.data?.error?.message || err.message;
     res.status(400).json({ success: false, message: errMsg });
   } finally {
-    await configureForUser(req.user.id).catch(() => resetToEnvConfig());
+    wa = await cloudClientForUser(req.user.id);
   }
 });
 
 router.get("/phone-info", async (req, res) => {
+  let wa = req.waCloud;
   try {
     const info = await wa.getPhoneNumberInfo();
     res.json(info);
@@ -338,6 +368,7 @@ router.get("/phone-info", async (req, res) => {
 });
 
 router.get("/business-profile", async (req, res) => {
+  let wa = req.waCloud;
   try {
     const profile = await wa.getBusinessProfile();
     res.json(profile);
@@ -347,6 +378,7 @@ router.get("/business-profile", async (req, res) => {
 });
 
 router.get("/queue-stats", async (req, res) => {
+  let wa = req.waCloud;
   try {
     const stats = await getQueueStats();
     res.json(stats);
@@ -356,6 +388,7 @@ router.get("/queue-stats", async (req, res) => {
 });
 
 router.get("/meta-templates", async (req, res) => {
+  let wa = req.waCloud;
   try {
     const templates = await wa.getTemplates();
     res.json(templates);

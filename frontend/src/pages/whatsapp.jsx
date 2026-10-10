@@ -1,3 +1,4 @@
+import { waUiStorage } from "../utils/waUiStorage";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
@@ -67,6 +68,10 @@ import { DEMO_STATUS, DEMO_CHATS, DEMO_MESSAGES_MAP } from "../auth/demoData";
 import WhatsAppNav from "../components/WhatsAppNav";
 import socket from "../socket/socket";
 import RichMessageContent from "../components/RichMessageContent";
+import { readLocalMessages, writeLocalMessages, mergeLocalMessages, readLocalMedia, writeLocalMedia, localMediaUrl, localCacheOwner, mediaFromFile } from "../utils/waLocalCache";
+import WAStorageAndSenders from "../components/WAStorageAndSenders";
+import WAInteractiveOptions from "../components/WAInteractiveOptions";
+import { getInteractiveMessage } from "../utils/waInteractiveMessage";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 import WAConfigPrompt from "../components/WAConfigPrompt";
 import WAContactAvatar from "../components/WAContactAvatar";
@@ -268,42 +273,55 @@ function previewText(message) {
 
 function safeLocalStorageSet(key, value) {
   try {
-    localStorage.setItem(key, value);
+    waUiStorage.setItem(key, value);
   } catch (err) {
     if (err && (err.name === "QuotaExceededError" || err.code === 22 || err.number === -2147024882)) {
       try {
         const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
+        for (let i = 0; i < waUiStorage.length; i++) {
+          const k = waUiStorage.key(i);
           if (k && k.startsWith("wa_chat_messages_") && k !== key) {
             keysToRemove.push(k);
           }
         }
-        keysToRemove.slice(0, Math.max(1, Math.ceil(keysToRemove.length / 2))).forEach((k) => localStorage.removeItem(k));
-        localStorage.setItem(key, value);
+        keysToRemove.slice(0, Math.max(1, Math.ceil(keysToRemove.length / 2))).forEach((k) => waUiStorage.removeItem(k));
+        waUiStorage.setItem(key, value);
       } catch (_) {}
     }
   }
 }
 
-function MediaBubble({ chatId, messageId, serializedId = null, filename = "", mediaUrl = null, mimetype = null, isMe = false, onPreview = null }) {
+function MediaBubble({ chatId, messageId, serializedId = null, filename = "", mediaUrl = null, mimetype = null, cloudMediaId = null, isMe = false, onPreview = null }) {
   const [media, setMedia] = useState(mediaUrl ? { url: mediaUrl, filename, mimetype } : null);
   const [loading, setLoading] = useState(!mediaUrl);
   const [error, setError] = useState(false);
+  const localBlobRef = useRef(null);
+  useEffect(() => () => { if (localBlobRef.current) URL.revokeObjectURL(localBlobRef.current); }, []);
 
   const load = useCallback(async () => {
-    if (mediaUrl) return;
+    if (mediaUrl && !mediaUrl.startsWith("blob:")) return;
+    if (mediaUrl?.startsWith("blob:") && String(messageId).startsWith("temp_")) { setLoading(false); return; }
     if (!chatId || !messageId) return;
     setLoading(true);
     setError(false);
     try {
-      const token = localStorage.getItem("token");
-      const url = `${API}/api/whatsapp/chat/${encodeURIComponent(chatId)}/media/${encodeURIComponent(messageId)}${serializedId ? `?serializedId=${encodeURIComponent(serializedId)}` : ""}`;
+      const token = waUiStorage.getItem("token");
+      const owner = localCacheOwner();
+      const cached = await readLocalMedia(`${chatId}:${messageId}`, owner);
+      if (cached?.data) {
+        localBlobRef.current = localMediaUrl(cached);
+        setMedia({ ...cached, url: localBlobRef.current }); setLoading(false); return;
+      }
+      const url = `${API}/api/whatsapp/chat/${encodeURIComponent(chatId)}/media/${encodeURIComponent(messageId)}?${new URLSearchParams({ ...(serializedId ? { serializedId } : {}), ...(cloudMediaId ? { cloudMediaId } : {}) })}`;
       const { data } = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (data && (data.url || data.data)) {
-        setMedia(data);
+        if (data.data) {
+          await writeLocalMedia(`${chatId}:${messageId}`, data, owner).catch(() => {});
+          localBlobRef.current = localMediaUrl(data);
+          setMedia({ ...data, url: localBlobRef.current });
+        } else setMedia(data);
       } else {
         setError(true);
       }
@@ -311,10 +329,10 @@ function MediaBubble({ chatId, messageId, serializedId = null, filename = "", me
       setError(true);
     }
     setLoading(false);
-  }, [chatId, messageId, mediaUrl, serializedId]);
+  }, [chatId, messageId, mediaUrl, serializedId, cloudMediaId]);
 
   useEffect(() => {
-    if (mediaUrl) {
+    if (mediaUrl && !mediaUrl.startsWith("blob:")) {
       setMedia({ url: mediaUrl, filename, mimetype });
       setLoading(false);
     } else {
@@ -322,7 +340,7 @@ function MediaBubble({ chatId, messageId, serializedId = null, filename = "", me
     }
   }, [load, mediaUrl, filename, mimetype]);
 
-  const rawFilename = filename || media?.filename || `Document_${messageId}`;
+  const rawFilename = media?.filename || filename || `Document_${messageId}`;
   const fileExt = (rawFilename.match(/\.([a-zA-Z0-9]+)$/) || [])[1]?.toLowerCase() ||
     (media?.mimetype ? media.mimetype.split("/")[1]?.split(";")[0]?.toLowerCase() : "file");
 
@@ -518,10 +536,10 @@ export default function WhatsAppPage() {
   const [initialChecking, setInitialChecking] = useState(true);
   const [workspaceMode, setWorkspaceMode] = useState(() => {
     try {
-      const saved = localStorage.getItem("wa_workspace_mode");
+      const saved = waUiStorage.getItem("wa_workspace_mode");
       if (saved === "true") return true;
       if (saved === "false") return false;
-      const cached = localStorage.getItem("wa_cached_chats");
+      const cached = waUiStorage.getItem("wa_cached_chats");
       return Boolean(cached && JSON.parse(cached).length > 0);
     } catch {
       return false;
@@ -529,7 +547,7 @@ export default function WhatsAppPage() {
   });
   const [status, setStatus] = useState(() => {
     try {
-      const saved = localStorage.getItem("wa_cached_status");
+      const saved = waUiStorage.getItem("wa_cached_status");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === "object") return parsed;
@@ -548,7 +566,7 @@ export default function WhatsAppPage() {
   const qrRetryCountRef = useRef(0);
   const [chats, setChats] = useState(() => {
     try {
-      const saved = localStorage.getItem("wa_cached_chats");
+      const saved = waUiStorage.getItem("wa_cached_chats");
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -556,7 +574,7 @@ export default function WhatsAppPage() {
   });
   const [selectedChat, setSelectedChat] = useState(() => {
     try {
-      const saved = localStorage.getItem("wa_active_chat");
+      const saved = waUiStorage.getItem("wa_active_chat");
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -569,11 +587,11 @@ export default function WhatsAppPage() {
   const [botResuming, setBotResuming] = useState(false);
   const [messages, setMessages] = useState(() => {
     try {
-      const savedChat = localStorage.getItem("wa_active_chat");
+      const savedChat = waUiStorage.getItem("wa_active_chat");
       if (savedChat) {
         const parsed = JSON.parse(savedChat);
         if (parsed?.id) {
-          const cachedMsgs = localStorage.getItem(`wa_chat_messages_${parsed.id}`);
+          const cachedMsgs = waUiStorage.getItem(`wa_chat_messages_${parsed.id}`);
           if (cachedMsgs) return JSON.parse(cachedMsgs);
         }
       }
@@ -627,7 +645,7 @@ export default function WhatsAppPage() {
   const [sidebarTab, setSidebarTab] = useState("all"); // 'all', 'unread', 'favourites', 'groups', 'bot'
   const [sidebarMode, setSidebarMode] = useState(() => {
     try {
-      return localStorage.getItem("wa_sidebar_mode") || "normal"; // "normal", "compact", "wide"
+      return waUiStorage.getItem("wa_sidebar_mode") || "normal"; // "normal", "compact", "wide"
     } catch {
       return "normal";
     }
@@ -636,7 +654,7 @@ export default function WhatsAppPage() {
   const toggleSidebarMode = useCallback(() => {
     setSidebarMode((prev) => {
       const next = prev === "normal" ? "compact" : prev === "compact" ? "wide" : "normal";
-      try { localStorage.setItem("wa_sidebar_mode", next); } catch (_) { }
+      try { waUiStorage.setItem("wa_sidebar_mode", next); } catch (_) { }
       return next;
     });
   }, []);
@@ -660,6 +678,8 @@ export default function WhatsAppPage() {
   const [selectedFlowId, setSelectedFlowId] = useState("");
   const [triggeringFlow, setTriggeringFlow] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [optionsMenuRequireNative, setOptionsMenuRequireNative] = useState(true);
+  const [optionsMenuSender, setOptionsMenuSender] = useState("auto");
   const [optionsMenuTitle, setOptionsMenuTitle] = useState("Welcome to Madhura Tech! Please choose an option below:");
   const [optionsMenuBotFlowId, setOptionsMenuBotFlowId] = useState("");
   const [optionsMenuItems, setOptionsMenuItems] = useState([
@@ -764,10 +784,10 @@ export default function WhatsAppPage() {
 
   // Sound & notification toggle
   const [soundEnabled, setSoundEnabled] = useState(() => {
-    try { return localStorage.getItem("wa_sound_enabled") !== "false"; } catch { return true; }
+    try { return waUiStorage.getItem("wa_sound_enabled") !== "false"; } catch { return true; }
   });
   const [desktopNotifs, setDesktopNotifs] = useState(() => {
-    try { return localStorage.getItem("wa_desktop_notifs") === "true"; } catch { return false; }
+    try { return waUiStorage.getItem("wa_desktop_notifs") === "true"; } catch { return false; }
   });
 
   // Online contacts set
@@ -776,7 +796,7 @@ export default function WhatsAppPage() {
   // Emoji search
   const [emojiSearch, setEmojiSearch] = useState("");
   const [recentEmojis, setRecentEmojis] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("wa_recent_emojis") || "[]"); } catch { return []; }
+    try { return JSON.parse(waUiStorage.getItem("wa_recent_emojis") || "[]"); } catch { return []; }
   });
 
   // Starred messages
@@ -803,7 +823,7 @@ export default function WhatsAppPage() {
       safeLocalStorageSet("wa_cached_chats", JSON.stringify(chats));
     } else if (Array.isArray(chats) && chats.length === 0) {
       try {
-        localStorage.removeItem("wa_cached_chats");
+        waUiStorage.removeItem("wa_cached_chats");
       } catch (_) { }
     }
   }, [chats]);
@@ -813,7 +833,7 @@ export default function WhatsAppPage() {
       if (status && status.connected) {
         safeLocalStorageSet("wa_cached_status", JSON.stringify(status));
       } else {
-        localStorage.removeItem("wa_cached_status");
+        waUiStorage.removeItem("wa_cached_status");
       }
     } catch (_) { }
   }, [status]);
@@ -823,7 +843,7 @@ export default function WhatsAppPage() {
       if (selectedChat) {
         safeLocalStorageSet("wa_active_chat", JSON.stringify(selectedChat));
       } else {
-        localStorage.removeItem("wa_active_chat");
+        waUiStorage.removeItem("wa_active_chat");
       }
     } catch (_) { }
   }, [selectedChat]);
@@ -832,6 +852,7 @@ export default function WhatsAppPage() {
     if (selectedChat?.id && Array.isArray(messages) && messages.length > 0) {
       const toStore = messages.slice(0, 100);
       safeLocalStorageSet(`wa_chat_messages_${selectedChat.id}`, JSON.stringify(toStore));
+      writeLocalMessages(selectedChat.id, messages).catch(() => {});
       if (!messagesCacheRef.current) messagesCacheRef.current = {};
       messagesCacheRef.current[selectedChat.id] = messages;
     }
@@ -881,7 +902,7 @@ export default function WhatsAppPage() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       let res;
       try {
@@ -941,7 +962,7 @@ export default function WhatsAppPage() {
       });
 
       if (flat.connected) {
-        try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
+        try { waUiStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
         setQrCode(null);
         setQrDataUrl(null);
@@ -973,7 +994,7 @@ export default function WhatsAppPage() {
     setQrLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const endpoint = force ? "/api/whatsapp/qr?refresh=true" : "/api/whatsapp/qr";
       let res;
@@ -1069,13 +1090,13 @@ export default function WhatsAppPage() {
 
   const handleForceDisconnectToQr = useCallback(() => {
     try {
-      localStorage.removeItem("wa_cached_status");
-      localStorage.removeItem("wa_cached_chats");
-      localStorage.removeItem("wa_active_chat");
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const k = localStorage.key(i);
+      waUiStorage.removeItem("wa_cached_status");
+      waUiStorage.removeItem("wa_cached_chats");
+      waUiStorage.removeItem("wa_active_chat");
+      for (let i = waUiStorage.length - 1; i >= 0; i--) {
+        const k = waUiStorage.key(i);
         if (k && k.startsWith("wa_chat_messages_")) {
-          localStorage.removeItem(k);
+          waUiStorage.removeItem(k);
         }
       }
     } catch (_) { }
@@ -1125,7 +1146,7 @@ export default function WhatsAppPage() {
       setChatsLoading(true);
     }
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const endpoint = refresh ? `/api/whatsapp/chats?refresh=true` : `/api/whatsapp/chats`;
       let res;
@@ -1150,7 +1171,7 @@ export default function WhatsAppPage() {
 
   const fetchAccountDetails = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const { data } = await axios.get(`${API}/api/whatsapp/account`, { headers });
       setAccountDetails(data);
@@ -1199,16 +1220,25 @@ export default function WhatsAppPage() {
     };
   }, [fetchStatus, fetchChats, fetchAccountDetails]);
 
+  const [syncProgress, setSyncProgress] = useState(null);
   const handleSyncWhatsApp = async () => {
     setSyncing(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      await axios.post(`${API}/api/whatsapp/sync-contacts`, {}, { headers }).catch(() => { });
-      await axios.post(`${API}/api/whatsapp/sync-chats`, {}, { headers }).catch(() => { });
+
+      await axios.post(`${API}/api/whatsapp/sync-chats`, {}, { headers });
+      let state;
+      do {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const { data } = await axios.get(`${API}/api/whatsapp/sync-status`, { headers });
+        state = data; setSyncProgress(data);
+        await fetchChats();
+      } while (state.status === "running");
+      if (state.status === "failed" || state.status === "partial") setError(state.error || state.contactError || `${state.failedChats || 0} chats could not be synced.`);
       await fetchChats(true);
       await fetchAccountDetails();
-    } catch (_) { }
+    } catch (err) { setError(err.response?.data?.error || "WhatsApp sync failed."); }
     setSyncing(false);
   };
 
@@ -1234,7 +1264,7 @@ export default function WhatsAppPage() {
     const hasCached = Boolean(messagesCacheRef.current[chatId] && messagesCacheRef.current[chatId].length > 0);
     if (!hasCached) {
       try {
-        const stored = localStorage.getItem(`wa_chat_messages_${chatId}`);
+        const stored = waUiStorage.getItem(`wa_chat_messages_${chatId}`);
         if (stored) {
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed) && parsed.length > 0) {
@@ -1250,11 +1280,13 @@ export default function WhatsAppPage() {
       }
     }
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const res = await axios.get(`${API}/api/whatsapp/chat/${encodeURIComponent(chatId)}/messages?limit=${limit}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = res.data || [];
+      const local = await readLocalMessages(chatId);
+      const data = mergeLocalMessages(mergeLocalMessages(local, messagesCacheRef.current[chatId] || []), res.data || []);
+      await writeLocalMessages(chatId, data).catch(() => {});
       messagesCacheRef.current[chatId] = data;
       setMessages(data);
       if (Array.isArray(data) && data.length > 0) {
@@ -1286,7 +1318,7 @@ export default function WhatsAppPage() {
     setShowAccountBalanceModal(true);
     setAccountBalance(null);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const { data } = await axios.get(`${API}/api/whatsapp/account-balance`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -1299,7 +1331,7 @@ export default function WhatsAppPage() {
 
   const fetchTemplates = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const { data } = await axios.get(`${API}/api/wa/templates`, { headers: { Authorization: `Bearer ${token}` } });
       setTemplates(data || []);
     } catch { }
@@ -1316,7 +1348,7 @@ export default function WhatsAppPage() {
   const handleSeedTemplates = async () => {
     setTmplLoading(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const { data } = await axios.post(`${API}/api/wa/templates/seed`, {}, { headers: { Authorization: `Bearer ${token}` } });
       if (data.templates) setTemplates(data.templates);
       else fetchTemplates();
@@ -1331,7 +1363,7 @@ export default function WhatsAppPage() {
     if (!newTmplName.trim() || !newTmplBody.trim()) return;
     setTmplLoading(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const { data } = await axios.post(
         `${API}/api/wa/templates`,
         { name: newTmplName.trim(), category: newTmplCategory, body: newTmplBody.trim() },
@@ -1377,7 +1409,7 @@ export default function WhatsAppPage() {
       setTimeout(() => scrollToBottom(false), 20);
     } else {
       try {
-        const stored = localStorage.getItem(`wa_chat_messages_${chat.id}`);
+        const stored = waUiStorage.getItem(`wa_chat_messages_${chat.id}`);
         if (stored) {
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed) && parsed.length > 0) {
@@ -1391,7 +1423,7 @@ export default function WhatsAppPage() {
 
     // Mark as read on WhatsApp server & DB
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       axios.post(`${API}/api/whatsapp/chat/${encodeURIComponent(chat.id)}/read`, {}, { headers }).catch(() => { });
     } catch (_) { }
@@ -1515,7 +1547,7 @@ export default function WhatsAppPage() {
     }
 
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       // Single request. The old code caught ANY error and re-POSTed to a second
       // URL — including a 500 returned after the server had already delivered,
@@ -1570,7 +1602,7 @@ export default function WhatsAppPage() {
   const handleReact = async (messageId, emoji) => {
     if (!selectedChat || !messageId) return;
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       await axios.post(`${API}/api/whatsapp/react`, {
         chatId: selectedChat.id,
@@ -1604,7 +1636,7 @@ export default function WhatsAppPage() {
     const cleanPhone = phone.replace(/\D/g, "").slice(-10);
     setCrmDetailsLoading(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const res = await axios.get(`${API}/api/whatsapp/contact-crm-details/${cleanPhone}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -1618,182 +1650,13 @@ export default function WhatsAppPage() {
 
   const fetchQuickReplies = async () => {
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const res = await axios.get(`${API}/api/whatsapp/quick-replies`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setQuickReplies(res.data || []);
     } catch (_) { }
   };
-
-  const extractMessageButtons = (msg) => {
-    if (!msg) return [];
-    const buttons = [];
-
-    const normalizeBtn = (b) => {
-      if (!b) return null;
-      if (typeof b === "string") {
-        const s = b.trim();
-        if (!s) return null;
-        if (s.startsWith("📞") || s.toLowerCase().startsWith("call")) {
-          const ph = (s.match(/\+?\d[\d\s-]{8,15}/) || [])[0] || "";
-          return { type: "call", title: s.replace(/^📞\s*/, "").replace(/:\s*\+?\d[\d\s-]{8,15}/, "").trim() || "Call Now", phone: ph };
-        }
-        if (s.startsWith("↗") || s.startsWith("🔗") || s.includes("http")) {
-          const u = (s.match(/https?:\/\/[^\s)]+/) || [])[0] || "";
-          return { type: "url", title: s.replace(/^[↗🔗]\s*/, "").replace(/:\s*https?:\/\/[^\s)]+/, "").trim() || "Apply Now", url: u };
-        }
-        const cleanTitle = s.replace(/^[↩🔘•\d.)\s\u20E3]+/u, "").trim();
-        return { type: "reply", title: cleanTitle || s, id: cleanTitle || s };
-      }
-      const title = b.title || b.text || b.displayText || b.id || "";
-      const type = b.type || (b.url ? "url" : b.phone ? "call" : "reply");
-      return {
-        type,
-        title: String(title).trim(),
-        id: b.id || title,
-        url: b.url || (type === "url" ? b.id : undefined),
-        phone: b.phone || (type === "call" ? b.id : undefined),
-      };
-    };
-
-    // 1. Direct buttons array (from bot flows or API)
-    if (Array.isArray(msg.buttons) && msg.buttons.length > 0) {
-      msg.buttons.forEach((b) => {
-        const norm = normalizeBtn(b);
-        if (norm && norm.title) buttons.push(norm);
-      });
-    }
-
-    // 2. Direct rows array (interactive lists)
-    if (buttons.length === 0 && Array.isArray(msg.rows) && msg.rows.length > 0) {
-      msg.rows.forEach((r) => {
-        const norm = normalizeBtn(r);
-        if (norm && norm.title) buttons.push(norm);
-      });
-    }
-
-    // 3. Interactive payload (official Meta / WhatsApp Cloud / Flow Engine)
-    if (buttons.length === 0) {
-      const interactive = msg.interactive || (typeof msg.interactive_payload === "string" ? (() => { try { return JSON.parse(msg.interactive_payload); } catch { return null; } })() : msg.interactive_payload);
-      if (interactive) {
-        if (Array.isArray(interactive.buttons)) {
-          interactive.buttons.forEach((b) => {
-            const btnData = b.reply || b.button || b;
-            const norm = normalizeBtn(btnData);
-            if (norm && norm.title) buttons.push(norm);
-          });
-        }
-        if (Array.isArray(interactive.action?.buttons)) {
-          interactive.action.buttons.forEach((b) => {
-            const btnData = b.reply || b.button || b;
-            const norm = normalizeBtn(btnData);
-            if (norm && norm.title) buttons.push(norm);
-          });
-        }
-        if (Array.isArray(interactive.rows)) {
-          interactive.rows.forEach((r) => {
-            const norm = normalizeBtn(r);
-            if (norm && norm.title) buttons.push(norm);
-          });
-        }
-        if (Array.isArray(interactive.action?.sections)) {
-          interactive.action.sections.forEach((sec) => {
-            if (Array.isArray(sec.rows)) {
-              sec.rows.forEach((r) => {
-                const norm = normalizeBtn(r);
-                if (norm && norm.title) buttons.push(norm);
-              });
-            }
-          });
-        }
-      }
-    }
-
-    // 4. Parse from message body text (flow menus, numbered choices, call/apply links)
-    if (buttons.length === 0) {
-      const body = msg.body || "";
-      if (body.includes("\n")) {
-        const lines = body.split("\n");
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-
-          // Call button: "📞 Call Now" or "📞 Call: +91..."
-          if (trimmed.startsWith("📞") || trimmed.toLowerCase().startsWith("call now") || trimmed.toLowerCase().startsWith("call:")) {
-            const ph = (trimmed.match(/\+?\d[\d\s-]{8,15}/) || [])[0] || "";
-            const t = trimmed.replace(/^📞\s*/, "").replace(/:\s*\+?\d[\d\s-]{8,15}/, "").trim();
-            buttons.push({ type: "call", title: t || "Call Now", phone: ph });
-            continue;
-          }
-
-          // URL button: "↗ Apply Now" or "↗ Link: https://..."
-          if (trimmed.startsWith("↗") || trimmed.startsWith("🔗") || trimmed.toLowerCase().startsWith("apply now") || trimmed.toLowerCase().startsWith("apply:")) {
-            const u = (trimmed.match(/https?:\/\/[^\s)]+/) || [])[0] || "";
-            const t = trimmed.replace(/^[↗🔗]\s*/, "").replace(/:\s*https?:\/\/[^\s)]+/, "").trim();
-            buttons.push({ type: "url", title: t || "Apply Now", url: u });
-            continue;
-          }
-
-          // Reply button: "↩ English" or "1️⃣ English" or "1. English" or "• English"
-          if (trimmed.startsWith("↩")) {
-            const t = trimmed.replace(/^↩\s*/, "").trim();
-            if (t) buttons.push({ type: "reply", title: t, id: t });
-            continue;
-          }
-
-          const match = trimmed.match(/^(?:\*|•|-)?\s*(?:\d+[\s.)-]+|[\u0030-\u0039]\uFE0F?\u20E3)\s*\*?(.*?)\*?$/);
-          if (match && match[1]) {
-            const clean = match[1].trim().replace(/\*+/g, "");
-            if (clean.length >= 2 && !clean.toLowerCase().startsWith("reply with") && !clean.toLowerCase().startsWith("or reply") && !clean.toLowerCase().startsWith("reply 0")) {
-              buttons.push({ type: "reply", title: clean, id: clean });
-            }
-          }
-        }
-      }
-    }
-
-    return buttons;
-  };
-
-  const getMessageDisplayBody = (msg, buttons) => {
-    let body = msg.body || "";
-    if (!buttons || buttons.length === 0 || !body.includes("\n")) return body;
-    const lines = body.split("\n");
-    let lastContentIdx = lines.length - 1;
-
-    while (lastContentIdx >= 0) {
-      const line = lines[lastContentIdx].trim();
-      if (!line) {
-        lastContentIdx--;
-        continue;
-      }
-      const isBtnLine =
-        line.startsWith("↩") ||
-        line.startsWith("📞") ||
-        line.startsWith("↗") ||
-        line.toLowerCase().startsWith("call now") ||
-        line.toLowerCase().startsWith("apply now") ||
-        line.toLowerCase().startsWith("reply with a number") ||
-        line.toLowerCase().startsWith("reply with") ||
-        line.toLowerCase().startsWith("choose an option") ||
-        buttons.some((b) => {
-          const t = (b.title || b.text || "").toLowerCase();
-          return t && line.toLowerCase().includes(t);
-        });
-
-      if (isBtnLine) {
-        lastContentIdx--;
-      } else {
-        break;
-      }
-    }
-
-    const cleaned = lines.slice(0, lastContentIdx + 1).join("\n").trim();
-    return cleaned || body;
-  };
-
-  const extractQuickReplies = extractMessageButtons;
 
   const handleSendDirect = async (textToSend) => {
     if (!textToSend || !selectedChat) return;
@@ -1836,7 +1699,7 @@ export default function WhatsAppPage() {
     });
 
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       // No second-URL retry: see handleSend.
       const res = await axios.post(
@@ -1877,7 +1740,7 @@ export default function WhatsAppPage() {
     if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
     setTriggeringFlow(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const res = await axios.post(`${API}/api/wa/flows/${flowId}/trigger-phone`, {
         phone: cleanPhone || selectedChat.id,
         chatId: selectedChat.id,
@@ -1901,7 +1764,7 @@ export default function WhatsAppPage() {
   const fetchFlows = useCallback(async () => {
     try {
       setFlowsLoading(true);
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const { data } = await axios.get(`${API}/api/wa/flows`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -1965,49 +1828,23 @@ export default function WhatsAppPage() {
     });
 
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       const formData = new FormData();
       formData.append("file", file);
 
-      let uploaded = null;
-      try {
-        const resUp = await axios.post(`${API}/api/whatsapp/upload-media`, formData, { headers, timeout: 60000 });
-        uploaded = resUp.data;
-      } catch (_) {
-        try {
-          const resFallback = await axios.post(`${API}/api/wa/campaigns/upload-media`, formData, { headers, timeout: 60000 });
-          uploaded = resFallback.data;
-        } catch (_) {
-          const resRel = await axios.post(`/api/whatsapp/upload-media`, formData, { headers, timeout: 60000 });
-          uploaded = resRel.data;
-        }
-      }
-
-      if (!uploaded || !uploaded.url) {
-        throw new Error("File upload failed. Please verify network connection or try a smaller file.");
-      }
-
-      const mediaType = uploaded.media_type || customMediaType || "document";
-      // One send attempt only. Re-POSTing to a second URL after the first may
-      // already have delivered sent the same attachment twice.
-      const idempotencyKey = `ui_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-      const res = await axios.post(
-        `${API}/api/whatsapp/send-media`,
-        {
-          chatId: selectedChat.id,
-          mediaUrl: uploaded.url,
-          mediaType,
-          filename: uploaded.filename || file.name,
-          idempotencyKey,
-        },
-        { headers, timeout: 60000 }
-      );
-
+      const owner = localCacheOwner();
+      const localFile = await mediaFromFile(file);
+      await writeLocalMedia(`${selectedChat.id}:${tempId}`, localFile, owner).catch(() => {});
+      formData.append("chatId", selectedChat.id);
+      formData.append("mediaType", file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : file.type.startsWith("audio/") ? "audio" : customMediaType || "document");
+      formData.append("idempotencyKey", `ui_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
+      const res = await axios.post(`${API}/api/whatsapp/send-media-upload`, formData, { headers, timeout: 60000 });
       const realId = res.data?.id || tempId;
+      await writeLocalMedia(`${selectedChat.id}:${realId}`, localFile, owner).catch(() => {});
       setMessages((prev) => {
         const next = prev.map((m) =>
-          m.id === tempId ? { ...m, id: realId, mediaUrl: uploaded.url, status: "sent" } : m
+          m.id === tempId ? { ...m, id: realId, mediaUrl: localBlobUrl, status: "sent" } : m
         );
         if (selectedChat?.id) {
           safeLocalStorageSet(`wa_chat_messages_${selectedChat.id}`, JSON.stringify(next.slice(0, 100)));
@@ -2021,7 +1858,7 @@ export default function WhatsAppPage() {
       }
       const errMsg = payload?.error || err.message || "Failed to send attachment";
       setError(`Attachment error: ${errMsg}`);
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, status: "failed" } : m)));
+      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, status: payload?.deliveryUnknown || !err.response ? "unknown" : "failed" } : m)));
     }
     setMediaSending(false);
   };
@@ -2147,7 +1984,7 @@ export default function WhatsAppPage() {
     if (!selectedChat || !flowId) return;
     setTriggeringFlow(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       let phone = selectedChat.id.replace(/\D/g, "");
       if (phone.length === 10) phone = "91" + phone;
@@ -2175,9 +2012,10 @@ export default function WhatsAppPage() {
     const validButtons = optionsMenuItems.filter((item) => {
       if (typeof item === "string") return item.trim().length > 0;
       return item && item.text && item.text.trim().length > 0;
-    }).map((item) => {
-      if (typeof item === "string") return { type: "reply", text: item.trim(), title: item.trim() };
+    }).map((item, index) => {
+      if (typeof item === "string") return { type: "reply", id: `option_${index + 1}`, text: item.trim(), title: item.trim() };
       return {
+        id: item.id || `option_${index + 1}`,
         type: item.type || "reply",
         text: item.text.trim(),
         title: item.text.trim(),
@@ -2187,6 +2025,7 @@ export default function WhatsAppPage() {
     });
 
     const bodyText = optionsMenuTitle.trim();
+    if (!validButtons.length && !optionsMenuBotFlowId) { setError("Add at least one option to your menu."); return; }
 
     // 1. If user selected a Bot Flow to trigger
     if (optionsMenuBotFlowId) {
@@ -2195,6 +2034,10 @@ export default function WhatsAppPage() {
       setShowAttachMenu(false);
       return;
     }
+
+    if (sendInFlightRef.current) return;
+    sendInFlightRef.current = true;
+    setSending(true);
 
     // 2. Build formatted text with buttons
     const formattedSendText = `${bodyText}\n\n${validButtons.map((b) => {
@@ -2215,6 +2058,7 @@ export default function WhatsAppPage() {
       buttons: validButtons,
       interactive: {
         type: "buttons",
+        text: bodyText,
         buttons: validButtons,
       },
     };
@@ -2224,16 +2068,23 @@ export default function WhatsAppPage() {
     setTimeout(scrollToBottom, 50);
 
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      await axios.post(`${API}/api/whatsapp/send`, {
+      const { data } = await axios.post(`${API}/api/whatsapp/send-interactive`, {
         chatId: selectedChat.id,
-        message: formattedSendText,
+        message: bodyText,
         buttons: validButtons,
+        requireNative: optionsMenuRequireNative,
+        preferredEngine: optionsMenuSender === "auto" ? null : optionsMenuSender,
       }, { headers });
+      setMessages((prev) => prev.filter((item) => item.id === tempId || item.id !== data.id).map((item) => item.id === tempId ? { ...item, id: data.id, status: "sent", interactive: { ...data.interactive, native: data.native } } : item));
       fetchMessages(selectedChat.id, 15);
     } catch (err) {
-      console.warn("Failed to send interactive options menu:", err.message);
+      setError(err.response?.data?.error || "Menu could not be sent. Check your WhatsApp connection.");
+      setMessages((prev) => prev.map((item) => item.id === tempId ? { ...item, status: err.response?.data?.deliveryUnknown ? "unknown" : "failed" } : item));
+    } finally {
+      sendInFlightRef.current = false;
+      setSending(false);
     }
   };
 
@@ -2260,7 +2111,7 @@ export default function WhatsAppPage() {
 
   const fetchTeamMembers = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       const { data } = await axios.get(`${API}/api/teammember`, { headers });
       setTeamMembers(Array.isArray(data) ? data : []);
@@ -2272,7 +2123,7 @@ export default function WhatsAppPage() {
   const handleAssignAgent = async (agentId, agentName) => {
     if (!selectedChat) return;
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       await axios.post(`${API}/api/whatsapp/chat/${selectedChat.id}/assign`, { agentId, agentName }, { headers });
       setAssignedAgentName(agentName);
@@ -2284,7 +2135,7 @@ export default function WhatsAppPage() {
   const handleUpdateTicketStatus = async (status) => {
     if (!selectedChat) return;
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       await axios.post(`${API}/api/whatsapp/chat/${selectedChat.id}/ticket-status`, { status }, { headers });
       setTicketStatus(status);
@@ -2297,7 +2148,7 @@ export default function WhatsAppPage() {
     if (!phone) return;
     setNotesLoading(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       const cleanPhone = phone.replace(/\D/g, "");
       const { data } = await axios.get(`${API}/api/whatsapp/chat/${cleanPhone}/notes`, { headers });
@@ -2314,12 +2165,12 @@ export default function WhatsAppPage() {
     if (!selectedChat || !newNoteText.trim()) return;
     setSubmittingNote(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       const cleanPhone = selectedChat.id.replace(/\D/g, "");
       await axios.post(
         `${API}/api/whatsapp/chat/${cleanPhone}/notes`,
-        { note: newNoteText, authorName: localStorage.getItem("userName") || "Agent" },
+        { note: newNoteText, authorName: waUiStorage.getItem("userName") || "Agent" },
         { headers }
       );
       setNewNoteText("");
@@ -2336,7 +2187,7 @@ export default function WhatsAppPage() {
     if (!selectedChat || !paymentAmount || Number(paymentAmount) <= 0) return;
     setCreatingPayment(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       const cleanPhone = selectedChat.id.replace(/\D/g, "");
       await axios.post(
@@ -2363,7 +2214,7 @@ export default function WhatsAppPage() {
   const fetchDripSequences = async () => {
     setDripLoading(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       const { data } = await axios.get(`${API}/api/wa/drip`, { headers });
       setDripSequences(Array.isArray(data) ? data : []);
@@ -2378,7 +2229,7 @@ export default function WhatsAppPage() {
     if (!selectedChat || !sequenceId) return;
     setEnrollingDrip(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       const cleanPhone = selectedChat.id.replace(/\D/g, "");
       await axios.post(
@@ -2449,7 +2300,7 @@ export default function WhatsAppPage() {
     if (!selectedChat) return;
     setSendingReminder(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       let phone = selectedChat.id.replace(/\D/g, "");
       if (phone.length === 10) phone = "91" + phone;
 
@@ -2480,7 +2331,7 @@ export default function WhatsAppPage() {
   const fetchCampaignGroups = useCallback(async () => {
     try {
       setGroupsLoading(true);
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const { data } = await axios.get(`${API}/api/wa/groups`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -2496,7 +2347,7 @@ export default function WhatsAppPage() {
     if (!selectedChat || selectedGroupIds.length === 0) return;
     setAddingToGroup(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       let cleanPhone = selectedChat.id.replace(/\D/g, "").slice(-10);
       for (const groupId of selectedGroupIds) {
         await axios.post(
@@ -2526,7 +2377,7 @@ export default function WhatsAppPage() {
     if (!newGroupName.trim() || !selectedChat) return;
     setCreatingGroup(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const { data: newGrp } = await axios.post(
         `${API}/api/wa/groups`,
         { name: newGroupName.trim(), description: "Created from WhatsApp Chat" },
@@ -2559,7 +2410,7 @@ export default function WhatsAppPage() {
   const fetchAutomations = useCallback(async () => {
     try {
       setAutomationsLoading(true);
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const { data } = await axios.get(`${API}/api/wa/automations`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -2575,7 +2426,7 @@ export default function WhatsAppPage() {
     if (!selectedChat || !automationId) return;
     setRunningAutomation(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const rawTarget = selectedChat.phoneNumber || selectedChat.phone || selectedChat.id?.replace(/@.*$/, "") || "";
       let phone = rawTarget.replace(/\D/g, "");
       if (phone.length === 10) phone = "91" + phone;
@@ -2607,7 +2458,7 @@ export default function WhatsAppPage() {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
-          const token = localStorage.getItem("token");
+          const token = waUiStorage.getItem("token");
           const headers = { Authorization: `Bearer ${token}` };
           await axios.post(`${API}/api/whatsapp/send-location`, {
             chatId: selectedChat.id, lat: pos.coords.latitude, lng: pos.coords.longitude,
@@ -2656,7 +2507,7 @@ export default function WhatsAppPage() {
     if (newChatMessage.trim()) {
       setNewChatLoading(true);
       try {
-        const token = localStorage.getItem("token");
+        const token = waUiStorage.getItem("token");
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
         // Single attempt — no second-URL retry (see handleSend).
         const idempotencyKey = `ui_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -2708,7 +2559,7 @@ export default function WhatsAppPage() {
 
   const handleEnterWorkspace = useCallback(() => {
     setWorkspaceMode(true);
-    try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
+    try { waUiStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
     setStatus((prev) => ({
       ...DEMO_STATUS,
       ...prev,
@@ -2741,7 +2592,7 @@ export default function WhatsAppPage() {
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         setLoginCheckMessage(`Checking device link (attempt ${attempt}/${maxAttempts})...`);
 
-        const token = localStorage.getItem("token");
+        const token = waUiStorage.getItem("token");
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
         let isLinked = false;
@@ -2773,7 +2624,7 @@ export default function WhatsAppPage() {
           setLoginCheckMessage(`Linked successfully${detectedPhone ? ` to +${detectedPhone}` : ""}! Opening workspace...`);
           setQrCode(null);
           setQrDataUrl(null);
-          try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
+          try { waUiStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
           await fetchChats(true);
           await fetchAccountDetails();
           setTimeout(() => {
@@ -2866,7 +2717,7 @@ export default function WhatsAppPage() {
     setPairingCode(null);
 
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       let res;
       try {
@@ -2943,6 +2794,8 @@ export default function WhatsAppPage() {
         isMe: Boolean(data?.isMe),
       };
 
+      const owner = localCacheOwner();
+      if (data?.sessionKey && String(data.sessionKey) !== owner) return;
       // Play pleasant audio chime on inbound messages (respects sound toggle)
       if (!msgObj.isMe && soundEnabledRef.current) {
         playNotificationSound();
@@ -2965,7 +2818,12 @@ export default function WhatsAppPage() {
       if (isCurrentChat && msgObj) {
         setMessages((prev) => {
           if (prev.some((m) => m.id === msgObj.id || (m.serializedId && m.serializedId === msgObj.serializedId))) {
-            return prev;
+            // The transport event may arrive before the Flowbot menu metadata.
+            if (!msgObj.interactive) return prev;
+            const enriched = prev.map((m) => m.id === msgObj.id || (m.serializedId && m.serializedId === msgObj.serializedId)
+              ? { ...m, ...msgObj, hasMedia: false } : m);
+            if (activeSelected?.id) safeLocalStorageSet(`wa_chat_messages_${activeSelected.id}`, JSON.stringify(enriched.slice(0, 100)));
+            return enriched;
           }
           const next = [msgObj, ...prev];
           if (activeSelected?.id) {
@@ -2983,10 +2841,14 @@ export default function WhatsAppPage() {
         }
       } else if (!isCurrentChat && targetChatId && msgObj) {
         try {
-          const stored = localStorage.getItem(`wa_chat_messages_${targetChatId}`);
+          const stored = waUiStorage.getItem(`wa_chat_messages_${targetChatId}`);
           const parsed = stored ? JSON.parse(stored) : [];
           if (!parsed.some((m) => m.id === msgObj.id || (m.serializedId && m.serializedId === msgObj.serializedId))) {
             safeLocalStorageSet(`wa_chat_messages_${targetChatId}`, JSON.stringify([msgObj, ...parsed].slice(0, 100)));
+          } else if (msgObj.interactive) {
+            const enriched = parsed.map((m) => m.id === msgObj.id || (m.serializedId && m.serializedId === msgObj.serializedId) ? { ...m, ...msgObj, hasMedia: false } : m);
+            messagesCacheRef.current[targetChatId] = enriched;
+            safeLocalStorageSet(`wa_chat_messages_${targetChatId}`, JSON.stringify(enriched.slice(0, 100)));
           }
         } catch (_) {}
       }
@@ -3288,8 +3150,8 @@ export default function WhatsAppPage() {
   useEffect(() => { desktopNotifsRef.current = desktopNotifs; }, [desktopNotifs]);
 
   // Persist sound/notification preferences
-  useEffect(() => { localStorage.setItem("wa_sound_enabled", soundEnabled); }, [soundEnabled]);
-  useEffect(() => { localStorage.setItem("wa_desktop_notifs", desktopNotifs); }, [desktopNotifs]);
+  useEffect(() => { waUiStorage.setItem("wa_sound_enabled", soundEnabled); }, [soundEnabled]);
+  useEffect(() => { waUiStorage.setItem("wa_desktop_notifs", desktopNotifs); }, [desktopNotifs]);
 
   // Request desktop notification permission
   const requestNotifPermission = useCallback(async () => {
@@ -3344,7 +3206,7 @@ export default function WhatsAppPage() {
     const phone = chatId.replace(/\D/g, "");
     if (!phone) return setBotStatus(null);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const { data } = await axios.get(`${API}/api/whatsapp/chat/${phone}/bot-status`, { headers, timeout: 8000 });
       setBotStatus(data);
@@ -3361,7 +3223,7 @@ export default function WhatsAppPage() {
     if (!selectedChat?.id) return;
     setBotResuming(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const phone = selectedChat.id.replace(/\D/g, "");
       // This endpoint re-enables the bot AND clears ai_paused_until.
@@ -3402,7 +3264,7 @@ export default function WhatsAppPage() {
   const addRecentEmoji = useCallback((emoji) => {
     setRecentEmojis((prev) => {
       const next = [emoji, ...prev.filter((e) => e !== emoji)].slice(0, 16);
-      try { localStorage.setItem("wa_recent_emojis", JSON.stringify(next)); } catch { }
+      try { waUiStorage.setItem("wa_recent_emojis", JSON.stringify(next)); } catch { }
       return next;
     });
   }, []);
@@ -3522,6 +3384,7 @@ export default function WhatsAppPage() {
     return (
       <div className="hl-page w-full flex-1 flex flex-col min-h-0 overflow-y-auto wa-scroll bg-[var(--color-paper)] text-[var(--color-ink)]">
         <WhatsAppNav />
+        {syncing && <p className="px-3 py-2 text-xs" role="status">Syncing WhatsApp: {syncProgress?.completedChats || 0} / {syncProgress?.totalChats || "?"} chats. Contacts are available across this workspace.</p>}
         {showConfigModal && (
           <WAConfigPrompt
             onClose={() => {
@@ -3547,7 +3410,7 @@ export default function WhatsAppPage() {
                 type="button"
                 onClick={() => {
                   setWorkspaceMode(true);
-                  try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
+                  try { waUiStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
                   setStatus((prev) => ({ ...DEMO_STATUS, ...prev, connected: true, activeEngine: "Interactive Workspace" }));
                   setQrCode(null);
                   setQrDataUrl(null);
@@ -3575,7 +3438,7 @@ export default function WhatsAppPage() {
               type="button"
               onClick={() => {
                 setWorkspaceMode(true);
-                try { localStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
+                try { waUiStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
                 setStatus({ ...DEMO_STATUS, connected: true, activeEngine: "Interactive Workspace" });
                 setChats([...DEMO_CHATS]);
                 if (DEMO_CHATS.length > 0) setSelectedChat(DEMO_CHATS[0]);
@@ -3921,7 +3784,7 @@ export default function WhatsAppPage() {
                 onClick={async () => {
                   try {
                     const res = await axios.get(`${API}/api/whatsapp/chat/${encodeURIComponent(selectedChat.id)}/profile-pic`, {
-                      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+                      headers: { Authorization: `Bearer ${waUiStorage.getItem("token")}` }
                     });
                     if (res.data?.profilePicUrl) {
                       setSelectedChat(prev => ({ ...prev, profilePicUrl: res.data.profilePicUrl }));
@@ -4116,7 +3979,7 @@ export default function WhatsAppPage() {
                     onClick={async () => {
                       setAddClientLoading(true);
                       try {
-                        const token = localStorage.getItem("token");
+                        const token = waUiStorage.getItem("token");
                         const cleanPhone = selectedChat.id?.replace(/\D/g, "").slice(-10);
                         const res = await axios.post(`${API}/api/whatsapp/add-to-crm-client`, {
                           phone: cleanPhone,
@@ -4352,6 +4215,8 @@ export default function WhatsAppPage() {
     <div className="w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-[var(--color-paper-2)] text-[var(--color-ink)] rounded-xl border border-[var(--color-rule)] shadow-sm overflow-hidden select-text wa-parallel-container">
       <div className="shrink-0 px-2 pt-2">
         <WhatsAppNav />
+        <WAStorageAndSenders compact />
+        {syncing && <p className="px-3 py-2 text-xs" role="status">Syncing WhatsApp: {syncProgress?.completedChats || 0} / {syncProgress?.totalChats || "..."} chats.</p>}
       </div>
 
       {deliveryWarning && (
@@ -5289,10 +5154,11 @@ export default function WhatsAppPage() {
                               )}
 
                               {(() => {
-                                const msgButtons = extractMessageButtons(msg);
-                                const displayBody = getMessageDisplayBody(msg, msgButtons);
+                                const interactiveMenu = getInteractiveMessage(msg);
+                                const displayBody = interactiveMenu ? interactiveMenu.body : msg.body;
                                 return (
                                   <>
+                                    {interactiveMenu?.header && <p className="font-semibold mb-1">{interactiveMenu.header}</p>}
                                     {msg.location ? (
                                       <a
                                         href={`https://www.google.com/maps?q=${msg.location.lat},${msg.location.lng}`}
@@ -5310,6 +5176,7 @@ export default function WhatsAppPage() {
                                           serializedId={msg.serializedId}
                                           mediaUrl={msg.mediaUrl}
                                           mimetype={msg.mimetype}
+                                          cloudMediaId={msg.cloudMediaId}
                                           filename={msg.filename || msg.body}
                                           isMe={msg.isMe}
                                           onPreview={(src, title) => openLightbox({ src, title })}
@@ -5320,7 +5187,7 @@ export default function WhatsAppPage() {
                                       </div>
                                     ) : (
                                       <RichMessageContent
-                                        text={displayBody || previewText(msg) || (msg.isMe ? "Sent message" : "Incoming message")}
+                                        text={interactiveMenu ? (displayBody || "Choose an option") : (displayBody || previewText(msg) || (msg.isMe ? "Sent message" : "Incoming message"))}
                                         isMe={msg.isMe}
                                       />
                                     )}
@@ -5351,37 +5218,12 @@ export default function WhatsAppPage() {
                                       {msg.isMe && <MessageTicks status={msg.status || "sent"} />}
                                     </div>
 
-                                    {/* WhatsApp Authentic Full-Width Action Buttons (Call Now / Apply Now / Quick Replies) */}
-                                    {msgButtons && msgButtons.length > 0 && (
-                                      <div className="mt-2 -mx-2.5 -mb-1.5 border-t border-[var(--color-rule)] divide-y divide-[var(--color-rule)] overflow-hidden rounded-b-lg select-none bg-[var(--color-paper)]">
-                                        {msgButtons.map((btn, bIdx) => (
-                                          <button
-                                            key={bIdx}
-                                            type="button"
-                                            onClick={() => {
-                                              if (btn.type === "url" && btn.url) {
-                                                window.open(btn.url, "_blank", "noopener,noreferrer");
-                                              } else if (btn.type === "call" && btn.phone) {
-                                                window.location.href = `tel:${btn.phone.replace(/\s+/g, "")}`;
-                                              } else {
-                                                handleSendDirect(btn.title || btn.text || btn);
-                                              }
-                                            }}
-                                            className="w-full py-2.5 px-3 flex items-center justify-center gap-2 text-xs font-semibold text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] active:bg-[var(--color-paper-2)] transition-colors text-center group/btn"
-                                            title={btn.type === "call" ? `Call ${btn.phone || ""}` : btn.type === "url" ? `Open link ${btn.url || ""}` : `Send "${btn.title || btn.text || btn}"`}
-                                          >
-                                            {btn.type === "call" ? (
-                                              <Phone size={14} className="text-[var(--color-ink)] shrink-0" />
-                                            ) : btn.type === "url" ? (
-                                              <ExternalLink size={14} className="text-[var(--color-ink)] shrink-0" />
-                                            ) : (
-                                              <CornerDownLeft size={14} className="text-[var(--color-ink)] shrink-0" />
-                                            )}
-                                            <span className="truncate group-hover/btn:underline">{btn.title || btn.text || btn}</span>
-                                          </button>
-                                        ))}
-                                      </div>
-                                    )}
+                                    <WAInteractiveOptions
+                                      menu={interactiveMenu}
+                                      onReply={(value) => handleSendDirect(value)}
+                                      disabled={sending || msg.status === "failed"}
+                                      readOnly={msg.isMe && !demoMode}
+                                    />
                                   </>
                                 );
                               })()}
@@ -6307,6 +6149,12 @@ export default function WhatsAppPage() {
               </div>
 
               {/* Buttons Editor */}
+              <label className="block text-sm mb-3">Send menu through
+                <select className="hl-input w-full p-2 mt-1" value={optionsMenuSender} onChange={(e) => { setOptionsMenuSender(e.target.value); setOptionsMenuRequireNative(e.target.value !== "web_session"); }}>
+                  <option value="auto">Automatic sender</option><option value="cloud_api">Cloud API (native buttons)</option><option value="web_session">QR / Web (numbered text)</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm mb-3"><input type="checkbox" checked={optionsMenuRequireNative} onChange={(e) => setOptionsMenuRequireNative(e.target.checked)} />Require native buttons on customer phone (Cloud API). Uncheck to allow QR/Web text.</label>
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="hl-section-label text-xs font-bold text-[var(--color-ink-2)] uppercase">

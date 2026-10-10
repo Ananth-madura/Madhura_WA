@@ -1,5 +1,4 @@
 const express = require("express");
-const crypto = require("crypto");
 const router = express.Router();
 const db = require("../config/database");
 const wa = require("../services/whatsappCloudApi");
@@ -8,14 +7,20 @@ const waAiReply = require("../services/waAiReply");
 // Opt-out keywords (case-insensitive)
 const OPT_OUT_KEYWORDS = ["stop", "unsubscribe", "opt out", "optout", "cancel", "quit", "end", "remove me", "no more"];
 
-router.get("/", (req, res) => {
+router.get("/", async (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
   // If Meta Cloud API verification request
   if (mode || token || challenge) {
-    const result = wa.verifyWebhook(mode, token, challenge);
+    let result = mode === "subscribe" && process.env.WA_VERIFY_TOKEN && token === process.env.WA_VERIFY_TOKEN ? challenge : null;
+    if (!result && mode === "subscribe" && token) {
+      try {
+        const [owners] = await db.promise().query("SELECT user_id FROM user_wa_configs WHERE verify_token = ? AND is_enabled = 1 LIMIT 1", [token]);
+        if (owners.length) result = challenge;
+      } catch (_) { return res.sendStatus(503); }
+    }
     if (result) {
       return res.status(200).send(result);
     }
@@ -31,42 +36,23 @@ router.get("/", (req, res) => {
   });
 });
 
-// Signature verification for Meta's webhook.
-//
-// It used to `return true` whenever WA_APP_SECRET was unset — and that is
-// exactly the state this install shipped in (.env has WA_APP_SECRET=). The
-// result was a fully open POST /webhook: anyone could drive
-// handleIncomingMessage, which creates leads, advances flows, fires welcome
-// messages and AI replies, and mutates CRM records.
-//
-// Now it fails closed. An install that genuinely has no app secret (for example
-// while testing against a WhatsApp Web session only) must opt in explicitly
-// with WA_WEBHOOK_ALLOW_UNSIGNED=1, which logs a warning on every boot so the
-// exposure is never silent.
-const ALLOW_UNSIGNED = process.env.WA_WEBHOOK_ALLOW_UNSIGNED === "1";
-
-if (!process.env.WA_APP_SECRET && !ALLOW_UNSIGNED) {
-  console.error(
-    "🔒 WA_APP_SECRET is not set and WA_WEBHOOK_ALLOW_UNSIGNED is not '1'. " +
-      "POST /webhook will reject every request. Set WA_APP_SECRET to your Meta app secret, " +
-      "or set WA_WEBHOOK_ALLOW_UNSIGNED=1 to accept unsigned webhooks deliberately."
-  );
-}
-
-function isValidSignature(req) {
-  const appSecret = process.env.WA_APP_SECRET || wa.appSecret;
-  if (!appSecret) return ALLOW_UNSIGNED || !req.headers["x-hub-signature-256"];
-  const signature = req.headers["x-hub-signature-256"];
-  if (!signature || !req.rawBody) return ALLOW_UNSIGNED;
-  const expected = "sha256=" + crypto.createHmac("sha256", appSecret).update(req.rawBody).digest("hex");
-  const sigBuf = Buffer.from(signature);
-  const expBuf = Buffer.from(expected);
-  return sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
+// Resolve the account before allowing any webhook side effects.
+async function resolveWebhookAccount(phoneId) {
+  const [owners] = await db.promise().query("SELECT * FROM user_wa_configs WHERE phone_number_id = ? LIMIT 1", [phoneId]);
+  if (owners.length) {
+    if (!owners[0].is_enabled) return null;
+    return { sessionKey: String(owners[0].user_id), appSecret: require("../backendutil/cryptoHelper").decrypt(owners[0].app_secret || process.env.WA_APP_SECRET || ""), client: wa.withAccount(owners[0]) };
+  }
+  const [accounts] = await db.promise().query("SELECT * FROM wa_accounts WHERE phone_number_id = ? AND is_active = 1 AND created_by IS NOT NULL LIMIT 1", [phoneId]);
+  if (accounts.length) return { sessionKey: String(accounts[0].created_by), appSecret: require("../backendutil/cryptoHelper").decrypt(accounts[0].app_secret || process.env.WA_APP_SECRET || ""), client: wa.withAccount(accounts[0]) };
+  if (phoneId === process.env.WA_PHONE_NUMBER_ID) return { sessionKey: String(require("../services/whatsappService").defaultKey), appSecret: process.env.WA_APP_SECRET || "" };
+  return null;
 }
 
 router.post("/", async (req, res) => {
   try {
-    if (!isValidSignature(req)) return res.sendStatus(403);
+    const authorization = await require("../services/waWebhookAuth").authorizeWebhook(req, resolveWebhookAccount);
+    if (!authorization.valid) return res.sendStatus(403);
     const body = req.body;
 
     await db.promise().query(
@@ -82,12 +68,12 @@ router.post("/", async (req, res) => {
               const value = change.value;
               if (value.messages) {
                 for (const msg of value.messages) {
-                  await handleIncomingMessage(msg, value.metadata, value.contacts);
+                  await handleIncomingMessage(msg, value.metadata, value.contacts, authorization.accounts.get(value.metadata?.phone_number_id));
                 }
               }
               if (value.statuses) {
                 for (const status of value.statuses) {
-                  await handleStatusUpdate(status);
+                  await handleStatusUpdate(status, authorization.accounts.get(value.metadata?.phone_number_id));
                 }
               }
             }
@@ -99,38 +85,35 @@ router.post("/", async (req, res) => {
     res.sendStatus(200);
   } catch (err) {
     console.error("Webhook error:", err.message);
-    res.sendStatus(200);
+    res.sendStatus(503);
   }
 });
 
-/**
- * Atomically claim a webhook event so a retried delivery is processed once.
- *
- * Meta re-delivers on timeout or a non-200, and this handler has side effects
- * (lead capture, flow dispatch, auto-replies) that must not run twice. The
- * claim relies on UNIQUE(event_type, wa_message_id, status) on
- * wa_webhook_events — added by migrations/wa_webhook_idempotency.js. Until that
- * migration is run, INSERT IGNORE always inserts and this returns true, so
- * behaviour is exactly as before rather than silently wrong.
- *
- * @returns {Promise<boolean>} true if this process owns the event
- */
+/** Atomic claim in a dedicated table; legacy event rows are left intact. */
 async function claimEvent(eventType, msgId, phone, status, payload) {
-  if (!msgId) return true; // nothing to key on — let it through
+  if (!msgId) return false;
   try {
     const [res] = await db.promise().query(
-      "INSERT IGNORE INTO wa_webhook_events (event_type, wa_message_id, phone, status, payload) VALUES (?, ?, ?, ?, ?)",
-      [eventType, msgId, phone, status, JSON.stringify(payload)]
+      "INSERT IGNORE INTO wa_webhook_claims (event_type, wa_message_id, status) VALUES (?, ?, ?)",
+      [eventType, msgId, status]
     );
+    if (res.affectedRows > 0) await db.promise().query(
+      "INSERT INTO wa_webhook_events (event_type, wa_message_id, phone, status, payload) VALUES (?, ?, ?, ?, ?)",
+      [eventType, msgId, phone, status, JSON.stringify(payload)]
+    ).catch(() => {});
     return res.affectedRows > 0;
   } catch (err) {
     console.warn(`[WA Webhook] Idempotency claim failed for ${msgId}: ${err.message}`);
-    return true; // never drop a real message because bookkeeping failed
+    throw err; // Return 503 so the provider retries after persistence recovers.
   }
 }
 
-async function handleIncomingMessage(msg, metadata, contacts = []) {
+async function handleIncomingMessage(msg, metadata, contacts = [], account = null) {
   const phone = msg.from;
+  account = account || await resolveWebhookAccount(metadata?.phone_number_id);
+  if (!account) throw new Error("Webhook sender has no configured owner");
+  const sessionKey = account.sessionKey;
+  const wa = account.client || await require("../services/waConfigHelper").cloudClientForUser(sessionKey);
   const msgId = msg.id;
   const timestamp = msg.timestamp ? new Date(parseInt(msg.timestamp) * 1000) : new Date();
   const contactProfileName = contacts?.[0]?.profile?.name || null;
@@ -208,6 +191,9 @@ async function handleIncomingMessage(msg, metadata, contacts = []) {
   });
 
   // (the wa_webhook_events row was already written by claimEvent above)
+  await db.promise().query("UPDATE wa_message_logs SET session_key = ?, media_id = ? WHERE wa_message_id = ?", [sessionKey, cloudMediaId || null, msgId]).catch(() => {});
+
+  require("../services/waTransientHistory").remember(phone, sessionKey, { id: msgId, body: messageText, isMe: false });
 
   // Emit socket event for real-time live chat update
   const chatId = `${phone}@c.us`;
@@ -219,9 +205,10 @@ async function handleIncomingMessage(msg, metadata, contacts = []) {
     const app = require("../server");
     const io = app.get && app.get("io");
     if (io) {
-      io.emit("wa_message_received", {
+      io.to(`user:${sessionKey}`).emit("wa_message_received", {
         phone,
         chatId,
+        sessionKey,
         message: {
           id: msgId,
           from: phone,
@@ -232,13 +219,14 @@ async function handleIncomingMessage(msg, metadata, contacts = []) {
           hasMedia: isMediaMsg,
           filename: mediaFilename || "",
           mimetype: mediaMimeType || "",
+          cloudMediaId,
         },
       });
     }
   } catch (_) {}
 
   // Eager background media download for Meta Cloud attachments
-  if (cloudMediaId) {
+  if (cloudMediaId && require("../services/waChatPrivacy").serverChatStorageEnabled()) {
     (async () => {
       try {
         const downloaded = await wa.downloadMedia(cloudMediaId);
@@ -251,7 +239,7 @@ async function handleIncomingMessage(msg, metadata, contacts = []) {
           const app = require("../server");
           const io = app.get && app.get("io");
           if (io) {
-            io.emit("wa_message_updated", {
+            io.to(`user:${sessionKey}`).emit("wa_message_updated", {
               id: msgId,
               serializedId: msgId,
               mediaUrl: downloaded.url,
@@ -341,7 +329,7 @@ async function handleIncomingMessage(msg, metadata, contacts = []) {
 
     // 1. Check if inbound message resolves a pending 2-way interactive confirmation
     const waConfirmation = require("../services/waConfirmationService");
-    const confirmationHandled = await waConfirmation.handleInboundConfirmation(phone, messageText, interactiveId).catch(() => false);
+    const confirmationHandled = await waConfirmation.handleInboundConfirmation(phone, messageText, interactiveId, sessionKey).catch(() => false);
     if (confirmationHandled) return;
 
     // 2. Check if customer is requesting their bills / receipts (scoped strictly to their phone)
@@ -357,7 +345,7 @@ async function handleIncomingMessage(msg, metadata, contacts = []) {
         const [flowRows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? AND status = 'active' LIMIT 1", [campaignReply.flowId]);
         if (flowRows.length > 0) {
           console.log(`🤖 [WA Campaign -> Flow] Launching Flow "${flowRows[0].name}" for campaign reply from +${phone}`);
-          await waFlowEngine.startFlowRun(flowRows[0], phone, null, messageText, `${phone}@c.us`);
+          await waFlowEngine.startFlowRun(flowRows[0], phone, sessionKey, messageText, `${phone}@c.us`);
           return;
         }
       } catch (fErr) {
@@ -376,11 +364,11 @@ async function handleIncomingMessage(msg, metadata, contacts = []) {
           type: msg.type,
           filename: msg[msg.type]?.filename || "",
           caption: msg[msg.type]?.caption || "",
-          resolve: () => require("../services/whatsappCloudApi").downloadMedia(mediaId),
+          resolve: () => wa.downloadMedia(mediaId),
         }
       : null;
 
-    waFlowEngine.dispatchInbound(phone, messageText, interactiveId, null, inboundMedia, { isCampaignReply, isHistoric: false }).then(async (flowHandled) => {
+    waFlowEngine.dispatchInbound(phone, messageText, interactiveId, sessionKey, inboundMedia, { isCampaignReply, isHistoric: false }).then(async (flowHandled) => {
       if (flowHandled) return;
 
       const waMenuHandler = require("../services/waMenuHandler");
@@ -389,25 +377,25 @@ async function handleIncomingMessage(msg, metadata, contacts = []) {
         buttonReplyId,
         listReplyId,
       };
-      const menuHandled = await waMenuHandler.handleMenuReply(phone, menuMsg).catch(() => false);
+      const menuHandled = await waMenuHandler.handleMenuReply(phone, menuMsg, sessionKey).catch(() => false);
       if (!menuHandled && messageText) {
         // Welcome Auto-Reply (Guarded: only user-initiated, never on campaign replies)
         const welcomeSent = await require("../services/waAutomationService").maybeSendWelcomeReply(
           phone,
           contactProfileName,
-          null,
+          sessionKey,
           { isCampaignReply }
         ).catch(() => false);
 
         if (!welcomeSent && !isCampaignReply) {
-          return waAiReply.maybeAutoReply(phone, messageText);
+          return waAiReply.maybeAutoReply(phone, messageText, contactProfileName, sessionKey);
         }
       }
     }).catch(() => {});
   }
 }
 
-async function handleStatusUpdate(status) {
+async function handleStatusUpdate(status, account) {
   const msgId = status.id;
   const statusName = status.status;
   const phone = status.recipient_id;
@@ -420,51 +408,7 @@ async function handleStatusUpdate(status) {
     return;
   }
 
-  const statusColumnMap = { sent: "sent_at", delivered: "delivered_at", read: "read_at", failed: "sent_at" };
-  const statusColumn = statusColumnMap[statusName];
-
-  if (statusColumn) {
-    const logFields = [`status = ?`, `${statusColumn} = ?`];
-    const logParams = [statusName, timestamp];
-    if (statusName === "failed") {
-      logFields.push(`error = ?`);
-      logParams.push(errorMsg);
-    }
-    logParams.push(msgId);
-
-    await db.promise().query(
-      `UPDATE wa_message_logs SET ${logFields.join(", ")} WHERE wa_message_id = ?`,
-      logParams
-    );
-
-    const campFields = [`status = ?`, `${statusColumn} = ?`];
-    const campParams = [statusName, timestamp];
-    if (statusName === "failed") {
-      campFields.push(`error = ?`);
-      campParams.push(errorMsg);
-    }
-    campParams.push(msgId);
-
-    await db.promise().query(
-      `UPDATE wa_campaign_messages SET ${campFields.join(", ")} WHERE wa_message_id = ?`,
-      campParams
-    );
-
-    if (statusName === "delivered" || statusName === "read") {
-      const [rows] = await db.promise().query("SELECT campaign_id FROM wa_campaign_messages WHERE wa_message_id = ?", [msgId]);
-      if (rows.length) {
-        const col = statusName === "delivered" ? "delivered_count" : "read_count";
-        await db.promise().query(`UPDATE wa_campaigns SET ${col} = ${col} + 1 WHERE id = ?`, [rows[0].campaign_id]);
-      }
-    }
-
-    if (statusName === "failed") {
-      const [rows] = await db.promise().query("SELECT campaign_id FROM wa_campaign_messages WHERE wa_message_id = ?", [msgId]);
-      if (rows.length) {
-        await db.promise().query("UPDATE wa_campaigns SET failed_count = failed_count + 1 WHERE id = ?", [rows[0].campaign_id]);
-      }
-    }
-  }
+  await require("../services/waDeliveryReceipts").applyDeliveryReceipt(msgId, statusName, timestamp, errorMsg);
 
   // Real-time UI live tick update via Socket.io
   const ackMap = { sent: 1, delivered: 2, read: 3, failed: -1 };
@@ -472,7 +416,7 @@ async function handleStatusUpdate(status) {
     const app = require("../server");
     const io = app.get && app.get("io");
     if (io) {
-      io.emit("wa_message_ack", {
+      io.to(`user:${account.sessionKey}`).emit("wa_message_ack", {
         phone,
         message: {
           id: msgId,
@@ -482,7 +426,7 @@ async function handleStatusUpdate(status) {
         },
       });
       if (statusName === "read") {
-        io.emit("wa_chat_read", { phone, chatId: `${phone}@c.us` });
+        io.to(`user:${account.sessionKey}`).emit("wa_chat_read", { phone, chatId: `${phone}@c.us` });
       }
     }
   } catch (_) {}

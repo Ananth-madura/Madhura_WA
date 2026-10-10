@@ -397,7 +397,7 @@ export default function WhatsAppAutomations() {
         // customer received the numbered-text version, not tappable buttons.
         warning:
           welcomeSettings.welcome_type === "buttons" && data.native === false
-            ? "Delivered as numbered text — native buttons need the WhatsApp Cloud API connected."
+            ? "Sent as numbered text — native buttons need the WhatsApp Cloud API connected."
             : null,
       });
     } catch (err) {
@@ -501,7 +501,7 @@ export default function WhatsAppAutomations() {
           </div>
           <div>
             <div className="hl-kpi-num">{stats.totalRuns}</div>
-            <div className="hl-kpi-label">Total Auto-Sends</div>
+            <div className="hl-kpi-label">Rule Runs</div>
           </div>
         </div>
 
@@ -511,7 +511,7 @@ export default function WhatsAppAutomations() {
           </div>
           <div>
             <div className="hl-kpi-num">{stats.sentCount}</div>
-            <div className="hl-kpi-label">Delivered Successfully</div>
+            <div className="hl-kpi-label">Accepted by Sender</div>
           </div>
         </div>
       </div>
@@ -532,7 +532,7 @@ export default function WhatsAppAutomations() {
                 <h2 className="hl-title flex items-center gap-2 flex-wrap">
                   <span>How WhatsApp Automations Work</span>
                   <span className="hl-badge hl-badge-success">
-                    ⚡ 100% Hands-Off Background Engine
+                    ⚡ Automatic Dispatch & Recovery
                   </span>
                 </h2>
                 <p className="hl-subtitle mt-0.5">
@@ -558,7 +558,7 @@ export default function WhatsAppAutomations() {
                 <span className="hl-badge hl-badge-accent">Set &amp; Forget</span>
               </div>
               <p className="hl-subtitle">
-                Triggered by <strong>CRM Database Events</strong> (Invoices created, payments received, lead added, AMC expiry). Sends 1-to-1 instant updates in &lt; 2s.
+                Triggered by <strong>CRM Database Events</strong> (Invoices created, payments received, lead added, AMC expiry). Sends personal updates on your configured schedule when a sender is connected.
               </p>
               <div className="hl-id p-2">
                 New Invoice ➔ Auto Send PDF &amp; Pay Link
@@ -571,7 +571,7 @@ export default function WhatsAppAutomations() {
                 <span className="hl-badge hl-badge-info">1-to-Many Blast</span>
               </div>
               <p className="hl-subtitle">
-                <strong>Outbound Marketing Broadcasts</strong> sent by the marketer to 600–800 selected contacts with photos, catalog PDFs, and anti-ban pacing.
+                <strong>Outbound Marketing Broadcasts</strong> send to your selected contacts using templates, media and configured sending intervals.
               </p>
               <div className="hl-id p-2">
                 Diwali Offer ➔ Send to 500 Walkin Leads
@@ -1164,14 +1164,18 @@ export default function WhatsAppAutomations() {
                         <td className="py-3 px-3">
                           <span
                             className={`hl-badge px-2 py-0.5 uppercase ${
-                              log.status === "sent" ? "hl-badge-success" : "hl-badge-error"
+                              log.status === "sent" ? "hl-badge-success" : ["scheduled", "sending", "unknown", "skipped"].includes(log.status) ? "hl-badge-warning" : "hl-badge-error"
                             }`}
                           >
                             {log.status}
                           </span>
+                          {log.status === "unknown" && <span className="hl-subtitle block">Check delivery before retrying</span>}
                         </td>
                         <td className="py-3 px-3 max-w-xs truncate hl-id">
-                          {JSON.stringify(triggerData)}
+                          <span>Step {log.execution_step || triggerData.step || 1}</span>
+                          {log.status === "scheduled" && log.scheduled_for && <span className="hl-subtitle block">Due {new Date(log.scheduled_for).toLocaleString("en-IN")}</span>}
+                          {log.error && <span className="hl-subtitle block" title={log.error}>{log.error}</span>}
+                          {log.wa_message_id && <span className="hl-subtitle block" title={log.wa_message_id}>{log.wa_message_id}</span>}
                         </td>
                         <td className="py-3 px-3 hl-id">
                           {log.sent_at ? new Date(log.sent_at).toLocaleString("en-IN") : "-"}

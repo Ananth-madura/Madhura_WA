@@ -1,3 +1,4 @@
+import { waUiStorage } from "../utils/waUiStorage";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Smartphone, CheckCircle2, XCircle, Loader2, Settings, Wifi,
@@ -13,6 +14,7 @@ import { QRCodeSVG } from "qrcode.react";
 import axios from "axios";
 import { API } from "../config/api";
 import socket from "../socket/socket";
+import WAStorageAndSenders from "../components/WAStorageAndSenders";
 import WhatsAppNav from "../components/WhatsAppNav";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 import { useAuth } from "../auth/AuthContext";
@@ -540,10 +542,10 @@ export default function WhatsAppAccounts() {
       try {
         ["wa_cached_status", "wa_cached_chats", "wa_active_chat"].forEach((key) => {
           sessionStorage.removeItem(key);
-          localStorage.removeItem(key);
+          waUiStorage.removeItem(key);
         });
         Object.keys(localStorage).forEach((k) => {
-          if (k.startsWith("wa_chat_messages_")) localStorage.removeItem(k);
+          if (k.startsWith(`wa_user_${JSON.parse(localStorage.getItem("user") || "{}").id}:wa_chat_messages_`)) localStorage.removeItem(k);
         });
       } catch (_) {}
       setQrCode(null);
@@ -776,6 +778,7 @@ export default function WhatsAppAccounts() {
   return (
     <div className="hl-page">
       <WhatsAppNav />
+      <WAStorageAndSenders settings />
 
       {/* Hero Header & Real-Time Status Hub */}
       <div className="hl-card p-4 sm:p-5 border mb-4 sm:mb-6 min-w-0">
