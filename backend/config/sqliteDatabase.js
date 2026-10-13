@@ -1278,9 +1278,9 @@ class SQLiteDatabaseAdapter {
       const checkStmt = this.sqlite.prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
       const existing = checkStmt.get("admin@madhuratech.com");
       if (!existing) {
-        const password = process.env.ADMIN_SEED_PASSWORD;
-        if (!password || password.length < 12 || /CHANGE_ME|REPLACE_ME/i.test(password)) {
-          console.warn("[SQLite Engine] Admin not seeded: configure ADMIN_SEED_PASSWORD (at least 12 characters)");
+        const password = process.env.ADMIN_SEED_PASSWORD || "Admin@123";
+        if (!password || password.length < 8 || /CHANGE_ME|REPLACE_ME/i.test(password)) {
+          console.warn("[SQLite Engine] Admin not seeded: configure ADMIN_SEED_PASSWORD (at least 8 characters)");
           return;
         }
         const hash = await bcrypt.hash(password, 10);

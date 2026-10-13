@@ -2,7 +2,7 @@
   "name": "whatsapp-crm-backend",
   "version": "1.0.0",
   "description": "Whatsapp_CRM standalone backend — WhatsApp session engine, Cloud API, campaigns, automations, flows, AI",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",

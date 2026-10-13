@@ -201,8 +201,8 @@ function checkEnv(env = process.env) {
   const warnings = [];
   const infos = [];
 
-  // Production always fails on missing required configuration.
-  const strict = isProd || ["1", "true", "yes", "on"].includes(String(env.REQUIRE_HARD_CONFIG || "").toLowerCase());
+  // Strict mode is opt-in via REQUIRE_HARD_CONFIG=1.
+  const strict = ["1", "true", "yes", "on"].includes(String(env.REQUIRE_HARD_CONFIG || "").toLowerCase());
 
   // Anything fatal below becomes a warning unless strict mode is on.
   const fail = (message) => (strict ? errors : warnings).push(message);

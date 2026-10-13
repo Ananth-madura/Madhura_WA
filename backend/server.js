@@ -32,7 +32,7 @@ if (defaults.applied.length) {
   console.log(`\nℹ️  ${defaults.applied.length} configuration value(s) defaulted (no environment was provided):`);
   for (const d of defaults.applied) console.log(`   ${d.key.padEnd(24)} ${d.why}`);
 }
-if (defaults.ephemeralJwt) {
+if (defaults.ephemeralJwt?.ephemeral && defaults.ephemeralJwt?.reason) {
   console.warn(`\n⚠️  ${defaults.ephemeralJwt.reason}\n`);
 }
 
@@ -229,8 +229,8 @@ app.get(["/health", "/api/health"], (req, res) => {
     // So a defaulted deployment is visible in one place rather than inferred from
     // a deploy log that has already scrolled away.
     defaultedValues: defaults.applied.map((d) => d.key),
-    ephemeralJwtSecret: Boolean(defaults.ephemeralJwt),
-    ...(defaults.ephemeralJwt
+    ephemeralJwtSecret: Boolean(defaults.ephemeralJwt?.ephemeral),
+    ...(defaults.ephemeralJwt?.ephemeral
       ? { ephemeralJwtSecretHint: "Set a real JWT_SECRET; sessions do not survive a restart until you do." }
       : {}),
     uptime: process.uptime(),

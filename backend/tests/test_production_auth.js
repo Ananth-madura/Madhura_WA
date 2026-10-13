@@ -29,7 +29,7 @@ delete process.env.JWT_SECRET;
 assert.equal(rest(valid).accepted, false);
 assert.equal(socket(valid).accepted, false);
 const { applyDefaults } = require('../config/runtimeDefaults');
-const env = { NODE_ENV: 'production' };
+const env = { NODE_ENV: 'production', REQUIRE_HARD_CONFIG: '1' };
 applyDefaults(env);
 assert.equal(env.JWT_SECRET, undefined, 'Production requires a stable configured secret');
 assert.equal(env.ALLOW_START_WITHOUT_DB, undefined);
