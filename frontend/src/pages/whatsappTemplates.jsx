@@ -472,7 +472,7 @@ export default function WATemplates() {
                   <p className="text-[10px] mt-1" style={{ color: "var(--color-ink-2)" }}>Lowercase letters, numbers, and underscores only.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="hl-section-label block mb-1">Category</label>
                     <select
@@ -498,7 +498,7 @@ export default function WATemplates() {
                 </div>
 
                 {/* Header configuration */}
-                <div className="grid grid-cols-2 gap-3 p-3" style={{ background: "var(--color-paper)", border: "1px solid var(--color-rule)", borderRadius: "var(--radius-input)" }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5" style={{ background: "var(--color-paper)", border: "1px solid var(--color-rule)", borderRadius: "var(--radius-input)" }}>
                   <div>
                     <label className="hl-section-label block mb-1">Header Type</label>
                     <select
@@ -561,7 +561,7 @@ export default function WATemplates() {
                 </div>
 
                 {/* Interactive Buttons */}
-                <div className="grid grid-cols-2 gap-3 p-3" style={{ background: "var(--color-paper)", border: "1px solid var(--color-rule)", borderRadius: "var(--radius-input)" }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5" style={{ background: "var(--color-paper)", border: "1px solid var(--color-rule)", borderRadius: "var(--radius-input)" }}>
                   <div>
                     <label className="hl-section-label block mb-1">Button Type</label>
                     <select

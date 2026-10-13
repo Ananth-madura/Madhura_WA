@@ -153,11 +153,11 @@ export default function WAConfigPrompt({ onClose }) {
               </div>
               <div className="relative">
                 <input type={showToken ? "text" : "password"} value={accessToken} onChange={e => setAccessToken(e.target.value)} onClick={() => { if (accessToken === "••••••••••••••••") setAccessToken(""); }} className="hl-input hl-id w-full border border-[var(--color-rule)] rounded-xl px-3 py-2.5 pr-9 text-sm focus:outline-none font-mono" placeholder="EAAB..." required />
-                <button type="button" onClick={() => setShowToken(!showToken)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"><EyeOff size={16} /></button>
+                <button type="button" onClick={() => setShowToken(!showToken)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">{showToken ? <EyeOff size={16} /> : <Eye size={16} />}</button>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="hl-section-label block text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-2)]">WABA ID</label>
                 <input type="text" value={wabaId} onChange={e => setWabaId(e.target.value)} className="hl-input w-full border border-[var(--color-rule)] rounded-xl px-3 py-2.5 text-sm focus:outline-none font-[var(--font-body)]" placeholder="WhatsApp Business Account ID" />
@@ -166,12 +166,12 @@ export default function WAConfigPrompt({ onClose }) {
                 <label className="hl-section-label block text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-2)]">App Secret</label>
                 <div className="relative">
                   <input type={showSecret ? "text" : "password"} value={appSecret} onChange={e => setAppSecret(e.target.value)} onClick={() => { if (appSecret === "••••••••••••••••") setAppSecret(""); }} className="hl-input hl-id w-full border border-[var(--color-rule)] rounded-xl px-3 py-2.5 pr-9 text-sm focus:outline-none font-mono" placeholder="App Secret" />
-                  <button type="button" onClick={() => setShowSecret(!showSecret)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"><EyeOff size={16} /></button>
+                  <button type="button" onClick={() => setShowSecret(!showSecret)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">{showSecret ? <EyeOff size={16} /> : <Eye size={16} />}</button>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="hl-section-label block text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-2)]">Verify Token</label>
                 <input type="text" value={verifyToken} onChange={e => setVerifyToken(e.target.value)} className="hl-input w-full border border-[var(--color-rule)] rounded-xl px-3 py-2.5 text-sm focus:outline-none font-[var(--font-body)]" placeholder="crm_verify_123" />
@@ -204,7 +204,7 @@ export default function WAConfigPrompt({ onClose }) {
               </ol>
             </div>
 
-            <div className="pt-3 border-t border-[var(--color-rule)] flex gap-3">
+            <div className="pt-3 border-t border-[var(--color-rule)] flex flex-col sm:flex-row gap-2.5">
               <button type="button" onClick={handleSnooze} className="hl-btn-secondary flex-1 px-4 py-2.5 border border-[var(--color-rule)] rounded-xl font-bold text-xs uppercase tracking-wider transition-colors">
                 Skip for Now
               </button>

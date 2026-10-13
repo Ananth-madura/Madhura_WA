@@ -11,6 +11,12 @@ import {
   ShieldCheck,
   KeyRound,
   ChevronRight,
+  User,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  Briefcase,
 } from "lucide-react";
 import { API } from "../config/api";
 import { useAuth } from "./AuthContext";
@@ -104,6 +110,8 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState("starter");
 
   // Plans catalog
@@ -459,148 +467,176 @@ export default function Signup() {
 
             {mode === "self_signup" ? (
               <form onSubmit={handleSelfSignup} noValidate>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14, marginBottom: 16 }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-4">
                   <div>
-                    <label htmlFor="lp-ws-name" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
-                      Company or Workspace Name
+                    <label htmlFor="lp-ws-name" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                      Company or Workspace Name *
                     </label>
-                    <input
-                      id="lp-ws-name"
-                      type="text"
-                      value={workspaceName}
-                      onChange={(e) => setWorkspaceName(e.target.value)}
-                      className="hl-input w-full"
-                      placeholder="e.g. Apex Global Solutions"
-                      required
-                    />
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <Building2 size={16} />
+                      </div>
+                      <input
+                        id="lp-ws-name"
+                        type="text"
+                        value={workspaceName}
+                        onChange={(e) => setWorkspaceName(e.target.value)}
+                        className="hl-input w-full pl-9 pr-3 py-2.5 text-sm transition focus:ring-2 focus:ring-emerald-500/20"
+                        placeholder="e.g. Apex Global Solutions"
+                        required
+                      />
+                    </div>
                   </div>
 
                   <div>
-                    <label htmlFor="lp-name" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
-                      Full Name
+                    <label htmlFor="lp-name" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                      Full Name *
                     </label>
-                    <input
-                      id="lp-name"
-                      type="text"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      autoComplete="name"
-                      className="hl-input w-full"
-                      placeholder="e.g. Rajesh Kumar"
-                      required
-                    />
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <User size={16} />
+                      </div>
+                      <input
+                        id="lp-name"
+                        type="text"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        autoComplete="name"
+                        className="hl-input w-full pl-9 pr-3 py-2.5 text-sm transition focus:ring-2 focus:ring-emerald-500/20"
+                        placeholder="e.g. Rajesh Kumar"
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ marginBottom: 16 }}>
-                  <label htmlFor="lp-email" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
-                    Work Email Address
+                <div className="mb-4">
+                  <label htmlFor="lp-email" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                    Work Email Address *
                   </label>
-                  <input
-                    id="lp-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
-                    className="hl-input w-full"
-                    placeholder="name@company.com"
-                    required
-                  />
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14, marginBottom: 20 }}>
-                  <div>
-                    <label htmlFor="lp-pass" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
-                      Create Password (min. 6 chars)
-                    </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                      <Mail size={16} />
+                    </div>
                     <input
-                      id="lp-pass"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      autoComplete="new-password"
-                      className="hl-input w-full"
-                      placeholder="••••••••••••"
+                      id="lp-email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      className="hl-input w-full pl-9 pr-3 py-2.5 text-sm transition focus:ring-2 focus:ring-emerald-500/20"
+                      placeholder="name@company.com"
                       required
                     />
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-5">
+                  <div>
+                    <label htmlFor="lp-pass" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                      Create Password (min. 6 chars) *
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <Lock size={16} />
+                      </div>
+                      <input
+                        id="lp-pass"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="new-password"
+                        className="hl-input w-full pl-9 pr-10 py-2.5 text-sm transition focus:ring-2 focus:ring-emerald-500/20"
+                        placeholder="••••••••••••"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
 
                   <div>
-                    <label htmlFor="lp-pass-confirm" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
-                      Confirm Password
+                    <label htmlFor="lp-pass-confirm" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                      Confirm Password *
                     </label>
-                    <input
-                      id="lp-pass-confirm"
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      autoComplete="new-password"
-                      className="hl-input w-full"
-                      placeholder="••••••••••••"
-                      required
-                    />
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <Lock size={16} />
+                      </div>
+                      <input
+                        id="lp-pass-confirm"
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        autoComplete="new-password"
+                        className="hl-input w-full pl-9 pr-10 py-2.5 text-sm transition focus:ring-2 focus:ring-emerald-500/20"
+                        placeholder="••••••••••••"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                        aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                      >
+                        {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 {/* Plan Selection Section */}
-                <div style={{ marginBottom: 22 }}>
+                <div className="mb-5">
                   <div className="flex items-center justify-between mb-2">
-                    <label className="hl-section-label" style={{ margin: 0 }}>
+                    <label className="hl-section-label block font-bold text-xs text-gray-700 m-0">
                       Select Workspace Plan
                     </label>
-                    <span style={{ fontSize: 11, color: "var(--color-ink-2)" }}>
+                    <span className="text-[11px] text-gray-500 font-medium">
                       Includes 14-day full feature trial
                     </span>
                   </div>
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-                      gap: 8,
-                      marginBottom: 12,
-                    }}
-                  >
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 mb-3">
                     {plans.map((p) => {
                       const isSelected = selectedPlan === p.id;
                       return (
                         <div
                           key={p.id}
                           onClick={() => setSelectedPlan(p.id)}
-                          style={{
-                            border: isSelected ? "2px solid #059669" : "1px solid var(--color-line)",
-                            background: isSelected ? "rgba(16, 185, 129, 0.06)" : "var(--color-paper)",
-                            borderRadius: "var(--radius-md, 8px)",
-                            padding: "10px 10px",
-                            cursor: "pointer",
-                            transition: "all 0.15s ease",
-                            position: "relative",
-                          }}
+                          className={`p-3 rounded-xl border cursor-pointer transition-all relative flex flex-col justify-between ${
+                            isSelected
+                              ? "border-emerald-600 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-500"
+                              : "border-gray-200 hover:border-gray-300 bg-white"
+                          }`}
                         >
-                          <div className="flex items-center justify-between gap-1 mb-1">
-                            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-ink)" }}>
-                              {p.name.replace(" Plan", "")}
-                            </span>
-                            {p.badge && (
-                              <span
-                                style={{
-                                  fontSize: 9,
-                                  fontWeight: 800,
-                                  textTransform: "uppercase",
-                                  padding: "1px 5px",
-                                  borderRadius: 4,
-                                  background: isSelected ? "#059669" : "#e2e8f0",
-                                  color: isSelected ? "#ffffff" : "#475569",
-                                }}
-                              >
-                                {p.badge}
+                          <div>
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <span className="text-xs font-bold text-gray-900 truncate">
+                                {p.name.replace(" Plan", "")}
                               </span>
-                            )}
+                              {p.badge && (
+                                <span
+                                  className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
+                                    isSelected
+                                      ? "bg-emerald-600 text-white"
+                                      : "bg-gray-100 text-gray-600"
+                                  }`}
+                                >
+                                  {p.badge}
+                                </span>
+                              )}
+                            </div>
+                            <div className={`text-base font-extrabold ${isSelected ? "text-emerald-700" : "text-gray-900"}`}>
+                              {p.price}
+                            </div>
                           </div>
-                          <div style={{ fontSize: 15, fontWeight: 800, color: isSelected ? "#047857" : "var(--color-ink)" }}>
-                            {p.price}
-                          </div>
-                          <div style={{ fontSize: 10, color: "var(--color-ink-2)" }}>
+                          <div className="text-[11px] text-gray-500 mt-1">
                             {p.maxSenders} {p.maxSenders === 1 ? "Number" : "Numbers"}
                           </div>
                         </div>
@@ -609,23 +645,15 @@ export default function Signup() {
                   </div>
 
                   {/* Highlighted plan feature card */}
-                  <div
-                    style={{
-                      background: "rgba(248, 250, 252, 0.8)",
-                      border: "1px solid var(--color-line)",
-                      borderRadius: 6,
-                      padding: "10px 12px",
-                      fontSize: 12,
-                    }}
-                  >
-                    <div className="flex items-center gap-1.5 font-semibold text-emerald-800 mb-1">
-                      <Sparkles size={14} className="text-emerald-600" />
+                  <div className="bg-slate-50/80 border border-gray-200 rounded-xl p-3 text-xs">
+                    <div className="flex items-center gap-1.5 font-semibold text-emerald-800 mb-2">
+                      <Sparkles size={14} className="text-emerald-600 shrink-0" />
                       <span>{currentPlanMeta.name} Features Included:</span>
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "4px 10px" }}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                       {currentPlanMeta.features?.slice(0, 4).map((f, i) => (
                         <div key={i} className="flex items-center gap-1.5 text-xs text-gray-700">
-                          <Check size={12} className="text-emerald-600 flex-shrink-0" />
+                          <Check size={13} className="text-emerald-600 shrink-0" />
                           <span>{f}</span>
                         </div>
                       ))}
@@ -636,16 +664,7 @@ export default function Signup() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="hl-btn-primary"
-                  style={{
-                    width: "100%",
-                    padding: "11px 16px",
-                    fontSize: 14,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                  }}
+                  className="hl-btn-primary w-full py-3 px-4 text-sm font-bold flex items-center justify-center gap-2 rounded-xl shadow-sm transition hover:shadow"
                 >
                   {loading ? (
                     <span>Provisioning Workspace…</span>
@@ -665,19 +684,14 @@ export default function Signup() {
                     {/* Live Verification Card */}
                     {verifiedCodeData && (
                       <div
-                        className="p-3 mb-4 rounded-lg flex items-start gap-2.5"
-                        style={{
-                          background: "#ECFDF3",
-                          border: "1px solid #ABEFC6",
-                          color: "#067647",
-                        }}
+                        className="p-3 mb-4 rounded-xl flex items-start gap-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800"
                       >
                         <ShieldCheck size={18} className="text-emerald-600 shrink-0 mt-0.5" />
                         <div className="text-xs">
                           <div className="font-bold">
                             Valid Access Code for {verifiedCodeData.tenant_name || "Workspace"}
                           </div>
-                          <div className="text-[11px] text-emerald-800 mt-0.5">
+                          <div className="text-[11px] text-emerald-700 mt-0.5">
                             Assigned Level:{" "}
                             <strong>
                               {ACCESS_LEVEL_NAMES[verifiedCodeData.whatsapp_access_level] || "Full WhatsApp Access"}
@@ -687,9 +701,9 @@ export default function Signup() {
                       </div>
                     )}
 
-                    <div style={{ marginBottom: 14 }}>
+                    <div className="mb-4">
                       <div className="flex items-center justify-between mb-1.5">
-                        <label htmlFor="join-access-code" className="hl-section-label" style={{ margin: 0 }}>
+                        <label htmlFor="join-access-code" className="hl-section-label block font-bold text-xs text-gray-700 m-0">
                           Workspace Access Code (from Admin) *
                         </label>
                         {verifyingCode && (
@@ -699,93 +713,128 @@ export default function Signup() {
                           </span>
                         )}
                       </div>
-                      <input
-                        id="join-access-code"
-                        type="text"
-                        value={accessCode}
-                        onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
-                        className="hl-input w-full font-mono font-bold tracking-wider"
-                        placeholder="e.g. AC-X9B2-4821"
-                        required
-                        autoFocus
-                      />
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                          <KeyRound size={16} />
+                        </div>
+                        <input
+                          id="join-access-code"
+                          type="text"
+                          value={accessCode}
+                          onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
+                          className="hl-input w-full pl-9 pr-3 py-2.5 font-mono font-bold tracking-wider text-sm transition focus:ring-2 focus:ring-emerald-500/20"
+                          placeholder="e.g. AC-X9B2-4821"
+                          required
+                          autoFocus
+                        />
+                      </div>
                       <span className="text-[11px] text-gray-500 block mt-1">
                         Obtained from your administrator when they added your employee profile.
                       </span>
                     </div>
 
-                    <div style={{ marginBottom: 14 }}>
-                      <label htmlFor="join-email" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
+                    <div className="mb-4">
+                      <label htmlFor="join-email" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
                         Work Email Address *
                       </label>
-                      <input
-                        id="join-email"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="hl-input w-full"
-                        placeholder="name@company.com"
-                        required
-                      />
-                    </div>
-
-                    <div style={{ marginBottom: 14 }}>
-                      <label htmlFor="join-name" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
-                        Your Full Name
-                      </label>
-                      <input
-                        id="join-name"
-                        type="text"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        className="hl-input w-full"
-                        placeholder="Rajesh Kumar"
-                      />
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
-                      <div>
-                        <label htmlFor="join-pass" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
-                          Set Password *
-                        </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                          <Mail size={16} />
+                        </div>
                         <input
-                          id="join-pass"
-                          type="password"
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          className="hl-input w-full"
-                          placeholder="••••••••••••"
+                          id="join-email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="hl-input w-full pl-9 pr-3 py-2.5 text-sm transition focus:ring-2 focus:ring-emerald-500/20"
+                          placeholder="name@company.com"
                           required
                         />
                       </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <label htmlFor="join-name" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                        Your Full Name
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                          <User size={16} />
+                        </div>
+                        <input
+                          id="join-name"
+                          type="text"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          className="hl-input w-full pl-9 pr-3 py-2.5 text-sm transition focus:ring-2 focus:ring-emerald-500/20"
+                          placeholder="Rajesh Kumar"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-5">
                       <div>
-                        <label htmlFor="join-pass-confirm" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
+                        <label htmlFor="join-pass" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                          Set Password *
+                        </label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                            <Lock size={16} />
+                          </div>
+                          <input
+                            id="join-pass"
+                            type={showPassword ? "text" : "password"}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="hl-input w-full pl-9 pr-10 py-2.5 text-sm transition focus:ring-2 focus:ring-emerald-500/20"
+                            placeholder="••••••••••••"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                          >
+                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label htmlFor="join-pass-confirm" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
                           Confirm Password *
                         </label>
-                        <input
-                          id="join-pass-confirm"
-                          type="password"
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          className="hl-input w-full"
-                          placeholder="••••••••••••"
-                          required
-                        />
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                            <Lock size={16} />
+                          </div>
+                          <input
+                            id="join-pass-confirm"
+                            type={showConfirmPassword ? "text" : "password"}
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            className="hl-input w-full pl-9 pr-10 py-2.5 text-sm transition focus:ring-2 focus:ring-emerald-500/20"
+                            placeholder="••••••••••••"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                            aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                          >
+                            {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
                       </div>
                     </div>
 
                     <button
                       type="submit"
                       disabled={loading}
-                      className="hl-btn-primary"
+                      className="hl-btn-primary w-full py-3 px-4 text-sm font-bold flex items-center justify-center gap-2 rounded-xl shadow-sm transition hover:shadow"
                       style={{
-                        width: "100%",
-                        padding: "11px 16px",
-                        fontSize: 14,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 8,
                         background: "linear-gradient(135deg, #059669 0%, #0d9488 100%)",
                         borderColor: "#047857",
                       }}
@@ -826,53 +875,70 @@ export default function Signup() {
                       </button>
                     </div>
 
-                    <label htmlFor="req-name" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
-                      Full Name
-                    </label>
-                    <input
-                      id="req-name"
-                      type="text"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="hl-input w-full"
-                      style={{ marginBottom: 14 }}
-                      placeholder="Your full name"
-                      required
-                    />
+                    <div className="mb-4">
+                      <label htmlFor="req-name" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                        Full Name *
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                          <User size={16} />
+                        </div>
+                        <input
+                          id="req-name"
+                          type="text"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          className="hl-input w-full pl-9 pr-3 py-2.5 text-sm"
+                          placeholder="Your full name"
+                          required
+                        />
+                      </div>
+                    </div>
 
-                    <label htmlFor="req-email" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
-                      Work Email Address
-                    </label>
-                    <input
-                      id="req-email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="hl-input w-full"
-                      style={{ marginBottom: 14 }}
-                      placeholder="name@company.com"
-                      required
-                    />
+                    <div className="mb-4">
+                      <label htmlFor="req-email" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                        Work Email Address *
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                          <Mail size={16} />
+                        </div>
+                        <input
+                          id="req-email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="hl-input w-full pl-9 pr-3 py-2.5 text-sm"
+                          placeholder="name@company.com"
+                          required
+                        />
+                      </div>
+                    </div>
 
-                    <label htmlFor="req-emp" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
-                      Employee ID / Department
-                    </label>
-                    <input
-                      id="req-emp"
-                      type="text"
-                      value={empId}
-                      onChange={(e) => setEmpId(e.target.value)}
-                      className="hl-input w-full"
-                      style={{ marginBottom: 20 }}
-                      placeholder="e.g. Sales / Support team"
-                      required
-                    />
+                    <div className="mb-5">
+                      <label htmlFor="req-emp" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                        Employee ID / Department *
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                          <Briefcase size={16} />
+                        </div>
+                        <input
+                          id="req-emp"
+                          type="text"
+                          value={empId}
+                          onChange={(e) => setEmpId(e.target.value)}
+                          className="hl-input w-full pl-9 pr-3 py-2.5 text-sm"
+                          placeholder="e.g. Sales / Support team"
+                          required
+                        />
+                      </div>
+                    </div>
 
                     <button
                       type="submit"
                       disabled={loading}
-                      className="hl-btn-primary"
-                      style={{ width: "100%", padding: "10px 14px" }}
+                      className="hl-btn-primary w-full py-2.5 px-4 text-sm font-bold rounded-xl"
                     >
                       {loading ? "Submitting Request…" : "Submit Access Request"}
                     </button>

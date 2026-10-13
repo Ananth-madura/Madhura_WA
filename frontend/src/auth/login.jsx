@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
-import { ArrowLeft, Zap, Shield, Sparkles, Check, CheckCircle2, KeyRound } from "lucide-react";
+import { ArrowLeft, Zap, Shield, Sparkles, Check, CheckCircle2, KeyRound, Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "./AuthContext";
 import { API } from "../config/api";
 import { startDirectDemoSession } from "./demoSession";
@@ -11,6 +11,7 @@ export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
@@ -170,62 +171,77 @@ export default function Login() {
         )}
 
         <form onSubmit={submit} noValidate>
-          <label htmlFor="hl-email" className="hl-section-label" style={{ display: "block", marginBottom: 6 }}>
-            Work Email, Employee ID, or Access Code
-          </label>
-          <input
-            id="hl-email"
-            type="text"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="username"
-            className="hl-input"
-            style={{ width: "100%", marginBottom: 14 }}
-            placeholder="admin@madhuratech.com"
-          />
-
-          <div className="flex items-center justify-between mb-1.5">
-            <label htmlFor="hl-password" className="hl-section-label" style={{ display: "block" }}>
-              Password
+          <div className="mb-4">
+            <label htmlFor="hl-email" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+              Work Email, Employee ID, or Access Code *
             </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                <Mail size={16} />
+              </div>
+              <input
+                id="hl-email"
+                type="text"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="username"
+                className="hl-input w-full pl-9 pr-3 py-2.5 text-sm transition focus:ring-2 focus:ring-emerald-500/20"
+                placeholder="admin@madhuratech.com"
+                required
+              />
+            </div>
           </div>
-          <input
-            id="hl-password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            className="hl-input"
-            style={{ width: "100%", marginBottom: 18 }}
-            placeholder="••••••••••••"
-          />
+
+          <div className="mb-5">
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor="hl-password" className="hl-section-label block font-bold text-xs text-gray-700 m-0">
+                Password *
+              </label>
+            </div>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                <Lock size={16} />
+              </div>
+              <input
+                id="hl-password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                className="hl-input w-full pl-9 pr-10 py-2.5 text-sm transition focus:ring-2 focus:ring-emerald-500/20"
+                placeholder="••••••••••••"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
 
           <button
             type="submit"
             disabled={loading || demoLoading}
-            className="hl-btn-primary"
-            style={{ width: "100%", padding: "10px 14px", fontSize: 14 }}
+            className="hl-btn-primary w-full py-3 px-4 text-sm font-bold flex items-center justify-center gap-2 rounded-xl shadow-sm transition hover:shadow"
           >
             {loading ? "Signing in…" : "Sign in to Dashboard"}
           </button>
 
           {/* Employee Access Code First-Time Activation Banner */}
           <div
-            className="mt-3 p-2.5 rounded-lg flex items-center justify-between gap-2"
-            style={{
-              background: "rgba(16, 185, 129, 0.08)",
-              border: "1px solid rgba(16, 185, 129, 0.25)",
-              fontSize: 12,
-            }}
+            className="mt-3.5 p-3 rounded-xl flex items-center justify-between gap-2 bg-emerald-50/80 border border-emerald-200 text-xs"
           >
-            <div className="flex items-center gap-1.5 text-emerald-900 min-w-0">
-              <KeyRound size={14} className="text-emerald-700 shrink-0" />
+            <div className="flex items-center gap-2 text-emerald-900 min-w-0">
+              <KeyRound size={15} className="text-emerald-700 shrink-0" />
               <span className="truncate">First-time login with admin Access Code?</span>
             </div>
             <Link
               to="/signup?tab=access_code"
-              className="font-bold text-emerald-700 hover:underline shrink-0"
-              style={{ fontSize: 11 }}
+              className="font-bold text-emerald-700 hover:underline shrink-0 text-xs"
             >
               Activate Code →
             </Link>
@@ -233,38 +249,22 @@ export default function Login() {
         </form>
 
         {/* Quick autofill chips for dev test */}
-        <div className="mt-3 pt-3" style={{ borderTop: "1px dashed var(--color-line)" }}>
-          <p style={{ fontSize: 11, color: "var(--color-ink-3)", marginBottom: 6 }}>
-            Quick fill dev credentials:
+        <div className="mt-4 pt-3.5 border-t border-dashed border-gray-200">
+          <p className="text-[11px] text-gray-500 mb-2 font-medium">
+            Quick fill dev test credentials:
           </p>
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={() => autofillPreset("admin@madhuratech.com", "admin123")}
-              style={{
-                fontSize: 11,
-                padding: "3px 8px",
-                borderRadius: 4,
-                border: "1px solid var(--color-line)",
-                background: "var(--color-paper-2, #f8fafc)",
-                color: "var(--color-ink-2)",
-                cursor: "pointer",
-              }}
+              className="text-xs py-1 px-2.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-gray-700 font-medium transition cursor-pointer"
             >
               admin@madhuratech.com
             </button>
             <button
               type="button"
               onClick={() => autofillPreset("demo@madhuratech.com", "demo123")}
-              style={{
-                fontSize: 11,
-                padding: "3px 8px",
-                borderRadius: 4,
-                border: "1px solid var(--color-line)",
-                background: "var(--color-paper-2, #f8fafc)",
-                color: "var(--color-ink-2)",
-                cursor: "pointer",
-              }}
+              className="text-xs py-1 px-2.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-gray-700 font-medium transition cursor-pointer"
             >
               demo@madhuratech.com
             </button>

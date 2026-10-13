@@ -39,7 +39,16 @@ const INTENTIONAL_PUBLIC = {
 };
 
 /** Guards that count as protection. */
-const GUARDS = /\b(verifyToken|requireAuth|isAdmin|isAdminOnly|isEmployee|auth)\b/;
+const GUARDS = /\b(verifyToken|requireAuth|isAdmin|isAdminOnly|isEmployee|auth|portalAuth)\b/;
+
+/** Route handlers in bare mounts that are intentional public entry points. */
+const INTENTIONAL_PUBLIC_HANDLERS = {
+  "clientPortalRoutes.js": {
+    "/settings": "Public client portal theme, branding, and status configuration",
+    "/auth/login": "Client portal email/password login with strict rate limiters",
+    "/auth/activate": "Client portal initial invite activation with strict rate limiters",
+  },
+};
 
 /** Rate limiters / uploaders that appear in the middleware slot but are NOT auth. */
 const NON_AUTH_MW = /\b(accessRequestLimiter|messageSendLimiter|campaignLaunchLimiter|upload|rateLimit)/;
@@ -96,7 +105,8 @@ function parseHandlers(file) {
     }
 
     const head = stmt.slice(0, stmt.search(/async\s*\(|\bfunction\s*\(|\(\s*req\b|\(\s*\{\s*req/));
-    const routePath = (stmt.match(/router\.\w+\s*\(\s*(\[[^\]]*\]|"[^"]*")/) || [, "?"])[1];
+    const rawRoute = (stmt.match(/router\.\w+\s*\(\s*(\[[^\]]*\]|["'][^"']+["'])/) || [, "?"])[1];
+    const routePath = rawRoute.replace(/['"]/g, "");
 
     // A guard counts only if it sits in the middleware slot BEFORE the handler.
     const mw = head.replace(/router\.\w+\s*\(/, "");
@@ -133,6 +143,10 @@ function classify(handlers, mounts) {
       candidates[0];
 
     const publicMount = mount.paths.some((p) => INTENTIONAL_PUBLIC[p]);
+    const publicHandlerReason = INTENTIONAL_PUBLIC_HANDLERS[h.file]?.[h.routePath];
+    if (publicHandlerReason) {
+      return { ...h, mount, verdict: "PUBLIC_BY_DESIGN", reason: publicHandlerReason };
+    }
 
     if (h.guarded) {
       return { ...h, mount, verdict: "GUARDED", reason: `inline ${h.guards.join(", ")}` };

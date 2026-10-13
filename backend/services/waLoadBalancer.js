@@ -163,9 +163,14 @@ class WALoadBalancer {
         waWeb = waService.default();
       }
       if (waWeb && !waWeb.ready) {
-        console.warn(
-          `⛔ [WA LoadBalancer] Session '${waWeb.key}' is not connected — not substituting another sender.`
-        );
+        const now = Date.now();
+        if (!this._lastWarnNotConnected) this._lastWarnNotConnected = {};
+        if (now - (this._lastWarnNotConnected[waWeb.key] || 0) > 45000) {
+          this._lastWarnNotConnected[waWeb.key] = now;
+          console.log(
+            `ℹ️ [WA LoadBalancer] Session '${waWeb.key}' is waiting for QR pairing (not yet linked).`
+          );
+        }
         waWeb = null;
       }
       const hasWeb = Boolean(waWeb && waWeb.ready);

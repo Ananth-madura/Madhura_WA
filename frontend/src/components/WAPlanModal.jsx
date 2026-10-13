@@ -273,7 +273,7 @@ export default function WAPlanModal({ isOpen, onClose }) {
           Subscription Plans &amp; Tiers
         </h3>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 20 }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
           {plans.map((p) => {
             const isCurrent = p.id === currentPlanId;
             return (

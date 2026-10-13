@@ -1746,13 +1746,24 @@ class WhatsAppService {
 
           // Try clicking WhatsApp Web's reload button if present (appears when QR expires)
           const clickedReload = await this.client.pupPage.evaluate(() => {
-            const reloadBtn = document.querySelector('button[role="button"]') ||
-                              document.querySelector('div[data-ref]') ||
-                              document.querySelector('span[data-icon="refresh"]') ||
-                              document.querySelector('[data-testid="qrcode"] + div button');
-            if (reloadBtn && typeof reloadBtn.click === "function") {
-              reloadBtn.click();
-              return true;
+            const selectors = [
+              '[data-testid="refresh-qr"]',
+              'button[data-testid*="refresh"]',
+              'div[data-testid*="refresh"][role="button"]',
+              'span[data-icon="refresh"]',
+              'button[aria-label*="reload" i]',
+              'button[aria-label*="refresh" i]',
+              '[data-testid="qrcode"] + div button',
+              'canvas + div button',
+              'button[role="button"]',
+              'div[data-ref]'
+            ];
+            for (const sel of selectors) {
+              const el = document.querySelector(sel);
+              if (el && typeof el.click === "function") {
+                el.click();
+                return true;
+              }
             }
             return false;
           }).catch(() => false);

@@ -387,12 +387,12 @@ export default function WhatsAppCampaignWizard({ isOpen, onClose, onSuccess, ini
 
               {contactsTab === "manual" && (
                 <div className="hl-card border border-[var(--color-rule)] rounded-xl p-4 space-y-3">
-                  <div className="flex gap-2">
-                    <input value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Name"
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Full Name"
                       className="hl-input flex-1 px-3 py-2 border border-[var(--color-rule)] rounded-lg text-sm outline-none" />
-                    <input value={manualPhone} onChange={e => setManualPhone(e.target.value)} placeholder="Phone"
-                      className="hl-input hl-id flex-1 px-3 py-2 border border-[var(--color-rule)] rounded-lg text-sm outline-none" />
-                    <button onClick={addSingleManual} className="hl-btn-secondary px-3 py-2 rounded-lg text-xs font-bold shrink-0">Add</button>
+                    <input value={manualPhone} onChange={e => setManualPhone(e.target.value)} placeholder="10-digit Phone"
+                      className="hl-input hl-id flex-1 px-3 py-2 border border-[var(--color-rule)] rounded-lg text-sm outline-none font-mono" />
+                    <button onClick={addSingleManual} className="hl-btn-secondary px-4 py-2 rounded-lg text-xs font-bold shrink-0">Add Contact</button>
                   </div>
                   <p className="text-xs text-[var(--color-ink-2)]">Or paste multiple lines as "phone, name" (one per line):</p>
                   <textarea value={manualPaste} onChange={e => setManualPaste(e.target.value)} rows={4}

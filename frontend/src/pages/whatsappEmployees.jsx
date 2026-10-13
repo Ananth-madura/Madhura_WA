@@ -21,6 +21,8 @@ import {
   Clock,
   Mail,
   ExternalLink,
+  User,
+  Briefcase,
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
@@ -756,151 +758,180 @@ export default function WAEmployees() {
 
       {/* Modal: Create Employee */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm">
           <div
-            className="hl-card w-full max-w-lg overflow-hidden animate-scale-up"
-            style={{ borderRadius: "var(--radius-lg, 12px)", background: "var(--color-paper)" }}
+            className="hl-card w-full max-w-lg max-h-[92dvh] flex flex-col overflow-hidden animate-scale-up rounded-2xl shadow-2xl"
+            style={{ background: "var(--color-paper)" }}
           >
-            <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-slate-50">
-              <div className="flex items-center gap-2">
-                <UserPlus size={18} className="text-emerald-600" />
-                <h3 className="font-bold text-base text-gray-900 m-0">Add New Employee</h3>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-slate-50/80 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <UserPlus size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-gray-900 m-0">Add New Employee</h3>
+                  <p className="text-[11px] text-gray-500 m-0">Generate a unique Access Code for isolated WhatsApp workspace login</p>
+                </div>
               </div>
               <button
+                type="button"
                 onClick={() => setShowCreateModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="p-5 space-y-4">
-              {formError && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-md">
-                  {formError}
-                </div>
-              )}
+            <form onSubmit={handleCreateSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-5 space-y-4 flex-1 overflow-y-auto wa-custom-scrollbar overscroll-contain">
+                {formError && (
+                  <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
+                    <AlertCircle size={15} className="shrink-0 text-red-600" />
+                    <span>{formError}</span>
+                  </div>
+                )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="hl-section-label block mb-1">First Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.first_name}
-                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                    className="hl-input w-full"
-                    placeholder="e.g. Ananya"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">First Name *</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <User size={15} />
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        value={formData.first_name}
+                        onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                        className="hl-input w-full pl-9 pr-3 py-2 text-sm"
+                        placeholder="e.g. Ananya"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Last Name</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <User size={15} />
+                      </div>
+                      <input
+                        type="text"
+                        value={formData.last_name}
+                        onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                        className="hl-input w-full pl-9 pr-3 py-2 text-sm"
+                        placeholder="e.g. Sharma"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="hl-section-label block mb-1">Last Name</label>
-                  <input
-                    type="text"
-                    value={formData.last_name}
-                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                    className="hl-input w-full"
-                    placeholder="e.g. Sharma"
-                  />
-                </div>
-              </div>
 
-              <div>
-                <label className="hl-section-label block mb-1">Work Email Address *</label>
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="hl-input w-full"
-                  placeholder="employee@company.com"
-                />
-                <span className="text-[11px] text-gray-500 block mt-1">
-                  Employee will verify this email along with their Access Code.
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="hl-section-label block mb-1">Job Title</label>
-                  <input
-                    type="text"
-                    value={formData.job_title}
-                    onChange={(e) => setFormData({ ...formData, job_title: e.target.value })}
-                    className="hl-input w-full"
-                    placeholder="e.g. Sales Specialist"
-                  />
+                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Work Email Address *</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                      <Mail size={15} />
+                    </div>
+                    <input
+                      type="email"
+                      required
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="hl-input w-full pl-9 pr-3 py-2 text-sm"
+                      placeholder="employee@company.com"
+                    />
+                  </div>
+                  <span className="text-[11px] text-gray-500 block mt-1">
+                    Employee will verify this email along with their workspace Access Code upon first login.
+                  </span>
                 </div>
-                <div>
-                  <label className="hl-section-label block mb-1">System Role</label>
-                  <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    className="hl-input w-full"
-                  >
-                    <option value="employee">Employee</option>
-                    <option value="agent">Support Agent</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-              </div>
 
-              {/* Granular WhatsApp Access Level Selection */}
-              <div>
-                <label className="hl-section-label block mb-1.5">
-                  WhatsApp Access Level
-                </label>
-                <div className="space-y-2">
-                  {Object.entries(ACCESS_LEVEL_META).map(([key, meta]) => {
-                    const Icon = meta.icon;
-                    const isSelected = formData.whatsapp_access_level === key;
-                    return (
-                      <label
-                        key={key}
-                        onClick={() => setFormData({ ...formData, whatsapp_access_level: key })}
-                        className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${
-                          isSelected
-                            ? "border-emerald-500 bg-emerald-50/50"
-                            : "border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="whatsapp_access_level"
-                          checked={isSelected}
-                          onChange={() => setFormData({ ...formData, whatsapp_access_level: key })}
-                          className="mt-0.5"
-                        />
-                        <div className="flex-1 text-xs">
-                          <div className="font-bold text-gray-900 flex items-center gap-1.5">
-                            <Icon size={13} style={{ color: meta.color }} />
-                            <span>{meta.label}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Job Title</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <Briefcase size={15} />
+                      </div>
+                      <input
+                        type="text"
+                        value={formData.job_title}
+                        onChange={(e) => setFormData({ ...formData, job_title: e.target.value })}
+                        className="hl-input w-full pl-9 pr-3 py-2 text-sm"
+                        placeholder="e.g. Sales Specialist"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">System Role</label>
+                    <select
+                      value={formData.role}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                      className="hl-input w-full py-2 text-sm font-medium"
+                    >
+                      <option value="employee">Employee</option>
+                      <option value="agent">Support Agent</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Granular WhatsApp Access Level Selection */}
+                <div>
+                  <label className="hl-section-label block mb-2 font-bold text-xs text-gray-700">
+                    WhatsApp Access Level &amp; Permissions
+                  </label>
+                  <div className="space-y-2">
+                    {Object.entries(ACCESS_LEVEL_META).map(([key, meta]) => {
+                      const Icon = meta.icon;
+                      const isSelected = formData.whatsapp_access_level === key;
+                      return (
+                        <label
+                          key={key}
+                          onClick={() => setFormData({ ...formData, whatsapp_access_level: key })}
+                          className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                            isSelected
+                              ? "border-emerald-500 bg-emerald-50/60 shadow-xs ring-1 ring-emerald-500/30"
+                              : "border-gray-200 hover:border-gray-300 hover:bg-gray-50/50"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="whatsapp_access_level"
+                            checked={isSelected}
+                            onChange={() => setFormData({ ...formData, whatsapp_access_level: key })}
+                            className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <div className="flex-1 text-xs">
+                            <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                              <Icon size={14} style={{ color: meta.color }} />
+                              <span>{meta.label}</span>
+                            </div>
+                            <p className="text-gray-500 text-[11px] mt-0.5 leading-relaxed">
+                              {meta.desc}
+                            </p>
                           </div>
-                          <p className="text-gray-500 text-[11px] mt-0.5 leading-relaxed">
-                            {meta.desc}
-                          </p>
-                        </div>
-                      </label>
-                    );
-                  })}
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+              {/* Sticky Footer */}
+              <div className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-gray-100 bg-slate-50/90 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="hl-btn-secondary"
-                  style={{ height: 38 }}
+                  className="hl-btn-secondary px-4 py-2 text-xs font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={formLoading}
-                  className="hl-btn-primary"
+                  className="hl-btn-primary px-4 py-2 text-xs font-bold shadow-sm"
                   style={{
-                    height: 38,
                     background: "linear-gradient(135deg, #059669 0%, #0d9488 100%)",
                     borderColor: "#047857",
                   }}
@@ -915,10 +946,10 @@ export default function WAEmployees() {
 
       {/* Modal: Created Employee Code Success Dialog */}
       {createdEmployeeResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm">
           <div
-            className="hl-card w-full max-w-md p-6 text-center animate-scale-up"
-            style={{ borderRadius: "var(--radius-lg, 12px)", background: "var(--color-paper)" }}
+            className="hl-card w-full max-w-md p-6 text-center animate-scale-up rounded-2xl shadow-2xl"
+            style={{ background: "var(--color-paper)" }}
           >
             <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-3">
               <CheckCircle2 size={28} />
@@ -953,7 +984,7 @@ export default function WAEmployees() {
               <button
                 type="button"
                 onClick={() => handleCopyInvitation(createdEmployeeResult)}
-                className="hl-btn-primary w-full py-2.5 flex items-center justify-center gap-2 text-sm"
+                className="hl-btn-primary w-full py-2.5 flex items-center justify-center gap-2 text-sm font-bold rounded-xl"
               >
                 <Copy size={16} />
                 <span>Copy Invitation &amp; Access Code</span>
@@ -961,7 +992,7 @@ export default function WAEmployees() {
               <button
                 type="button"
                 onClick={() => setCreatedEmployeeResult(null)}
-                className="hl-btn-secondary w-full py-2 text-xs"
+                className="hl-btn-secondary w-full py-2 text-xs font-semibold rounded-xl"
               >
                 Done / Close
               </button>
@@ -972,12 +1003,12 @@ export default function WAEmployees() {
 
       {/* Modal: Edit Employee Access Level */}
       {editEmployee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm">
           <div
-            className="hl-card w-full max-w-md overflow-hidden animate-scale-up"
-            style={{ borderRadius: "var(--radius-lg, 12px)", background: "var(--color-paper)" }}
+            className="hl-card w-full max-w-md max-h-[92dvh] flex flex-col overflow-hidden animate-scale-up rounded-2xl shadow-2xl"
+            style={{ background: "var(--color-paper)" }}
           >
-            <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-slate-50">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-slate-50/80 shrink-0">
               <div className="flex items-center gap-2">
                 <Edit2 size={16} className="text-blue-600" />
                 <h3 className="font-bold text-base text-gray-900 m-0">
@@ -985,83 +1016,90 @@ export default function WAEmployees() {
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={() => setEditEmployee(null)}
-                className="text-gray-400 hover:text-gray-600 p-1"
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100"
               >
                 <X size={16} />
               </button>
             </div>
 
-            <form onSubmit={handleUpdateAccessLevel} className="p-5 space-y-4">
-              <div>
-                <label className="hl-section-label block mb-1">Job Title</label>
-                <input
-                  type="text"
-                  value={editEmployee.job_title || ""}
-                  onChange={(e) => setEditEmployee({ ...editEmployee, job_title: e.target.value })}
-                  className="hl-input w-full"
-                />
-              </div>
+            <form onSubmit={handleUpdateAccessLevel} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-5 space-y-4 flex-1 overflow-y-auto wa-custom-scrollbar overscroll-contain">
+                <div>
+                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Job Title</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                      <Briefcase size={15} />
+                    </div>
+                    <input
+                      type="text"
+                      value={editEmployee.job_title || ""}
+                      onChange={(e) => setEditEmployee({ ...editEmployee, job_title: e.target.value })}
+                      className="hl-input w-full pl-9 pr-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
 
-              <div>
-                <label className="hl-section-label block mb-1">Status</label>
-                <select
-                  value={editEmployee.status || "active"}
-                  onChange={(e) => setEditEmployee({ ...editEmployee, status: e.target.value })}
-                  className="hl-input w-full"
-                >
-                  <option value="active">Active</option>
-                  <option value="pending">Pending Activation</option>
-                  <option value="banned">Suspended / Inactive</option>
-                </select>
-              </div>
+                <div>
+                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Account Status</label>
+                  <select
+                    value={editEmployee.status || "active"}
+                    onChange={(e) => setEditEmployee({ ...editEmployee, status: e.target.value })}
+                    className="hl-input w-full py-2 text-sm font-medium"
+                  >
+                    <option value="active">Active (Operational)</option>
+                    <option value="pending">Pending Activation (Awaiting Code Login)</option>
+                    <option value="banned">Suspended / Deactivated</option>
+                  </select>
+                </div>
 
-              <div>
-                <label className="hl-section-label block mb-1.5">WhatsApp Access Level</label>
-                <div className="space-y-2">
-                  {Object.entries(ACCESS_LEVEL_META).map(([key, meta]) => {
-                    const Icon = meta.icon;
-                    const isSelected = editEmployee.whatsapp_access_level === key;
-                    return (
-                      <label
-                        key={key}
-                        onClick={() => setEditEmployee({ ...editEmployee, whatsapp_access_level: key })}
-                        className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer ${
-                          isSelected ? "border-blue-500 bg-blue-50/50" : "border-gray-200"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="edit_level"
-                          checked={isSelected}
-                          onChange={() => setEditEmployee({ ...editEmployee, whatsapp_access_level: key })}
-                          className="mt-0.5"
-                        />
-                        <div className="text-xs">
-                          <span className="font-bold text-gray-900 flex items-center gap-1">
-                            <Icon size={12} style={{ color: meta.color }} />
-                            {meta.label}
-                          </span>
-                          <span className="text-[10px] text-gray-500 block leading-tight mt-0.5">
-                            {meta.desc}
-                          </span>
-                        </div>
-                      </label>
-                    );
-                  })}
+                <div>
+                  <label className="hl-section-label block mb-2 font-bold text-xs text-gray-700">WhatsApp Access Level</label>
+                  <div className="space-y-2">
+                    {Object.entries(ACCESS_LEVEL_META).map(([key, meta]) => {
+                      const Icon = meta.icon;
+                      const isSelected = editEmployee.whatsapp_access_level === key;
+                      return (
+                        <label
+                          key={key}
+                          onClick={() => setEditEmployee({ ...editEmployee, whatsapp_access_level: key })}
+                          className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition ${
+                            isSelected ? "border-blue-500 bg-blue-50/60 ring-1 ring-blue-500/30" : "border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="edit_level"
+                            checked={isSelected}
+                            onChange={() => setEditEmployee({ ...editEmployee, whatsapp_access_level: key })}
+                            className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                          />
+                          <div className="text-xs">
+                            <span className="font-bold text-gray-900 flex items-center gap-1.5">
+                              <Icon size={13} style={{ color: meta.color }} />
+                              {meta.label}
+                            </span>
+                            <span className="text-[11px] text-gray-500 block leading-tight mt-0.5">
+                              {meta.desc}
+                            </span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-gray-100 bg-slate-50/90 shrink-0">
                 <button
                   type="button"
                   onClick={() => setEditEmployee(null)}
-                  className="hl-btn-secondary"
-                  style={{ height: 36 }}
+                  className="hl-btn-secondary px-4 py-2 text-xs font-semibold"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="hl-btn-primary" style={{ height: 36 }}>
+                <button type="submit" className="hl-btn-primary px-4 py-2 text-xs font-bold">
                   Save Changes
                 </button>
               </div>

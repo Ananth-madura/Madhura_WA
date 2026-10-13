@@ -805,11 +805,11 @@ export default function WhatsAppContacts() {
                 </button>
               </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="hl-btn-secondary flex-1"
+                  className="hl-btn-secondary flex-1 py-2.5"
                 >
                   Cancel
                 </button>
@@ -817,7 +817,7 @@ export default function WhatsAppContacts() {
                   type="button"
                   onClick={handleSave}
                   disabled={!form.name || !form.phone}
-                  className="hl-btn-primary flex-1"
+                  className="hl-btn-primary flex-1 py-2.5"
                 >
                   {editContact ? "Save Changes" : "Create Contact"}
                 </button>
@@ -873,11 +873,11 @@ export default function WhatsAppContacts() {
                 </div>
               )}
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowCsvModal(false)}
-                  className="hl-btn-secondary flex-1"
+                  className="hl-btn-secondary flex-1 py-2.5"
                 >
                   Cancel
                 </button>
@@ -885,7 +885,7 @@ export default function WhatsAppContacts() {
                   type="button"
                   onClick={handleUploadParsedCsv}
                   disabled={!csvFile || csvUploading}
-                  className="hl-btn-primary flex-1 flex items-center justify-center gap-2"
+                  className="hl-btn-primary flex-1 py-2.5 flex items-center justify-center gap-2"
                 >
                   {csvUploading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                   <span>{csvUploading ? "Importing..." : "Start Import"}</span>

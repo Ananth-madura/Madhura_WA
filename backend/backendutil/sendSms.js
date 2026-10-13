@@ -3,16 +3,27 @@ const db = require("../config/database");
 const { getTransporterForUser } = require("./emailConfig");
 
 function createTransporter() {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  const user = (process.env.EMAIL_USER || "").trim();
+  const pass = (process.env.EMAIL_PASS || "").trim();
+  if (!user || !pass) {
+    return null;
+  }
+  // Ignore placeholder values from .env template
+  if (
+    user.includes("your-email") ||
+    user.includes("example.com") ||
+    pass.includes("your-app-password") ||
+    pass.includes("placeholder")
+  ) {
     return null;
   }
   return nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: Number(process.env.SMTP_PORT) || 587,
     secure: false,
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      user,
+      pass,
     },
     tls: { rejectUnauthorized: false },
     connectionTimeout: 10000,
@@ -24,13 +35,13 @@ let transporter = createTransporter();
 if (transporter) {
   transporter.verify((error) => {
     if (error) {
-      console.error("OTP email transporter verification failed:", error.message);
+      console.warn("⚠️ OTP email transporter verification notice:", error.message, "(Verify Gmail App Password in .env if email OTP/2FA is needed)");
     } else {
-      console.log("OTP email transporter is ready");
+      console.log("✅ OTP email transporter is ready");
     }
   });
 } else {
-  console.warn("OTP email transporter not configured. Set EMAIL_USER and EMAIL_PASS in .env");
+  console.log("ℹ️ OTP email transporter not configured (using placeholder credentials in .env). Set a valid Gmail App Password if email OTP/2FA is needed.");
 }
 
 const sendEmailOtp = async (email, otp, customSubject, is2fa = false) => {

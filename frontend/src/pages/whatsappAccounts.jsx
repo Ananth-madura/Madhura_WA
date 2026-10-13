@@ -2054,14 +2054,14 @@ export default function WhatsAppAccounts() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between pt-1">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
                       <p className="text-[11px] opacity-70">
                         Include country code without leading plus (e.g. 91 for India).
                       </p>
                       <button
                         type="submit"
                         disabled={metaDirectTestLoading || !metaDirectTestPhone.trim()}
-                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition flex items-center gap-1.5 disabled:opacity-50"
+                        className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition flex items-center justify-center gap-1.5 disabled:opacity-50"
                       >
                         {metaDirectTestLoading ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                         <span>{metaDirectTestLoading ? "Sending to Handset..." : "Send Test WhatsApp"}</span>
