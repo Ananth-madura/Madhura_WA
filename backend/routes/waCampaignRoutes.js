@@ -4,9 +4,17 @@ const db = require("../config/database");
 const multer = require("multer");
 const path = require("path");
 const { verifyToken: auth } = require("../middleware/authMiddleware");
+const {
+  requireTenantContext,
+  requireBranchScope,
+  requirePermission,
+} = require("../middleware/tenantMiddleware");
 const wa = require("../services/whatsappCloudApi");
 const { configureForUser, resetToEnvConfig } = require("../services/waConfigHelper");
 const { campaignLaunchLimiter } = require("../middleware/waRateLimiter");
+
+// Apply authentication, fail-closed tenant validation, and branch scoping to all campaign routes
+router.use(auth, requireTenantContext, requireBranchScope);
 
 // Upload target comes from config/runtimePaths so that on the VPS it resolves
 // to a directory OUTSIDE the deploy directory. See that file for why.
@@ -21,20 +29,36 @@ const upload = multer({
 
 // Bulk-send caps live in one place so every send surface shares them.
 const { checkBlastSize } = require("../services/waBlastGuard");
-// ── List campaigns ────────────────────────────────────────────────────────────
-router.get("/", auth, async (req, res) => {
+// ── List campaigns (Scoped by Organization & Branch) ─────────────────────────
+router.get("/", async (req, res) => {
   try {
+    const tid = req.tenantId;
+    let whereClauses = ["c.tenant_id = ?"];
+    let params = [tid];
+
+    if (req.branchId) {
+      whereClauses.push("(c.branch_id = ? OR c.branch_id IS NULL)");
+      params.push(req.branchId);
+    } else if (req.permittedBranchIds && req.permittedBranchIds.length > 0) {
+      const placeholders = req.permittedBranchIds.map(() => "?").join(",");
+      whereClauses.push(`(c.branch_id IN (${placeholders}) OR c.branch_id IS NULL)`);
+      params.push(...req.permittedBranchIds);
+    }
+
     const [rows] = await db.promise().query(`
       SELECT c.*, (SELECT COUNT(*) FROM wa_campaign_messages cm WHERE cm.campaign_id = c.id AND cm.status = 'unknown') AS unknown_count,
              t.name as template_name,
              f.name as flow_name,
-             g.name as group_name
+             g.name as group_name,
+             b.name as branch_name, b.code as branch_code
       FROM wa_campaigns c
       LEFT JOIN wa_templates t ON c.template_id = t.id
       LEFT JOIN wa_flows f ON c.flow_id = f.id
       LEFT JOIN wa_contact_groups g ON c.group_id = g.id
+      LEFT JOIN branches b ON c.branch_id = b.id
+      WHERE ${whereClauses.join(" AND ")}
       ORDER BY c.created_at DESC
-    `);
+    `, params);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -212,9 +236,10 @@ router.post("/anti-ban/settings", auth, async (req, res) => {
 });
 
 // ── Create campaign ───────────────────────────────────────────────────────────
-router.post("/", auth, async (req, res) => {
+router.post("/", async (req, res) => {
   try {
-    const tenantId = req.user?.tenant_id || 1;
+    const tenantId = req.tenantId;
+    const branchId = req.branchId || req.body.branch_id || null;
     const {
       name, description, type, template_id, flow_id, message_text, media_type, media_url, group_id, scheduled_at,
       whatsapp_number, daily_limit, start_time, end_time, timezone, random_delay_min, random_delay_max,
@@ -227,8 +252,8 @@ router.post("/", auth, async (req, res) => {
 
     let totalContacts = 0;
     if (group_id) {
-      const [rows] = await db.promise().query("SELECT COUNT(*) as count FROM wa_group_contacts WHERE group_id = ?", [group_id]);
-      totalContacts = rows[0].count;
+      const [rows] = await db.promise().query("SELECT COUNT(*) as count FROM wa_group_contacts WHERE group_id = ? AND (tenant_id = ? OR tenant_id IS NULL)", [group_id, tenantId]);
+      totalContacts = rows[0]?.count || 0;
     }
 
     const [result] = await db.promise().query(
@@ -237,8 +262,8 @@ router.post("/", auth, async (req, res) => {
         scheduled_at, total_contacts, whatsapp_number, daily_limit, start_time, end_time, timezone,
         random_delay_min, random_delay_max, pause_every, pause_duration_min, pause_duration_max,
         retry_failed, max_retries, retry_delay_min, retry_delay_max, exclude_prev_recipients,
-        duplicate_filter, pool_id, routing_strategy, spintax_enabled, warmup_mode, tenant_id, created_by, session_key
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        duplicate_filter, pool_id, routing_strategy, spintax_enabled, warmup_mode, tenant_id, branch_id, created_by, session_key
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         name, description || null, type || "text", template_id || null, flow_id || null, message_text || null,
         media_type || null, media_url || null, group_id || null,
@@ -252,7 +277,7 @@ router.post("/", auth, async (req, res) => {
         exclude_prev_recipients ? 1 : 0, duplicate_filter !== false ? 1 : 0,
         pool_id ? parseInt(pool_id) : null, routing_strategy || "round_robin",
         spintax_enabled !== false ? 1 : 0, warmup_mode ? 1 : 0,
-        tenantId, req.user?.id || null,
+        tenantId, branchId, req.user?.id || null,
         String(req.user?.id || "1")
       ]
     );
@@ -271,10 +296,11 @@ router.post("/", auth, async (req, res) => {
 });
 
 // ── Stop every running/paused campaign at once (emergency kill switch) ──────
-router.post("/stop-all", auth, async (req, res) => {
+router.post("/stop-all", async (req, res) => {
   try {
     const [result] = await db.promise().query(
-      "UPDATE wa_campaigns SET status='cancelled', completed_at=NOW() WHERE status IN ('running','paused','scheduled')"
+      "UPDATE wa_campaigns SET status='cancelled', completed_at=NOW() WHERE status IN ('running','paused','scheduled') AND tenant_id = ?",
+      [req.tenantId]
     );
     res.json({ success: true, stopped: result.affectedRows });
   } catch (err) {
@@ -283,16 +309,18 @@ router.post("/stop-all", auth, async (req, res) => {
 });
 
 // ── Get campaign detail ───────────────────────────────────────────────────────
-router.get("/:id", auth, async (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
     const [rows] = await db.promise().query(`
-      SELECT c.*, (SELECT COUNT(*) FROM wa_campaign_messages cm WHERE cm.campaign_id = c.id AND cm.status = 'unknown') AS unknown_count, t.name as template_name, f.name as flow_name, g.name as group_name
+      SELECT c.*, (SELECT COUNT(*) FROM wa_campaign_messages cm WHERE cm.campaign_id = c.id AND cm.status = 'unknown') AS unknown_count, t.name as template_name, f.name as flow_name, g.name as group_name,
+             b.name as branch_name, b.code as branch_code
       FROM wa_campaigns c
       LEFT JOIN wa_templates t ON c.template_id = t.id
       LEFT JOIN wa_flows f ON c.flow_id = f.id
       LEFT JOIN wa_contact_groups g ON c.group_id = g.id
-      WHERE c.id = ?
-    `, [req.params.id]);
+      LEFT JOIN branches b ON c.branch_id = b.id
+      WHERE c.id = ? AND c.tenant_id = ?
+    `, [req.params.id, req.tenantId]);
     if (!rows.length) return res.status(404).json({ error: "Campaign not found" });
     const [messages] = await db.promise().query(
       "SELECT * FROM wa_campaign_messages WHERE campaign_id = ? ORDER BY created_at ASC LIMIT 500",
@@ -305,7 +333,7 @@ router.get("/:id", auth, async (req, res) => {
 });
 
 // ── Update campaign ───────────────────────────────────────────────────────────
-router.put("/:id", auth, async (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
     const {
       name, description, type, template_id, flow_id, message_text, group_id, scheduled_at, status,
@@ -321,7 +349,7 @@ router.put("/:id", auth, async (req, res) => {
         random_delay_min=?, random_delay_max=?, pause_every=?, pause_duration_min=?, pause_duration_max=?,
         retry_failed=?, max_retries=?, retry_delay_min=?, retry_delay_max=?,
         exclude_prev_recipients=?, duplicate_filter=?, updated_at=NOW()
-       WHERE id=?`,
+       WHERE id=? AND tenant_id=?`,
       [
         name, description, type, template_id || null, flow_id || null, message_text, group_id, scheduled_at, status,
         whatsapp_number || null, parseInt(daily_limit) || 0,
@@ -331,13 +359,13 @@ router.put("/:id", auth, async (req, res) => {
         retry_failed ? 1 : 0, parseInt(max_retries) || 3,
         parseInt(retry_delay_min) || 15, parseInt(retry_delay_max) || 30,
         exclude_prev_recipients ? 1 : 0, duplicate_filter !== false ? 1 : 0,
-        req.params.id
+        req.params.id, req.tenantId
       ]
     );
 
     if (group_id) {
       const [rows] = await db.promise().query("SELECT COUNT(*) as count FROM wa_group_contacts WHERE group_id = ?", [group_id]);
-      await db.promise().query("UPDATE wa_campaigns SET total_contacts = ? WHERE id = ?", [rows[0].count, req.params.id]);
+      await db.promise().query("UPDATE wa_campaigns SET total_contacts = ? WHERE id = ? AND tenant_id = ?", [rows[0].count, req.params.id, req.tenantId]);
     }
 
     const [row] = await db.promise().query(`
@@ -346,8 +374,8 @@ router.put("/:id", auth, async (req, res) => {
       LEFT JOIN wa_templates t ON c.template_id = t.id
       LEFT JOIN wa_flows f ON c.flow_id = f.id
       LEFT JOIN wa_contact_groups g ON c.group_id = g.id
-      WHERE c.id = ?
-    `, [req.params.id]);
+      WHERE c.id = ? AND c.tenant_id = ?
+    `, [req.params.id, req.tenantId]);
     res.json(row[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -355,9 +383,9 @@ router.put("/:id", auth, async (req, res) => {
 });
 
 // ── Delete campaign ───────────────────────────────────────────────────────────
-router.delete("/:id", auth, async (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
-    await db.promise().query("DELETE FROM wa_campaigns WHERE id = ?", [req.params.id]);
+    await db.promise().query("DELETE FROM wa_campaigns WHERE id = ? AND tenant_id = ?", [req.params.id, req.tenantId]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -365,13 +393,11 @@ router.delete("/:id", auth, async (req, res) => {
 });
 
 // ── Start campaign ────────────────────────────────────────────────────────────
-router.post("/:id/start", auth, campaignLaunchLimiter, async (req, res) => {
+router.post("/:id/start", campaignLaunchLimiter, async (req, res) => {
   try {
-    // Scope the lookup to this user. Without it any authenticated user could
-    // name any campaign id and start someone else's blast from their own number.
     const [campaigns] = await db.promise().query(
-      "SELECT * FROM wa_campaigns WHERE id = ? AND (created_by IS NULL OR created_by = ? OR session_key = ? OR session_key = '')",
-      [req.params.id, String(req.user?.id || ""), String(req.user?.id || "")]
+      "SELECT * FROM wa_campaigns WHERE id = ? AND tenant_id = ?",
+      [req.params.id, req.tenantId]
     );
     if (!campaigns.length) return res.status(404).json({ error: "Campaign not found" });
     const campaign = campaigns[0];

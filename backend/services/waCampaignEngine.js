@@ -101,7 +101,7 @@ async function isOptedOut(phone, tenantId = 1) {
   try {
     const cleanPhone = phone.replace(/\D/g, "").slice(-10);
     const [rows] = await db.promise().query(
-      "SELECT id FROM wa_opt_outs WHERE (phone = ? OR phone LIKE ?) AND (tenant_id = ? OR tenant_id IS NULL) LIMIT 1",
+      "SELECT id FROM wa_opt_outs WHERE (phone = ? OR phone LIKE ?) AND tenant_id = ? LIMIT 1",
       [phone, `%${cleanPhone}`, tenantId || 1]
     );
     return rows.length > 0;
@@ -117,7 +117,7 @@ async function isBlocked(phone, tenantId = 1) {
   try {
     const cleanPhone = phone.replace(/\D/g, "").slice(-10);
     const [rows] = await db.promise().query(
-      "SELECT id FROM wa_contacts WHERE (phone = ? OR phone LIKE ?) AND (is_blocked = 1 OR is_unsubscribed = 1) AND (tenant_id = ? OR tenant_id IS NULL) LIMIT 1",
+      "SELECT id FROM wa_contacts WHERE (phone = ? OR phone LIKE ?) AND (is_blocked = 1 OR is_unsubscribed = 1) AND tenant_id = ? LIMIT 1",
       [phone, `%${cleanPhone}`, tenantId || 1]
     );
     return rows.length > 0;

@@ -10,6 +10,15 @@ const { verifyToken, isAdmin, isAdminOnly } = require("../middleware/authMiddlew
 const { createRateLimiter, loginLimiter, otpLimiter } = require("../middleware/waRateLimiter");
 const { getNotificationIO } = require("../sockets/notifications");
 const tenantPlanService = require("../services/tenantPlanService");
+const organizationService = require("../services/organizationService");
+
+const queryAsync = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.query(sql, params, (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows);
+    });
+  });
 
 const router = express.Router();
 
@@ -23,11 +32,14 @@ const fieldLabels = {
 
 /* ================= GET ALL USERS (for admin) ================= */
 router.get("/users", verifyToken, isAdmin, (req, res) => {
-  const tenantId = req.user?.tenant_id || 1;
+  const tenantId = req.user?.tenant_id;
+  if (!tenantId) {
+    return res.status(403).json({ message: "Tenant context required" });
+  }
   db.query(
     `SELECT id, first_name, last_name, email, role, status, emp_id, access_code, whatsapp_access_level, created_at 
      FROM users 
-     WHERE (tenant_id = ? OR tenant_id IS NULL)
+     WHERE tenant_id = ?
      ORDER BY created_at DESC`,
     [tenantId],
     (err, rows) => {
@@ -300,12 +312,14 @@ router.post("/demo-login", async (req, res) => {
     async (err, rows) => {
       const user = (rows && rows.length) ? rows[0] : { id: 1, first_name: demoName, email: demoEmail, role: requestedRole, status: "active", tenant_id: 1 };
       const tid = user.tenant_id || 1;
-      const tInfo = (typeof tenantPlanService !== "undefined" && tenantPlanService?.getTenantById)
-        ? await tenantPlanService.getTenantById(tid).catch(() => ({ id: tid, name: "Demo Workspace", plan: "growth" }))
-        : { id: tid, name: "Demo Workspace", plan: "growth" };
+
+      let orgs = await organizationService.getUserOrganizations(user.id).catch(() => []);
+      const activeOrg = (orgs && orgs.find(o => o.id === tid)) || (orgs && orgs[0]) || { id: tid, name: "Madhura Primary Organization", plan: "growth" };
+      let branchList = await organizationService.getBranches(tid).catch(() => []);
+      const activeBranch = branchList[0] || { id: 1, name: "Head Office (Main)", code: "HQ-01", is_head_office: 1 };
 
       const token = jwt.sign(
-        { id: user.id, role: user.role || requestedRole, name: user.first_name || demoName, email: user.email || demoEmail, tenant_id: tid, plan: tInfo.plan || "growth" },
+        { id: user.id, role: user.role || requestedRole, name: user.first_name || demoName, email: user.email || demoEmail, tenant_id: tid, branch_id: activeBranch.id, plan: activeOrg.plan || "growth" },
         secret,
         { expiresIn: "14d" }
       );
@@ -318,11 +332,18 @@ router.post("/demo-login", async (req, res) => {
           email: user.email || demoEmail,
           role: user.role || requestedRole,
           tenant_id: tid,
-          tenant_name: tInfo.name || "Demo Workspace",
-          plan: tInfo.plan || "growth",
+          tenant_name: activeOrg.name,
+          branch_id: activeBranch.id,
+          branch_name: activeBranch.name,
+          branch_code: activeBranch.code,
+          plan: activeOrg.plan || "growth",
           demoMode: true,
         },
-        tenant: tInfo,
+        activeOrganization: activeOrg,
+        organizations: orgs.length ? orgs : [activeOrg],
+        activeBranch,
+        branches: branchList.length ? branchList : [activeBranch],
+        permittedBranchIds: [activeBranch.id],
         message: "Demo developer access granted",
       });
     }
@@ -349,13 +370,81 @@ router.post("/login", loginLimiter, (req, res) => {
 
       const sendAuthResponse = async () => {
         const tid = user.tenant_id || 1;
-        const tInfo = (typeof tenantPlanService !== "undefined" && tenantPlanService?.getTenantById)
-          ? await tenantPlanService.getTenantById(tid).catch(() => ({ id: tid, name: "Workspace", plan: "starter" }))
-          : { id: tid, name: "Workspace", plan: "starter" };
+        let tInfo = null;
+        try {
+          tInfo = await organizationService.getOrganizationDetails(tid);
+        } catch (_) {}
+        if (!tInfo) {
+          tInfo = (typeof tenantPlanService !== "undefined" && tenantPlanService?.getTenantById)
+            ? await tenantPlanService.getTenantById(tid).catch(() => ({ id: tid, name: "Workspace", plan: "starter" }))
+            : { id: tid, name: "Workspace", plan: "starter" };
+        }
+
+        let orgs = await organizationService.getUserOrganizations(user.id).catch(() => []);
+        if (!orgs || orgs.length === 0) {
+          try {
+            await queryAsync(
+              `INSERT OR IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active')`,
+              [tid, user.id, user.role === 'admin' ? 'organization_owner' : 'agent']
+            );
+            orgs = await organizationService.getUserOrganizations(user.id).catch(() => []);
+          } catch (_) {}
+        }
+
+        const activeOrg = (orgs && orgs.find(o => o.id === tid)) || (orgs && orgs[0]) || {
+          id: tid,
+          name: tInfo.name || "Workspace",
+          plan: tInfo.plan || "starter",
+        };
+        const activeTenantId = activeOrg.id;
+
+        let branchList = await organizationService.getBranches(activeTenantId).catch(() => []);
+        if (!branchList || branchList.length === 0) {
+          try {
+            await queryAsync(
+              `INSERT OR IGNORE INTO branches (tenant_id, code, name, timezone, is_head_office, status) VALUES (?, 'HEADOFFICE', 'Head Office (Main)', 'Asia/Kolkata', 1, 'active')`,
+              [activeTenantId]
+            );
+            branchList = await organizationService.getBranches(activeTenantId).catch(() => []);
+          } catch (_) {}
+        }
+
+        const staffBranches = await queryAsync(
+          `SELECT sbm.branch_id, sbm.is_primary, b.name, b.code, b.is_head_office
+           FROM staff_branch_memberships sbm
+           JOIN branches b ON sbm.branch_id = b.id
+           WHERE sbm.user_id = ? AND sbm.tenant_id = ?
+           ORDER BY sbm.is_primary DESC`,
+          [user.id, activeTenantId]
+        ).catch(() => []);
+
+        let activeBranch = null;
+        if (staffBranches && staffBranches.length > 0) {
+          activeBranch = branchList.find(b => b.id === staffBranches[0].branch_id) || staffBranches[0];
+        } else {
+          activeBranch = branchList.find(b => b.is_head_office) || branchList[0] || null;
+          if (activeBranch) {
+            try {
+              await queryAsync(
+                `INSERT OR IGNORE INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary) VALUES (?, ?, ?, 1)`,
+                [activeTenantId, user.id, activeBranch.id]
+              );
+            } catch (_) {}
+          }
+        }
 
         const secret = process.env.JWT_SECRET || "wa_crm_jwt_default_secret_dev_access_2026";
         const token = jwt.sign(
-          { id: user.id, role: user.role, name: user.first_name, email: user.email, tenant_id: tid, whatsapp_access_level: user.whatsapp_access_level || "full", plan: tInfo.plan || "starter" },
+          {
+            id: user.id,
+            role: user.role,
+            name: user.first_name,
+            email: user.email,
+            tenant_id: activeTenantId,
+            branch_id: activeBranch?.id || null,
+            whatsapp_access_level: user.whatsapp_access_level || "full",
+            plan: activeOrg.plan || "starter",
+          },
           secret,
           { expiresIn: "14d" }
         );
@@ -367,11 +456,19 @@ router.post("/login", loginLimiter, (req, res) => {
             name: user.first_name,
             email: user.email,
             role: user.role,
-            tenant_id: tid,
-            tenant_name: tInfo.name || "Workspace",
+            tenant_id: activeTenantId,
+            tenant_name: activeOrg.name || "Workspace",
+            branch_id: activeBranch?.id || null,
+            branch_name: activeBranch?.name || "Head Office (Main)",
+            branch_code: activeBranch?.code || "HQ-01",
             whatsapp_access_level: user.whatsapp_access_level || "full",
-            plan: tInfo.plan || "starter",
+            plan: activeOrg.plan || "starter",
           },
+          activeOrganization: activeOrg,
+          organizations: orgs,
+          activeBranch,
+          branches: branchList,
+          permittedBranchIds: user.role === 'admin' ? branchList.map(b => b.id) : (staffBranches.map(s => s.branch_id)),
           tenant: tInfo,
         });
       };
@@ -432,17 +529,34 @@ router.get("/plans", (req, res) => {
   }
 });
 
-/* ================= SELF SIGNUP (MULTI-TENANT WORKSPACE ONBOARDING) ================= */
+/* ================= SELF SIGNUP (MULTI-TENANT & MULTI-BRANCH WORKSPACE ONBOARDING) ================= */
 router.post("/self-signup", async (req, res) => {
   try {
-    const { first_name, email, password, company_name, plan } = req.body || {};
+    const {
+      first_name,
+      last_name,
+      email,
+      password,
+      company_name,
+      legal_name,
+      brand_name,
+      industry,
+      mobile_number,
+      branch_name,
+      branch_code,
+      timezone,
+      plan,
+    } = req.body || {};
+
     const cleanEmail = (email || "").trim().toLowerCase();
-    const cleanName = (first_name || "").trim();
+    const cleanFirstName = (first_name || "").trim();
+    const cleanLastName = (last_name || "").trim();
+    const cleanFullName = `${cleanFirstName} ${cleanLastName}`.trim() || cleanFirstName;
     const cleanPassword = password || "";
-    const cleanCompany = (company_name || "").trim() || `${cleanName}'s Workspace`;
+    const cleanCompany = (company_name || "").trim() || `${cleanFirstName}'s Workspace`;
     const cleanPlan = (plan || "starter").toLowerCase();
 
-    if (!cleanName || !cleanEmail || !cleanPassword) {
+    if (!cleanFirstName || !cleanEmail || !cleanPassword) {
       return res.status(400).json({ message: "Name, email and password are required" });
     }
 
@@ -450,7 +564,7 @@ router.post("/self-signup", async (req, res) => {
       return res.status(400).json({ message: "Password must be at least 6 characters" });
     }
 
-    if (!/^[^s@]+@[^s@]+\.[^s@]{2,}$/.test(cleanEmail)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
       return res.status(400).json({ message: "Please provide a valid email address" });
     }
 
@@ -465,18 +579,14 @@ router.post("/self-signup", async (req, res) => {
       }
 
       try {
-        const tenant = await tenantPlanService.createTenant({
-          name: cleanCompany,
-          plan: cleanPlan,
-        });
-
         const hash = await bcrypt.hash(cleanPassword, 10);
         const empId = `EMP-${Math.floor(1000 + Math.random() * 9000)}`;
 
+        // 1. Insert admin user
         db.query(
-          `INSERT INTO users (first_name, email, user_password, role, status, emp_id, tenant_id) VALUES (?, ?, ?, 'admin', 'active', ?, ?)`,
-          [cleanName, cleanEmail, hash, empId, tenant.id],
-          (insertErr, userRes) => {
+          `INSERT INTO users (first_name, last_name, email, user_password, role, status, emp_id, mobile_number, tenant_id) VALUES (?, ?, ?, ?, 'admin', 'active', ?, ?, 0)`,
+          [cleanFirstName, cleanLastName, cleanEmail, hash, empId, mobile_number || null],
+          async (insertErr, userRes) => {
             if (insertErr) {
               console.error("self-signup insert user error:", insertErr.message);
               return res.status(500).json({ message: "Failed to create account" });
@@ -485,40 +595,84 @@ router.post("/self-signup", async (req, res) => {
             const newUserId = userRes.insertId || userRes.lastID || 1;
 
             try {
-              db.query(
-                `INSERT INTO teammember (first_name, emp_email, emp_id, job_title, emp_role, user_id) VALUES (?, ?, ?, 'Owner', 'Admin', ?)`,
-                [cleanName, cleanEmail, empId, newUserId]
+              // 2. Transactionally create Organization, Head Office Branch, Owner Membership, Staff Membership, and Wallets
+              const org = await organizationService.createOrganization({
+                name: cleanCompany,
+                legal_name: legal_name || cleanCompany,
+                brand_name: brand_name || cleanCompany,
+                ownerUserId: newUserId,
+                plan: cleanPlan,
+                branch_name: branch_name || "Head Office (Main)",
+                branch_code: branch_code || "HQ-01",
+                timezone: timezone || "Asia/Kolkata",
+              });
+
+              const newTenantId = org.id;
+              const newBranchId = org.head_office_branch_id;
+
+              // 3. Update user with new tenant_id
+              await queryAsync(`UPDATE users SET tenant_id = ? WHERE id = ?`, [newTenantId, newUserId]);
+
+              // 4. Teammember record
+              try {
+                db.query(
+                  `INSERT INTO teammember (first_name, last_name, emp_email, emp_id, job_title, emp_role, user_id) VALUES (?, ?, ?, ?, 'Workspace Owner', 'Admin', ?)`,
+                  [cleanFirstName, cleanLastName, cleanEmail, empId, newUserId]
+                );
+              } catch (_) {}
+
+              // 5. Fetch organizations and branches
+              const orgs = await organizationService.getUserOrganizations(newUserId).catch(() => [org]);
+              const branches = await organizationService.getBranches(newTenantId).catch(() => []);
+              const activeBranch = branches.find((b) => b.id === newBranchId) || {
+                id: newBranchId,
+                name: org.branch_name || "Head Office (Main)",
+                code: org.branch_code || "HQ-01",
+                is_head_office: 1,
+              };
+
+              const secret = process.env.JWT_SECRET || "wa_crm_jwt_default_secret_dev_access_2026";
+              const token = jwt.sign(
+                {
+                  id: newUserId,
+                  role: "admin",
+                  name: cleanFullName,
+                  email: cleanEmail,
+                  tenant_id: newTenantId,
+                  branch_id: newBranchId,
+                  plan: org.plan,
+                },
+                secret,
+                { expiresIn: "14d" }
               );
-            } catch (_) {}
 
-            const secret = process.env.JWT_SECRET || "wa_crm_jwt_default_secret_dev_access_2026";
-            const token = jwt.sign(
-              {
-                id: newUserId,
-                role: "admin",
-                name: cleanName,
-                email: cleanEmail,
-                tenant_id: tenant.id,
-                plan: tenant.plan,
-              },
-              secret,
-              { expiresIn: "14d" }
-            );
-
-            return res.status(201).json({
-              token,
-              user: {
-                id: newUserId,
-                name: cleanName,
-                email: cleanEmail,
-                role: "admin",
-                tenant_id: tenant.id,
-                tenant_name: tenant.name,
-                plan: tenant.plan,
-              },
-              tenant,
-              message: `Workspace "${tenant.name}" created successfully!`,
-            });
+              return res.status(201).json({
+                token,
+                user: {
+                  id: newUserId,
+                  name: cleanFullName,
+                  first_name: cleanFirstName,
+                  last_name: cleanLastName,
+                  email: cleanEmail,
+                  role: "admin",
+                  tenant_id: newTenantId,
+                  tenant_name: org.name,
+                  branch_id: newBranchId,
+                  branch_name: activeBranch.name,
+                  branch_code: activeBranch.code,
+                  plan: org.plan,
+                },
+                activeOrganization: org,
+                organizations: orgs,
+                activeBranch,
+                branches,
+                permittedBranchIds: [newBranchId],
+                message: `Enterprise Organization "${org.name}" created with branch "${activeBranch.name}"!`,
+              });
+            } catch (createErr) {
+              console.error("self-signup createOrganization error:", createErr);
+              return res.status(500).json({ message: "Failed to initialize organization and branch structure" });
+            }
           }
         );
       } catch (tenantErr) {
@@ -535,7 +689,10 @@ router.post("/self-signup", async (req, res) => {
 /* ================= GET CURRENT TENANT & USAGE ================= */
 router.get("/tenant-info", verifyToken, async (req, res) => {
   try {
-    const tenantId = req.user?.tenant_id || 1;
+    const tenantId = req.user?.tenant_id;
+    if (!tenantId) {
+      return res.status(403).json({ message: "Tenant context required" });
+    }
     const usageData = await tenantPlanService.getTenantUsage(tenantId);
     res.json(usageData);
   } catch (err) {
@@ -546,14 +703,25 @@ router.get("/tenant-info", verifyToken, async (req, res) => {
 /* ================= SWITCH / UPGRADE PLAN ================= */
 router.post("/switch-plan", verifyToken, isAdmin, async (req, res) => {
   try {
-    const tenantId = req.user?.tenant_id || 1;
+    const tenantId = req.user?.tenant_id;
+    if (!tenantId) {
+      return res.status(403).json({ message: "Tenant context required" });
+    }
     const { plan } = req.body;
     if (!plan) return res.status(400).json({ message: "Plan is required" });
 
-    const updated = await tenantPlanService.switchTenantPlan(tenantId, plan);
-    res.json({
-      message: `Plan upgraded to ${updated.planMeta?.name || plan}`,
-      tenant: updated,
+    // Allow plan update only for platform admin in development, otherwise direct to billing checkout
+    if (process.env.NODE_ENV === "development" && req.user.role === "admin") {
+      const updated = await tenantPlanService.switchTenantPlan(tenantId, plan);
+      return res.json({
+        message: `Plan upgraded to ${updated.planMeta?.name || plan}`,
+        tenant: updated,
+      });
+    }
+
+    return res.status(402).json({
+      message: "Direct plan switching is disabled. Upgrades require a verified checkout session via /api/v2/billing/checkout.",
+      checkoutUrl: "/api/v2/billing/checkout",
     });
   } catch (err) {
     res.status(500).json({ message: "Failed to update plan" });
@@ -562,6 +730,11 @@ router.post("/switch-plan", verifyToken, isAdmin, async (req, res) => {
 
 /* ================= ADMIN: CREATE USER ================= */
 router.post("/create-user", verifyToken, isAdmin, (req, res) => {
+  const tenantId = req.user?.tenant_id;
+  if (!tenantId) {
+    return res.status(403).json({ message: "Organization context is required to create users" });
+  }
+
   const { first_name, last_name, email, emp_id, job_title, emp_role, mobile_number, emp_address, user_password, system_role } = req.body;
   if (!first_name || !email || !user_password) return res.status(400).json({ message: "Name, email and password required" });
 
@@ -569,8 +742,8 @@ router.post("/create-user", verifyToken, isAdmin, (req, res) => {
   bcrypt.hash(user_password, 10, (err, hash) => {
     if (err) return res.status(500).json({ message: "Password hash failed" });
 
-    db.query(`INSERT INTO users (first_name, last_name, email, user_password, role, status) VALUES (?, ?, ?, ?, ?, ?)`,
-      [first_name, last_name || "", email.toLowerCase(), hash, role, "active"], (err2, result) => {
+    db.query(`INSERT INTO users (first_name, last_name, email, user_password, role, status, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [first_name, last_name || "", email.toLowerCase(), hash, role, "active", tenantId], (err2, result) => {
         if (err2) {
           if (err2.code === "ER_DUP_ENTRY") return res.status(400).json({ message: "Email already exists" });
           return res.status(500).json({ message: "User creation failed" });
@@ -578,13 +751,19 @@ router.post("/create-user", verifyToken, isAdmin, (req, res) => {
 
         const newUserId = result.insertId;
         db.query(
-          `INSERT INTO teammember (first_name, last_name, emp_email, emp_id, job_title, emp_role, mobile_number, emp_address, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [first_name, last_name || "", email.toLowerCase(), emp_id || null, job_title || "Developer", emp_role || "Developer", mobile_number || null, emp_address || null, newUserId],
+          `INSERT INTO teammember (first_name, last_name, emp_email, emp_id, job_title, emp_role, mobile_number, emp_address, user_id, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [first_name, last_name || "", email.toLowerCase(), emp_id || null, job_title || "Developer", emp_role || "Developer", mobile_number || null, emp_address || null, newUserId, tenantId],
           (err3) => {
             if (err3) {
               console.error("Teammember insert error after user creation:", err3);
             }
           }
+        );
+
+        // Also record in organization_memberships
+        db.query(
+          `INSERT OR IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active')`,
+          [tenantId, newUserId, role === "admin" ? "organization_admin" : "agent"]
         );
 
         res.json({ message: "User created successfully", userId: newUserId });
@@ -609,10 +788,18 @@ function generateEmployeeAccessCode() {
 router.get("/employees", verifyToken, isAdmin, async (req, res) => {
   try {
     const tenantId = req.user?.tenant_id || 1;
+    const requestedBranch = req.query?.branchId || req.query?.branch_id || req.headers["x-branch-id"];
 
     // Strict employee isolation: employees can NEVER list or view other employees
     if (req.user?.role === "employee") {
       return res.status(403).json({ message: "Access denied. Employee accounts cannot view other employees." });
+    }
+
+    let branchWhere = "";
+    const queryParams = [tenantId];
+    if (requestedBranch && requestedBranch !== "all" && requestedBranch !== "0") {
+      branchWhere = " AND (t.branch_id = ? OR sbm.branch_id = ?)";
+      queryParams.push(Number(requestedBranch), Number(requestedBranch));
     }
 
     db.query(
@@ -629,12 +816,17 @@ router.get("/employees", verifyToken, isAdmin, async (req, res) => {
         u.created_at,
         t.mobile,
         t.job_title,
-        t.emp_role
+        t.emp_role,
+        COALESCE(t.branch_id, sbm.branch_id) as branch_id,
+        b.name as branch_name,
+        b.code as branch_code
        FROM users u
        LEFT JOIN teammember t ON (t.user_id = u.id OR (u.email IS NOT NULL AND t.emp_email = u.email))
-       WHERE u.tenant_id = ?
+       LEFT JOIN staff_branch_memberships sbm ON (sbm.tenant_id = u.tenant_id AND sbm.user_id = u.id AND sbm.is_primary = 1)
+       LEFT JOIN branches b ON (b.id = COALESCE(t.branch_id, sbm.branch_id))
+       WHERE u.tenant_id = ? ${branchWhere}
        ORDER BY u.created_at DESC`,
-      [tenantId],
+      queryParams,
       (err, rows) => {
         if (err) {
           console.error("fetch employees error:", err.message);
@@ -657,7 +849,7 @@ router.get("/employees", verifyToken, isAdmin, async (req, res) => {
 
         // Query total messages dispatched in this tenant
         db.query(
-          `SELECT COUNT(*) as total_dispatched FROM wa_message_logs WHERE (tenant_id = ? OR tenant_id IS NULL)`,
+          `SELECT COUNT(*) as total_dispatched FROM wa_message_logs WHERE tenant_id = ?`,
           [tenantId],
           (logErr, logRows) => {
             const totalDispatched = (logRows && logRows[0] && logRows[0].total_dispatched) || 0;
@@ -729,10 +921,25 @@ router.post("/employees", verifyToken, isAdmin, async (req, res) => {
           const newUserId = result.insertId || result.lastID;
 
           try {
+            const targetBranchId = Number(req.body?.branch_id) || 1;
             db.query(
-              `INSERT INTO teammember (first_name, last_name, emp_email, mobile, job_title, emp_role, emp_id, user_id, tenant_id, access_code, whatsapp_access_level)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [cleanFirst, cleanLast || null, cleanEmail, cleanMobile || null, cleanJob, cleanRole === "admin" ? "Admin" : "Sales", empId, newUserId, tenantId, accessCode, cleanAccessLevel]
+              `INSERT INTO teammember (first_name, last_name, emp_email, mobile, job_title, emp_role, emp_id, user_id, tenant_id, access_code, whatsapp_access_level, branch_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [cleanFirst, cleanLast || null, cleanEmail, cleanMobile || null, cleanJob, cleanRole === "admin" ? "Admin" : "Sales", empId, newUserId, tenantId, accessCode, cleanAccessLevel, targetBranchId]
+            );
+
+            // Record in organization_memberships
+            db.query(
+              `INSERT OR IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status)
+               VALUES (?, ?, ?, 'active')`,
+              [tenantId, newUserId, cleanRole === "admin" ? "organization_admin" : "agent"]
+            );
+
+            // Record in staff_branch_memberships
+            db.query(
+              `INSERT OR IGNORE INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary)
+               VALUES (?, ?, ?, 1)`,
+              [tenantId, newUserId, targetBranchId]
             );
           } catch (_) {}
 
@@ -845,6 +1052,24 @@ router.put("/employees/:id", verifyToken, isAdmin, (req, res) => {
         if (whatsapp_access_level) {
           db.query(`UPDATE teammember SET whatsapp_access_level = ? WHERE user_id = ?`, [whatsapp_access_level, targetId]);
         }
+
+        const targetBranchId = req.body?.branch_id !== undefined ? req.body.branch_id : (req.body?.branchId !== undefined ? req.body.branchId : null);
+        if (targetBranchId) {
+          const bid = Number(targetBranchId);
+          db.query(`UPDATE teammember SET branch_id = ? WHERE user_id = ?`, [bid, targetId]);
+          db.query(
+            `UPDATE staff_branch_memberships SET branch_id = ? WHERE user_id = ? AND tenant_id = ?`,
+            [bid, targetId, tenantId],
+            (sbErr, sbRes) => {
+              if (!sbRes || sbRes.affectedRows === 0) {
+                db.query(
+                  `INSERT INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary) VALUES (?, ?, ?, 1)`,
+                  [tenantId, targetId, bid]
+                );
+              }
+            }
+          );
+        }
       } catch (_) {}
 
       res.json({ message: "Employee updated successfully!" });
@@ -886,10 +1111,15 @@ router.post("/verify-access-code", (req, res) => {
   if (!code) return res.status(400).json({ valid: false, message: "Access code is required" });
 
   db.query(
-    `SELECT u.id, u.first_name, u.email, u.role, u.whatsapp_access_level, u.tenant_id, t.name as tenant_name
+    `SELECT u.id, u.first_name, u.email, u.role, u.whatsapp_access_level, u.tenant_id,
+            t.name as tenant_name,
+            b.id as branch_id, b.name as branch_name, b.code as branch_code
      FROM users u
      LEFT JOIN tenants t ON t.id = u.tenant_id
-     WHERE UPPER(u.access_code) = ? LIMIT 1`,
+     LEFT JOIN staff_branch_memberships sbm ON sbm.user_id = u.id AND sbm.tenant_id = u.tenant_id
+     LEFT JOIN branches b ON b.id = sbm.branch_id
+     WHERE UPPER(u.access_code) = ?
+     ORDER BY sbm.is_primary DESC LIMIT 1`,
     [code],
     (err, rows) => {
       if (err || !rows || !rows.length) {
@@ -904,6 +1134,10 @@ router.post("/verify-access-code", (req, res) => {
         role: u.role,
         whatsapp_access_level: u.whatsapp_access_level || "full",
         tenant_name: u.tenant_name || "Workspace",
+        tenant_id: u.tenant_id,
+        branch_id: u.branch_id || null,
+        branch_name: u.branch_name || "Head Office (Main)",
+        branch_code: u.branch_code || "HQ-01",
       });
     }
   );
@@ -950,7 +1184,7 @@ router.post("/join-with-access-code", async (req, res) => {
         db.query(
           `UPDATE users SET user_password = ?, status = 'active', first_name = ? WHERE id = ?`,
           [hash, displayName, user.id],
-          (upErr) => {
+          async (upErr) => {
             if (upErr) {
               console.error("join-with-access-code update error:", upErr.message);
               return res.status(500).json({ message: "Failed to activate employee account" });
@@ -961,6 +1195,44 @@ router.post("/join-with-access-code", async (req, res) => {
             } catch (_) {}
 
             const tid = user.tenant_id || 1;
+
+            // Ensure organization membership exists
+            try {
+              await queryAsync(
+                `INSERT OR IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active')`,
+                [tid, user.id, user.role || "agent"]
+              );
+            } catch (_) {}
+
+            // Ensure branches and staff branch membership exist
+            let branchList = await organizationService.getBranches(tid).catch(() => []);
+            const staffBranches = await queryAsync(
+              `SELECT sbm.branch_id, b.name, b.code, b.is_head_office
+               FROM staff_branch_memberships sbm
+               JOIN branches b ON sbm.branch_id = b.id
+               WHERE sbm.user_id = ? AND sbm.tenant_id = ?
+               ORDER BY sbm.is_primary DESC`,
+              [user.id, tid]
+            ).catch(() => []);
+
+            let activeBranch = null;
+            if (staffBranches && staffBranches.length > 0) {
+              activeBranch = branchList.find((b) => b.id === staffBranches[0].branch_id) || staffBranches[0];
+            } else {
+              activeBranch = branchList.find((b) => b.is_head_office) || branchList[0] || null;
+              if (activeBranch) {
+                try {
+                  await queryAsync(
+                    `INSERT OR IGNORE INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary) VALUES (?, ?, ?, 1)`,
+                    [tid, user.id, activeBranch.id]
+                  );
+                } catch (_) {}
+              }
+            }
+
+            const orgs = await organizationService.getUserOrganizations(user.id).catch(() => []);
+            const activeOrg = (orgs && orgs.find((o) => o.id === tid)) || { id: tid, name: user.tenant_name || "Workspace", plan: user.plan || "starter" };
+
             const secret = process.env.JWT_SECRET || "wa_crm_jwt_default_secret_dev_access_2026";
             const token = jwt.sign(
               {
@@ -969,6 +1241,7 @@ router.post("/join-with-access-code", async (req, res) => {
                 name: displayName,
                 email: cleanEmail,
                 tenant_id: tid,
+                branch_id: activeBranch?.id || null,
                 whatsapp_access_level: user.whatsapp_access_level || "full",
                 plan: user.plan || "starter",
               },
@@ -984,10 +1257,18 @@ router.post("/join-with-access-code", async (req, res) => {
                 email: cleanEmail,
                 role: user.role || "employee",
                 tenant_id: tid,
-                tenant_name: user.tenant_name || "Workspace",
+                tenant_name: activeOrg.name,
+                branch_id: activeBranch?.id || null,
+                branch_name: activeBranch?.name || "Head Office (Main)",
+                branch_code: activeBranch?.code || "HQ-01",
                 whatsapp_access_level: user.whatsapp_access_level || "full",
                 plan: user.plan || "starter",
               },
+              activeOrganization: activeOrg,
+              organizations: orgs.length ? orgs : [activeOrg],
+              activeBranch,
+              branches: branchList,
+              permittedBranchIds: activeBranch ? [activeBranch.id] : [],
               message: "Access code verified! Your employee account is activated.",
             });
           }
@@ -1022,11 +1303,14 @@ router.get("/my-employee-profile", verifyToken, (req, res) => {
 
 // 9. GET /api/auth/teammember — Returns team members of current tenant for live chat assignments
 router.get("/teammember", verifyToken, (req, res) => {
-  const tenantId = req.user?.tenant_id || 1;
+  const tenantId = req.user?.tenant_id;
+  if (!tenantId) {
+    return res.status(403).json({ message: "Tenant context required" });
+  }
   db.query(
     `SELECT id, first_name, last_name, emp_email, mobile, job_title, emp_role, emp_id, user_id, whatsapp_access_level
      FROM teammember
-     WHERE (tenant_id = ? OR tenant_id IS NULL)
+     WHERE tenant_id = ?
      ORDER BY first_name ASC`,
     [tenantId],
     (err, rows) => {

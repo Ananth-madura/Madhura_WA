@@ -135,8 +135,8 @@ self.addEventListener("push", (event) => {
 
   const options = {
     body: data.body,
-    icon: "/Madhura-logo.png",
-    badge: "/Madhura-logo.png",
+    icon: "/Group.png",
+    badge: "/Group.png",
     data: { url: data.url || "/dashboard" },
     actions: [{ action: "open_url", title: "View Details" }],
   };

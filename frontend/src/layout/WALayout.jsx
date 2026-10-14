@@ -1,6 +1,6 @@
 import { waUiStorage } from "../utils/waUiStorage";
 import { useEffect, useState, useCallback } from "react";
-import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
 import axios from "axios";
 import {
   Loader2,
@@ -14,6 +14,7 @@ import {
   Settings,
   Layers,
   Users,
+  GitBranch,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import useWALocalInbox from "../hooks/useWALocalInbox";
@@ -23,6 +24,8 @@ import socket from "../socket/socket";
 import WAConfigPrompt from "../components/WAConfigPrompt";
 import WAAccountBalanceModal from "../components/WAAccountBalanceModal";
 import WAPlanModal from "../components/WAPlanModal";
+import OrganizationSwitcher from "../components/OrganizationSwitcher";
+import BranchSwitcher from "../components/BranchSwitcher";
 
 // Corporate Shell for Whatsapp_CRM — Hallmark Workbench shell (design.md).
 // Deep-navy slab, yellow hairline, quiet type. Routes and logic untouched.
@@ -235,12 +238,11 @@ export default function WALayout() {
         style={{ minHeight: 56 }}
       >
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <span className="hl-wordmark" title="Madhura WhatsApp CRM">
-            <span className="hl-wordmark-mark" aria-hidden="true"></span>
-            <span className="truncate">
-              Madhura&nbsp;<em>WhatsApp CRM</em>
-            </span>
-          </span>
+          <Link to="/whatsapp" className="flex items-center gap-2 shrink-0 py-0.5" title="Madhura WhatsApp CRM">
+            <img src="/Group.png" alt="Madhura WhatsApp CRM" className="h-7 w-auto object-contain" />
+          </Link>
+          <OrganizationSwitcher />
+          <BranchSwitcher />
           {user && (
             <span className="hl-shell-meta hidden lg:inline-flex truncate">
               {user.name || user.email} · {user.role}
@@ -275,18 +277,40 @@ export default function WALayout() {
             </span>
           )}
 
+          {/* Manage Branches */}
+          <button
+            onClick={() => navigate("/whatsapp/branches")}
+            className={`hl-btn-secondary shrink-0 ${location.pathname === "/whatsapp/branches" ? "border-emerald-600 bg-emerald-950/60 text-emerald-300 font-semibold" : ""}`}
+            style={{ height: 38, padding: "0 0.65rem", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+            title="Manage Branches & Queues"
+          >
+            <GitBranch size={14} className="text-emerald-400" />
+            <span className="hidden md:inline whitespace-nowrap">Branches</span>
+          </button>
+
           {/* Manage Employees (Admin only) */}
           {(user?.role === "admin" || user?.role === "subadmin") && (
             <button
               onClick={() => navigate("/whatsapp/employees")}
-              className={`hl-btn-secondary shrink-0 ${location.pathname === "/whatsapp/employees" ? "border-emerald-600 bg-emerald-50 text-emerald-800 font-semibold" : ""}`}
+              className={`hl-btn-secondary shrink-0 ${location.pathname === "/whatsapp/employees" ? "border-emerald-600 bg-emerald-950/60 text-emerald-300 font-semibold" : ""}`}
               style={{ height: 38, padding: "0 0.65rem", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
               title="Manage Employees, Access Codes & Staff Activity Analytics"
             >
-              <Users size={14} className="text-emerald-700" />
+              <Users size={14} className="text-emerald-400" />
               <span className="hidden sm:inline whitespace-nowrap">Employees</span>
             </button>
           )}
+
+          {/* Billing & Subscriptions */}
+          <button
+            onClick={() => navigate("/whatsapp/billing")}
+            className={`hl-btn-secondary shrink-0 ${location.pathname === "/whatsapp/billing" ? "border-amber-600 bg-amber-950/60 text-amber-300 font-semibold" : ""}`}
+            style={{ height: 38, padding: "0 0.65rem", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+            title="Subscription, Plans & Resource Metering"
+          >
+            <CreditCard size={14} className="text-amber-400" />
+            <span className="hidden lg:inline whitespace-nowrap">Billing & Plans</span>
+          </button>
 
           {/* Quota & Balance */}
           <button

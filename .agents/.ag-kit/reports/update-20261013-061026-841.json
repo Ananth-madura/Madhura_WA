@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "runId": "20261013-061026-841",
+  "strategy": "merge",
+  "toolkitVersion": "2026.8.31",
+  "createdAt": "2026-10-13T06:10:27.703Z",
+  "backupDir": "D:\\Whatsapp_CRM\\.ag-kit-backups\\20261013-061026-841",
+  "summary": {
+    "actions": 0,
+    "conflicts": 0,
+    "preserved": 17,
+    "unchanged": 221
+  },
+  "actions": [],
+  "conflicts": [],
+  "preserved": [
+    {
+      "file": "skills/grill-me/SKILL.md",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/grill-me/agents/openai.yaml",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/grill-with-docs/SKILL.md",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/grill-with-docs/agents/openai.yaml",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/improve-codebase-architecture/HTML-REPORT.md",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/improve-codebase-architecture/SKILL.md",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/improve-codebase-architecture/agents/openai.yaml",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/teach/GLOSSARY-FORMAT.md",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/teach/LEARNING-RECORD-FORMAT.md",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/teach/MISSION-FORMAT.md",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/teach/RESOURCES-FORMAT.md",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/teach/SKILL.md",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/teach/agents/openai.yaml",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/to-questionnaire/SKILL.md",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/to-questionnaire/agents/openai.yaml",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/to-spec/SKILL.md",
+      "reason": "user-owned file"
+    },
+    {
+      "file": "skills/to-spec/agents/openai.yaml",
+      "reason": "user-owned file"
+    }
+  ]
+}

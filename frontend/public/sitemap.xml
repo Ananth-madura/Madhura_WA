@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Canonical URLs for the public marketing site. Kept in sync with
+  frontend/src/pages/marketing/content/index.js — add a page there first,
+  then add its URL here.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://madhuratech.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+
+  <!-- Product -->
+  <url><loc>https://madhuratech.com/product/live-inbox</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://madhuratech.com/product/campaigns</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://madhuratech.com/product/templates</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://madhuratech.com/product/automations</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://madhuratech.com/product/analytics</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+
+  <!-- Company -->
+  <url><loc>https://madhuratech.com/company/about</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://madhuratech.com/company/contact</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://madhuratech.com/company/careers</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+
+  <!-- Documentation -->
+  <url><loc>https://madhuratech.com/docs</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+
+  <!-- Legal -->
+  <url><loc>https://madhuratech.com/legal/privacy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://madhuratech.com/legal/terms</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://madhuratech.com/legal/security</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+</urlset>

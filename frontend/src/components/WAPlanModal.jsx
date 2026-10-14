@@ -126,22 +126,35 @@ export default function WAPlanModal({ isOpen, onClose }) {
     try {
       const token = localStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const res = await axios.post(`${API}/api/auth/switch-plan`, { plan: targetPlanId }, { headers });
 
-      if (res.data?.tenant) {
-        setMessage({ type: "success", text: `Plan successfully switched to ${res.data.tenant.planMeta?.name || targetPlanId}!` });
-        // Update user session in AuthContext
+      const checkoutRes = await axios.post(
+        `${API}/api/v2/billing/checkout`,
+        { planId: targetPlanId, interval: "month" },
+        { headers }
+      );
+
+      const confirmRes = await axios.post(
+        `${API}/api/v2/billing/confirm-payment`,
+        {
+          planId: targetPlanId,
+          orderId: checkoutRes.data?.receipt || `sub_${Date.now()}`,
+          paymentId: `pay_test_${Date.now()}`,
+          signature: "mock_test_signature",
+        },
+        { headers }
+      );
+
+      if (confirmRes.data?.success) {
+        setMessage({ type: "success", text: `Plan successfully activated for ${targetPlanId.toUpperCase()}!` });
         login({
           ...user,
           plan: targetPlanId,
-          tenant: res.data.tenant,
         });
-        // Refresh usage
-        const refreshUsage = await axios.get(`${API}/api/auth/tenant-info`, { headers }).catch(() => null);
+        const refreshUsage = await axios.get(`${API}/api/v2/billing/subscription`, { headers }).catch(() => null);
         if (refreshUsage?.data) setTenantUsage(refreshUsage.data);
       }
     } catch (err) {
-      setMessage({ type: "error", text: err.response?.data?.message || "Failed to switch plan. Admin access required." });
+      setMessage({ type: "error", text: err.response?.data?.message || "Failed to upgrade plan via billing engine." });
     } finally {
       setSwitching(false);
     }

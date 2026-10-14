@@ -19,6 +19,7 @@ import {
   CreditCard,
   RefreshCw,
   Bell,
+  GitBranch,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
@@ -217,6 +218,13 @@ export default function WhatsAppNav() {
       title: "Campaign & Message Analytics",
       path: "/whatsapp/analytics",
       icon: BarChart3,
+    },
+    {
+      id: "branches",
+      label: "Branches",
+      title: "Multi-Branch Operating System & Workspaces",
+      path: "/whatsapp/branches",
+      icon: GitBranch,
     },
     {
       id: "accounts",

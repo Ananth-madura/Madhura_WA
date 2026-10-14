@@ -3,12 +3,12 @@
   "name": "Madhura Tech",
   "icons": [
     {
-      "src": "Madhura-logo.png",
+      "src": "Group.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "Madhura-logo.png",
+      "src": "Group.png",
       "type": "image/png",
       "sizes": "512x512"
     }

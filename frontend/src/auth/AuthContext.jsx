@@ -24,6 +24,15 @@ export function AuthProvider({ children }) {
     } else {
       localStorage.removeItem("token");
     }
+
+    const tid = userData.tenant_id || userData.active_tenant_id;
+    if (tid) {
+      localStorage.setItem("active_tenant_id", String(tid));
+    }
+    const bid = userData.branch_id || userData.active_branch_id;
+    if (bid) {
+      localStorage.setItem("active_branch_id", String(bid));
+    }
   };
 
   const logout = () => {
@@ -45,6 +54,8 @@ export function AuthProvider({ children }) {
     } catch (_) {
       localStorage.removeItem("user");
       localStorage.removeItem("token");
+      localStorage.removeItem("active_tenant_id");
+      localStorage.removeItem("active_branch_id");
     }
 
     setUser(null);

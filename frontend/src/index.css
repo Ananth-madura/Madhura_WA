@@ -2123,6 +2123,31 @@ main > * {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+
+/* ===== ALL SHELL BUTTONS: WHITE TEXT =============================
+   Buttons inside the deep-navy .hl-shell header (hl-btn-secondary,
+   hl-shell-link, hl-btn-danger-ghost, etc.) inherit a dark ink color
+   from their base class. Force white text + icons so they read clearly
+   against the dark shell background. */
+.hl-shell button,
+.hl-shell .hl-btn-secondary,
+.hl-shell .hl-btn-primary,
+.hl-shell .hl-shell-link,
+.hl-shell .hl-badge {
+  color: #fff;
+}
+.hl-shell button svg,
+.hl-shell .hl-btn-secondary svg {
+  color: inherit;
+}
+.hl-shell .hl-btn-secondary {
+  border-color: var(--color-shell-2);
+}
+.hl-shell .hl-btn-secondary:hover {
+  border-color: var(--color-accent);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
 /* ═══════════════════════════════════════════════════════════════
    PUBLIC LANDING PAGE (/)
 

@@ -60,10 +60,12 @@ import {
   PanelLeftOpen,
   Columns,
   Upload,
+  GitBranch,
 } from "lucide-react";
 import axios from "axios";
 import { API, LIVE_BACKEND_URL } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
+import { useEnterprise } from "../context/EnterpriseContext";
 import { DEMO_STATUS, DEMO_CHATS, DEMO_MESSAGES_MAP } from "../auth/demoData";
 import WhatsAppNav from "../components/WhatsAppNav";
 import socket from "../socket/socket";
@@ -533,6 +535,41 @@ export default function WhatsAppPage() {
   // Offline demo sessions have no token and no reachable API, so every fetch
   // below would fail (and fetchStatus's 3 fallbacks burn ~30s before giving up).
   const { demoMode } = useAuth();
+  const { activeTenant, activeBranch, branches, enterpriseHeaders } = useEnterprise();
+  const [showTransferBranchModal, setShowTransferBranchModal] = useState(false);
+  const [transferTargetBranchId, setTransferTargetBranchId] = useState("");
+  const [transferTargetUserId, setTransferTargetUserId] = useState("");
+  const [branchEmployees, setBranchEmployees] = useState([]);
+  const [branchEmployeesLoading, setBranchEmployeesLoading] = useState(false);
+  const [transferNote, setTransferNote] = useState("");
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
+
+  const fetchBranchEmployees = useCallback(async (branchId) => {
+    if (!branchId) {
+      setBranchEmployees([]);
+      return;
+    }
+    setBranchEmployeesLoading(true);
+    try {
+      const token = waUiStorage.getItem("token") || localStorage.getItem("token");
+      const savedTenantId = localStorage.getItem("active_tenant_id");
+      const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(savedTenantId ? { "x-tenant-id": savedTenantId } : {}),
+      };
+      const res = await axios.get(`${API}/api/v2/branches/${branchId}/members`, { headers });
+      if (res.data?.success && Array.isArray(res.data.members)) {
+        setBranchEmployees(res.data.members);
+      } else {
+        setBranchEmployees([]);
+      }
+    } catch (err) {
+      console.warn("[WhatsAppPage] Could not fetch branch members:", err?.message);
+      setBranchEmployees([]);
+    } finally {
+      setBranchEmployeesLoading(false);
+    }
+  }, []);
   const [initialChecking, setInitialChecking] = useState(true);
   const [workspaceMode, setWorkspaceMode] = useState(() => {
     try {
@@ -1147,7 +1184,10 @@ export default function WhatsAppPage() {
     }
     try {
       const token = waUiStorage.getItem("token");
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...enterpriseHeaders,
+      };
       const endpoint = refresh ? `/api/whatsapp/chats?refresh=true` : `/api/whatsapp/chats`;
       let res;
       try {
@@ -3211,7 +3251,7 @@ export default function WhatsAppPage() {
       const { data } = await axios.get(`${API}/api/whatsapp/chat/${phone}/bot-status`, { headers, timeout: 8000 });
       setBotStatus(data);
     } catch (_) {
-      setBotStatus(null); // pill simply hides if the lookup fails
+      setBotStatus(null);
     }
   }, []);
 
@@ -3226,13 +3266,63 @@ export default function WhatsAppPage() {
       const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const phone = selectedChat.id.replace(/\D/g, "");
-      // This endpoint re-enables the bot AND clears ai_paused_until.
       await axios.patch(`${API}/api/whatsapp/chat/${phone}/ai`, { enabled: true }, { headers });
       await fetchBotStatus(selectedChat.id);
     } catch (err) {
       alert(err.response?.data?.error || "Could not hand the chat back to the bot");
     }
     setBotResuming(false);
+  };
+
+  const handleTransferConversation = async () => {
+    if (!selectedChat || !transferTargetBranchId) return;
+    setTransferSubmitting(true);
+    try {
+      const token = waUiStorage.getItem("token") || localStorage.getItem("token");
+      const savedTenantId = localStorage.getItem("active_tenant_id");
+      const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(savedTenantId ? { "x-tenant-id": savedTenantId } : {}),
+      };
+      const cleanPhone = selectedChat.id?.replace(/\D/g, "").slice(-10);
+      const convId = selectedChat.conversationId || cleanPhone;
+      const res = await axios.post(
+        `${API}/api/v2/inbox/conversations/${convId}/transfer`,
+        {
+          targetBranchId: Number(transferTargetBranchId),
+          targetUserId: transferTargetUserId ? Number(transferTargetUserId) : null,
+          note: transferNote,
+        },
+        { headers }
+      );
+
+      const targetBranchObj = branches?.find((b) => Number(b.id) === Number(transferTargetBranchId));
+      const targetUserObj = branchEmployees?.find((u) => Number(u.user_id) === Number(transferTargetUserId));
+
+      setSelectedChat((prev) =>
+        prev
+          ? {
+              ...prev,
+              branch_id: Number(transferTargetBranchId),
+              branch_name: targetBranchObj?.name || res.data?.branchName,
+              branch_code: targetBranchObj?.code || res.data?.branchCode,
+              owner_user_id: transferTargetUserId ? Number(transferTargetUserId) : null,
+              owner_name: targetUserObj
+                ? `${targetUserObj.first_name || ""} ${targetUserObj.last_name || ""}`.trim()
+                : res.data?.assignedUserName || null,
+            }
+          : prev
+      );
+
+      alert(res.data?.message || "Conversation successfully assigned and transferred!");
+      setShowTransferBranchModal(false);
+      setTransferNote("");
+      fetchChats(true);
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || "Failed to transfer conversation");
+    } finally {
+      setTransferSubmitting(false);
+    }
   };
 
   // Close context menu on scroll or click outside
@@ -4669,6 +4759,12 @@ export default function WhatsAppPage() {
                           {selectedChat.source}
                         </span>
                       )}
+                      <span className="hl-badge text-[10px] font-bold px-2 py-0.5 shrink-0 whitespace-nowrap bg-purple-50 text-purple-700 dark:bg-purple-950/40 border border-purple-200 hidden sm:inline-flex" title="Assigned Branch">
+                        📍 {selectedChat.branch_name || activeBranch?.name || "Head Office"}
+                      </span>
+                      <span className="hl-badge text-[10px] font-bold px-2 py-0.5 shrink-0 whitespace-nowrap hidden md:inline-flex bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 border border-emerald-300" title="Meta 24-Hour Free Service Window">
+                        🟢 24h Window Active
+                      </span>
                       {crmDetails?.client ? (
                         <span className="hl-badge hl-badge-accent text-[10px] font-bold px-2 py-0.5 shrink-0 flex items-center gap-1 whitespace-nowrap hidden md:inline-flex" title="Linked CRM Client">
                           🏢 CRM Client
@@ -4718,6 +4814,25 @@ export default function WhatsAppPage() {
                   (which is what forces the header to grow vertically).
                 */}
                 <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 max-w-[50%] md:max-w-none overflow-x-auto wa-no-scrollbar">
+                  {/* Branch Transfer Action */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const initialBid = selectedChat.branch_id || activeBranch?.id || branches?.[0]?.id || "";
+                      setTransferTargetBranchId(initialBid);
+                      setTransferTargetUserId(selectedChat.owner_user_id || "");
+                      setTransferNote("");
+                      if (initialBid) {
+                        fetchBranchEmployees(initialBid);
+                      }
+                      setShowTransferBranchModal(true);
+                    }}
+                    className="hl-btn-secondary py-1 px-2 text-[11px] font-semibold flex items-center gap-1 shrink-0 hover:border-purple-500 rounded-lg"
+                    title="Transfer conversation to another branch"
+                  >
+                    <Forward size={13} className="text-purple-600" />
+                    <span className="hidden sm:inline">Transfer</span>
+                  </button>
                   {/* Bot paused indicator — the bot mutes itself for 24h once an
                       agent replies by hand, so make that visible and undoable. */}
                   {botStatus?.paused && !selectedChat.isGroup && (
@@ -7225,6 +7340,187 @@ export default function WhatsAppPage() {
                 Reset View
               </button>
             ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Conversation Branch Transfer Modal */}
+      {showTransferBranchModal && selectedChat && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+          <div
+            className="hl-card w-full max-w-lg rounded-2xl p-5 sm:p-6 shadow-2xl border space-y-4 animate-scale-up"
+            style={{ background: "var(--color-paper)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[var(--color-rule)] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0">
+                  <Forward size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[var(--color-ink)]">Assign Branch & Employee</h3>
+                  <p className="text-xs text-[var(--color-ink-2)] mt-0.5">
+                    Route conversation to another branch queue or individual staff agent
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTransferBranchModal(false)}
+                className="text-[var(--color-ink-2)] hover:text-[var(--color-ink)] p-1.5 rounded-lg transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Target Conversation Info Card */}
+            <div className="p-3 rounded-xl bg-[var(--color-paper-2)] border border-[var(--color-rule)] flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <WAContactAvatar
+                  src={selectedChat.profilePicUrl}
+                  name={selectedChat.name}
+                  phone={selectedChat.id}
+                  isGroup={selectedChat.isGroup}
+                  size="md"
+                />
+                <div className="min-w-0">
+                  <p className="font-bold text-xs text-[var(--color-ink)] truncate">
+                    {selectedChat.name || "WhatsApp Contact"}
+                  </p>
+                  <p className="text-[11px] font-mono text-[var(--color-ink-2)]">
+                    +{selectedChat.id?.replace(/\D/g, "")}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="text-[10px] text-[var(--color-ink-2)] block">Current Queue</span>
+                <span className="text-[11px] font-semibold text-emerald-600">
+                  {selectedChat.branch_name || activeBranch?.name || "Main Branch"}
+                </span>
+                {selectedChat.owner_name && (
+                  <span className="text-[10px] text-[var(--color-ink-2)] block truncate max-w-[130px]">
+                    Agent: {selectedChat.owner_name}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              {/* Step 1: Choose Branch */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="font-bold text-[var(--color-ink)] flex items-center gap-1.5">
+                    <GitBranch size={13} className="text-emerald-500" />
+                    <span>1. Choose Branch *</span>
+                  </label>
+                  {branches && (
+                    <span className="text-[10px] text-[var(--color-ink-2)] font-mono">
+                      {branches.length} branches available
+                    </span>
+                  )}
+                </div>
+                <select
+                  value={transferTargetBranchId}
+                  onChange={(e) => {
+                    const newBranchId = e.target.value;
+                    setTransferTargetBranchId(newBranchId);
+                    setTransferTargetUserId("");
+                    if (newBranchId) {
+                      fetchBranchEmployees(newBranchId);
+                    }
+                  }}
+                  className="hl-input w-full py-2.5 px-3 text-xs sm:text-sm font-medium rounded-xl"
+                  required
+                >
+                  <option value="">Select destination branch…</option>
+                  {branches &&
+                    branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.code}){b.is_head_office ? " — Head Office" : ""}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Step 2: Choose Employee */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="font-bold text-[var(--color-ink)] flex items-center gap-1.5">
+                    <Users size={13} className="text-blue-500" />
+                    <span>2. Choose Employee / Agent</span>
+                  </label>
+                  {branchEmployeesLoading ? (
+                    <span className="text-[10px] text-[var(--color-ink-2)] flex items-center gap-1">
+                      <Loader2 size={11} className="animate-spin" /> Loading staff…
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-emerald-600 font-semibold">
+                      {branchEmployees.length} staff available
+                    </span>
+                  )}
+                </div>
+                <select
+                  value={transferTargetUserId}
+                  onChange={(e) => setTransferTargetUserId(e.target.value)}
+                  disabled={!transferTargetBranchId || branchEmployeesLoading}
+                  className="hl-input w-full py-2.5 px-3 text-xs sm:text-sm font-medium rounded-xl disabled:opacity-50"
+                >
+                  <option value="">
+                    {branchEmployeesLoading
+                      ? "Loading employees…"
+                      : "Unassigned (Branch Shared Queue — All Agents)"}
+                  </option>
+                  {branchEmployees.map((emp) => {
+                    const name =
+                      `${emp.first_name || ""} ${emp.last_name || ""}`.trim() || emp.email;
+                    const role = emp.organization_role || emp.team_name || "Agent";
+                    return (
+                      <option key={emp.user_id} value={emp.user_id}>
+                        {name} · {role}
+                      </option>
+                    );
+                  })}
+                </select>
+                <p className="text-[10px] text-[var(--color-ink-2)] mt-1">
+                  Leave unassigned if you want any executive at the branch to claim and respond.
+                </p>
+              </div>
+
+              {/* Step 3: Internal Handoff Note */}
+              <div>
+                <label className="font-bold text-[var(--color-ink)] block mb-1.5">
+                  3. Internal Handoff Note (Optional)
+                </label>
+                <textarea
+                  value={transferNote}
+                  onChange={(e) => setTransferNote(e.target.value)}
+                  rows={2}
+                  className="hl-input w-full p-2.5 text-xs rounded-xl resize-none"
+                  placeholder="e.g. Customer requested on-site inspection. Handing off to local branch executives."
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[var(--color-rule)]">
+              <button
+                type="button"
+                onClick={() => setShowTransferBranchModal(false)}
+                className="hl-btn-secondary px-4 py-2 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={transferSubmitting || !transferTargetBranchId}
+                onClick={handleTransferConversation}
+                className="hl-btn-primary px-4 py-2 text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 shadow-md"
+              >
+                {transferSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Forward size={14} />}
+                <span>Confirm & Assign</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -8,7 +8,7 @@ import {
   Play, UserCheck, MessageSquare, Cpu, Sliders, HelpCircle, Server,
   Power, Activity, Terminal, Hash, MessageCircle, AlertTriangle,
   ChevronRight, ToggleLeft, ToggleRight, Phone, MessageSquarePlus,
-  Compass, Radio, Flame, Link2, Code2, Webhook
+  Compass, Radio, Flame, Link2, Code2, Webhook, Building2, Filter, Star, PlusCircle, CheckSquare
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import axios from "axios";
@@ -18,6 +18,7 @@ import WAStorageAndSenders from "../components/WAStorageAndSenders";
 import WhatsAppNav from "../components/WhatsAppNav";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 import { useAuth } from "../auth/AuthContext";
+import { useEnterprise } from "../context/EnterpriseContext";
 import { DEMO_STATUS } from "../auth/demoData";
 
 const QUALITY_COLORS = {
@@ -65,6 +66,288 @@ const MODEL_PRESETS = [
 
 export default function WhatsAppAccounts() {
   const [activeTab, setActiveTab] = useState("ai"); // "ai" | "web" | "meta" | "welcome" | "test"
+  const { activeTenant, activeBranch, branches, enterpriseHeaders } = useEnterprise();
+
+  // ── Unified Scoped Enterprise Headers ──
+  const headers = useCallback(() => {
+    const token = waUiStorage.getItem("token") || localStorage.getItem("token");
+    return {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...enterpriseHeaders,
+    };
+  }, [enterpriseHeaders]);
+
+  // ── Meta Senders & Dynamic Multi-Branch State ──
+  const [metaSenders, setMetaSenders] = useState([]);
+  const [loadingMetaSenders, setLoadingMetaSenders] = useState(false);
+  const [senderFilter, setSenderFilter] = useState("all"); // "all" | "active_branch" | "shared" | "dedicated"
+  const [selectedSenderForBranch, setSelectedSenderForBranch] = useState(null);
+  const [branchModalOpen, setBranchModalOpen] = useState(false);
+  const [branchModalLoading, setBranchModalLoading] = useState(false);
+  const [branchModalIsShared, setBranchModalIsShared] = useState(true);
+  const [branchModalSelectedIds, setBranchModalSelectedIds] = useState([]);
+  const [branchModalIsDefault, setBranchModalIsDefault] = useState(false);
+  const [syncingSenderId, setSyncingSenderId] = useState(null);
+  const [deletingSenderId, setDeletingSenderId] = useState(null);
+  const [senderActionNotice, setSenderActionNotice] = useState(null);
+  const [testSenderId, setTestSenderId] = useState("");
+
+  // ── Interactive Meta Partner Embedded Signup Dialog ──
+  const [embeddedModalOpen, setEmbeddedModalOpen] = useState(false);
+  const [embeddedSignupLoading, setEmbeddedSignupLoading] = useState(false);
+  const [embeddedSignupError, setEmbeddedSignupError] = useState("");
+  const [embeddedSignupSuccess, setEmbeddedSignupSuccess] = useState("");
+  const [embeddedSessionData, setEmbeddedSessionData] = useState(null);
+  const [embeddedForm, setEmbeddedForm] = useState({
+    code: "",
+    wabaId: "",
+    phoneNumberId: "",
+    displayName: "",
+    displayPhone: "",
+    isShared: true,
+    branchIds: [],
+    isDefault: false,
+  });
+
+  // ── Manual Direct Sender Registration Dialog ──
+  const [directSenderModalOpen, setDirectSenderModalOpen] = useState(false);
+  const [directSenderLoading, setDirectSenderLoading] = useState(false);
+  const [directSenderError, setDirectSenderError] = useState("");
+  const [directSenderSuccess, setDirectSenderSuccess] = useState("");
+  const [directSenderForm, setDirectSenderForm] = useState({
+    phone_number_id: "",
+    access_token: "",
+    waba_id: "",
+    display_phone: "",
+    verified_name: "",
+    is_shared: true,
+    branch_ids: [],
+    is_default: false,
+  });
+
+  // ── Fetch Senders Scoped to Organization & Branch ──
+  const fetchMetaSenders = useCallback(async () => {
+    setLoadingMetaSenders(true);
+    try {
+      const { data } = await axios.get(`${API}/api/v2/meta/senders`, { headers: headers() });
+      if (data?.success && Array.isArray(data.senders)) {
+        setMetaSenders(data.senders);
+      }
+    } catch (_) {}
+    setLoadingMetaSenders(false);
+  }, [headers]);
+
+  useEffect(() => {
+    if (activeTab === "meta" || activeTab === "test") {
+      fetchMetaSenders();
+    }
+  }, [activeTab, fetchMetaSenders, activeTenant?.id, activeBranch?.id]);
+
+  // ── Launch Guided Embedded Signup Dialog ──
+  const handleLaunchEmbeddedSignup = async () => {
+    setEmbeddedSignupLoading(true);
+    setEmbeddedSignupError("");
+    setEmbeddedSignupSuccess("");
+    try {
+      const { data } = await axios.post(`${API}/api/v2/meta/onboarding/sessions`, {}, { headers: headers() });
+      if (data?.success && data?.session) {
+        setEmbeddedSessionData(data.session);
+        setEmbeddedForm({
+          code: data.session.nonce || "",
+          wabaId: metaForm.waba_id || metaForm.phone_number_id || "",
+          phoneNumberId: metaForm.phone_number_id || "",
+          displayName: activeTenant?.name || "Official WhatsApp Business",
+          displayPhone: "919876543210",
+          isShared: true,
+          branchIds: activeBranch ? [activeBranch.id] : [],
+          isDefault: false,
+        });
+        setEmbeddedModalOpen(true);
+      } else {
+        setEmbeddedSignupError("Failed to initiate Meta onboarding session.");
+      }
+    } catch (err) {
+      setEmbeddedSignupError(err.response?.data?.message || err.message || "Failed to initialize Embedded Signup.");
+    } finally {
+      setEmbeddedSignupLoading(false);
+    }
+  };
+
+  const handleCompleteEmbeddedSignup = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!embeddedForm.code || !embeddedSessionData) {
+      setEmbeddedSignupError("Authorization code is required.");
+      return;
+    }
+    setEmbeddedSignupLoading(true);
+    setEmbeddedSignupError("");
+    setEmbeddedSignupSuccess("");
+    try {
+      const completeRes = await axios.post(
+        `${API}/api/v2/meta/onboarding/complete`,
+        {
+          code: embeddedForm.code.trim(),
+          stateToken: embeddedSessionData.stateToken,
+          wabaId: embeddedForm.wabaId.trim() || metaForm.phone_number_id || "104857392019485",
+          phoneNumberId: embeddedForm.phoneNumberId.trim() || metaForm.phone_number_id || "104857392019485",
+          displayName: embeddedForm.displayName.trim() || activeTenant?.name || "Official WhatsApp Business",
+          displayPhone: embeddedForm.displayPhone.trim() || "919876543210",
+          isShared: embeddedForm.isShared ? 1 : 0,
+          branchIds: embeddedForm.isShared ? [] : embeddedForm.branchIds,
+          isDefault: embeddedForm.isDefault ? 1 : 0,
+        },
+        { headers: headers() }
+      );
+      if (completeRes.data?.success) {
+        setEmbeddedSignupSuccess("WABA and Phone Number connected & branch-routed successfully!");
+        fetchMetaSenders();
+        setTimeout(() => {
+          setEmbeddedModalOpen(false);
+          setEmbeddedSignupSuccess("");
+        }, 1500);
+      } else {
+        setEmbeddedSignupError(completeRes.data?.message || "Failed to connect Meta sender.");
+      }
+    } catch (err) {
+      setEmbeddedSignupError(err.response?.data?.message || err.message || "Failed to complete partner connection.");
+    } finally {
+      setEmbeddedSignupLoading(false);
+    }
+  };
+
+  // ── Register Direct Manual Sender ──
+  const handleSaveDirectSender = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!directSenderForm.phone_number_id || !directSenderForm.access_token || !directSenderForm.waba_id) {
+      setDirectSenderError("Phone Number ID, Access Token, and WABA ID are required.");
+      return;
+    }
+    setDirectSenderLoading(true);
+    setDirectSenderError("");
+    setDirectSenderSuccess("");
+    try {
+      const payload = {
+        phoneNumberId: directSenderForm.phone_number_id.trim(),
+        accessToken: directSenderForm.access_token.trim(),
+        wabaId: directSenderForm.waba_id.trim(),
+        displayPhone: directSenderForm.display_phone.trim() || undefined,
+        displayName: directSenderForm.verified_name.trim() || undefined,
+        isShared: directSenderForm.is_shared ? 1 : 0,
+        branchIds: directSenderForm.is_shared ? [] : directSenderForm.branch_ids,
+        isDefault: directSenderForm.is_default ? 1 : 0,
+      };
+      const { data } = await axios.post(`${API}/api/v2/meta/senders/manual`, payload, { headers: headers() });
+      if (data?.success) {
+        setDirectSenderSuccess(`Sender +${data.sender?.display_phone || directSenderForm.display_phone} registered and branch-assigned successfully!`);
+        fetchMetaSenders();
+        setTimeout(() => {
+          setDirectSenderModalOpen(false);
+          setDirectSenderSuccess("");
+          setDirectSenderForm({
+            phone_number_id: "",
+            access_token: "",
+            waba_id: "",
+            display_phone: "",
+            verified_name: "",
+            is_shared: true,
+            branch_ids: [],
+            is_default: false,
+          });
+        }, 1500);
+      } else {
+        setDirectSenderError(data?.message || "Failed to register direct sender.");
+      }
+    } catch (err) {
+      setDirectSenderError(err.response?.data?.message || err.message || "Failed to register direct sender.");
+    } finally {
+      setDirectSenderLoading(false);
+    }
+  };
+
+  // ── Sync Sender Health with Meta Graph API ──
+  const handleSyncSenderHealth = async (senderId) => {
+    setSyncingSenderId(senderId);
+    setSenderActionNotice(null);
+    try {
+      const { data } = await axios.post(`${API}/api/v2/meta/senders/${senderId}/sync`, {}, { headers: headers() });
+      if (data?.success) {
+        setSenderActionNotice({
+          type: "success",
+          message: `Sender synchronized! Quality: ${data.sender?.quality_rating || "GREEN"} • Tier: ${data.sender?.messaging_tier || "Standard"}`,
+        });
+        fetchMetaSenders();
+      } else {
+        setSenderActionNotice({ type: "error", message: data?.message || "Sync failed" });
+      }
+    } catch (err) {
+      setSenderActionNotice({
+        type: "error",
+        message: err.response?.data?.message || err.message || "Failed to sync sender health with Meta Graph API",
+      });
+    } finally {
+      setSyncingSenderId(null);
+      setTimeout(() => setSenderActionNotice(null), 5000);
+    }
+  };
+
+  // ── Disconnect WhatsApp Sender ──
+  const handleDeleteSender = async (sender) => {
+    if (!window.confirm(`Disconnect WhatsApp sender +${sender.display_phone} (${sender.verified_name || "Business"})? Outbound messages for assigned branches will fall back to shared senders.`)) {
+      return;
+    }
+    setDeletingSenderId(sender.id);
+    setSenderActionNotice(null);
+    try {
+      const { data } = await axios.delete(`${API}/api/v2/meta/senders/${sender.id}`, { headers: headers() });
+      if (data?.success) {
+        setSenderActionNotice({
+          type: "success",
+          message: `Sender +${sender.display_phone} disconnected successfully.`,
+        });
+        fetchMetaSenders();
+      } else {
+        setSenderActionNotice({ type: "error", message: data?.message || "Delete failed" });
+      }
+    } catch (err) {
+      setSenderActionNotice({
+        type: "error",
+        message: err.response?.data?.message || err.message || "Failed to disconnect sender",
+      });
+    } finally {
+      setDeletingSenderId(null);
+      setTimeout(() => setSenderActionNotice(null), 5000);
+    }
+  };
+
+  const openBranchAssignmentModal = (sender) => {
+    setSelectedSenderForBranch(sender);
+    setBranchModalIsShared(sender.is_shared === 1);
+    setBranchModalSelectedIds(sender.assigned_branch_ids || []);
+    setBranchModalIsDefault(sender.is_default === 1);
+    setBranchModalOpen(true);
+  };
+
+  const handleSaveBranchAssignments = async () => {
+    if (!selectedSenderForBranch) return;
+    setBranchModalLoading(true);
+    try {
+      await axios.patch(
+        `${API}/api/v2/meta/senders/${selectedSenderForBranch.id}/branch-assignments`,
+        {
+          isShared: branchModalIsShared ? 1 : 0,
+          branchIds: branchModalSelectedIds,
+          isDefault: branchModalIsDefault ? 1 : 0,
+        },
+        { headers: headers() }
+      );
+      setBranchModalOpen(false);
+      fetchMetaSenders();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to update branch assignment");
+    } finally {
+      setBranchModalLoading(false);
+    }
+  };
   const [status, setStatus] = useState(null);
   const [accountDetails, setAccountDetails] = useState(null);
   const [config, setConfig] = useState(null);
@@ -193,7 +476,6 @@ export default function WhatsAppAccounts() {
     : QUALITY_COLORS.GREEN;
   const webhookUrl = `${window.location.origin}/api/wa/webhook`;
 
-  const headers = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 
   // ── Fetch All WhatsApp & AI Settings ──
   const fetchAll = async () => {
@@ -336,7 +618,7 @@ export default function WhatsAppAccounts() {
   useEffect(() => {
     fetchAll();
     fetchKbDocs();
-  }, []);
+  }, [activeTenant?.id, activeBranch?.id]);
 
   // Socket.IO real-time QR and connection sync
   useEffect(() => {
@@ -706,6 +988,7 @@ export default function WhatsAppAccounts() {
           phone: testPhone.trim(),
           message: testMsgText.trim(),
           engine: testEngine !== "auto" ? testEngine : undefined,
+          senderId: testSenderId || undefined,
         },
         { headers: headers() }
       );
@@ -779,6 +1062,56 @@ export default function WhatsAppAccounts() {
     <div className="hl-page">
       <WhatsAppNav />
       <WAStorageAndSenders settings />
+
+      {/* Multi-Tenant Multi-Branch Scope & Quota Meter */}
+      <div className="mb-4 sm:mb-6 p-4 sm:p-5 rounded-2xl border bg-gradient-to-r from-emerald-950/20 via-slate-900/40 to-slate-950/40 border-emerald-500/20 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+          <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shrink-0">
+            <Building2 size={24} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-extrabold text-sm sm:text-base text-gray-900 dark:text-white truncate">
+                {activeTenant?.name || "Global Enterprise Organization"}
+              </span>
+              <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                {activeTenant?.plan || "ENTERPRISE"} PLAN
+              </span>
+              <span className="text-[10px] font-mono text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+                Tenant: {activeTenant?.id || "default"}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <span>Active Scope:</span>
+              <span className="font-semibold text-emerald-500 dark:text-emerald-400 flex items-center gap-1">
+                <Layers size={13} />
+                {activeBranch ? `${activeBranch.name} (${activeBranch.code})` : "All Branches (HQ Unified Oversight)"}
+              </span>
+              <span>•</span>
+              <span>Total Network: <strong className="text-gray-700 dark:text-gray-300">{branches?.length || 1} Branches</strong></span>
+            </div>
+          </div>
+        </div>
+
+        {/* Quota & Senders Capacity Pill */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="px-3.5 py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white/70 dark:bg-black/30 flex items-center gap-3 text-xs">
+            <div>
+              <span className="text-[10px] text-gray-400 block uppercase font-bold tracking-wider">Senders Quota</span>
+              <span className="font-mono font-extrabold text-gray-900 dark:text-gray-100">
+                {metaSenders.length} / {activeTenant?.max_whatsapp_numbers || 10} Active
+              </span>
+            </div>
+            <div className="h-6 w-px bg-gray-200 dark:bg-gray-800" />
+            <div>
+              <span className="text-[10px] text-gray-400 block uppercase font-bold tracking-wider">Topology</span>
+              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                {metaSenders.filter((s) => s.is_shared === 1).length} Shared • {metaSenders.filter((s) => s.is_shared === 0).length} Dedicated
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Hero Header & Real-Time Status Hub */}
       <div className="hl-card p-4 sm:p-5 border mb-4 sm:mb-6 min-w-0">
@@ -1769,6 +2102,321 @@ export default function WhatsAppAccounts() {
           {activeTab === "meta" && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 min-w-0">
               <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
+                {/* 0. Official Meta Embedded Signup & Direct Onboarding Hero */}
+                <div className="hl-card border border-emerald-500/30 bg-gradient-to-br from-emerald-950/20 via-slate-900/40 to-slate-950/40 p-5 sm:p-6 rounded-2xl min-w-0 shadow-sm">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div className="space-y-1.5 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <h3 className="font-extrabold text-base text-gray-900 dark:text-white flex items-center gap-2">
+                          <span>Meta Cloud Partner Embedded Signup & Direct Sender Hub</span>
+                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider border border-emerald-500/30">
+                            Graph v22.0
+                          </span>
+                        </h3>
+                      </div>
+                      <p className="text-xs text-gray-600 dark:text-gray-300 max-w-2xl leading-relaxed">
+                        Onboard official Meta WhatsApp Business Accounts with 1-click Facebook Embedded Signup or add custom WABA permanent credentials manually. Numbers automatically support branch allocation and default fallbacks.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                      <button
+                        type="button"
+                        disabled={embeddedSignupLoading}
+                        onClick={handleLaunchEmbeddedSignup}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md hover:shadow-lg transition-all shrink-0 cursor-pointer disabled:opacity-50"
+                      >
+                        {embeddedSignupLoading ? (
+                          <>
+                            <Loader2 size={15} className="animate-spin" />
+                            <span>Connecting…</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap size={15} />
+                            <span>Connect with Facebook</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDirectSenderError("");
+                          setDirectSenderSuccess("");
+                          setDirectSenderModalOpen(true);
+                        }}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-700 shadow-xs transition-all shrink-0 cursor-pointer"
+                      >
+                        <PlusCircle size={15} className="text-emerald-500" />
+                        <span>Add Sender Manually</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {senderActionNotice && (
+                    <div className={`mt-3.5 p-3 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2 ${
+                      senderActionNotice.type === "success"
+                        ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
+                        : "bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200"
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        {senderActionNotice.type === "success" ? (
+                          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                        ) : (
+                          <AlertCircle size={16} className="text-rose-600 shrink-0" />
+                        )}
+                        <span>{senderActionNotice.message}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSenderActionNotice(null)}
+                        className="p-1 hover:opacity-75"
+                      >
+                        <XCircle size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 0.1 Connected Senders & Branch Routing (Multi-Branch Dynamic Center) */}
+                <div className="hl-card border p-4 sm:p-6 min-w-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b">
+                    <div>
+                      <h3 className="font-extrabold text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                        <Smartphone size={16} className="text-emerald-500" />
+                        <span>Connected WhatsApp Senders ({metaSenders.length})</span>
+                      </h3>
+                      <p className="hl-subtitle mt-0.5">
+                        Manage phone numbers registered under {activeTenant?.name || "your organization"} and dynamic branch routing.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={fetchMetaSenders}
+                        className="hl-btn-secondary px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5"
+                      >
+                        <RefreshCw size={13} className={loadingMetaSenders ? "animate-spin" : ""} />
+                        <span>Refresh Senders</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Filter Sub-Tabs */}
+                  <div className="flex items-center gap-1.5 mb-4 pb-2 border-b border-gray-100 dark:border-gray-800 overflow-x-auto text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setSenderFilter("all")}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 shrink-0 ${
+                        senderFilter === "all"
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                          : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      }`}
+                    >
+                      <span>All Senders</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-200 dark:bg-gray-700 font-mono">
+                        {metaSenders.length}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSenderFilter("active_branch")}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 shrink-0 ${
+                        senderFilter === "active_branch"
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                          : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      }`}
+                    >
+                      <Layers size={13} />
+                      <span>{activeBranch ? activeBranch.name : "Active Branch"}</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-200 dark:bg-gray-700 font-mono">
+                        {metaSenders.filter((s) => s.is_shared === 1 || (Array.isArray(s.assigned_branch_ids) && s.assigned_branch_ids.includes(activeBranch?.id))).length}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSenderFilter("shared")}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 shrink-0 ${
+                        senderFilter === "shared"
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                          : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      }`}
+                    >
+                      <Globe size={13} />
+                      <span>Shared ({metaSenders.filter((s) => s.is_shared === 1).length})</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSenderFilter("dedicated")}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 shrink-0 ${
+                        senderFilter === "dedicated"
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                          : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      }`}
+                    >
+                      <Building2 size={13} />
+                      <span>Dedicated ({metaSenders.filter((s) => s.is_shared === 0).length})</span>
+                    </button>
+                  </div>
+
+                  {loadingMetaSenders ? (
+                    <div className="py-12 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
+                      <Loader2 size={18} className="animate-spin text-emerald-600" />
+                      <span>Synchronizing organization senders…</span>
+                    </div>
+                  ) : metaSenders.length === 0 ? (
+                    <div className="py-10 text-center text-xs text-gray-500 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
+                      <Smartphone size={28} className="mx-auto mb-2 text-gray-400" />
+                      <p className="font-bold text-gray-700 dark:text-gray-300">No senders onboarded yet</p>
+                      <p className="mt-1">Connect your Meta Business Account using the buttons above or configure credentials below.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {metaSenders
+                        .filter((s) => {
+                          if (senderFilter === "active_branch") {
+                            if (!activeBranch?.id) return true;
+                            return s.is_shared === 1 || (Array.isArray(s.assigned_branch_ids) && s.assigned_branch_ids.includes(activeBranch.id));
+                          }
+                          if (senderFilter === "shared") return s.is_shared === 1;
+                          if (senderFilter === "dedicated") return s.is_shared === 0;
+                          return true;
+                        })
+                        .map((s) => {
+                          const isDefaultForActiveBranch = activeBranch && s.is_default === 1 && (s.is_shared === 1 || (Array.isArray(s.assigned_branch_ids) && s.assigned_branch_ids.includes(activeBranch.id)));
+                          return (
+                            <div
+                              key={s.id}
+                              className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs hover:border-emerald-500/40 transition-colors"
+                            >
+                              <div className="space-y-1.5 min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-extrabold text-xs text-gray-900 dark:text-white">
+                                    {s.verified_name || s.display_phone || "WhatsApp Business"}
+                                  </span>
+                                  <span className="text-[10px] font-mono bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded font-bold">
+                                    +{s.display_phone}
+                                  </span>
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    s.status === "connected"
+                                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-500/20"
+                                      : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-500/20"
+                                  }`}>
+                                    ● {s.status}
+                                  </span>
+                                  {isDefaultForActiveBranch && (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-400/30 flex items-center gap-1">
+                                      <Star size={10} className="fill-amber-500 text-amber-500" />
+                                      <span>Default Sender</span>
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                                  <span>Tier: <strong className="text-gray-800 dark:text-gray-200">{s.messaging_tier || "Standard"}</strong></span>
+                                  <span>•</span>
+                                  <span>
+                                    Quality:{" "}
+                                    <strong className={`${
+                                      s.quality_rating === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : s.quality_rating === "YELLOW" ? "text-amber-600" : "text-rose-600"
+                                    }`}>
+                                      ● {s.quality_rating || "GREEN"}
+                                    </strong>
+                                  </span>
+                                  <span>•</span>
+                                  <span>
+                                    {s.is_shared === 1 ? (
+                                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                                        <Globe size={12} />
+                                        <span>Shared (All Branches)</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-600 dark:text-slate-300 font-semibold flex items-center gap-1">
+                                        <Building2 size={12} />
+                                        <span>Dedicated Routing ({s.assigned_branch_ids?.length || 0} Branches)</span>
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+
+                                {/* Assigned Branch Pills if Dedicated */}
+                                {s.is_shared === 0 && Array.isArray(s.assigned_branch_ids) && s.assigned_branch_ids.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {s.assigned_branch_ids.map((bId) => {
+                                      const branchObj = branches?.find((b) => b.id === bId);
+                                      return (
+                                        <span
+                                          key={bId}
+                                          className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700"
+                                        >
+                                          {branchObj ? `${branchObj.name} (${branchObj.code})` : bId}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2 shrink-0 self-start md:self-center">
+                                <button
+                                  type="button"
+                                  disabled={syncingSenderId === s.id}
+                                  onClick={() => handleSyncSenderHealth(s.id)}
+                                  title="Sync Quality & Limit Tier from Meta Graph API"
+                                  className="hl-btn-secondary px-2.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 hover:border-emerald-500 disabled:opacity-50"
+                                >
+                                  <RefreshCw size={12} className={syncingSenderId === s.id ? "animate-spin text-emerald-600" : ""} />
+                                  <span>Sync</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => openBranchAssignmentModal(s)}
+                                  className="hl-btn-secondary px-2.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 hover:border-emerald-500"
+                                >
+                                  <Settings size={12} />
+                                  <span>Routing</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTestSenderId(s.id);
+                                    setActiveTab("test");
+                                  }}
+                                  className="hl-btn-secondary px-2.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 hover:border-emerald-500"
+                                >
+                                  <Send size={12} />
+                                  <span>Test</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={deletingSenderId === s.id}
+                                  onClick={() => handleDeleteSender(s)}
+                                  title="Disconnect sender from organization"
+                                  className="px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300 hover:bg-rose-100 text-xs font-semibold flex items-center gap-1 disabled:opacity-50"
+                                >
+                                  {deletingSenderId === s.id ? (
+                                    <Loader2 size={12} className="animate-spin" />
+                                  ) : (
+                                    <Trash2 size={12} />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+
                 {/* 1. Credentials Configuration */}
                 <div className="hl-card border p-4 sm:p-6 min-w-0">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b">
@@ -2290,21 +2938,39 @@ export default function WhatsAppAccounts() {
               )}
 
               <form onSubmit={handleSendTestMessage} className="space-y-4 text-xs">
-                <div>
-                  <label className="hl-section-label block mb-1">Sending Channel</label>
-                  <select
-                    value={testEngine}
-                    onChange={(e) => setTestEngine(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-[#25D366] bg-white font-semibold text-gray-800 shadow-sm"
-                  >
-                    <option value="auto">⚡ Smart Auto-Detect (Active WhatsApp Engine)</option>
-                    <option value="web" disabled={!webConnected}>
-                      📱 WhatsApp Web {webConnected ? `(+${status?.web?.phone || "Connected"})` : "— [Offline]"}
-                    </option>
-                    <option value="cloud_api" disabled={!cloudConfigured}>
-                      ☁️ Meta Cloud API {cloudConfigured ? "— [Configured]" : "— [Not Setup]"}
-                    </option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="hl-section-label block mb-1">Sending Channel</label>
+                    <select
+                      value={testEngine}
+                      onChange={(e) => setTestEngine(e.target.value)}
+                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-[#25D366] bg-white dark:bg-gray-900 font-semibold text-gray-800 dark:text-gray-200 shadow-sm"
+                    >
+                      <option value="auto">⚡ Smart Auto-Detect (Active Engine)</option>
+                      <option value="web" disabled={!webConnected}>
+                        📱 WhatsApp Web {webConnected ? `(+${status?.web?.phone || "Connected"})` : "— [Offline]"}
+                      </option>
+                      <option value="cloud_api" disabled={!cloudConfigured}>
+                        ☁️ Meta Cloud API {cloudConfigured ? "— [Configured]" : "— [Not Setup]"}
+                      </option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="hl-section-label block mb-1">Outbound Meta Sender</label>
+                    <select
+                      value={testSenderId}
+                      onChange={(e) => setTestSenderId(e.target.value)}
+                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-[#25D366] bg-white dark:bg-gray-900 font-semibold text-gray-800 dark:text-gray-200 shadow-sm"
+                    >
+                      <option value="">⚡ Auto (Default for {activeBranch?.name || "Active Branch"})</option>
+                      {metaSenders.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          +{s.display_phone} ({s.verified_name || "Business"}) {s.is_shared === 1 ? "[Shared]" : "[Dedicated]"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div>
@@ -2729,6 +3395,454 @@ print_r($res);
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Sender Branch Routing Modal */}
+      {branchModalOpen && selectedSenderForBranch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs">
+          <div className="hl-card w-full max-w-lg rounded-2xl p-5 sm:p-6 shadow-2xl border space-y-4 animate-scale-up" style={{ background: "var(--color-paper)" }}>
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-gray-900 dark:text-white">Configure Branch Routing</h3>
+                <p className="text-xs text-gray-500 mt-0.5 font-mono">
+                  +{selectedSenderForBranch.display_phone} ({selectedSenderForBranch.verified_name || "Sender"})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBranchModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg"
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="font-bold text-gray-700 dark:text-gray-300 block mb-2">Sender Distribution Model</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label
+                    onClick={() => setBranchModalIsShared(true)}
+                    className={`p-3 rounded-xl border cursor-pointer flex flex-col gap-1 ${
+                      branchModalIsShared
+                        ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-100 ring-1 ring-emerald-500"
+                        : "border-gray-200 dark:border-gray-800"
+                    }`}
+                  >
+                    <span className="font-bold flex items-center gap-1.5">
+                      <Globe size={14} className="text-emerald-600" />
+                      <span>Shared Number</span>
+                    </span>
+                    <span className="text-[11px] opacity-75">
+                      Available across entire organization. Inbound routing via AI & keywords.
+                    </span>
+                  </label>
+
+                  <label
+                    onClick={() => setBranchModalIsShared(false)}
+                    className={`p-3 rounded-xl border cursor-pointer flex flex-col gap-1 ${
+                      !branchModalIsShared
+                        ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-100 ring-1 ring-emerald-500"
+                        : "border-gray-200 dark:border-gray-800"
+                    }`}
+                  >
+                    <span className="font-bold flex items-center gap-1.5">
+                      <Building2 size={14} className="text-emerald-600" />
+                      <span>Dedicated Branch</span>
+                    </span>
+                    <span className="text-[11px] opacity-75">
+                      Exclusively assigned to specific branch locations.
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {!branchModalIsShared && (
+                <div>
+                  <label className="font-bold text-gray-700 dark:text-gray-300 block mb-2">
+                    Select Assigned Branches
+                  </label>
+                  <div className="space-y-2 max-h-48 overflow-y-auto p-1">
+                    {branches && branches.map((b) => {
+                      const isChecked = branchModalSelectedIds.includes(b.id);
+                      return (
+                        <label
+                          key={b.id}
+                          className="flex items-center gap-2.5 p-2.5 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setBranchModalSelectedIds([...branchModalSelectedIds, b.id]);
+                              } else {
+                                setBranchModalSelectedIds(branchModalSelectedIds.filter((id) => id !== b.id));
+                              }
+                            }}
+                            className="rounded text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <div className="flex-1 flex items-center justify-between">
+                            <span className="font-semibold text-gray-900 dark:text-white">{b.name}</span>
+                            <span className="text-[10px] bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded font-mono font-bold">
+                              {b.code}
+                            </span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Default Outbound Sender Checkbox */}
+              <div className="pt-2 border-t">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={branchModalIsDefault}
+                    onChange={(e) => setBranchModalIsDefault(e.target.checked)}
+                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                  />
+                  <span className="font-semibold text-gray-800 dark:text-gray-200">
+                    ⭐ Set as primary default sender for assigned branch
+                  </span>
+                </label>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 pl-6">
+                  Outbound broadcasts and CRM notifications from this branch will automatically route through this number.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setBranchModalOpen(false)}
+                className="hl-btn-secondary px-4 py-2 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={branchModalLoading}
+                onClick={handleSaveBranchAssignments}
+                className="hl-btn-primary px-4 py-2 text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {branchModalLoading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                <span>Save Branch Assignments</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Guided Meta Partner Embedded Signup Dialog */}
+      {embeddedModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs">
+          <div className="hl-card w-full max-w-lg rounded-2xl p-5 sm:p-6 shadow-2xl border space-y-4 animate-scale-up" style={{ background: "var(--color-paper)" }}>
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-gray-900 dark:text-white flex items-center gap-2">
+                  <Zap size={18} className="text-emerald-500" />
+                  <span>Meta Partner Embedded Signup</span>
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Complete official WABA linking and branch provisioning for {activeTenant?.name || "your organization"}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmbeddedModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg"
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
+
+            {embeddedSignupSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-100/80 dark:bg-emerald-950/40 border border-emerald-300 text-emerald-800 dark:text-emerald-200 text-xs font-semibold flex items-center gap-2">
+                <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+                <span>{embeddedSignupSuccess}</span>
+              </div>
+            )}
+
+            {embeddedSignupError && (
+              <div className="p-3 rounded-xl bg-rose-100/80 dark:bg-rose-950/40 border border-rose-300 text-rose-800 dark:text-rose-200 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle size={16} className="shrink-0 text-rose-600" />
+                <span>{embeddedSignupError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCompleteEmbeddedSignup} className="space-y-3.5 text-xs">
+              {embeddedSessionData && (
+                <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 flex items-center justify-between">
+                  <span className="text-[11px] text-gray-500">Session Nonce: <code className="font-mono text-emerald-600">{embeddedSessionData.nonce?.substring(0, 16)}…</code></span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">Ready</span>
+                </div>
+              )}
+
+              <div>
+                <label className="hl-section-label block mb-1">Meta Authorization Code *</label>
+                <input
+                  type="text"
+                  required
+                  value={embeddedForm.code}
+                  onChange={(e) => setEmbeddedForm({ ...embeddedForm, code: e.target.value })}
+                  placeholder="Paste authorization code from Facebook dialog"
+                  className="w-full px-3.5 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="hl-section-label block mb-1">Phone Number ID</label>
+                  <input
+                    type="text"
+                    value={embeddedForm.phoneNumberId}
+                    onChange={(e) => setEmbeddedForm({ ...embeddedForm, phoneNumberId: e.target.value })}
+                    placeholder="e.g. 104857392019485"
+                    className="w-full px-3.5 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="hl-section-label block mb-1">WABA Account ID</label>
+                  <input
+                    type="text"
+                    value={embeddedForm.wabaId}
+                    onChange={(e) => setEmbeddedForm({ ...embeddedForm, wabaId: e.target.value })}
+                    placeholder="e.g. 102938475610293"
+                    className="w-full px-3.5 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="hl-section-label block mb-1">Display Phone Number</label>
+                  <input
+                    type="text"
+                    value={embeddedForm.displayPhone}
+                    onChange={(e) => setEmbeddedForm({ ...embeddedForm, displayPhone: e.target.value })}
+                    placeholder="919876543210"
+                    className="w-full px-3.5 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="hl-section-label block mb-1">Verified Display Name</label>
+                  <input
+                    type="text"
+                    value={embeddedForm.displayName}
+                    onChange={(e) => setEmbeddedForm({ ...embeddedForm, displayName: e.target.value })}
+                    placeholder="Business Display Name"
+                    className="w-full px-3.5 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="hl-section-label block mb-1">Branch Distribution</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label
+                    onClick={() => setEmbeddedForm({ ...embeddedForm, isShared: true })}
+                    className={`p-2.5 rounded-xl border cursor-pointer text-center font-bold ${
+                      embeddedForm.isShared
+                        ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-100"
+                        : "border-gray-200 dark:border-gray-800"
+                    }`}
+                  >
+                    🌐 Shared (All Branches)
+                  </label>
+                  <label
+                    onClick={() => setEmbeddedForm({ ...embeddedForm, isShared: false, branchIds: activeBranch ? [activeBranch.id] : [] })}
+                    className={`p-2.5 rounded-xl border cursor-pointer text-center font-bold ${
+                      !embeddedForm.isShared
+                        ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-100"
+                        : "border-gray-200 dark:border-gray-800"
+                    }`}
+                  >
+                    🏢 Active Branch Only
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setEmbeddedModalOpen(false)}
+                  className="hl-btn-secondary px-4 py-2 text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={embeddedSignupLoading || !embeddedForm.code}
+                  className="hl-btn-primary px-5 py-2 text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {embeddedSignupLoading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                  <span>Complete Partner Connection</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Direct Sender Registration Dialog */}
+      {directSenderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs">
+          <div className="hl-card w-full max-w-lg rounded-2xl p-5 sm:p-6 shadow-2xl border space-y-4 animate-scale-up" style={{ background: "var(--color-paper)" }}>
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-gray-900 dark:text-white flex items-center gap-2">
+                  <PlusCircle size={18} className="text-emerald-500" />
+                  <span>Register Direct WhatsApp Sender</span>
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Link an existing Meta Cloud API phone number with direct permanent token.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDirectSenderModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg"
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
+
+            {directSenderSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-100/80 dark:bg-emerald-950/40 border border-emerald-300 text-emerald-800 dark:text-emerald-200 text-xs font-semibold flex items-center gap-2">
+                <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+                <span>{directSenderSuccess}</span>
+              </div>
+            )}
+
+            {directSenderError && (
+              <div className="p-3 rounded-xl bg-rose-100/80 dark:bg-rose-950/40 border border-rose-300 text-rose-800 dark:text-rose-200 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle size={16} className="shrink-0 text-rose-600" />
+                <span>{directSenderError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveDirectSender} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="hl-section-label block mb-1">Phone Number ID *</label>
+                  <input
+                    type="text"
+                    required
+                    value={directSenderForm.phone_number_id}
+                    onChange={(e) => setDirectSenderForm({ ...directSenderForm, phone_number_id: e.target.value })}
+                    placeholder="e.g. 104857392019485"
+                    className="w-full px-3.5 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="hl-section-label block mb-1">WABA Account ID *</label>
+                  <input
+                    type="text"
+                    required
+                    value={directSenderForm.waba_id}
+                    onChange={(e) => setDirectSenderForm({ ...directSenderForm, waba_id: e.target.value })}
+                    placeholder="e.g. 102938475610293"
+                    className="w-full px-3.5 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="hl-section-label block mb-1">Permanent Access Token *</label>
+                <input
+                  type="password"
+                  required
+                  value={directSenderForm.access_token}
+                  onChange={(e) => setDirectSenderForm({ ...directSenderForm, access_token: e.target.value })}
+                  placeholder="EAA..."
+                  className="w-full px-3.5 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="hl-section-label block mb-1">Display Mobile Number</label>
+                  <input
+                    type="text"
+                    value={directSenderForm.display_phone}
+                    onChange={(e) => setDirectSenderForm({ ...directSenderForm, display_phone: e.target.value })}
+                    placeholder="919876543210"
+                    className="w-full px-3.5 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="hl-section-label block mb-1">Verified Display Name</label>
+                  <input
+                    type="text"
+                    value={directSenderForm.verified_name}
+                    onChange={(e) => setDirectSenderForm({ ...directSenderForm, verified_name: e.target.value })}
+                    placeholder="e.g. Bangalore Branch Support"
+                    className="w-full px-3.5 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="hl-section-label block mb-1">Branch Distribution Model</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label
+                    onClick={() => setDirectSenderForm({ ...directSenderForm, is_shared: true })}
+                    className={`p-2.5 rounded-xl border cursor-pointer text-center font-bold ${
+                      directSenderForm.is_shared
+                        ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-100"
+                        : "border-gray-200 dark:border-gray-800"
+                    }`}
+                  >
+                    🌐 Shared (All Branches)
+                  </label>
+                  <label
+                    onClick={() => setDirectSenderForm({ ...directSenderForm, is_shared: false, branch_ids: activeBranch ? [activeBranch.id] : [] })}
+                    className={`p-2.5 rounded-xl border cursor-pointer text-center font-bold ${
+                      !directSenderForm.is_shared
+                        ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-100"
+                        : "border-gray-200 dark:border-gray-800"
+                    }`}
+                  >
+                    🏢 Active Branch Only
+                  </label>
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={directSenderForm.is_default}
+                  onChange={(e) => setDirectSenderForm({ ...directSenderForm, is_default: e.target.checked })}
+                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                />
+                <span className="font-semibold text-gray-800 dark:text-gray-200">
+                  ⭐ Set as default outbound sender for selected branch
+                </span>
+              </label>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setDirectSenderModalOpen(false)}
+                  className="hl-btn-secondary px-4 py-2 text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={directSenderLoading}
+                  className="hl-btn-primary px-5 py-2 text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {directSenderLoading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  <span>Save & Connect Sender</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

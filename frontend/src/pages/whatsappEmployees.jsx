@@ -23,10 +23,13 @@ import {
   ExternalLink,
   User,
   Briefcase,
+  Building,
+  GitBranch,
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
+import { useEnterprise } from "../context/EnterpriseContext";
 import WhatsAppNav from "../components/WhatsAppNav";
 
 const ACCESS_LEVEL_META = {
@@ -70,6 +73,7 @@ const ACCESS_LEVEL_META = {
 
 export default function WAEmployees() {
   const { user } = useAuth();
+  const { activeTenant, activeBranch, branches, enterpriseHeaders } = useEnterprise();
 
   // Employee data & analytics
   const [employees, setEmployees] = useState([]);
@@ -88,6 +92,7 @@ export default function WAEmployees() {
   const [searchQuery, setSearchQuery] = useState("");
   const [levelFilter, setLevelFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [branchFilter, setBranchFilter] = useState("all");
 
   // Modals state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -104,7 +109,14 @@ export default function WAEmployees() {
     whatsapp_access_level: "full",
     job_title: "WhatsApp Support Executive",
     mobile: "",
+    branch_id: activeBranch?.id || 1,
   });
+
+  useEffect(() => {
+    if (activeBranch?.id) {
+      setFormData((prev) => ({ ...prev, branch_id: activeBranch.id }));
+    }
+  }, [activeBranch]);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -119,8 +131,12 @@ export default function WAEmployees() {
     setError("");
     try {
       const token = localStorage.getItem("token");
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const { data } = await axios.get(`${API}/api/auth/employees`, { headers });
+      const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...enterpriseHeaders,
+      };
+      const params = branchFilter !== "all" ? { branchId: branchFilter } : {};
+      const { data } = await axios.get(`${API}/api/auth/employees`, { headers, params });
 
       if (data?.employees) {
         setEmployees(data.employees);
@@ -137,7 +153,7 @@ export default function WAEmployees() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, enterpriseHeaders, branchFilter]);
 
   useEffect(() => {
     fetchEmployees();
@@ -196,7 +212,10 @@ export default function WAEmployees() {
 
     try {
       const token = localStorage.getItem("token");
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...enterpriseHeaders,
+      };
       const { data } = await axios.post(`${API}/api/auth/employees`, formData, { headers });
 
       setShowCreateModal(false);
@@ -232,6 +251,7 @@ export default function WAEmployees() {
           role: editEmployee.role,
           job_title: editEmployee.job_title,
           status: editEmployee.status,
+          branch_id: editEmployee.branch_id ? Number(editEmployee.branch_id) : undefined,
         },
         { headers }
       );
@@ -263,7 +283,11 @@ export default function WAEmployees() {
       (statusFilter === "active" && emp.status === "active") ||
       (statusFilter === "pending" && emp.status !== "active");
 
-    return matchesSearch && matchesLevel && matchesStatus;
+    const matchesBranch =
+      branchFilter === "all" ||
+      Number(emp.branch_id) === Number(branchFilter);
+
+    return matchesSearch && matchesLevel && matchesStatus && matchesBranch;
   });
 
   // Strict employee isolation guard: if regular employee, show isolated view
@@ -496,8 +520,26 @@ export default function WAEmployees() {
           )}
         </div>
 
-        {/* Access Level Filter */}
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {/* Branch Filter */}
+          {branches && branches.length > 0 && (
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="hl-input w-full sm:w-auto"
+              style={{ height: 38, fontSize: 13, minWidth: 150 }}
+            >
+              <option value="all">🏢 All Branches</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name} ({b.code})
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Access Level Filter */}
           <select
             value={levelFilter}
             onChange={(e) => setLevelFilter(e.target.value)}
@@ -550,6 +592,7 @@ export default function WAEmployees() {
               >
                 <th className="py-3 px-4 font-semibold">Employee</th>
                 <th className="py-3 px-4 font-semibold">Role</th>
+                <th className="py-3 px-4 font-semibold">Branch</th>
                 <th className="py-3 px-4 font-semibold">WhatsApp Access Level</th>
                 <th className="py-3 px-4 font-semibold">Workspace Access Code</th>
                 <th className="py-3 px-4 font-semibold">Status</th>
@@ -559,14 +602,14 @@ export default function WAEmployees() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-gray-500">
+                  <td colSpan={7} className="py-12 text-center text-gray-500">
                     <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-emerald-600" />
                     <span>Loading employees directory…</span>
                   </td>
                 </tr>
               ) : filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-gray-500">
+                  <td colSpan={7} className="py-12 text-center text-gray-500">
                     <Users size={32} className="mx-auto mb-2 text-gray-300" />
                     <p className="font-semibold text-sm text-gray-700">No employees found</p>
                     <p className="text-xs text-gray-500 mt-1">
@@ -641,6 +684,19 @@ export default function WAEmployees() {
                           <div className="text-[11px] text-gray-500 mt-0.5 truncate max-w-[140px]">
                             {emp.job_title}
                           </div>
+                        )}
+                      </td>
+
+                      {/* Branch */}
+                      <td className="py-3.5 px-4">
+                        {emp.branch_name ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] bg-slate-100 text-slate-800 px-2.5 py-1 rounded-md font-medium border border-slate-200">
+                            📍 {emp.branch_name}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-md font-medium border border-emerald-100">
+                            🏢 Head Office
+                          </span>
                         )}
                       </td>
 
@@ -876,6 +932,31 @@ export default function WAEmployees() {
                   </div>
                 </div>
 
+                {/* Assigned Branch Selection */}
+                <div>
+                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                    Assigned Branch / Location *
+                  </label>
+                  <select
+                    value={formData.branch_id || (branches?.[0]?.id) || 1}
+                    onChange={(e) => setFormData({ ...formData, branch_id: Number(e.target.value) })}
+                    className="hl-input w-full py-2 text-sm font-medium"
+                  >
+                    {branches && branches.length > 0 ? (
+                      branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.code}){b.is_head_office ? " — Head Office" : ""}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="1">Head Office (Main) (HQ-01)</option>
+                    )}
+                  </select>
+                  <span className="text-[11px] text-gray-500 block mt-1">
+                    Staff member will be scoped to handle conversations and campaigns for this branch.
+                  </span>
+                </div>
+
                 {/* Granular WhatsApp Access Level Selection */}
                 <div>
                   <label className="hl-section-label block mb-2 font-bold text-xs text-gray-700">
@@ -1052,6 +1133,26 @@ export default function WAEmployees() {
                     <option value="pending">Pending Activation (Awaiting Code Login)</option>
                     <option value="banned">Suspended / Deactivated</option>
                   </select>
+                </div>
+
+                {/* Branch Assignment */}
+                <div>
+                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Assigned Branch / Location</label>
+                  <select
+                    value={editEmployee.branch_id || ""}
+                    onChange={(e) => setEditEmployee({ ...editEmployee, branch_id: e.target.value ? Number(e.target.value) : null })}
+                    className="hl-input w-full py-2 text-sm font-medium"
+                  >
+                    <option value="">🏢 Head Office / Default</option>
+                    {branches && branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.code}){b.is_head_office ? " — Head Office" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[11px] text-gray-500 block mt-1">
+                    Reassigning updates the operational branch and customer chat scope for this employee.
+                  </span>
                 </div>
 
                 <div>

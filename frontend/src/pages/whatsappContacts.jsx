@@ -3,12 +3,13 @@ import {
   Users, Plus, Search, RefreshCw, UserCheck, UserX, ShieldOff, Shield,
   Download, Upload, X, Edit2, Phone, Tag, ChevronDown, Loader2, CheckCircle2,
   AlertCircle, FileText, Check, MessageSquare, ArrowUpRight, Filter, Trash2,
-  Sparkles
+  Sparkles, GitBranch, Building
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
+import { useEnterprise } from "../context/EnterpriseContext";
 import { DEMO_CONTACTS } from "../auth/demoData";
 import WhatsAppNav from "../components/WhatsAppNav";
 import WAContactAvatar from "../components/WAContactAvatar";
@@ -80,11 +81,13 @@ function StatCard({ label, value, color, icon: Icon }) {
 
 export default function WhatsAppContacts() {
   const navigate = useNavigate();
+  const { activeTenant, activeBranch, branches, enterpriseHeaders } = useEnterprise();
   const [contacts, setContacts] = useState([]);
   const [stats, setStats] = useState({});
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [selectedBranch, setSelectedBranch] = useState("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -93,7 +96,16 @@ export default function WhatsAppContacts() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
-  const [form, setForm] = useState({ name: "", phone: "", country_code: "91", email: "", tags: "", notes: "", opt_in_status: 1 });
+  const [form, setForm] = useState({
+    name: "",
+    phone: "",
+    country_code: "91",
+    email: "",
+    tags: "",
+    notes: "",
+    opt_in_status: 1,
+    branch_id: activeBranch?.id || 1,
+  });
 
   const [showCsvModal, setShowCsvModal] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
@@ -103,11 +115,14 @@ export default function WhatsAppContacts() {
   const fileInputRef = useRef(null);
 
   const token = () => localStorage.getItem("token");
-  const headers = () => ({ Authorization: `Bearer ${token()}` });
+  const headers = () => ({
+    Authorization: `Bearer ${token()}`,
+    ...(enterpriseHeaders || {}),
+  });
 
   const { demoMode } = useAuth();
 
-  const fetchContacts = useCallback(async (p = page, f = filter, s = search) => {
+  const fetchContacts = useCallback(async (p = page, f = filter, s = search, b = selectedBranch) => {
     setLoading(true);
     if (demoMode) {
       let filtered = [...DEMO_CONTACTS];
@@ -121,7 +136,13 @@ export default function WhatsAppContacts() {
       return;
     }
     try {
-      const params = new URLSearchParams({ page: p, limit: 50, ...(f !== "all" && { filter: f }), ...(s && { search: s }) });
+      const params = new URLSearchParams({
+        page: p,
+        limit: 50,
+        ...(f !== "all" && { filter: f }),
+        ...(s && { search: s }),
+        ...(b !== "all" && { branchId: b }),
+      });
       const { data } = await axios.get(`${API}/api/wa/contacts?${params}`, { headers: headers() });
       setContacts(data.contacts && data.contacts.length ? data.contacts : DEMO_CONTACTS);
       setTotal(data.total || DEMO_CONTACTS.length);
@@ -132,7 +153,7 @@ export default function WhatsAppContacts() {
       setTotalPages(1);
     }
     setLoading(false);
-  }, [demoMode, page, filter, search]);
+  }, [demoMode, page, filter, search, selectedBranch, enterpriseHeaders]);
 
   const fetchStats = useCallback(async () => {
     if (demoMode) {
@@ -148,13 +169,13 @@ export default function WhatsAppContacts() {
   }, [demoMode]);
 
   useEffect(() => {
-    fetchContacts(1, filter, search);
+    fetchContacts(1, filter, search, selectedBranch);
     fetchStats();
-  }, [filter]);
+  }, [filter, selectedBranch]);
 
   useEffect(() => {
     const t = setTimeout(() => {
-      fetchContacts(1, filter, search);
+      fetchContacts(1, filter, search, selectedBranch);
       setPage(1);
     }, 400);
     return () => clearTimeout(t);
@@ -162,7 +183,16 @@ export default function WhatsAppContacts() {
 
   const openCreate = () => {
     setEditContact(null);
-    setForm({ name: "", phone: "", country_code: "91", email: "", tags: "", notes: "", opt_in_status: 1 });
+    setForm({
+      name: "",
+      phone: "",
+      country_code: "91",
+      email: "",
+      tags: "",
+      notes: "",
+      opt_in_status: 1,
+      branch_id: selectedBranch !== "all" ? Number(selectedBranch) : (activeBranch?.id || branches?.[0]?.id || 1),
+    });
     setShowModal(true);
   };
 
@@ -176,6 +206,7 @@ export default function WhatsAppContacts() {
       tags: Array.isArray(c.tags) ? c.tags.join(", ") : (typeof c.tags === "string" ? c.tags : ""),
       notes: c.notes || "",
       opt_in_status: c.opt_in_status ? 1 : 0,
+      branch_id: c.branch_id || activeBranch?.id || branches?.[0]?.id || 1,
     });
     setShowModal(true);
   };
@@ -502,6 +533,35 @@ export default function WhatsAppContacts() {
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto flex-1 sm:flex-none min-w-0">
+          {branches?.length > 0 && (
+            <div className="hl-input flex items-center gap-1.5 shrink-0" style={{ padding: "4px 8px" }}>
+              <GitBranch size={13} style={{ color: "var(--color-ink-2)" }} />
+              <select
+                value={selectedBranch}
+                onChange={(e) => {
+                  setSelectedBranch(e.target.value);
+                  setPage(1);
+                }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  outline: "none",
+                  fontSize: "var(--text-xs)",
+                  color: "var(--color-ink)",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                <option value="all">All Branches ({branches.length})</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="hl-input flex items-center gap-2 flex-1 min-w-0 sm:flex-none" style={{ display: "flex", alignItems: "center" }}>
             <Search size={14} className="shrink-0" />
             <input
@@ -520,7 +580,7 @@ export default function WhatsAppContacts() {
           </div>
 
           <button
-            onClick={() => fetchContacts(page, filter, search)}
+            onClick={() => fetchContacts(page, filter, search, selectedBranch)}
             className="hl-btn-secondary shrink-0"
             title="Refresh list"
           >
@@ -536,6 +596,7 @@ export default function WhatsAppContacts() {
             <thead>
               <tr>
                 <th className="text-left">Contact Profile</th>
+                <th className="text-left">Branch</th>
                 <th className="text-left">Phone Number</th>
                 <th className="text-left">Tags</th>
                 <th className="text-center">Status</th>
@@ -547,13 +608,13 @@ export default function WhatsAppContacts() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center" style={{ padding: "var(--space-xl)" }}>
+                  <td colSpan={8} className="text-center" style={{ padding: "var(--space-xl)" }}>
                     <Loader2 size={32} className="animate-spin mx-auto" style={{ color: "var(--color-ink)" }} />
                   </td>
                 </tr>
               ) : contacts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="hl-empty">
+                  <td colSpan={8} className="hl-empty">
                     <UserCheck size={44} className="mx-auto mb-2" style={{ color: "var(--color-ink-2)" }} />
                     <p className="hl-empty-title">No contacts found matching filter</p>
                     <p className="hl-subtitle">Click "Import from CRM" or "Add Contact" to populate.</p>
@@ -588,6 +649,12 @@ export default function WhatsAppContacts() {
                             {c.email && <p className="hl-id">{c.email}</p>}
                           </div>
                         </div>
+                      </td>
+                      <td>
+                        <span className="hl-badge hl-badge-info inline-flex items-center gap-1 text-[10px] font-mono font-bold">
+                          <Building size={10} />
+                          <span>{c.branch_name || c.branch_code || "Head Office"}</span>
+                        </span>
                       </td>
                       <td>
                         <span className="hl-id">
@@ -790,6 +857,36 @@ export default function WhatsAppContacts() {
                   placeholder="Optional internal remarks..."
                 />
               </div>
+
+              {branches?.length > 0 && (
+                <div>
+                  <label className="hl-section-label block mb-1">Branch Queue Assignment</label>
+                  <div className="hl-input flex items-center gap-2">
+                    <Building size={14} style={{ color: "var(--color-ink-2)" }} />
+                    <select
+                      value={form.branch_id || ""}
+                      onChange={(e) => setForm({ ...form, branch_id: Number(e.target.value) })}
+                      className="flex-1"
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        outline: "none",
+                        fontFamily: "var(--font-body)",
+                        fontSize: "var(--text-sm)",
+                        color: "var(--color-ink)",
+                        padding: 0,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.code}) {b.is_head_office ? "★ Head Office" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               <div className="hl-card flex items-center justify-between" style={{ padding: "var(--space-xs)" }}>
                 <div>

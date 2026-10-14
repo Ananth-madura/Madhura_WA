@@ -58,6 +58,19 @@ export const VARIABLE_GROUPS = [
     ],
   },
   {
+    id: "branch",
+    label: "🏢 Organization & Branch",
+    icon: Briefcase,
+    color: "hl-badge-success",
+    variables: [
+      { tag: "{{branch_name}}", label: "Branch Name", sample: "Bangalore Main Branch" },
+      { tag: "{{branch_code}}", label: "Branch Code", sample: "BLR-01" },
+      { tag: "{{branch_city}}", label: "Branch City", sample: "Bangalore" },
+      { tag: "{{company_name}}", label: "Company / Tenant Name", sample: "Madhura Enterprise" },
+      { tag: "{{branch_phone}}", label: "Branch Contact Phone", sample: "+91 80 4123 4567" },
+    ],
+  },
+  {
     id: "spintax",
     label: "🎲 Anti-Ban Spintax",
     icon: Shuffle,
@@ -110,6 +123,15 @@ export function evaluateMessagePlaceholders(text, overrides = {}) {
     due_date: "2026-08-30",
     agent_name: "Pooja Mehta",
     technician: "Senior Engineer Suresh",
+
+    // Organization & Branch (Multi-Tenant / Multi-Branch)
+    branch_name: "Bangalore Main Branch",
+    branch_code: "BLR-01",
+    branch_city: "Bangalore",
+    branch_phone: "+91 80 4123 4567",
+    branch_address: "Brigade Road, Bangalore",
+    company_name: "Madhura Enterprise",
+    tenant_name: "Madhura Enterprise",
 
     // Time & Date
     greeting_time: greetingTime,

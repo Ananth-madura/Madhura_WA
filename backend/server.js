@@ -315,13 +315,25 @@ app.use((req, res, next) => {
 // the WA frontend can log in against the cloned users table. See README.
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/client-portal", require("./routes/clientPortalRoutes"));
+
+// ── Enterprise Multi-Tenant & Multi-Branch v2 REST APIs ──────────────────────
+app.use("/api/v2", require("./routes/enterpriseBranchRoutes"));
+app.use("/api/v2", require("./routes/enterpriseOrganizationRoutes"));
+app.use("/api/v2/meta", require("./routes/enterpriseMetaRoutes"));
+app.use("/api/v2/billing", require("./routes/enterpriseBillingRoutes"));
+app.use("/api/v2/inbox", require("./routes/enterpriseInboxRoutes"));
+app.use("/webhooks/razorpay", require("./routes/enterpriseBillingRoutes"));
+
 app.use("/api/teammember", require("./middleware/authMiddleware").verifyToken, (req, res) => {
-  const tenantId = req.user?.tenant_id || 1;
+  const tenantId = req.user?.tenant_id;
+  if (!tenantId) {
+    return res.status(403).json({ message: "Tenant context required" });
+  }
   const db = require("./config/database");
   db.query(
     `SELECT id, first_name, last_name, emp_email, mobile, job_title, emp_role, emp_id, user_id, whatsapp_access_level
      FROM teammember
-     WHERE (tenant_id = ? OR tenant_id IS NULL)
+     WHERE tenant_id = ?
      ORDER BY first_name ASC`,
     [tenantId],
     (err, rows) => {

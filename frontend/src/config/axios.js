@@ -14,6 +14,14 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  const tenantId = localStorage.getItem("active_tenant_id");
+  if (tenantId) {
+    config.headers["x-tenant-id"] = tenantId;
+  }
+  const branchId = localStorage.getItem("active_branch_id");
+  if (branchId) {
+    config.headers["x-branch-id"] = branchId;
+  }
   return config;
 });
 
