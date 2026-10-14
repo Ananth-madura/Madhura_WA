@@ -12,21 +12,21 @@
      • related           → up to three siblings from the same section
    --------------------------------------------------------------------------------- */
 
-import { PRODUCT_PAGES } from "./product";
-import { PRODUCT_EXTRA_PAGES } from "./productExtra";
-import { COMPANY_PAGES } from "./company";
-import { COMPANY_EXTRA_PAGES } from "./companyExtra";
-import { LEGAL_PAGES } from "./legal";
-import { DOCS_PAGE } from "./docs";
-import { SOLUTION_PAGES, INDUSTRY_PAGES } from "./solutions";
-import { FEATURE_PAGES } from "./features";
-import { PLATFORM_PAGES } from "./platform";
-import { DEVELOPER_PAGES } from "./developers";
-import { RESOURCE_PAGES } from "./resources";
-import { SUPPORT_PAGES } from "./support";
-import { TRUST_PAGES } from "./trust";
-import { LEGAL_EXTRA_PAGES } from "./legalExtra";
-import { SECTION_INDEX, LEGACY_ALIASES } from "../siteNav";
+import { PRODUCT_PAGES } from "./product.js";
+import { PRODUCT_EXTRA_PAGES } from "./productExtra.js";
+import { COMPANY_PAGES } from "./company.js";
+import { COMPANY_EXTRA_PAGES } from "./companyExtra.js";
+import { LEGAL_PAGES } from "./legal.js";
+import { DOCS_PAGE } from "./docs.js";
+import { SOLUTION_PAGES, INDUSTRY_PAGES } from "./solutions.js";
+import { FEATURE_PAGES } from "./features.js";
+import { PLATFORM_PAGES } from "./platform.js";
+import { DEVELOPER_PAGES } from "./developers.js";
+import { RESOURCE_PAGES } from "./resources.js";
+import { SUPPORT_PAGES } from "./support.js";
+import { TRUST_PAGES } from "./trust.js";
+import { LEGAL_EXTRA_PAGES } from "./legalExtra.js";
+import { SECTION_INDEX, LEGACY_ALIASES } from "../siteNav.js";
 
 const RAW_PAGES = [
   ...PRODUCT_PAGES,
