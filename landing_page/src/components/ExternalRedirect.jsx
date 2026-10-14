@@ -15,7 +15,7 @@ export default function ExternalRedirect({ to = "/login" }) {
   }, [to, location.search, location.hash]);
 
   return (
-    <div className="min-h-screen bg-[#070b16] text-white flex flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="min-h-screen bg-[#050e2f] text-white flex flex-col items-center justify-center gap-4 px-6 text-center">
       <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-cyan-400 animate-pulse" />
       <p className="text-sm text-slate-400">
         Opening the MADHURA workspace…

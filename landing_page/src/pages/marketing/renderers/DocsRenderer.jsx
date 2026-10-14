@@ -46,7 +46,7 @@ function ArticleBody({ article }) {
           <figcaption className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
             {article.code.label}
           </figcaption>
-          <pre className="rounded-xl bg-[#0b1224] text-slate-100 p-4 text-xs leading-relaxed overflow-x-auto">
+          <pre className="rounded-xl bg-[#111e43] text-slate-100 p-4 text-xs leading-relaxed overflow-x-auto">
             <code>{article.code.text}</code>
           </pre>
         </figure>
@@ -265,7 +265,7 @@ export default function DocsRenderer({ page }) {
               type="button"
               disabled={!apiCategory}
               onClick={() => setOpen(`${apiCategory.id}:authentication`)}
-              className="inline-flex items-center gap-2 bg-[#0b1224] text-white font-bold text-sm px-6 py-3 rounded-full transition hover:scale-105 active:scale-95 disabled:opacity-40 disabled:hover:scale-100"
+              className="inline-flex items-center gap-2 bg-[#111e43] text-white font-bold text-sm px-6 py-3 rounded-full transition hover:scale-105 active:scale-95 disabled:opacity-40 disabled:hover:scale-100"
             >
               <Code size={15} />
               API auth

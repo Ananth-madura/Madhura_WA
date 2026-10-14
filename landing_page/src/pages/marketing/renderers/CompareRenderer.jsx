@@ -111,7 +111,7 @@ export default function CompareRenderer({ page }) {
           <div className="overflow-x-auto rounded-3xl border border-slate-200 shadow-sm bg-white">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-[#070b16] text-white">
+                <tr className="bg-[#050e2f] text-white">
                   <th className="p-5 sm:p-6 text-sm font-bold w-2/5">Platform Capability</th>
                   <th className="p-5 sm:p-6 text-sm font-bold text-cyan-400 bg-blue-950/60 border-x border-white/10 w-3/10">
                     <div className="flex items-center gap-1.5">
@@ -227,7 +227,7 @@ export default function CompareRenderer({ page }) {
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-[#070b16] text-white p-5 text-center">
+              <div className="rounded-2xl bg-[#050e2f] text-white p-5 text-center">
                 <div className="text-xs font-bold uppercase tracking-wide text-cyan-400">
                   Projected Annual Savings
                 </div>

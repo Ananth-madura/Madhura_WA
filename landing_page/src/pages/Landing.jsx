@@ -620,11 +620,11 @@ export default function Landing() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#070b16] text-slate-100 font-sans selection:bg-blue-600 selection:text-white">
+    <div className="min-h-screen bg-[#050e2f] text-slate-100 font-sans selection:bg-blue-600 selection:text-white">
       {/* ─────────────────────────────────────────────────────────────────────────
           HEADER / NAVBAR
           ───────────────────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 bg-[#070b16]/90 backdrop-blur-md border-b border-white/[0.08]">
+      <header className="sticky top-0 z-50 bg-[#050e2f]/90 backdrop-blur-md border-b border-white/[0.08]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2.5 group shrink-0" aria-label="MADHURA home">
@@ -678,7 +678,7 @@ export default function Landing() {
         {mobileNavOpen && (
           <div
             id="landing-mobile-nav"
-            className="md:hidden border-t border-white/[0.08] bg-[#070b16] max-h-[calc(100vh-5rem)] overflow-y-auto"
+            className="md:hidden border-t border-white/[0.08] bg-[#050e2f] max-h-[calc(100vh-5rem)] overflow-y-auto"
           >
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-4">
               <ul className="space-y-1">
@@ -788,12 +788,12 @@ export default function Landing() {
             {/* Right Column: Deeply Interactive Real-App Mockup (Persisted in LocalStorage) */}
             <div className="lg:col-span-7 relative">
               {/* WhatsApp Floating Orb */}
-              <div className="absolute -top-5 -left-4 z-20 w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xl shadow-emerald-500/40 ring-4 ring-[#070b16]">
+              <div className="absolute -top-5 -left-4 z-20 w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xl shadow-emerald-500/40 ring-4 ring-[#050e2f]">
                 <MessageCircle size={24} />
               </div>
 
               {/* Main App Window Card */}
-              <div className="relative rounded-2xl bg-[#0c1427] border border-white/[0.14] shadow-2xl shadow-blue-950/70 backdrop-blur-xl overflow-hidden ring-1 ring-white/10">
+              <div className="relative rounded-2xl bg-[#111e43] border border-white/[0.14] shadow-2xl shadow-blue-950/70 backdrop-blur-xl overflow-hidden ring-1 ring-white/10">
                 {/* Window Chrome Header with System Controls */}
                 <div className="px-4 py-2.5 bg-[#080e1c] border-b border-white/[0.08] flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
@@ -828,7 +828,7 @@ export default function Landing() {
                 {/* Internal CRM Dual-Pane Grid */}
                 <div className="grid grid-cols-12 min-h-[430px]">
                   {/* Left Channels List Pane (4 Cols) */}
-                  <div className="col-span-12 sm:col-span-5 bg-[#091022] border-r border-white/[0.08] flex flex-col justify-between">
+                  <div className="col-span-12 sm:col-span-5 bg-[#050e2f] border-r border-white/[0.08] flex flex-col justify-between">
                     <div>
                       {/* Search & Header */}
                       <div className="p-3 border-b border-white/[0.06] space-y-2">
@@ -847,7 +847,7 @@ export default function Landing() {
                             value={heroContactSearch}
                             onChange={(e) => setHeroContactSearch(e.target.value)}
                             placeholder="Filter contacts..."
-                            className="w-full bg-[#131d36] border border-white/10 rounded-lg pl-7 pr-2 py-1 text-[11px] text-white placeholder-white/50 focus:outline-none focus:border-blue-500"
+                            className="w-full bg-[#202c52] border border-white/10 rounded-lg pl-7 pr-2 py-1 text-[11px] text-white placeholder-white/50 focus:outline-none focus:border-blue-500"
                           />
                         </div>
                       </div>
@@ -874,7 +874,7 @@ export default function Landing() {
                                 <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-700 to-indigo-600 text-white font-bold text-xs flex items-center justify-center">
                                   {contact.avatar}
                                 </div>
-                                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-[#091022] ${contact.status === "online" ? "bg-emerald-400" : "bg-amber-400"}`} />
+                                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-[#050e2f] ${contact.status === "online" ? "bg-emerald-400" : "bg-amber-400"}`} />
                               </div>
 
                               <div className="flex-1 min-w-0">
@@ -902,7 +902,7 @@ export default function Landing() {
                   {/* Right Chat Area (7 Cols) */}
                   <div className="col-span-12 sm:col-span-7 flex flex-col justify-between bg-[#0b1429]">
                     {/* Active Chat Header */}
-                    <div className="p-3 bg-[#0a1224] border-b border-white/[0.08] flex items-center justify-between">
+                    <div className="p-3 bg-[#050e2f] border-b border-white/[0.08] flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-full bg-emerald-700/80 text-white font-bold text-xs flex items-center justify-center border border-emerald-500/40">
                           {activeHeroContact.avatar}
@@ -955,7 +955,7 @@ export default function Landing() {
                             className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 shadow-md text-white !text-white ${
                               msg.sender === "outgoing"
                                 ? "bg-emerald-600 text-white !text-white rounded-tr-none shadow-emerald-950/40"
-                                : "bg-[#18233c] text-white !text-white rounded-tl-none border border-white/[0.16]"
+                                : "bg-[#202c52] text-white !text-white rounded-tl-none border border-white/[0.16]"
                             }`}
                             style={{ color: "#ffffff" }}
                           >
@@ -978,7 +978,7 @@ export default function Landing() {
                       {isHeroTyping && (
                         <div className="flex justify-start">
                           <div 
-                            className="bg-[#18233c] text-white !text-white border border-white/[0.16] rounded-2xl rounded-tl-none px-3.5 py-2 text-[11px] flex items-center gap-2"
+                            className="bg-[#202c52] text-white !text-white border border-white/[0.16] rounded-2xl rounded-tl-none px-3.5 py-2 text-[11px] flex items-center gap-2"
                             style={{ color: "#ffffff" }}
                           >
                             <span 
@@ -1001,21 +1001,21 @@ export default function Landing() {
                     <div className="px-3 pt-1 flex items-center gap-1.5 overflow-x-auto text-[10px]">
                       <button
                         onClick={() => handleHeroSendMessage("Can you send me the enterprise pricing breakdown?")}
-                        className="whitespace-nowrap px-2.5 py-1 rounded-full bg-[#131d38] hover:bg-blue-600 text-white !text-white border border-white/20 transition font-medium"
+                        className="whitespace-nowrap px-2.5 py-1 rounded-full bg-[#202c52] hover:bg-blue-600 text-white !text-white border border-white/20 transition font-medium"
                         style={{ color: "#ffffff" }}
                       >
                         💰 Ask Pricing
                       </button>
                       <button
                         onClick={() => handleHeroSendMessage("How do multi-branch access codes work?")}
-                        className="whitespace-nowrap px-2.5 py-1 rounded-full bg-[#131d38] hover:bg-blue-600 text-white !text-white border border-white/20 transition font-medium"
+                        className="whitespace-nowrap px-2.5 py-1 rounded-full bg-[#202c52] hover:bg-blue-600 text-white !text-white border border-white/20 transition font-medium"
                         style={{ color: "#ffffff" }}
                       >
                         🏢 Multi-Branch Access
                       </button>
                       <button
                         onClick={() => handleHeroSendMessage("Can we schedule a 1-on-1 team onboarding?")}
-                        className="whitespace-nowrap px-2.5 py-1 rounded-full bg-[#131d38] hover:bg-blue-600 text-white !text-white border border-white/20 transition font-medium"
+                        className="whitespace-nowrap px-2.5 py-1 rounded-full bg-[#202c52] hover:bg-blue-600 text-white !text-white border border-white/20 transition font-medium"
                         style={{ color: "#ffffff" }}
                       >
                         📅 Book Onboarding
@@ -1028,14 +1028,14 @@ export default function Landing() {
                         e.preventDefault();
                         handleHeroSendMessage();
                       }}
-                      className="p-3 border-t border-white/[0.08] flex items-center gap-2 bg-[#091022]"
+                      className="p-3 border-t border-white/[0.08] flex items-center gap-2 bg-[#050e2f]"
                     >
                       <input
                         type="text"
                         value={heroMessageInput}
                         onChange={(e) => setHeroMessageInput(e.target.value)}
                         placeholder={`Message ${activeHeroContact.name}...`}
-                        className="flex-1 bg-[#131d36] border border-white/[0.12] rounded-xl px-3.5 py-2 text-xs text-white !text-white placeholder-white/60 focus:outline-none focus:border-blue-500"
+                        className="flex-1 bg-[#202c52] border border-white/[0.12] rounded-xl px-3.5 py-2 text-xs text-white !text-white placeholder-white/60 focus:outline-none focus:border-blue-500"
                         style={{ color: "#ffffff" }}
                       />
                       <button
@@ -1056,7 +1056,7 @@ export default function Landing() {
       {/* ─────────────────────────────────────────────────────────────────────────
           SECTION 2: 4 GLOSSY 3D FEATURE BENTO CARDS
           ───────────────────────────────────────────────────────────────────────── */}
-      <section id="features" className="relative pt-16 pb-20 bg-gradient-to-b from-[#070b16] via-[#091530] to-[#f8fafc] text-slate-900">
+      <section id="features" className="relative pt-16 pb-20 bg-gradient-to-b from-[#050e2f] via-[#091530] to-[#f8fafc] text-slate-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Section Header */}
           <div className="text-center max-w-3xl mx-auto space-y-3 mb-12">
@@ -1071,7 +1071,7 @@ export default function Landing() {
           {/* 4 Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Card 1: Live WhatsApp Inbox */}
-            <div className="group relative rounded-2xl bg-gradient-to-b from-[#0e1a38] to-[#070e24] p-7 text-center border border-blue-500/20 hover:border-blue-400/50 shadow-2xl shadow-blue-950/70 hover:-translate-y-1.5 transition-all duration-300">
+            <div className="group relative rounded-2xl bg-gradient-to-b from-[#202c52] to-[#050e2f] p-7 text-center border border-blue-500/20 hover:border-blue-400/50 shadow-2xl shadow-blue-950/70 hover:-translate-y-1.5 transition-all duration-300">
               <div className="flex justify-center mb-5">
                 <Icon3DInbox className="w-24 h-24 transform group-hover:scale-110 transition duration-300" />
               </div>
@@ -1082,7 +1082,7 @@ export default function Landing() {
             </div>
 
             {/* Card 2: Campaigns */}
-            <div className="group relative rounded-2xl bg-gradient-to-b from-[#0e1a38] to-[#070e24] p-7 text-center border border-blue-500/20 hover:border-blue-400/50 shadow-2xl shadow-blue-950/70 hover:-translate-y-1.5 transition-all duration-300">
+            <div className="group relative rounded-2xl bg-gradient-to-b from-[#202c52] to-[#050e2f] p-7 text-center border border-blue-500/20 hover:border-blue-400/50 shadow-2xl shadow-blue-950/70 hover:-translate-y-1.5 transition-all duration-300">
               <div className="flex justify-center mb-5">
                 <Icon3DCampaigns className="w-24 h-24 transform group-hover:scale-110 transition duration-300" />
               </div>
@@ -1093,7 +1093,7 @@ export default function Landing() {
             </div>
 
             {/* Card 3: Automation */}
-            <div className="group relative rounded-2xl bg-gradient-to-b from-[#0e1a38] to-[#070e24] p-7 text-center border border-blue-500/20 hover:border-blue-400/50 shadow-2xl shadow-blue-950/70 hover:-translate-y-1.5 transition-all duration-300">
+            <div className="group relative rounded-2xl bg-gradient-to-b from-[#202c52] to-[#050e2f] p-7 text-center border border-blue-500/20 hover:border-blue-400/50 shadow-2xl shadow-blue-950/70 hover:-translate-y-1.5 transition-all duration-300">
               <div className="flex justify-center mb-5">
                 <Icon3DAutomation className="w-24 h-24 transform group-hover:scale-110 transition duration-300" />
               </div>
@@ -1104,7 +1104,7 @@ export default function Landing() {
             </div>
 
             {/* Card 4: Analytics */}
-            <div className="group relative rounded-2xl bg-gradient-to-b from-[#0e1a38] to-[#070e24] p-7 text-center border border-blue-500/20 hover:border-blue-400/50 shadow-2xl shadow-blue-950/70 hover:-translate-y-1.5 transition-all duration-300">
+            <div className="group relative rounded-2xl bg-gradient-to-b from-[#202c52] to-[#050e2f] p-7 text-center border border-blue-500/20 hover:border-blue-400/50 shadow-2xl shadow-blue-950/70 hover:-translate-y-1.5 transition-all duration-300">
               <div className="flex justify-center mb-5">
                 <Icon3DAnalytics className="w-24 h-24 transform group-hover:scale-110 transition duration-300" />
               </div>
@@ -1632,7 +1632,7 @@ export default function Landing() {
             <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
               {/* Flowchart Nodes */}
               <div className="md:col-span-6 space-y-4">
-                <div className="rounded-xl bg-[#0e172c] border border-blue-500/30 p-3.5 shadow-lg shadow-blue-950/50">
+                <div className="rounded-xl bg-[#111e43] border border-blue-500/30 p-3.5 shadow-lg shadow-blue-950/50">
                   <div className="flex items-center gap-2 text-[10px] font-bold text-blue-400 uppercase tracking-wider">
                     <Radio size={12} className="text-emerald-400 animate-pulse" />
                     <span>Trigger Event</span>
@@ -1645,7 +1645,7 @@ export default function Landing() {
                   <div className="w-0.5 h-6 bg-gradient-to-b from-blue-500 to-cyan-400" />
                 </div>
 
-                <div className="rounded-xl bg-[#0e172c] border border-cyan-500/30 p-3.5 shadow-lg shadow-blue-950/50">
+                <div className="rounded-xl bg-[#111e43] border border-cyan-500/30 p-3.5 shadow-lg shadow-blue-950/50">
                   <div className="flex items-center gap-2 text-[10px] font-bold text-cyan-400 uppercase tracking-wider">
                     <Sliders size={12} />
                     <span>Customer Segmentation</span>
@@ -1879,7 +1879,7 @@ export default function Landing() {
       {/* ─────────────────────────────────────────────────────────────────────────
           SECTION 6: PRE-FOOTER CONVERSION SECTION
           ───────────────────────────────────────────────────────────────────────── */}
-      <section className="py-20 bg-gradient-to-b from-[#070b16] via-[#091530] to-[#0a1224] text-white border-t border-white/[0.08] relative overflow-hidden">
+      <section className="py-20 bg-gradient-to-b from-[#050e2f] via-[#091530] to-[#050e2f] text-white border-t border-white/[0.08] relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-600/15 via-transparent to-transparent pointer-events-none" />
         
         <div className="max-w-5xl mx-auto px-4 text-center space-y-6 relative z-10">
@@ -2049,7 +2049,7 @@ export default function Landing() {
           ───────────────────────────────────────────────────────────────────────── */}
       {showDemoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg rounded-2xl bg-[#0c1427] border border-white/15 p-6 sm:p-8 text-white shadow-2xl relative">
+          <div className="w-full max-w-lg rounded-2xl bg-[#111e43] border border-white/15 p-6 sm:p-8 text-white shadow-2xl relative">
             <button
               onClick={() => {
                 setShowDemoModal(false);
@@ -2095,7 +2095,7 @@ export default function Landing() {
                       value={demoForm.name}
                       onChange={(e) => setDemoForm({ ...demoForm, name: e.target.value })}
                       placeholder="e.g. Vikramaditya Sharma"
-                      className="w-full bg-[#131d38] border border-white/15 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      className="w-full bg-[#202c52] border border-white/15 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                     />
                   </div>
 
@@ -2108,7 +2108,7 @@ export default function Landing() {
                         value={demoForm.email}
                         onChange={(e) => setDemoForm({ ...demoForm, email: e.target.value })}
                         placeholder="name@company.com"
-                        className="w-full bg-[#131d38] border border-white/15 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                        className="w-full bg-[#202c52] border border-white/15 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                       />
                     </div>
                     <div>
@@ -2119,7 +2119,7 @@ export default function Landing() {
                         value={demoForm.phone}
                         onChange={(e) => setDemoForm({ ...demoForm, phone: e.target.value })}
                         placeholder="+91 98765 43210"
-                        className="w-full bg-[#131d38] border border-white/15 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                        className="w-full bg-[#202c52] border border-white/15 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                       />
                     </div>
                   </div>
@@ -2132,7 +2132,7 @@ export default function Landing() {
                         value={demoForm.company}
                         onChange={(e) => setDemoForm({ ...demoForm, company: e.target.value })}
                         placeholder="e.g. Acme Enterprises"
-                        className="w-full bg-[#131d38] border border-white/15 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                        className="w-full bg-[#202c52] border border-white/15 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                       />
                     </div>
                     <div>
@@ -2140,7 +2140,7 @@ export default function Landing() {
                       <select
                         value={demoForm.teamSize}
                         onChange={(e) => setDemoForm({ ...demoForm, teamSize: e.target.value })}
-                        className="w-full bg-[#131d38] border border-white/15 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                        className="w-full bg-[#202c52] border border-white/15 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500"
                       >
                         <option value="1-10">1-10 team members</option>
                         <option value="11-50">11-50 team members</option>

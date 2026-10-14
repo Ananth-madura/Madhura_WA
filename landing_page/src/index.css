@@ -3,7 +3,111 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Brand core (HSL) */
+    --brand-navy: 226 44% 22%;      /* #202C52 */
+    --brand-deep: 228 81% 10%;      /* #050E2F */
+    --brand-mid: 225 60% 17%;       /* #111E43 */
+    --brand-gold: 44 97% 54%;       /* #FCBD16 */
+    --brand-gold-soft: 46 100% 87%; /* #FFF0BF */
+    --bg-soft: 0 0% 96%;            /* #F5F5F5 */
+    --ink: 220 50% 19%;             /* #182747 */
+    --body-muted: 218 10% 39%;      /* #59616F */
+    --border-soft: 218 30% 93%;     /* #E6EAF1 */
+
+    /* Gold scale (replaces legacy blue accents) */
+    --gold-50: 46 100% 96%;
+    --gold-100: 46 100% 90%;
+    --gold-200: 45 98% 80%;
+    --gold-300: 44 97% 68%;
+    --gold-400: 44 97% 58%;
+    --gold-500: 44 97% 54%;
+    --gold-600: 42 95% 50%;
+    --gold-700: 38 90% 42%;
+    --gold-800: 34 80% 34%;
+    --gold-900: 30 70% 26%;
+    --gold-950: 28 70% 14%;
+
+    /* Navy-tinted neutral scale (replaces slate) */
+    --navy-50: 220 33% 98%;
+    --navy-100: 218 30% 95%;
+    --navy-200: 218 30% 90%;
+    --navy-300: 220 24% 80%;
+    --navy-400: 222 18% 62%;
+    --navy-500: 218 10% 45%;
+    --navy-600: 218 12% 36%;
+    --navy-700: 222 28% 28%;
+    --navy-800: 225 40% 20%;
+    --navy-900: 220 50% 15%;
+    --navy-950: 228 70% 9%;
+
+    --shadow-card: 0 6px 22px hsl(222 72% 13% / 0.09);
+    --shadow-card-hover: 0 14px 32px hsl(222 72% 13% / 0.15);
+    --gradient-navy: linear-gradient(115deg, hsl(var(--brand-navy)) 0%, hsl(var(--brand-mid)) 54%, hsl(var(--brand-deep)) 100%);
+  }
+
+  html { scroll-behavior: smooth; }
+
   body {
-    font-family: 'Inter', 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Poppins', 'Outfit', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background-image: var(--gradient-navy);
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4 {
+    letter-spacing: -0.025em;
+  }
+
+  h1 {
+    font-family: 'Outfit', 'Poppins', sans-serif;
+    letter-spacing: -0.035em;
+  }
+
+  /* Gold surfaces always carry navy ink, never white */
+  .bg-blue-400, .bg-blue-500, .bg-blue-600, .bg-blue-700,
+  .bg-cyan-400, .bg-cyan-500, .bg-indigo-600, .bg-brand-gold {
+    color: hsl(var(--brand-mid));
+  }
+  :is(.bg-blue-400, .bg-blue-500, .bg-blue-600, .bg-blue-700, .bg-cyan-500, .bg-indigo-600, .bg-brand-gold)
+    :is(.text-white, svg),
+  :is(.bg-blue-400, .bg-blue-500, .bg-blue-600, .bg-blue-700, .bg-cyan-500, .bg-indigo-600, .bg-brand-gold).text-white {
+    color: hsl(var(--brand-mid));
+  }
+
+  /* Capsule CTAs: anything gold-filled that behaves like a button */
+  a:is(.bg-blue-500, .bg-blue-600, .bg-blue-700),
+  button:is(.bg-blue-500, .bg-blue-600, .bg-blue-700) {
+    border-radius: 9999px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    box-shadow: 0 8px 20px hsl(var(--brand-gold) / 0.25);
+    transition: transform .2s ease, box-shadow .2s ease, background-color .2s ease;
+  }
+  a:is(.bg-blue-500, .bg-blue-600, .bg-blue-700):hover,
+  button:is(.bg-blue-500, .bg-blue-600, .bg-blue-700):hover {
+    transform: translateY(-2px);
+    background-color: hsl(var(--gold-400));
+    box-shadow: 0 12px 26px hsl(var(--brand-gold) / 0.35);
+  }
+
+  ::selection {
+    background: hsl(var(--brand-gold));
+    color: hsl(var(--brand-mid));
+  }
+}
+
+@layer components {
+  .gradient-navy { background-image: var(--gradient-navy); }
+  .section-gold { background-color: hsl(var(--brand-gold)); color: hsl(var(--brand-mid)); }
+  .section-soft { background-color: hsl(var(--bg-soft)); }
+  .card-brand {
+    @apply rounded-card border border-brand-line bg-white shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-hover;
+  }
+  .btn-gold {
+    @apply inline-flex items-center gap-2 rounded-full bg-brand-gold px-6 py-3 text-sm font-semibold text-brand-mid transition hover:-translate-y-0.5;
+  }
+  .btn-navy {
+    @apply inline-flex items-center gap-2 rounded-full bg-brand-navy px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5;
   }
 }

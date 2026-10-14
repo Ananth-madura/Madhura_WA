@@ -87,7 +87,7 @@ export function FaqList({ faq }) {
 export function CtaBanner({ cta }) {
   if (!cta) return null;
   return (
-    <section className="py-20 bg-[#070b16] text-white border-t border-white/[0.08]">
+    <section className="py-20 bg-[#050e2f] text-white border-t border-white/[0.08]">
       <div className="max-w-4xl mx-auto px-4 text-center space-y-6">
         <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-white leading-tight">
           {cta.title}

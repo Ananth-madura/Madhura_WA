@@ -123,7 +123,7 @@ export default function BlogRenderer({ page }) {
         {/* Featured Flagship Article (if not searching) */}
         {!query && selectedCategory === "all" && featured && (
           <div className="mt-14 max-w-5xl mx-auto">
-            <div className="relative rounded-3xl bg-[#070b16] text-white p-8 sm:p-12 border border-white/10 shadow-2xl overflow-hidden">
+            <div className="relative rounded-3xl bg-[#050e2f] text-white p-8 sm:p-12 border border-white/10 shadow-2xl overflow-hidden">
               <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 rounded-full bg-blue-600/20 blur-3xl pointer-events-none" />
 
               <div className="relative z-10 grid lg:grid-cols-12 gap-8 items-center">
@@ -237,7 +237,7 @@ export default function BlogRenderer({ page }) {
 
       {/* Newsletter Subscription Banner */}
       <Section className="bg-slate-50 border-y border-slate-200">
-        <div className="max-w-3xl mx-auto text-center rounded-3xl bg-[#0b1224] text-white p-8 sm:p-12 border border-white/10 shadow-xl">
+        <div className="max-w-3xl mx-auto text-center rounded-3xl bg-[#111e43] text-white p-8 sm:p-12 border border-white/10 shadow-xl">
           <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 bg-cyan-950/70 border border-cyan-500/30 px-3 py-1 rounded-full">
             Bi-Weekly Engineering Briefing
           </span>

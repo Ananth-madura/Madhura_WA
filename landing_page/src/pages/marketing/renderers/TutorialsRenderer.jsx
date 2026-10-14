@@ -312,7 +312,7 @@ export default function TutorialsRenderer({ page }) {
                     {/* Step Code Block if any */}
                     {step.code && (
                       <div className="mt-3">
-                        <div className="flex items-center justify-between bg-[#070b16] text-slate-300 px-4 py-2 rounded-t-xl text-xs font-mono">
+                        <div className="flex items-center justify-between bg-[#050e2f] text-slate-300 px-4 py-2 rounded-t-xl text-xs font-mono">
                           <span>{step.code.label || "Code snippet"}</span>
                           <button
                             type="button"
@@ -330,7 +330,7 @@ export default function TutorialsRenderer({ page }) {
                             )}
                           </button>
                         </div>
-                        <pre className="bg-[#0b1224] text-slate-100 p-4 rounded-b-xl text-xs overflow-x-auto font-mono leading-relaxed">
+                        <pre className="bg-[#111e43] text-slate-100 p-4 rounded-b-xl text-xs overflow-x-auto font-mono leading-relaxed">
                           <code>{step.code.snippet}</code>
                         </pre>
                       </div>

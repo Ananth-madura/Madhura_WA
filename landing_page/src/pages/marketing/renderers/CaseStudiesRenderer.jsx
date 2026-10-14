@@ -215,7 +215,7 @@ export default function CaseStudiesRenderer({ page }) {
 
               {/* Executive Testimonial Quote */}
               {activeStory.quote && (
-                <div className="rounded-2xl bg-[#070b16] text-white p-6 sm:p-8 relative">
+                <div className="rounded-2xl bg-[#050e2f] text-white p-6 sm:p-8 relative">
                   <Quote size={32} className="text-blue-500/30 mb-2" />
                   <p className="text-sm sm:text-base text-slate-200 italic leading-relaxed">
                     “{activeStory.quote.text}”

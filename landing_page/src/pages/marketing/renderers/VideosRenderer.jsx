@@ -129,7 +129,7 @@ export default function VideosRenderer({ page }) {
                 className="cursor-pointer group flex flex-col justify-between rounded-3xl border border-slate-200 bg-white overflow-hidden shadow-xs hover:border-blue-400 hover:shadow-card transition-all"
               >
                 {/* Simulated Thumbnail */}
-                <div className="relative aspect-video bg-gradient-to-tr from-[#070b16] via-[#0b1224] to-[#1e293b] p-6 flex flex-col justify-between overflow-hidden">
+                <div className="relative aspect-video bg-gradient-to-tr from-[#050e2f] via-[#111e43] to-[#1e293b] p-6 flex flex-col justify-between overflow-hidden">
                   <div className="flex items-center justify-between z-10">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 bg-cyan-950/80 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
                       {vid.track}
@@ -197,9 +197,9 @@ export default function VideosRenderer({ page }) {
       {/* Interactive Video Player Modal */}
       {activeVideo && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-fade-in">
-          <div className="relative w-full max-w-5xl rounded-3xl bg-[#0b1224] text-white shadow-2xl border border-white/10 overflow-hidden max-h-[95vh] flex flex-col">
+          <div className="relative w-full max-w-5xl rounded-3xl bg-[#111e43] text-white shadow-2xl border border-white/10 overflow-hidden max-h-[95vh] flex flex-col">
             {/* Top Bar */}
-            <div className="bg-[#070b16] px-6 py-4 flex items-center justify-between border-b border-white/10">
+            <div className="bg-[#050e2f] px-6 py-4 flex items-center justify-between border-b border-white/10">
               <div className="flex items-center gap-3">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 bg-cyan-950/80 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
                   {activeVideo.track}
@@ -267,7 +267,7 @@ export default function VideosRenderer({ page }) {
             </div>
 
             {/* Video Metadata & Tabs */}
-            <div className="p-6 overflow-y-auto flex-1 bg-[#0b1224]">
+            <div className="p-6 overflow-y-auto flex-1 bg-[#111e43]">
               {/* Tab navigation */}
               <div className="flex items-center gap-4 border-b border-white/10 pb-3 text-xs font-bold">
                 <button

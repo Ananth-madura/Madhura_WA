@@ -101,7 +101,7 @@ function CookiePreferences({ onClose }) {
         role="dialog"
         aria-modal="true"
         aria-label="Cookie preferences"
-        className="w-full max-w-lg rounded-2xl bg-[#0b1224] border border-white/10 p-6 shadow-2xl"
+        className="w-full max-w-lg rounded-2xl bg-[#111e43] border border-white/10 p-6 shadow-2xl"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -187,7 +187,7 @@ export default function SiteFooter() {
       <footer className="bg-[#060a14] text-slate-400 border-t border-white/[0.08] pt-14 pb-10 text-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           {/* ── Operational transparency ─────────────────────────────────── */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-[#0b1224] border border-white/[0.08] flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#111e43] border border-white/[0.08] flex flex-col md:flex-row items-center justify-between gap-4">
             <Link to="/status" className="flex items-center gap-3 group">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
               <span className="flex items-center gap-2 text-white font-semibold text-xs sm:text-sm group-hover:text-blue-300 transition">
@@ -291,7 +291,7 @@ export default function SiteFooter() {
             </div>
 
             <div className="flex md:justify-end items-start gap-3">
-              <span className="inline-flex items-center gap-2 bg-[#0b1224] border border-white/10 px-3 py-1.5 rounded-lg text-white text-[11px]">
+              <span className="inline-flex items-center gap-2 bg-[#111e43] border border-white/10 px-3 py-1.5 rounded-lg text-white text-[11px]">
                 <Globe size={13} className="text-blue-400" />
                 <span>{COMPANY.region}</span>
               </span>

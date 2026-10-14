@@ -8,14 +8,14 @@ import { HEADER_NAV } from "./siteNav";
 /* ─────────────────────────────────────────────────────────────────────────────
    Shared chrome for every public marketing URL: sticky header with a
    keyboard-accessible mega menu, a mobile drawer, and the site footer.
-   Styled to continue the Landing page — dark `#070b16` bar over a light canvas.
+   Styled to continue the Landing page — dark `#050e2f` bar over a light canvas.
    ───────────────────────────────────────────────────────────────────────────── */
 
 function BrandMark() {
   return (
     <Link to="/" className="flex items-center gap-2.5 group shrink-0" aria-label="Madhura home">
       <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-cyan-400 p-0.5 shadow-lg shadow-blue-500/25">
-        <div className="w-full h-full bg-[#070b16] rounded-[10px] flex items-center justify-center">
+        <div className="w-full h-full bg-[#050e2f] rounded-[10px] flex items-center justify-center">
           <span className="font-black text-xl bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
             M
           </span>
@@ -69,7 +69,7 @@ function DesktopMenu({ item, open, onToggle, onClose }) {
 
       {open && (
         <div className="absolute left-1/2 -translate-x-1/2 top-full pt-4 z-50">
-          <div className="w-[26rem] rounded-2xl bg-[#0b1224] border border-white/10 shadow-2xl shadow-black/50 p-2 animate-scale-in">
+          <div className="w-[26rem] rounded-2xl bg-[#111e43] border border-white/10 shadow-2xl shadow-black/50 p-2 animate-scale-in">
             {item.children.map((child) => (
               <Link
                 key={child.path}
@@ -143,7 +143,7 @@ export default function MarketingLayout({ children, page }) {
         Skip to content
       </a>
 
-      <header className="sticky top-0 z-50 bg-[#070b16]/90 backdrop-blur-md border-b border-white/[0.08]">
+      <header className="sticky top-0 z-50 bg-[#050e2f]/90 backdrop-blur-md border-b border-white/[0.08]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-6">
           <BrandMark />
 
@@ -215,7 +215,7 @@ export default function MarketingLayout({ children, page }) {
         {drawerOpen && (
           <div
             id="mobile-nav"
-            className="xl:hidden border-t border-white/[0.08] bg-[#070b16] max-h-[calc(100vh-5rem)] overflow-y-auto"
+            className="xl:hidden border-t border-white/[0.08] bg-[#050e2f] max-h-[calc(100vh-5rem)] overflow-y-auto"
           >
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-5">
               {HEADER_NAV.map((item) =>
@@ -278,7 +278,7 @@ export default function MarketingLayout({ children, page }) {
 
       <main id="main-content">
         {page?.hero ? (
-          <section className="bg-[#070b16] text-white border-b border-white/[0.08]">
+          <section className="bg-[#050e2f] text-white border-b border-white/[0.08]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14 pb-16">
               <Breadcrumbs page={page} />
               <div className="grid lg:grid-cols-12 gap-10 items-end">
@@ -321,7 +321,7 @@ export default function MarketingLayout({ children, page }) {
             </div>
           </section>
         ) : (
-          <section className="bg-[#070b16] text-white border-b border-white/[0.08]">
+          <section className="bg-[#050e2f] text-white border-b border-white/[0.08]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-10">
               <Breadcrumbs page={page} />
             </div>
