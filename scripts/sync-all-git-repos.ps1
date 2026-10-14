@@ -30,6 +30,12 @@ foreach ($name in $RequiredRemotes.Keys) {
     }
 }
 
+function Remove-GitBranchSafe($branch) {
+    if ((git branch --list $branch).Trim()) {
+        git branch -D $branch 2>$null | Out-Null
+    }
+}
+
 # 1. PUSH MONOREPO
 Write-Host "`n[1/4] Pushing to Monorepo (Ananth-madura/Madhura_WA)..." -ForegroundColor Cyan
 git push monorepo "${CurrentBranch}:main"
@@ -38,29 +44,21 @@ Write-Host "[OK] Monorepo synced." -ForegroundColor Green
 
 # 2. PUSH LANDING PAGE
 Write-Host "`n[2/4] Splitting and pushing landing_page to Ananth-madura/whatsapp_landing..." -ForegroundColor Cyan
-git branch -D split-landing 2>$null
+Remove-GitBranchSafe "split-landing"
 git subtree split --prefix=landing_page -b split-landing
-if ($Force) {
-    git push landing-repo split-landing:main --force
-} else {
-    git push landing-repo split-landing:main --force-with-lease 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Re-trying landing push with --force..." -ForegroundColor Yellow
-        git push landing-repo split-landing:main --force
-    }
-}
+git push landing-repo split-landing:main --force
 Write-Host "[OK] Landing Page synced." -ForegroundColor Green
 
 # 3. PUSH FRONTEND
 Write-Host "`n[3/4] Splitting and pushing frontend to madhuratech/Madhura-wa-frontend..." -ForegroundColor Cyan
-git branch -D split-frontend 2>$null
+Remove-GitBranchSafe "split-frontend"
 git subtree split --prefix=frontend -b split-frontend
 git push frontend-repo split-frontend:main --force
 Write-Host "[OK] Frontend synced." -ForegroundColor Green
 
 # 4. PUSH BACKEND
 Write-Host "`n[4/4] Splitting and pushing backend to madhuratech/Madhura-wa-backend..." -ForegroundColor Cyan
-git branch -D split-backend 2>$null
+Remove-GitBranchSafe "split-backend"
 git subtree split --prefix=backend -b split-backend
 git push backend-repo split-backend:main --force
 Write-Host "[OK] Backend synced." -ForegroundColor Green
