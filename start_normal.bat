@@ -100,8 +100,15 @@ for /f "tokens=2 delims=:" %%i in ('ipconfig ^| findstr /R /C:"IPv4 Address" ^| 
 (
 echo PORT=3001
 echo REACT_APP_API_URL=http://!LAN_IP!:5001
+echo REACT_APP_MARKETING_URL=http://!LAN_IP!:3002
 ) > "%ROOT%\frontend\.env"
-echo [OK]   Frontend .env set to port 3001 and backend http://!LAN_IP!:5001.
+echo [OK]   Frontend .env set to port 3001, backend http://!LAN_IP!:5001, marketing http://!LAN_IP!:3002.
+
+(
+echo VITE_APP_URL=http://!LAN_IP!:3001
+echo VITE_API_URL=http://!LAN_IP!:5001
+) > "%ROOT%\landing_page\.env"
+echo [OK]   Landing page .env set to app http://!LAN_IP!:3001.
 echo.
 
 :: ---- Step 4: Check and Install Dependencies ----
@@ -142,9 +149,18 @@ if not exist "%ROOT%\frontend\node_modules" (
 ) else (
     echo [OK]   Frontend dependencies found.
 )
+
+if not exist "%ROOT%\landing_page\node_modules" (
+    echo [INFO] Installing landing page dependencies - please wait...
+    cd /d "%ROOT%\landing_page"
+    call npm install
+    echo [OK]   Landing page dependencies installed.
+) else (
+    echo [OK]   Landing page dependencies found.
+)
 echo.
 
-:: ---- Step 5: Free Ports 5001 and 3001 ----
+:: ---- Step 5: Free Ports 5001, 3001 and 3002 ----
 echo [5/7] Checking and preparing network ports...
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":5001 .*LISTENING"') do (
     echo [INFO] Releasing busy port 5001 PID %%P...
@@ -154,7 +170,11 @@ for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":3001 .*LISTENING"') d
     echo [INFO] Releasing busy port 3001 PID %%P...
     taskkill /F /PID %%P >nul 2>&1
 )
-echo [OK]   Ports 5001 and 3001 are ready.
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":3002 .*LISTENING"') do (
+    echo [INFO] Releasing busy port 3002 PID %%P...
+    taskkill /F /PID %%P >nul 2>&1
+)
+echo [OK]   Ports 5001, 3001 and 3002 are ready.
 echo.
 
 :: ---- Step 6: Optional services note ----
@@ -177,6 +197,11 @@ ping -n 3 127.0.0.1 >nul
 
 echo Starting FRONTEND on port 3001...
 start "Whatsapp_CRM Frontend" /D "%ROOT%\frontend" cmd /k "title Whatsapp_CRM Frontend (port 3001) & color 0B & echo [Frontend] Starting... & npm start & echo. & echo [Frontend] Process exited. Press any key to restart... & pause >nul & npm start"
+
+ping -n 2 127.0.0.1 >nul
+
+echo Starting LANDING PAGE on port 3002...
+start "Whatsapp_CRM Landing Page" /D "%ROOT%\landing_page" cmd /k "title Whatsapp_CRM Landing Page (port 3002) & color 0E & echo [Landing Page] Starting... & npm run dev & echo. & echo [Landing Page] Process exited. Press any key to restart... & pause >nul & npm run dev"
 
 echo.
 echo Waiting for backend to become healthy [up to ~90s, first boot seeds the DB]...
@@ -203,8 +228,10 @@ echo   Backend API    : http://localhost:5001
 echo   Backend health : http://localhost:5001/health
 echo.
 echo   Local UI       : http://localhost:3001
+echo   Landing Page   : http://localhost:3002
 if not "%LAN_IP%"=="127.0.0.1" (
     echo   LAN Network UI : http://%LAN_IP%:3001
+    echo   LAN Landing    : http://%LAN_IP%:3002
 )
 echo.
 echo   Login: admin@madhuratech.com  /  admin@123
