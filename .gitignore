@@ -17,6 +17,10 @@ build/
 npm-debug.log*
 whatsapp-sessions/
 logs
+.kiro
+.claude
+.agents
+.ag-kit-backups
 
 # ⚠️ backend/patches/ is deliberately NOT ignored.
 # backend/package.json runs `patch-package` on postinstall, and
