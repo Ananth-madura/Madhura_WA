@@ -31,8 +31,9 @@ foreach ($name in $RequiredRemotes.Keys) {
 }
 
 function Remove-GitBranchSafe($branch) {
-    if ((git branch --list $branch).Trim()) {
-        git branch -D $branch 2>$null | Out-Null
+    $existing = git branch --list $branch
+    if ($existing) {
+        git branch -D $branch 2>&1 | Out-Null
     }
 }
 
