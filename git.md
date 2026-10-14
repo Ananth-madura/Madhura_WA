@@ -106,6 +106,35 @@ git subtree push --prefix=backend backend-repo main
 
 ---
 
+### C. Pulling Updates from Sub-Repositories (e.g. Landing Page)
+
+Because `landing_page/` is a subfolder inside this monorepo rather than an independent `.git` checkout, running a raw `git pull` inside `landing_page` operates on the monorepo root. 
+
+When changes are committed directly to `https://github.com/Ananth-madura/whatsapp_landing.git` (e.g. via GitHub or Lovable/GPT-Engineer), pull them into `landing_page/` using:
+
+```powershell
+# 1. Fetch latest changes from whatsapp_landing
+git fetch landing-repo main
+
+# 2. Extract into landing_page/ directory
+git archive --output=landing.tar landing-repo/main
+tar -xf landing.tar -C landing_page
+Remove-Item landing.tar -Force
+
+# 3. Commit and push back to monorepo
+git add landing_page/
+git commit -m "sync(landing): pull latest changes from whatsapp_landing"
+git push monorepo feature/enterprise-multi-tenant-multi-branch:main
+```
+
+Or run the dedicated pull helper:
+```powershell
+.\scripts\pull-landing-repo.ps1
+```
+
+
+---
+
 ## 4. One-Click Automated Push Script
 
 To synchronize all 4 repositories in a single command, you can run the automated PowerShell script located at:
