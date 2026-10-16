@@ -67,7 +67,6 @@ import { API, LIVE_BACKEND_URL } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
 import { useEnterprise } from "../context/EnterpriseContext";
 import { DEMO_STATUS, DEMO_CHATS, DEMO_MESSAGES_MAP } from "../auth/demoData";
-import WhatsAppNav from "../components/WhatsAppNav";
 import socket from "../socket/socket";
 import RichMessageContent from "../components/RichMessageContent";
 import { readLocalMessages, writeLocalMessages, mergeLocalMessages, readLocalMedia, writeLocalMedia, localMediaUrl, localCacheOwner, mediaFromFile } from "../utils/waLocalCache";
@@ -77,6 +76,7 @@ import { getInteractiveMessage } from "../utils/waInteractiveMessage";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 import WAConfigPrompt from "../components/WAConfigPrompt";
 import WAContactAvatar from "../components/WAContactAvatar";
+import "./whatsapp-inbox.css";
 
 function formatChatTime(timestamp) {
   if (!timestamp) return "";
@@ -185,6 +185,10 @@ const DEFAULT_SPEED_REPLIES = [
   },
 ];
 
+// How many items can be pinned in the Quick speed bar at once.
+const SPEED_PIN_LIMIT = 7;
+const SPEED_PIN_KEY = "wa_speed_pinned";
+
 function sameDay(a, b) {
   if (!a || !b) return false;
   return new Date(a * 1000).toDateString() === new Date(b * 1000).toDateString();
@@ -257,11 +261,6 @@ function TypingIndicator() {
     </div>
   );
 }
-
-// WhatsApp's tiled doodle wallpaper, inlined as an SVG data URI so it needs no
-// asset request and survives any CSP.
-const CHAT_WALLPAPER =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='0.035' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M22 34c6-8 16-8 22 0M30 52v14M18 60h24'/%3E%3Ccircle cx='96' cy='30' r='9'/%3E%3Cpath d='M92 30l3 3 6-7'/%3E%3Cpath d='M150 22h26v18h-9l-5 6-4-6h-8z'/%3E%3Cpath d='M214 26c5 0 9 4 9 9s-4 9-9 9h-3l-5 5v-5c-4-1-7-4-7-9 0-5 4-9 9-9z'/%3E%3Cpath d='M34 108c0-7 5-12 12-12s12 5 12 12-5 12-12 12h-4l-6 5v-6c-1-2-2-6-2-11z'/%3E%3Cpath d='M104 100l8 14h-16z'/%3E%3Ccircle cx='170' cy='108' r='10'/%3E%3Cpath d='M166 108h8M170 104v8'/%3E%3Cpath d='M212 98h20v16h-20zM216 98v-4h12v4'/%3E%3Cpath d='M24 178c4-6 12-6 16 0M32 190v10'/%3E%3Cpath d='M84 172h22l-4 20H88z'/%3E%3Cpath d='M150 176c6-4 14 0 14 7 0 6-6 9-10 13l-4 4-4-4c-4-4-10-7-10-13 0-7 8-11 14-7z'/%3E%3Ccircle cx='218' cy='184' r='11'/%3E%3Cpath d='M213 184l4 4 7-8'/%3E%3Cpath d='M60 232h18v14H60zM64 232v-4h10v4'/%3E%3Cpath d='M126 236l7 12h-14z'/%3E%3Cpath d='M186 228c5-3 12 0 12 6 0 5-5 8-8 11l-4 3-3-3c-3-3-8-6-8-11 0-6 6-9 11-6z'/%3E%3C/g%3E%3C/svg%3E\")";
 
 // Mirrors the backend's describeLastMessage() — a live-pushed media/location
 // message has no body text, so give the sidebar preview a label instead of
@@ -617,11 +616,6 @@ export default function WhatsAppPage() {
       return null;
     }
   });
-  // Bot pause state for the open chat. The bot mutes itself for 24h whenever an
-  // agent replies by hand, so the operator needs to see that and be able to
-  // hand the conversation back.
-  const [botStatus, setBotStatus] = useState(null);
-  const [botResuming, setBotResuming] = useState(false);
   const [messages, setMessages] = useState(() => {
     try {
       const savedChat = waUiStorage.getItem("wa_active_chat");
@@ -731,6 +725,20 @@ export default function WhatsAppPage() {
   const [replyingTo, setReplyingTo] = useState(null);
   const [quickReplies, setQuickReplies] = useState([]);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
+  // Quick speed bar pinning — double-click the "Quick:" label to choose which
+  // macros / quick replies / templates are pinned there (up to SPEED_PIN_LIMIT).
+  // The choice is persisted so it survives reloads and is kept per browser.
+  const [showSpeedPinModal, setShowSpeedPinModal] = useState(false);
+  const [pinnedSpeedIds, setPinnedSpeedIds] = useState(() => {
+    try {
+      const raw = waUiStorage.getItem(SPEED_PIN_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter((k) => typeof k === "string").slice(0, SPEED_PIN_LIMIT) : [];
+    } catch (_) {
+      return [];
+    }
+  });
+  const [draftPinnedIds, setDraftPinnedIds] = useState([]);
   const [crmDetails, setCrmDetails] = useState(null);
   const [crmDetailsLoading, setCrmDetailsLoading] = useState(false);
   const [aiPaused, setAiPaused] = useState(false);
@@ -805,8 +813,6 @@ export default function WhatsAppPage() {
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const [unreadWhileScrolled, setUnreadWhileScrolled] = useState(0);
   const threadRef = useRef(null);
-  const wallpaperRef = useRef(null);
-  const parallaxRaf = useRef(null);
 
   // ── New UX Enhancement States ─────────────────────────────────────────────
   // Typing indicator state
@@ -908,8 +914,6 @@ export default function WhatsAppPage() {
     }
   }, []);
 
-  // WhatsApp Doodle Wallpaper Parallax Scroll Handler:
-  // Decoupled via requestAnimationFrame to guarantee silky 60fps/120fps hardware acceleration
   const handleThreadScroll = useCallback((e) => {
     const el = e.currentTarget;
     const isAway = el.scrollHeight - el.scrollTop - el.clientHeight > 180;
@@ -918,22 +922,36 @@ export default function WhatsAppPage() {
       setUnreadWhileScrolled(0);
     }
 
-    if (!parallaxRaf.current) {
-      parallaxRaf.current = requestAnimationFrame(() => {
-        if (wallpaperRef.current) {
-          const parallaxOffset = (el.scrollTop * 0.18) % 260;
-          wallpaperRef.current.style.transform = `translate3d(0, -${parallaxOffset}px, 0)`;
-        }
-        parallaxRaf.current = null;
-      });
-    }
   }, []);
 
   useEffect(() => {
+    const closePopovers = (event) => {
+      document.querySelectorAll('.wa-inbox details[open]').forEach((details) => {
+        if (!details.contains(event.target)) details.removeAttribute('open');
+      });
+    };
+    const onEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      document.querySelectorAll('.wa-inbox details[open]').forEach((details) => {
+        details.removeAttribute('open');
+        details.querySelector('summary')?.focus();
+      });
+      setShowAttachMenu(false);
+      setShowEmojiPicker(false);
+      setShowTemplatePicker(false);
+      setShowNotesDrawer(false);
+      setShowContactInfoDrawer(false);
+      setShowNewChatModal(false);
+      setShowFlowModal(false);
+      setShowReminderModal(false);
+      setShowTransferBranchModal(false);
+      setContextMenu(null);
+    };
+    document.addEventListener('pointerdown', closePopovers);
+    document.addEventListener('keydown', onEscape);
     return () => {
-      if (parallaxRaf.current) {
-        cancelAnimationFrame(parallaxRaf.current);
-      }
+      document.removeEventListener('pointerdown', closePopovers);
+      document.removeEventListener('keydown', onEscape);
     };
   }, []);
 
@@ -1432,6 +1450,76 @@ export default function WhatsAppPage() {
     setShowTemplatePicker(false);
   };
 
+  // ── Quick speed bar pinning ───────────────────────────────────────────────
+  // Every pinnable source (built-in macros, CRM quick replies, saved templates)
+  // normalised to one shape so the bar and the chooser can share a single list.
+  const speedCandidates = useMemo(
+    () => [
+      ...DEFAULT_SPEED_REPLIES.map((m) => ({ key: `sr:${m.id}`, label: m.label, text: m.text, source: "Macro" })),
+      ...quickReplies.map((q) => ({
+        key: `qr:${q.id}`,
+        label: `/${q.shortcut || q.title || "reply"}`,
+        text: q.content || "",
+        source: "Quick Reply",
+      })),
+      ...templates.map((t) => ({ key: `tp:${t.id}`, label: t.name, text: t.body || "", source: "Template" })),
+    ],
+    [quickReplies, templates]
+  );
+
+  const defaultSpeedKeys = useMemo(
+    () => DEFAULT_SPEED_REPLIES.map((m) => `sr:${m.id}`),
+    []
+  );
+
+  // Pinned items, in the order they were chosen. Nothing pinned → the 7
+  // built-in macros stay on the bar exactly as before.
+  const speedItems = useMemo(() => {
+    const chosen = pinnedSpeedIds
+      .map((id) => speedCandidates.find((c) => c.key === id))
+      .filter(Boolean);
+    if (chosen.length > 0) return chosen;
+    return speedCandidates.slice(0, DEFAULT_SPEED_REPLIES.length);
+  }, [pinnedSpeedIds, speedCandidates]);
+
+  // Shared insert path: fill placeholders, drop the text in the composer, focus it.
+  const applyQuickText = (rawText) => {
+    const name = selectedChat?.name && !selectedChat.name.startsWith("+") ? selectedChat.name : "";
+    const phone = selectedChat?.phone || selectedChat?.id?.replace(/@.*$/, "") || "";
+    const filled = evaluateMessagePlaceholders(rawText || "", {
+      name: name || "Customer",
+      first_name: name ? name.split(" ")[0] : "Customer",
+      phone: phone,
+    });
+    setMessageInput(filled);
+    if (textareaRef.current) textareaRef.current.focus();
+  };
+
+  const openSpeedPinModal = () => {
+    // Start the draft from what is on the bar right now (defaults if untouched).
+    setDraftPinnedIds(pinnedSpeedIds.length > 0 ? pinnedSpeedIds : defaultSpeedKeys);
+    setShowSpeedPinModal(true);
+  };
+
+  const toggleSpeedPin = (key) => {
+    setDraftPinnedIds((prev) => {
+      if (prev.includes(key)) return prev.filter((k) => k !== key);
+      if (prev.length >= SPEED_PIN_LIMIT) return prev;
+      return [...prev, key];
+    });
+  };
+
+  const saveSpeedPins = () => {
+    const clean = draftPinnedIds.slice(0, SPEED_PIN_LIMIT);
+    setPinnedSpeedIds(clean);
+    try {
+      waUiStorage.setItem(SPEED_PIN_KEY, JSON.stringify(clean));
+    } catch (_) {
+      /* storage unavailable — pins still hold for this session */
+    }
+    setShowSpeedPinModal(false);
+  };
+
   const handleSelectChat = (chat) => {
     setSelectedChat(chat);
     safeLocalStorageSet("wa_active_chat", JSON.stringify(chat));
@@ -1614,8 +1702,6 @@ export default function WhatsAppPage() {
         )
       );
 
-      // Replying by hand pauses the bot server-side — surface that immediately.
-      fetchBotStatus(selectedChat.id);
     } catch (err) {
       const payload = err.response?.data;
       // 504 + deliveryUnknown: WhatsApp got the message but never confirmed.
@@ -3240,40 +3326,6 @@ export default function WhatsAppPage() {
     };
   }, [selectedChat]);
 
-  // ── Bot pause indicator ────────────────────────────────────────────────────
-  const fetchBotStatus = useCallback(async (chatId) => {
-    if (!chatId || chatId.includes("@g.us")) return setBotStatus(null);
-    const phone = chatId.replace(/\D/g, "");
-    if (!phone) return setBotStatus(null);
-    try {
-      const token = waUiStorage.getItem("token");
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const { data } = await axios.get(`${API}/api/whatsapp/chat/${phone}/bot-status`, { headers, timeout: 8000 });
-      setBotStatus(data);
-    } catch (_) {
-      setBotStatus(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchBotStatus(selectedChat?.id);
-  }, [selectedChat?.id, fetchBotStatus]);
-
-  const handleResumeBot = async () => {
-    if (!selectedChat?.id) return;
-    setBotResuming(true);
-    try {
-      const token = waUiStorage.getItem("token");
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const phone = selectedChat.id.replace(/\D/g, "");
-      await axios.patch(`${API}/api/whatsapp/chat/${phone}/ai`, { enabled: true }, { headers });
-      await fetchBotStatus(selectedChat.id);
-    } catch (err) {
-      alert(err.response?.data?.error || "Could not hand the chat back to the bot");
-    }
-    setBotResuming(false);
-  };
-
   const handleTransferConversation = async () => {
     if (!selectedChat || !transferTargetBranchId) return;
     setTransferSubmitting(true);
@@ -3472,9 +3524,7 @@ export default function WhatsAppPage() {
 
   if (!status.connected && !workspaceMode) {
     return (
-      <div className="hl-page w-full flex-1 flex flex-col min-h-0 overflow-y-auto wa-scroll bg-[var(--color-paper)] text-[var(--color-ink)]">
-        <WhatsAppNav />
-        {syncing && <p className="px-3 py-2 text-xs" role="status">Syncing WhatsApp: {syncProgress?.completedChats || 0} / {syncProgress?.totalChats || "?"} chats. Contacts are available across this workspace.</p>}
+      <div className="hl-page w-full flex-1 flex flex-col min-h-0 overflow-y-auto wa-scroll bg-[var(--color-paper)] text-[var(--color-ink)]">        {syncing && <p className="px-3 py-2 text-xs" role="status">Syncing WhatsApp: {syncProgress?.completedChats || 0} / {syncProgress?.totalChats || "?"} chats. Contacts are available across this workspace.</p>}
         {showConfigModal && (
           <WAConfigPrompt
             onClose={() => {
@@ -3848,6 +3898,7 @@ export default function WhatsAppPage() {
           <button
             type="button"
             onClick={() => setShowContactInfoDrawer(false)}
+            aria-label="Close contact details"
             className="p-1.5 rounded-lg text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper)] transition"
             title="Close CRM details"
           >
@@ -4302,28 +4353,27 @@ export default function WhatsAppPage() {
   };
 
   return (
-    <div className="w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-[var(--color-paper-2)] text-[var(--color-ink)] rounded-xl border border-[var(--color-rule)] shadow-sm overflow-hidden select-text wa-parallel-container">
-      <div className="shrink-0 px-2 pt-2">
-        <WhatsAppNav />
-        <WAStorageAndSenders compact />
-        {syncing && <p className="px-3 py-2 text-xs" role="status">Syncing WhatsApp: {syncProgress?.completedChats || 0} / {syncProgress?.totalChats || "..."} chats.</p>}
-      </div>
+    <div className="wa-inbox w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-[var(--color-paper-2)] text-[var(--color-ink)] rounded-xl border border-[var(--color-rule)] shadow-sm overflow-hidden select-text wa-parallel-container">      {syncing && (
+        <p className="px-3 py-2 text-xs shrink-0 border-b border-[var(--color-rule)] bg-[var(--color-paper-2)] text-[var(--color-ink-2)]" role="status">
+          Syncing WhatsApp: {syncProgress?.completedChats || 0} / {syncProgress?.totalChats || "..."} chats.
+        </p>
+      )}
 
       {deliveryWarning && (
-        <div className="p-2.5 text-xs font-semibold flex items-start justify-between gap-3 shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-brand-orange)] text-[var(--color-ink)]">
+        <div role="alert" className="p-2.5 text-xs font-semibold flex items-start justify-between gap-3 shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-brand-orange)] text-[var(--color-ink)]">
           <span>
             <strong className="block">Delivery not confirmed</strong>
             {deliveryWarning} Check the chat before sending again — the message may already have been delivered.
           </span>
-          <button onClick={() => setDeliveryWarning(null)} className="shrink-0 hover:opacity-80">
+          <button onClick={() => setDeliveryWarning(null)} aria-label="Dismiss delivery warning" className="shrink-0 hover:opacity-80">
             <X size={14} />
           </button>
         </div>
       )}
       {error && (
-        <div className="p-2.5 text-xs font-semibold flex items-center justify-between shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-error)] text-[var(--color-error)]">
+        <div role="alert" className="p-2.5 text-xs font-semibold flex items-center justify-between shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-error)] text-[var(--color-error)]">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-[var(--color-error)] hover:opacity-80">
+          <button onClick={() => setError(null)} aria-label="Dismiss error" className="text-[var(--color-error)] hover:opacity-80">
             <X size={14} />
           </button>
         </div>
@@ -4334,15 +4384,27 @@ export default function WhatsAppPage() {
 
         {/* Chats Sidebar Column (Independent Parallel Scrolling) */}
         <div
-          className={`border-r border-[var(--color-rule)] bg-[var(--color-paper-2)] flex flex-col h-full min-h-0 shrink-0 select-none transition-all duration-200 ${sidebarMode === "compact"
+          className={`wa-inbox-sidebar border-r border-[var(--color-rule)] bg-[var(--color-paper-2)] flex flex-col h-full min-h-0 shrink-0 select-none transition-all duration-200 ${sidebarMode === "compact"
               ? "wa-sidebar-compact"
               : sidebarMode === "wide"
                 ? "wa-sidebar-wide"
                 : "w-full md:w-80 lg:w-[21rem] xl:w-[360px]"
             } ${showMobileChat ? "hidden md:flex" : "flex"}`}
         >
+          {sidebarMode !== "compact" && (
+            <div className="wa-conversations-heading">
+              <div><h2>Conversations <span>{allChatsList.length}</span></h2><p>Every customer. One place.</p></div>
+              <div className="flex items-center gap-1.5">
+                <details className="wa-storage-details is-icon">
+                  <summary title="Sender & storage" aria-label="Sender and storage"><Database size={15} /><ChevronDown size={13} /></summary>
+                  <div className="wa-storage-popover"><WAStorageAndSenders compact /></div>
+                </details>
+                <button type="button" className="hl-btn-primary" onClick={() => setShowNewChatModal(true)} title="Start new conversation" aria-label="Start new conversation"><Plus size={18} /></button>
+              </div>
+            </div>
+          )}
           {/* Search Bar & Action Buttons */}
-          <div className="p-2.5 border-b border-[var(--color-rule)] flex items-center gap-1.5 shrink-0 bg-[var(--color-paper-2)]">
+          <div className="wa-inbox-search p-2.5 border-b border-[var(--color-rule)] flex items-center gap-1.5 shrink-0 bg-[var(--color-paper-2)]">
             {sidebarMode === "compact" ? (
               <div className="flex flex-col items-center gap-2 w-full py-1">
                 <button
@@ -4369,6 +4431,10 @@ export default function WhatsAppPage() {
                 >
                   <RefreshCw size={14} className={chatsLoading ? "animate-spin text-[var(--color-ink)]" : ""} />
                 </button>
+                <details className="wa-storage-details is-icon">
+                  <summary title="Sender & storage" aria-label="Sender and storage"><Database size={15} /><ChevronDown size={13} /></summary>
+                  <div className="wa-storage-popover"><WAStorageAndSenders compact /></div>
+                </details>
               </div>
             ) : (
               <>
@@ -4376,7 +4442,7 @@ export default function WhatsAppPage() {
                   <Search size={14} className="absolute left-3 top-2.5 text-[var(--color-ink-2)]" />
                   <input
                     type="text"
-                    placeholder="Search or start a new chat..."
+                    placeholder="Search conversations" aria-label="Search conversations"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="hl-input w-full pl-9 pr-7 py-1.5 text-xs rounded-lg"
@@ -4422,7 +4488,7 @@ export default function WhatsAppPage() {
 
           {/* Filter Capsules / Pills (All, Direct, Unread, Groups, Bot, Favourites) */}
           {sidebarMode !== "compact" && (
-            <div className="hl-tabs px-3 py-1.5 flex items-center gap-1.5 shrink-0 overflow-x-auto wa-no-scrollbar border-b border-[var(--color-rule)] bg-[var(--color-paper-2)]">
+            <div className="wa-inbox-filters hl-tabs px-3 py-1.5 flex items-center gap-1.5 shrink-0 overflow-x-auto wa-no-scrollbar border-b border-[var(--color-rule)] bg-[var(--color-paper-2)]">
               <button
                 onClick={() => setSidebarTab("all")}
                 className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "all" ? "is-active" : ""}`}
@@ -4468,7 +4534,7 @@ export default function WhatsAppPage() {
                 className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "bot" ? "is-active" : ""}`}
                 title="Chats currently in automated bot flow"
               >
-                <span>🤖 Bot</span>
+                <span>Automated</span>
                 {botChatsList.length > 0 && (
                   <span className="hl-badge hl-badge-warn text-[10px] px-1.5 py-0.2 font-bold">
                     {botChatsList.length}
@@ -4486,7 +4552,7 @@ export default function WhatsAppPage() {
           )}
 
           {/* Chat List Items (Parallel Independent Column Scroll #1) */}
-          <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-[var(--color-rule)] overscroll-contain wa-custom-scrollbar wa-parallel-scroll scroll-smooth">
+          <div className="wa-conversation-list flex-1 min-h-0 overflow-y-auto divide-y divide-[var(--color-rule)] overscroll-contain wa-custom-scrollbar wa-parallel-scroll scroll-smooth">
             {chatsLoading && chats.length === 0 ? (
               <div className="hl-empty flex flex-col items-center justify-center h-48 space-y-2">
                 <Loader2 size={28} className="animate-spin text-[var(--color-ink)]" />
@@ -4532,7 +4598,10 @@ export default function WhatsAppPage() {
                     <div
                       key={chat.id}
                       onClick={() => handleSelectChat(chat)}
-                      className={`w-full py-3 flex flex-col items-center justify-center cursor-pointer relative group transition-all duration-150 border-l-2 ${isActive
+                    role="button" tabIndex={0} aria-pressed={isActive}
+                    aria-label={`Open conversation with ${chat.name || chat.phoneNumber || "contact"}`}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleSelectChat(chat); } }}
+                    className={`wa-conversation-row w-full py-3 flex flex-col items-center justify-center cursor-pointer relative group transition-all duration-150 border-l-2 ${isActive
                           ? "bg-[var(--color-paper)] border-[var(--color-accent)]"
                           : "border-transparent hover:bg-[var(--color-paper)]/70"
                         }`}
@@ -4568,7 +4637,10 @@ export default function WhatsAppPage() {
                   <div
                     key={chat.id}
                     onClick={() => handleSelectChat(chat)}
-                    className={`w-full flex items-center gap-3 px-3.5 py-3 hover:bg-[var(--color-paper)] transition text-left cursor-pointer border-l-4 ${isActive ? "bg-[var(--color-paper)] border-[var(--color-accent)]" : "border-transparent"
+                    role="button" tabIndex={0} aria-pressed={isActive}
+                    aria-label={`Open conversation with ${chat.name || chat.phoneNumber || "contact"}`}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleSelectChat(chat); } }}
+                    className={`wa-conversation-row w-full flex items-center gap-3 px-3.5 py-3 hover:bg-[var(--color-paper)] transition text-left cursor-pointer border-l-4 ${isActive ? "bg-[var(--color-paper)] border-[var(--color-accent)]" : "border-transparent"
                       }`}
                   >
                     {/* Contact Profile Picture / Avatar with Online Status */}
@@ -4649,7 +4721,7 @@ export default function WhatsAppPage() {
         </div>
 
         {/* Main Conversation Window / Empty State */}
-        <div className={`flex-1 flex flex-col h-full min-h-0 min-w-0 bg-[var(--color-paper)] relative ${!showMobileChat ? "hidden md:flex" : "flex"}`}>
+        <div className={`wa-inbox-conversation flex-1 flex flex-col h-full min-h-0 min-w-0 bg-[var(--color-paper)] relative ${!showMobileChat ? "hidden md:flex" : "flex"}`}>
           {!selectedChat ? (
             <div className="hl-empty flex-1 flex flex-col items-center justify-center p-8 select-none">
               <div className="max-w-md w-full text-center space-y-6">
@@ -4657,436 +4729,51 @@ export default function WhatsAppPage() {
                   <MessageCircle size={44} />
                 </div>
                 <div>
-                  <h2 className="hl-title tracking-wide">WhatsApp Desktop & CRM Live</h2>
+                  <h2 className="hl-title tracking-wide">A better conversation starts here</h2>
                   <p className="hl-subtitle mt-1">
-                    Send and receive live messages without keeping your phone online. Connected with Madhura Tech CRM.
+                    Choose a conversation to pick up where you left off, or reach out to a customer. Contact details and team notes stay close at hand.
                   </p>
                 </div>
 
-                {/* Quick Action Shortcut Buttons (Matching Screenshot) */}
-                <div className="flex items-center justify-center gap-4 pt-2">
-                  <button
-                    onClick={() => setShowNewChatModal(true)}
-                    className="hl-card flex flex-col items-center gap-2 p-3.5 transition w-28 group"
-                  >
-                    <div className="p-2.5 rounded-xl bg-[var(--color-paper)] text-[var(--color-ink)] group-hover:scale-110 transition">
-                      <FileText size={20} />
-                    </div>
-                    <span className="hl-kpi-label">Send document</span>
-                  </button>
-
-                  <button
-                    onClick={() => setShowNewChatModal(true)}
-                    className="hl-card flex flex-col items-center gap-2 p-3.5 transition w-28 group"
-                  >
-                    <div className="p-2.5 rounded-xl bg-[var(--color-paper)] text-[var(--color-ink)] group-hover:scale-110 transition">
-                      <UserPlus size={20} />
-                    </div>
-                    <span className="hl-kpi-label">Add contact</span>
-                  </button>
-
-                  <button
-                    onClick={() => setShowNewChatModal(true)}
-                    className="hl-card flex flex-col items-center gap-2 p-3.5 transition w-28 group"
-                  >
-                    <div className="p-2.5 rounded-xl bg-[var(--color-paper)] text-[var(--color-ink)] group-hover:scale-110 transition">
-                      <Sparkles size={20} />
-                    </div>
-                    <span className="hl-kpi-label">Ask Meta AI</span>
-                  </button>
+                <div className="wa-inbox-welcome-actions">
+                  <button type="button" className="hl-btn-primary" onClick={() => setShowNewChatModal(true)}><Plus size={16} /> New conversation</button>
+                  <button type="button" className="hl-btn-secondary" onClick={() => navigate("/whatsapp/contacts")}><Users size={16} /> View contacts</button>
                 </div>
               </div>
             </div>
           ) : (
             <>
-              {/* Active Chat Header — the action cluster scrolls horizontally so it can
-                  never be clipped, at any width or orientation. */}
-              <div className="flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 border-b border-[var(--color-rule)] bg-[var(--color-paper-2)] shrink-0 min-w-0">
-                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                  <button onClick={() => setShowMobileChat(false)} className="md:hidden p-1 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] rounded shrink-0">
-                    <ChevronLeft size={20} />
-                  </button>
-                  <div
-                    onClick={() => {
-                      fetchContactCrmDetails(selectedChat.id);
-                      setShowContactInfoDrawer(true);
-                    }}
-                    className="cursor-pointer shrink-0"
-                  >
-                    <WAContactAvatar
-                      src={selectedChat.profilePicUrl}
-                      name={selectedChat.name}
-                      phone={selectedChat.id}
-                      isGroup={selectedChat.isGroup}
-                      size="md"
-                      clickable={true}
-                    />
+              <header className="wa-conversation-header">
+                <button type="button" onClick={() => setShowMobileChat(false)} className="wa-chat-back md:hidden" aria-label="Back to conversations"><ChevronLeft size={20} /></button>
+                <button type="button" className="wa-contact-identity" onClick={() => { setShowNotesDrawer(false); fetchContactCrmDetails(selectedChat.id); setShowContactInfoDrawer(true); }} aria-label={`View contact details for ${selectedChat.name || "contact"}`}>
+                  <WAContactAvatar src={selectedChat.profilePicUrl} name={selectedChat.name} phone={selectedChat.id} isGroup={selectedChat.isGroup} size="md" />
+                  <span className="wa-contact-name">
+                    <strong>{(() => { const n = selectedChat.name || ""; return n.replace(/\D/g, "").length >= 13 || n.includes("@lid") ? selectedChat.formattedPhone || formatPhoneNumber(selectedChat.phoneNumber) || "WhatsApp Contact" : n || selectedChat.formattedPhone || "WhatsApp Contact"; })()}</strong>
+                    <span>{selectedChat.isGroup ? "Group conversation" : contactTyping ? "Typing…" : isContactOnline(selectedChat.id) ? "Online" : selectedChat.formattedPhone || formatPhoneNumber(selectedChat.phoneNumber || selectedChat.id) || "WhatsApp contact"}</span>
+                  </span>
+                </button>
+                <div className="wa-header-actions">
+                  <div className="wa-header-tickets">
+                    <label className="wa-ticket-field"><span>Status</span><select aria-label="Conversation status" id="wa-ticket-status-select" value={ticketStatus} onChange={event => handleUpdateTicketStatus(event.target.value)}><option value="open">Open</option><option value="pending">Pending</option><option value="resolved">Resolved</option><option value="spam">Spam</option></select></label>
+                    <label className="wa-ticket-field wa-assignee-field"><Users size={14} /><select aria-label="Assign conversation" value={assignedAgentName} onChange={event => { const member = teamMembers.find(m => `${m.first_name} ${m.last_name || ""}`.trim() === event.target.value); handleAssignAgent(member?.id || null, event.target.value); }}><option value="">Unassigned</option>{teamMembers.map(m => { const name = `${m.first_name} ${m.last_name || ""}`.trim(); return <option key={m.id} value={name}>{name}</option>; })}</select></label>
+                    <span className="wa-conversation-branch" title="Assigned branch"><GitBranch size={13} />{selectedChat.branch_name || activeBranch?.name || "Head Office"}</span>
                   </div>
-                  <div
-                    onClick={() => {
-                      fetchContactCrmDetails(selectedChat.id);
-                      setShowContactInfoDrawer(true);
-                    }}
-                    className="cursor-pointer group min-w-0 flex-1"
-                  >
-                    {/* Identity line: name + phone, one truncating line each.
-                        The "+Add to CRM" affordance moves to the action strip
-                        below `lg` so it cannot crowd out the contact name. */}
-                    <div className="flex items-center gap-2 min-w-0 w-full">
-                      <p className="font-bold text-[var(--color-ink)] text-sm transition truncate min-w-0 flex-1">
-                        {(() => {
-                          const n = selectedChat.name || "";
-                          if (n.replace(/\D/g, "").length >= 13 || n.includes("@lid")) {
-                            return selectedChat.formattedPhone || formatPhoneNumber(selectedChat.phoneNumber) || "WhatsApp Contact";
-                          }
-                          return n || selectedChat.formattedPhone || "WhatsApp Contact";
-                        })()}
-                      </p>
-                      {/* Which number this conversation is actually sent from.
-                          A send used to leave from whichever session happened to
-                          be connected, so seeing it here is what makes that
-                          class of mistake visible instead of silent. */}
-                      {status.phone && (
-                        <span
-                          className="hl-badge text-[10px] font-bold px-2 py-0.5 shrink-0 whitespace-nowrap hidden sm:inline-flex"
-                          title={`Messages in this chat are sent from ${status.phone} via ${status.activeEngine}`}
-                        >
-                          ⤴ {status.phone}
-                        </span>
-                      )}
-                      {selectedChat.source && (
-                        <span className="hl-badge hl-badge-success text-[10px] font-bold px-2 py-0.5 shrink-0 whitespace-nowrap hidden sm:inline-flex">
-                          {selectedChat.source}
-                        </span>
-                      )}
-                      <span className="hl-badge text-[10px] font-bold px-2 py-0.5 shrink-0 whitespace-nowrap bg-purple-50 text-purple-700 dark:bg-purple-950/40 border border-purple-200 hidden sm:inline-flex" title="Assigned Branch">
-                        📍 {selectedChat.branch_name || activeBranch?.name || "Head Office"}
-                      </span>
-                      <span className="hl-badge text-[10px] font-bold px-2 py-0.5 shrink-0 whitespace-nowrap hidden md:inline-flex bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 border border-emerald-300" title="Meta 24-Hour Free Service Window">
-                        🟢 24h Window Active
-                      </span>
-                      {crmDetails?.client ? (
-                        <span className="hl-badge hl-badge-accent text-[10px] font-bold px-2 py-0.5 shrink-0 flex items-center gap-1 whitespace-nowrap hidden md:inline-flex" title="Linked CRM Client">
-                          🏢 CRM Client
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAddClientData({
-                              name: selectedChat.name && !selectedChat.name.startsWith("+") ? selectedChat.name : "",
-                              company_name: "",
-                              email: "",
-                              city: "",
-                              service: "",
-                              notes: "",
-                            });
-                            setShowAddClientForm(true);
-                          }}
-                          className="hl-badge text-[10px] font-semibold px-2 py-0.5 hover:bg-[var(--color-paper)] transition text-[var(--color-ink-2)] hover:text-[var(--color-ink)] shrink-0 whitespace-nowrap hidden lg:inline-flex"
-                          title="Register contact in CRM as Client / Lead"
-                        >
-                          + Add to CRM
-                        </button>
-                      )}
+                  <button type="button" className={`wa-header-action ${showNotesDrawer ? "is-active" : ""}`} onClick={() => { setShowContactInfoDrawer(false); if (!showNotesDrawer) fetchInternalNotes(selectedChat.id); setShowNotesDrawer(v => !v); }} aria-pressed={showNotesDrawer} title="Team notes"><FileText size={16} /><span>Notes</span>{internalNotes.length > 0 && <span className="wa-note-count">{internalNotes.length}</span>}</button>
+                  <button type="button" className={`wa-header-action ${showContactInfoDrawer ? "is-active" : ""}`} onClick={() => { setShowNotesDrawer(false); if (!showContactInfoDrawer) fetchContactCrmDetails(selectedChat.id); setShowContactInfoDrawer(v => !v); }} aria-pressed={showContactInfoDrawer} title="Contact details"><Info size={16} /><span>Details</span></button>
+                  <details className="wa-conversation-menu" key={selectedChat.id}>
+                    <summary aria-label="More conversation actions" title="More conversation actions"><MoreVertical size={19} /></summary>
+                    <div className="wa-conversation-menu-panel" onClick={event => { if (event.target.closest("button")) event.currentTarget.closest("details").removeAttribute("open"); }}>
+                      <p>Conversation actions</p>
+                      <button type="button" onClick={() => setShowTemplatePicker(v => !v)}><FileText size={16} /> Message templates</button>
+                      <button type="button" onClick={openSpeedPinModal}><MessageSquare size={16} /> Manage saved replies</button>
+                      <button type="button" onClick={() => { const bid = selectedChat.branch_id || activeBranch?.id || branches?.[0]?.id || ""; setTransferTargetBranchId(bid); setTransferTargetUserId(selectedChat.owner_user_id || ""); setTransferNote(""); if (bid) fetchBranchEmployees(bid); setShowTransferBranchModal(true); }}><Forward size={16} /> Transfer conversation</button>
+                      <button type="button" onClick={() => setShowFlowModal(true)}><GitBranch size={16} /> Launch chatbot flow</button>
+                      <button type="button" onClick={() => setShowReminderModal(true)}><Bell size={16} /> Send reminder</button>
+                      {!crmDetails?.client && <button type="button" onClick={() => { setAddClientData({ name: selectedChat.name && !selectedChat.name.startsWith("+") ? selectedChat.name : "", company_name: "", email: "", city: "", service: "", notes: "" }); setShowAddClientForm(true); setShowNotesDrawer(false); fetchContactCrmDetails(selectedChat.id); setShowContactInfoDrawer(true); }}><UserPlus size={16} /> Add to CRM</button>}
                     </div>
-                    {selectedChat.isGroup ? (
-                      <p className="text-xs text-[var(--color-ink-2)] truncate">Group Chat</p>
-                    ) : contactTyping ? (
-                      <p className="hl-badge hl-badge-success text-xs font-semibold animate-pulse shrink-0">typing...</p>
-                    ) : isContactOnline(selectedChat.id) ? (
-                      <p className="hl-badge hl-badge-success text-xs font-medium flex items-center gap-1 shrink-0">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] inline-block"></span> online
-                      </p>
-                    ) : (
-                      <p className="text-xs text-[var(--color-ink-2)] truncate">
-                        {selectedChat.formattedPhone ||
-                          formatPhoneNumber(selectedChat.phoneNumber || selectedChat.id) ||
-                          (selectedChat.id?.includes("@lid") ? "WhatsApp Contact" : `+${selectedChat.id?.replace(/\D/g, "")}`)}
-                      </p>
-                    )}
-                  </div>
+                  </details>
                 </div>
-
-                {/*
-                  Action cluster. It is capped at 50% below `md` so it can never
-                  squeeze the contact identity into a one-character-wide column
-                  (which is what forces the header to grow vertically).
-                */}
-                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 max-w-[50%] md:max-w-none overflow-x-auto wa-no-scrollbar">
-                  {/* Branch Transfer Action */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const initialBid = selectedChat.branch_id || activeBranch?.id || branches?.[0]?.id || "";
-                      setTransferTargetBranchId(initialBid);
-                      setTransferTargetUserId(selectedChat.owner_user_id || "");
-                      setTransferNote("");
-                      if (initialBid) {
-                        fetchBranchEmployees(initialBid);
-                      }
-                      setShowTransferBranchModal(true);
-                    }}
-                    className="hl-btn-secondary py-1 px-2 text-[11px] font-semibold flex items-center gap-1 shrink-0 hover:border-purple-500 rounded-lg"
-                    title="Transfer conversation to another branch"
-                  >
-                    <Forward size={13} className="text-purple-600" />
-                    <span className="hidden sm:inline">Transfer</span>
-                  </button>
-                  {/* Bot paused indicator — the bot mutes itself for 24h once an
-                      agent replies by hand, so make that visible and undoable. */}
-                  {botStatus?.paused && !selectedChat.isGroup && (
-                    <div
-                      className="hl-badge flex items-center gap-1.5 px-2.5 py-1.5"
-                      title={
-                        botStatus.pausedUntil
-                          ? `Bot is quiet until ${new Date(botStatus.pausedUntil).toLocaleString()}`
-                          : "Bot is switched off for this contact"
-                      }
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-ink-2)] inline-block shrink-0" />
-                      <span className="text-[11px] font-bold text-[var(--color-ink-2)] whitespace-nowrap">
-                        {botStatus.assignedAgentName
-                          ? `You have this chat (${botStatus.assignedAgentName})`
-                          : "Bot paused"}
-                      </span>
-                      <button
-                        onClick={handleResumeBot}
-                        disabled={botResuming}
-                        className="text-[11px] font-bold text-[var(--color-ink)] disabled:opacity-50 whitespace-nowrap"
-                        title="Let the bot answer this contact again"
-                      >
-                        {botResuming ? "..." : "Let bot reply"}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Register in CRM — inline in the action strip below `lg`, where the
-                      identity line above no longer has room for it. */}
-                  {!crmDetails?.client && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAddClientData({
-                          name: selectedChat.name && !selectedChat.name.startsWith("+") ? selectedChat.name : "",
-                          company_name: "",
-                          email: "",
-                          city: "",
-                          service: "",
-                          notes: "",
-                        });
-                        setShowAddClientForm(true);
-                      }}
-                      className="hl-badge px-2.5 py-1.5 text-xs font-semibold shrink-0 whitespace-nowrap lg:hidden"
-                      title="Register contact in CRM as Client / Lead"
-                    >
-                      <UserPlus size={14} />
-                      <span className="sr-only">Add to CRM</span>
-                    </button>
-                  )}
-
-                  {/* Trigger Chatbot Flow Button */}
-                  <button
-                    onClick={() => setShowFlowModal(true)}
-                    className="hl-badge hl-badge-warn flex items-center gap-1.5 px-2.5 py-1.5 transition text-xs font-semibold"
-                    title="Launch an interactive Chatbot Flow for this contact"
-                  >
-                    <Zap size={14} />
-                    <span className="hidden sm:inline">Flow Bot</span>
-                  </button>
-
-                  {/* Trigger CRM Automation Button */}
-                  <button
-                    onClick={() => {
-                      fetchAutomations();
-                      setShowAutomationModal(true);
-                    }}
-                    className="hl-badge hl-badge-info flex items-center gap-1.5 px-2.5 py-1.5 transition text-xs font-semibold"
-                    title="Execute CRM Workflow Automation Rule"
-                  >
-                    <Sparkles size={14} />
-                    <span className="hidden md:inline">Automation</span>
-                  </button>
-
-                  {/* Send Interactive Reminder Button */}
-                  <button
-                    onClick={() => setShowReminderModal(true)}
-                    className="hl-badge hl-badge-warn flex items-center gap-1.5 px-2.5 py-1.5 transition text-xs font-semibold"
-                    title="Send 2-Way Interactive Confirmation Notice"
-                  >
-                    <Bell size={14} />
-                    <span className="hidden md:inline">Reminder</span>
-                  </button>
-
-                  {/* Add to Campaign Group Button */}
-                  <button
-                    onClick={() => {
-                      fetchCampaignGroups();
-                      setShowAddToGroupModal(true);
-                    }}
-                    className="hl-badge hl-badge-info flex items-center gap-1.5 px-2.5 py-1.5 transition text-xs font-semibold"
-                    title="Enroll contact into Bulk Campaign Target Groups"
-                  >
-                    <Users size={14} />
-                    <span className="hidden lg:inline">Campaigns</span>
-                  </button>
-
-                  {/* Template Picker Button */}
-                  <button
-                    onClick={() => setShowTemplatePicker((v) => !v)}
-                    className="hl-badge hl-badge-success flex items-center gap-1.5 px-2.5 py-1.5 transition text-xs font-semibold"
-                    title="Insert WhatsApp message template"
-                  >
-                    <FileText size={14} />
-                    <span className="hidden sm:inline">Templates</span>
-                  </button>
-
-                  {/* CRM Info & Hub Drawer Toggle */}
-                  <button
-                    onClick={() => {
-                      if (showContactInfoDrawer) {
-                        setShowContactInfoDrawer(false);
-                      } else {
-                        setShowNotesDrawer(false);
-                        fetchContactCrmDetails(selectedChat.id);
-                        setShowContactInfoDrawer(true);
-                      }
-                    }}
-                    className={`p-2 rounded-lg transition flex items-center gap-1.5 text-xs font-semibold ${showContactInfoDrawer
-                        ? "bg-[var(--color-paper)] text-[var(--color-ink)] border border-[var(--color-rule)] shadow-xs"
-                        : "text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper)]"
-                      }`}
-                    title="Toggle Contact Profile, CRM Inquiries & Quick Links"
-                  >
-                    <Info size={17} />
-                    <span className="hidden xl:inline">Contact CRM</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Shared Team Inbox Collaboration & Ticket Status Bar.
-                  On a phone this bar must never wrap into three rows — it eats
-                  the thread's height. Below `md` the two clusters become
-                  independently scrollable strips on a single line. */}
-              <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-[var(--color-paper-2)] border-b border-[var(--color-rule)] text-xs shrink-0 min-w-0 overflow-hidden">
-                <div className="flex items-center gap-2 min-w-0 flex-1 md:flex-none overflow-x-auto wa-no-scrollbar">
-                  {/* Ticket Status Dropdown */}
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="hl-section-label text-[11px] font-bold text-[var(--color-ink-2)] uppercase tracking-wider shrink-0">
-                      Status:
-                    </span>
-                    <div className="relative inline-flex items-center">
-                      <select
-                        id="wa-ticket-status-select"
-                        value={ticketStatus}
-                        onChange={(e) => handleUpdateTicketStatus(e.target.value)}
-                        className={`hl-select py-1 pl-6 pr-7 text-xs font-bold rounded-lg cursor-pointer transition shadow-xs border ${
-                          ticketStatus === "open"
-                            ? "bg-emerald-50/80 border-emerald-400 text-emerald-800 focus:ring-emerald-500"
-                            : ticketStatus === "pending"
-                            ? "bg-amber-50/80 border-amber-400 text-amber-800 focus:ring-amber-500"
-                            : ticketStatus === "resolved"
-                            ? "bg-blue-50/80 border-blue-400 text-blue-800 focus:ring-blue-500"
-                            : "bg-red-50/80 border-red-400 text-red-800 focus:ring-red-500"
-                        }`}
-                        title="Conversation ticket status"
-                      >
-                        <option value="open">Open (Active)</option>
-                        <option value="pending">Pending (Waiting)</option>
-                        <option value="resolved">Resolved (Closed)</option>
-                        <option value="spam">Spam (Junk)</option>
-                      </select>
-                      <span
-                        className={`absolute left-2.5 w-2 h-2 rounded-full pointer-events-none ${
-                          ticketStatus === "open"
-                            ? "bg-emerald-500 animate-pulse"
-                            : ticketStatus === "pending"
-                            ? "bg-amber-500"
-                            : ticketStatus === "resolved"
-                            ? "bg-blue-500"
-                            : "bg-red-500"
-                        }`}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Agent Assignment Selector */}
-                  <div className="flex items-center gap-1.5 border-l border-[var(--color-rule)] pl-2 shrink-0">
-                    <span className="hl-section-label text-[11px] font-bold text-[var(--color-ink-2)] uppercase tracking-wider shrink-0">
-                      Agent:
-                    </span>
-                    <select
-                      value={assignedAgentName}
-                      onChange={(e) => {
-                        const sel = teamMembers.find((m) => `${m.first_name} ${m.last_name || ""}`.trim() === e.target.value);
-                        handleAssignAgent(sel?.id || null, e.target.value);
-                      }}
-                      className="hl-select px-2.5 py-1 text-xs cursor-pointer font-semibold rounded-lg bg-[var(--color-paper)] border-[var(--color-rule)]"
-                    >
-                      <option value="">👤 Unassigned</option>
-                      {teamMembers.map((m) => {
-                        const name = `${m.first_name} ${m.last_name || ""}`.trim();
-                        return (
-                          <option key={m.id} value={name}>
-                            👤 {name} ({m.emp_role || "Agent"})
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0 max-w-[45%] md:max-w-none overflow-x-auto wa-no-scrollbar">
-                  {/* Launch Chatbot Flow Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      fetchFlows();
-                      setShowFlowModal(true);
-                    }}
-                    className="hl-badge hl-badge-success flex items-center gap-1.5 px-2.5 py-1 font-bold text-[11px] transition"
-                    title="Launch a smart chatbot flow for this customer"
-                  >
-                    <span>🤖 Launch Flow</span>
-                  </button>
-
-                  {/* Internal Team Notes Drawer Toggle */}
-                  <button
-                    onClick={() => {
-                      if (showNotesDrawer) {
-                        setShowNotesDrawer(false);
-                      } else {
-                        setShowContactInfoDrawer(false);
-                        fetchInternalNotes(selectedChat.id);
-                        setShowNotesDrawer(true);
-                      }
-                    }}
-                    className={`hl-badge flex items-center gap-1.5 px-2.5 py-1 font-bold text-[11px] transition ${showNotesDrawer ? "hl-badge-accent shadow-xs ring-1 ring-[var(--color-accent)]" : "hl-badge-warn"
-                      }`}
-                    title="Toggle Team Internal Collaboration Notes"
-                  >
-                    <span>📝 Team Notes</span>
-                    {internalNotes.length > 0 && (
-                      <span className="hl-badge hl-badge-accent px-1.5 py-0.2 font-extrabold text-[10px]">
-                        {internalNotes.length}
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Engine Badge */}
-                  {status.isCloud ? (
-                    <span className="hl-badge hl-badge-info hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-paper)] animate-pulse"></span>
-                      <span>☁️ Meta Official API • {status.phone ? `+${status.phone}` : "Active"}</span>
-                    </span>
-                  ) : (
-                    <span className="hl-badge hl-badge-success hidden lg:inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-paper)] animate-pulse"></span>
-                      <span>📱 Web Linked • {status.phone ? `+${status.phone}` : "Active"}</span>
-                    </span>
-                  )}
-                </div>
-              </div>
+              </header>
 
               {/* Active Bot Flow Banner */}
               {activeFlowRun && (
@@ -5117,19 +4804,7 @@ export default function WhatsAppPage() {
               )}
 
               {/* Chat Thread Canvas with Parallax Doodle Background */}
-              <div className="flex-1 min-h-0 relative flex flex-col overflow-hidden bg-[var(--color-paper-2)]">
-                {/* Parallax WhatsApp Doodle Wallpaper Layer */}
-                <div
-                  ref={wallpaperRef}
-                  className="absolute inset-0 pointer-events-none will-change-transform opacity-95 transition-transform duration-75 ease-out"
-                  style={{
-                    backgroundImage: CHAT_WALLPAPER,
-                    backgroundRepeat: "repeat",
-                    backgroundSize: "260px 260px",
-                    transform: "translate3d(0, 0px, 0)",
-                  }}
-                />
-
+              <div className="wa-thread-canvas flex-1 min-h-0 relative flex flex-col overflow-hidden bg-[var(--color-paper-2)]">
                 {/* Messages Thread Scroll Area (Independent Parallel Column Scroll) */}
                 <div
                   ref={threadRef}
@@ -5144,7 +4819,7 @@ export default function WhatsAppPage() {
                     }
                   }}
                   onDrop={handleDropFiles}
-                  className="relative z-10 flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-4 overscroll-contain wa-parallel-scroll wa-custom-scrollbar scroll-smooth"
+                  className="wa-message-thread relative z-10 flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-4 overscroll-contain wa-parallel-scroll wa-custom-scrollbar scroll-smooth"
                 >
                   {isDraggingFile && (
                     <div className="absolute inset-0 z-50 bg-[var(--color-paper)]/90 backdrop-blur-xs flex flex-col items-center justify-center border-2 border-dashed border-[var(--color-ink)] m-3 rounded-2xl pointer-events-none transition-all animate-in fade-in">
@@ -5208,7 +4883,7 @@ export default function WhatsAppPage() {
                             className={`flex ${msg.isMe ? "justify-end" : "justify-start"} group relative wa-bubble-enter ${endsRun ? "mb-2.5" : "mb-0.5"}`}
                           >
                             {/* Hover action toolbar for reactions & quote reply */}
-                            <div className="hl-badge opacity-0 group-hover:opacity-100 transition flex items-center gap-1 px-2 py-0.5 absolute -top-3 z-10 select-none">
+                            <div className="wa-message-actions hl-badge opacity-0 group-hover:opacity-100 transition flex items-center gap-1 px-2 py-0.5 absolute -top-3 z-10 select-none">
                               {["👍", "❤️", "😂", "😮", "🙏"].map((emoji) => (
                                 <button
                                   key={emoji}
@@ -5244,7 +4919,7 @@ export default function WhatsAppPage() {
                             </div>
 
                             <div
-                              className={`max-w-[75%] md:max-w-[65%] px-2.5 py-1.5 rounded-lg text-sm shadow-sm relative ${msg.isMe
+                              className={`wa-message-bubble ${msg.isMe ? "wa-message-outgoing" : "wa-message-incoming"} max-w-[75%] md:max-w-[65%] px-2.5 py-1.5 rounded-lg text-sm shadow-sm relative ${msg.isMe
                                 ? `bg-[var(--color-accent-soft)] text-[var(--color-ink)] ${startsRun ? "rounded-tr-none" : ""}`
                                 : `bg-[var(--color-paper-2)] text-[var(--color-ink)] border border-[var(--color-rule)] ${startsRun ? "rounded-tl-none" : ""}`
                                 }`}
@@ -5389,55 +5064,22 @@ export default function WhatsAppPage() {
                 </div>
               )}
 
-              {/* Dynamic Quick Reply Speed Bar (1-Click CRM Macros) */}
+              {/* Dynamic Quick Reply Speed Bar (1-Click CRM Macros).
+                  Double-click the "Quick:" label to choose which macros, CRM
+                  quick replies or saved templates are pinned here (up to 7,
+                  persisted in this browser). */}
               <div className="wa-speed-bar wa-custom-scrollbar shrink-0 select-none max-h-9 overflow-y-auto">
-                <span className="text-[10px] font-bold text-[var(--color-ink-2)] uppercase tracking-wider shrink-0 flex items-center gap-1 mr-1">
-                  <Zap size={11} className="text-[var(--color-accent)]" /> Quick:
-                </span>
-                {DEFAULT_SPEED_REPLIES.map((macro) => (
+                <button type="button" onClick={openSpeedPinModal} title="Choose saved replies" className="wa-quick-label"><MessageSquare size={13} /> Saved replies</button>
+                <button type="button" className="wa-speed-chip" onClick={() => setShowTemplatePicker(v => !v)}><FileText size={12} /> Templates</button>
+                {speedItems.map((item) => (
                   <button
-                    key={macro.id}
+                    key={item.key}
                     type="button"
-                    onClick={() => {
-                      const name = selectedChat?.name && !selectedChat.name.startsWith("+") ? selectedChat.name : "";
-                      const phone = selectedChat?.phone || selectedChat?.id?.replace(/@.*$/, "") || "";
-                      const filled = evaluateMessagePlaceholders(macro.text, {
-                        name: name || "Customer",
-                        first_name: name ? name.split(" ")[0] : "Customer",
-                        phone: phone,
-                      });
-                      setMessageInput(filled);
-                      if (textareaRef.current) {
-                        textareaRef.current.focus();
-                      }
-                    }}
-                    className="wa-speed-chip hover:shadow-xs"
-                    title={macro.text}
+                    onClick={() => applyQuickText(item.text)}
+                    className={`wa-speed-chip hover:shadow-xs ${item.key.startsWith("qr:") ? "bg-[var(--color-paper-2)] border-dashed hover:border-solid" : ""}`}
+                    title={`${item.source} — ${item.text}`}
                   >
-                    <span>{macro.label}</span>
-                  </button>
-                ))}
-                {quickReplies.length > 0 && quickReplies.slice(0, 6).map((qr) => (
-                  <button
-                    key={qr.id}
-                    type="button"
-                    onClick={() => {
-                      const name = selectedChat?.name && !selectedChat.name.startsWith("+") ? selectedChat.name : "";
-                      const phone = selectedChat?.phone || selectedChat?.id?.replace(/@.*$/, "") || "";
-                      const filled = evaluateMessagePlaceholders(qr.content || "", {
-                        name: name || "Customer",
-                        first_name: name ? name.split(" ")[0] : "Customer",
-                        phone: phone,
-                      });
-                      setMessageInput(filled);
-                      if (textareaRef.current) {
-                        textareaRef.current.focus();
-                      }
-                    }}
-                    className="wa-speed-chip bg-[var(--color-paper-2)] border-dashed hover:border-solid"
-                    title={qr.content}
-                  >
-                    <span>/{qr.shortcut || qr.title}</span>
+                    <span>{item.label.replace(/^[^\p{L}\p{N}]+/u, "")}</span>
                   </button>
                 ))}
               </div>
@@ -5826,36 +5468,6 @@ export default function WhatsAppPage() {
                   {mediaSending ? <Loader2 size={18} className="animate-spin text-[var(--color-ink)]" /> : <Paperclip size={18} />}
                 </button>
 
-                {/* Templates Quick Button */}
-                <button
-                  type="button"
-                  onClick={() => setShowTemplatePicker((v) => !v)}
-                  className="hl-btn-secondary wa-composer-tool p-2.5 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] rounded-full transition shrink-0"
-                  title="Insert a saved template"
-                >
-                  <FileText size={18} />
-                </button>
-
-                {/* Quick Flow Trigger Button */}
-                <button
-                  type="button"
-                  onClick={() => setShowFlowModal(true)}
-                  className="hl-btn-secondary wa-composer-tool p-2.5 text-[var(--color-ink)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] rounded-full transition shrink-0"
-                  title="Trigger Chatbot Flow"
-                >
-                  <Zap size={18} />
-                </button>
-
-                {/* Quick Interactive Buttons & Flow Menu */}
-                <button
-                  type="button"
-                  onClick={() => setShowOptionsModal(true)}
-                  className="hl-btn-secondary wa-composer-tool p-2.5 text-[var(--color-ink)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-2)] rounded-full transition shrink-0"
-                  title="Send WhatsApp Interactive Buttons & Flow Menu (Call, Links, Quick Replies)"
-                >
-                  <ListOrdered size={18} />
-                </button>
-
                 {/* Emoji Picker Button */}
                 <div className="relative">
                   <button
@@ -5971,7 +5583,7 @@ export default function WhatsAppPage() {
                     }}
                     onKeyDown={handleKeyDown}
                     onPaste={handlePasteComposer}
-                    placeholder={`Message ${selectedChat.name}... (Type / for quick replies, Shift+Enter for new line)`}
+                    aria-label={`Message ${selectedChat.name || "contact"}`} placeholder="Write a reply…"
                     className="hl-card wa-composer-input flex-1 min-w-[8rem] basis-[10rem] px-4 py-2 rounded-2xl text-sm wa-auto-textarea leading-relaxed max-h-32 transition-[height] duration-75"
                     disabled={sending}
                   />
@@ -7082,6 +6694,98 @@ export default function WhatsAppPage() {
       )}
 
       {/* Trigger CRM Automation Modal */}
+      {/* Choose Quick Templates — double-click the "Quick:" label to open it.
+          Pick up to SPEED_PIN_LIMIT macros / quick replies / templates to pin
+          in the speed bar; the selection is persisted per browser. */}
+      {showSpeedPinModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowSpeedPinModal(false)}>
+          <div className="hl-card w-full max-w-2xl p-4 sm:p-6 relative max-h-[92dvh] overflow-y-auto wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowSpeedPinModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
+              <X size={20} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4 border-b border-[var(--color-rule)] pb-3 pr-8">
+              <div className="p-3 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]">
+                <Pin size={24} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="hl-title">Choose Quick Templates</h3>
+                <p className="text-xs text-[var(--color-ink-2)]">
+                  Pin up to {SPEED_PIN_LIMIT} items in the Quick bar — double-click the "Quick:" label any time to change them.
+                </p>
+              </div>
+              <span className="hl-badge hl-badge-info ml-auto shrink-0 !text-[10px]">
+                {draftPinnedIds.length}/{SPEED_PIN_LIMIT} pinned
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              {[
+                { title: "Built-in Macros", items: speedCandidates.filter((c) => c.key.startsWith("sr:")) },
+                { title: "CRM Quick Replies", items: speedCandidates.filter((c) => c.key.startsWith("qr:")) },
+                { title: "Saved WhatsApp Templates", items: speedCandidates.filter((c) => c.key.startsWith("tp:")) },
+              ].map((group) => (
+                <div key={group.title}>
+                  <p className="hl-section-label !text-[10px] font-bold text-[var(--color-ink-2)] uppercase tracking-wider mb-2">
+                    {group.title} · {group.items.length}
+                  </p>
+                  {group.items.length === 0 ? (
+                    <p className="text-[11px] italic text-[var(--color-ink-2)] px-1">Nothing here yet.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {group.items.map((c) => {
+                        const isPinned = draftPinnedIds.includes(c.key);
+                        const isFull = !isPinned && draftPinnedIds.length >= SPEED_PIN_LIMIT;
+                        return (
+                          <button
+                            key={c.key}
+                            type="button"
+                            onClick={() => toggleSpeedPin(c.key)}
+                            disabled={isFull}
+                            title={isFull ? `All ${SPEED_PIN_LIMIT} slots are used — unpin something first` : c.text}
+                            style={isPinned ? { borderColor: "var(--color-accent)", backgroundColor: "rgba(252,189,22,0.16)" } : undefined}
+                            className={`wa-speed-chip transition ${isFull ? "opacity-40 cursor-not-allowed" : ""}`}
+                          >
+                            {isPinned && <CheckCircle2 size={11} className="shrink-0 text-[var(--color-ink)]" />}
+                            <span className="truncate">{c.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 justify-between mt-5 pt-3 border-t border-[var(--color-rule)]">
+              <button
+                type="button"
+                onClick={() => setDraftPinnedIds(defaultSpeedKeys)}
+                className="text-xs font-bold text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+              >
+                ↺ Reset to the {defaultSpeedKeys.length} defaults
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSpeedPinModal(false)}
+                  className="hl-btn-secondary !px-3 !py-1.5 !text-xs font-bold rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveSpeedPins}
+                  className="hl-btn-primary !px-4 !py-1.5 !text-xs font-bold rounded-lg"
+                >
+                  Save pins
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAutomationModal && selectedChat && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowAutomationModal(false)}>
           <div className="hl-card w-full max-w-lg p-4 sm:p-6 relative max-h-[92dvh] overflow-y-auto wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>

@@ -1,0 +1,158 @@
+.wa-inbox {
+  --color-accent-soft: #fff4cf;
+  position: relative;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px #050e2f06;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.wa-chat-mode > .hl-shell > div:first-child { flex-shrink: 0; }
+.wa-chat-mode > .hl-shell > div:last-child { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; justify-content: flex-end; }
+@media (max-width: 1099px) {
+  .wa-chat-mode > .hl-shell > div:last-child { justify-content: flex-start; }
+}
+
+.wa-inbox :is(button, summary, select) { -webkit-tap-highlight-color: transparent; }
+.wa-inbox :is(button, summary, [role="button"], select, input, textarea):focus-visible { outline: 2px solid #202c52; outline-offset: -2px; }
+.wa-inbox .hl-badge::before { display: none; }
+.wa-inbox .animate-pulse { animation: none; }
+.wa-inbox summary { list-style: none; cursor: pointer; }
+.wa-inbox summary::-webkit-details-marker { display: none; }
+.wa-storage-details { position: relative; }
+.wa-storage-details > summary { display: flex; align-items: center; gap: 8px; min-height: 32px; font-size: 11px; color: var(--color-ink-2); white-space: nowrap; }
+.wa-storage-details.is-icon > summary { justify-content: center; gap: 3px; min-height: 36px; min-width: 36px; padding: 8px; border: 1px solid transparent; border-radius: 8px; }
+.wa-storage-details.is-icon > summary:hover { background: var(--color-paper); border-color: var(--color-rule); color: var(--color-ink); }
+.wa-inbox-sidebar .wa-storage-popover { left: 0; right: auto; }
+.wa-storage-popover { position: absolute; right: 0; top: calc(100% + 8px); width: min(360px, calc(100vw - 40px)); z-index: 45; box-shadow: 0 8px 32px #050e2f1a; border-radius: 10px; background: var(--color-paper-2); }
+.wa-storage-popover .hl-card { font-size: 12px; line-height: 1.7; }
+
+.wa-inbox-sidebar { width: 100%; }
+.wa-conversations-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 20px 16px 8px; flex-shrink: 0; }
+.wa-conversations-heading h2 { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; letter-spacing: -.025em; }
+.wa-conversations-heading h2 span { color: var(--color-ink-2); background: var(--color-paper); padding: 2px 6px; border-radius: 5px; font-size: 11px; font-weight: 500; }
+.wa-conversations-heading p { margin-top: 4px; font-size: 11px; color: var(--color-ink-2); }
+.wa-conversations-heading .hl-btn-primary { min-height: 36px; width: 36px; padding: 8px; border-radius: 8px; }
+.wa-inbox-search { padding: 12px 16px; gap: 6px; border: 0; }
+.wa-inbox-search .hl-input { min-height: 38px; background: var(--color-paper); border-color: transparent; border-radius: 8px; font-size: 12px; }
+.wa-inbox-search input.hl-input { height: 38px; padding: 8px 28px 8px 34px; }
+.wa-inbox-search .relative > svg { top: 50%; transform: translateY(-50%); }
+.wa-inbox :is(input, textarea)::placeholder { color: #667085; }
+.wa-inbox-search .hl-btn-secondary { height: 36px; width: 32px; min-width: 32px; padding: 6px; border: 0; background: transparent; }
+.wa-inbox-search > .hl-btn-secondary[title="Start new chat"] { display: none; }
+.wa-inbox .wa-inbox-filters { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 16px 12px; overflow: visible; }
+.wa-inbox-filters .hl-tab { min-height: 30px; padding: 4px 9px; border: 1px solid transparent; border-radius: 6px; font-size: 11px; font-weight: 500; }
+.wa-inbox-filters .hl-tab::after { display: none; }
+.wa-inbox-filters .hl-tab.is-active { color: var(--color-ink); background: var(--color-accent-soft); border-color: #e8cb79; }
+.wa-inbox-filters .hl-badge { border: 0; padding: 0; background: transparent; font-size: 10px; color: inherit; }
+.wa-conversation-list { padding: 6px 8px; border: 0; }
+.wa-conversation-list > .wa-conversation-row { border: 0; border-radius: 8px; margin-bottom: 3px; padding: 14px 10px; }
+.wa-conversation-row[aria-pressed="true"] { background: #eef0f5; box-shadow: inset 3px 0 0 var(--color-ink); }
+.wa-conversation-row:not([aria-pressed="true"]):hover { background: var(--color-paper); }
+.wa-conversation-row .font-bold { font-weight: 600; font-size: 13px; }
+.wa-conversation-row .hl-id { font: 400 10px/1.5 Inter, sans-serif; color: var(--color-ink-2); }
+.wa-conversation-row .hl-badge-accent { color: white; background: var(--color-ink); border: 0; border-radius: 5px; }
+
+.wa-conversation-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; min-height: 72px; background: var(--color-paper-2); border-bottom: 1px solid var(--color-rule); }
+.wa-contact-identity { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; text-align: left; border-radius: 6px; padding: 0; }
+.wa-contact-identity > :first-child { flex-shrink: 0; }
+.wa-contact-name { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wa-contact-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
+.wa-contact-name > span { font-size: 11px; color: var(--color-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wa-header-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.wa-header-action, .wa-conversation-menu > summary, .wa-chat-back { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; min-width: 36px; border-radius: 6px; padding: 8px; color: var(--color-ink-2); font-size: 12px; }
+.wa-header-action:hover, .wa-header-action.is-active, .wa-conversation-menu > summary:hover { background: var(--color-paper); color: var(--color-ink); }
+.wa-note-count { padding: 0 5px; font-size: 10px; background: var(--color-paper); border-radius: 4px; }
+.wa-conversation-menu { position: relative; }
+.wa-conversation-menu-panel { position: absolute; z-index: 45; top: calc(100% + 8px); right: 0; width: 240px; max-width: calc(100vw - 24px); background: var(--color-paper-2); border: 1px solid var(--color-rule); box-shadow: 0 8px 32px #050e2f1a; border-radius: 10px; padding: 6px; }
+.wa-conversation-menu-panel p { padding: 8px 10px; font-size: 11px; color: var(--color-ink-2); }
+.wa-conversation-menu-panel button { display: flex; align-items: center; gap: 10px; text-align: left; width: 100%; min-height: 40px; padding: 8px 10px; font-size: 12px; border-radius: 6px; }
+.wa-conversation-menu-panel button:hover { background: var(--color-paper); }
+.wa-ticket-field { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; margin: 0; font-size: 11px; color: var(--color-ink-2); }
+.wa-ticket-field select { width: auto; max-width: 140px; height: 32px; min-height: 30px; border: 1px solid #8892a2; border-radius: 6px; padding: 4px 20px 4px 8px; background-color: var(--color-paper-2); color: var(--color-ink); font: 500 11px/1.4 Inter, sans-serif; cursor: pointer; }
+/* Status, assignee and branch live in the conversation header, immediately left of Notes */
+.wa-header-tickets { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.wa-header-tickets .wa-ticket-field { flex-shrink: 1; min-width: 0; }
+.wa-header-tickets .wa-ticket-field select { max-width: 132px; }
+.wa-header-tickets .wa-conversation-branch { flex-shrink: 1; min-width: 0; overflow: hidden; }
+.wa-conversation-branch { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; color: var(--color-ink-2); font-size: 10px; white-space: nowrap; }
+.wa-thread-canvas { background: #f5f6f8; }
+.wa-message-thread { padding: 20px clamp(16px, 4vw, 56px); }
+.wa-inbox .wa-sticky-date-chip > span { background: #e9ecf1; border: 0; border-radius: 5px; font: 500 10px/1.5 Inter, sans-serif; letter-spacing: .025em; box-shadow: none; backdrop-filter: none; color: #596477; }
+.wa-inbox .wa-message-bubble { padding: 10px 12px 8px; box-shadow: 0 1px 2px #202c5208; font-size: 13px; line-height: 1.65; border-radius: 10px; max-width: min(82%, 560px); overflow-wrap: anywhere; }
+.wa-message-incoming { background: var(--color-paper-2); border-color: #e2e5eb; }
+.wa-message-outgoing { background: var(--color-accent-soft); border: 1px solid #efdfb0; }
+.wa-message-bubble > span[aria-hidden="true"] { display: none; }
+.wa-message-bubble .hl-id { font: 400 10px/1.5 Inter, sans-serif; color: #606b7e; padding-top: 5px; }
+.wa-message-actions { background: var(--color-paper-2); box-shadow: 0 2px 8px #202c5214; }
+.wa-message-actions:focus-within { opacity: 1; }
+.wa-inbox .wa-speed-bar { min-height: 40px; max-height: none; padding: 6px 16px; gap: 6px; overflow-x: auto; overflow-y: hidden; border-top: 1px solid var(--color-rule); }
+.wa-quick-label { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; font-size: 10px; font-weight: 600; color: var(--color-ink-2); min-height: 28px; padding: 0 4px; }
+.wa-inbox .wa-speed-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; min-height: 28px; padding: 4px 9px; border-radius: 5px; box-shadow: none; background: var(--color-paper-2); border: 1px solid var(--color-rule); color: var(--color-ink-2); }
+.wa-inbox .wa-speed-chip:hover { background: var(--color-paper); border-color: #a9b0bd; color: var(--color-ink); }
+.wa-inbox .wa-composer { flex-wrap: nowrap; padding: 8px 16px 12px; gap: 6px; border-top: 0; }
+.wa-inbox .wa-composer-input { background: var(--color-paper); border: 1px solid var(--color-rule); border-radius: 8px; box-shadow: none; padding: 10px 12px; min-width: 0; min-height: 44px; font-size: 12px; }
+.wa-inbox .wa-composer-tool { width: 36px; min-height: 40px; min-width: 36px; padding: 8px; border: 0; background: transparent; }
+.wa-inbox .wa-composer > .hl-btn-primary { min-height: 40px; min-width: 40px; padding: 10px; border-radius: 8px; }
+.wa-inbox-welcome-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
+.wa-inbox-conversation > .hl-empty .hl-title { font-size: clamp(20px, 2vw, 26px); letter-spacing: -.035em; line-height: 1.4; }
+.wa-inbox-conversation > .hl-empty .hl-subtitle { margin: 12px auto 0; max-width: 340px; line-height: 1.8; font-size: 12px; }
+
+@media (min-width: 768px) {
+  .wa-inbox-sidebar:not(.wa-sidebar-compact):not(.wa-sidebar-wide) { width: 300px; }
+  .wa-chat-back.md\:hidden { display: none; }
+}
+@media (min-width: 1100px), (min-width: 768px) and (max-height: 520px) {
+
+  .wa-inbox-sidebar:not(.wa-sidebar-compact):not(.wa-sidebar-wide) { width: 316px; }
+}
+@media (max-height: 520px) {
+  .wa-inbox .wa-conversation-header { min-height: 56px; padding-top: 6px; padding-bottom: 6px; }
+  .wa-inbox .wa-speed-bar { display: none; }
+  .wa-inbox .wa-composer { padding-top: 4px; padding-bottom: 4px; }
+}
+@media (min-width: 1450px) {
+  .wa-inbox-sidebar:not(.wa-sidebar-compact):not(.wa-sidebar-wide) { width: 344px; }
+}
+@media (max-width: 1279px) {
+  .wa-inbox aside.wa-parallel-pane { display: none !important; }
+}
+@media (max-width: 1099px) {
+  .wa-conversation-header .wa-header-actions { flex-shrink: 1; min-width: 0; }
+  .wa-header-tickets { flex-shrink: 1; }
+  .wa-header-tickets .wa-ticket-field { flex-shrink: 1; }
+  .wa-header-tickets .wa-ticket-field select { min-width: 64px; max-width: 104px; }
+}
+@media (max-width: 899px) {
+  .wa-header-tickets .wa-ticket-field > span { display: none; }
+  .wa-header-tickets .wa-ticket-field select { min-width: 56px; max-width: 92px; }
+  .wa-header-action > span:not(.wa-note-count) { display: none; }
+}
+@media (max-width: 767px) {
+  .wa-storage-details > summary { font-size: 10px; gap: 5px; }
+  .wa-inbox .wa-inbox-sidebar { width: 100% !important; max-width: none !important; min-width: 0 !important; }
+  .wa-conversation-header { padding: 8px 10px; gap: 6px; min-height: 64px; }
+  .wa-contact-identity { gap: 8px; }
+  .wa-contact-name strong { font-size: 13px; }
+  .wa-header-action > span:not(.wa-note-count) { display: none; }
+  .wa-header-action, .wa-conversation-menu > summary, .wa-chat-back { min-width: 40px; min-height: 44px; padding: 6px; }
+  .wa-header-actions { gap: 0; }
+  .wa-conversation-header .wa-header-actions { gap: 4px; }
+  .wa-header-tickets { gap: 4px; overflow: hidden; }
+  .wa-header-tickets .wa-assignee-field > svg { display: none; }
+  .wa-header-tickets .wa-ticket-field select { min-width: 48px; max-width: 84px; height: 36px; min-height: 36px; padding: 4px 14px 4px 6px; font-size: 10px; }
+  .wa-conversation-branch { display: none; }
+  .wa-inbox .wa-speed-bar { padding: 4px 10px; }
+  .wa-inbox .wa-composer { padding: 6px 8px max(8px, env(safe-area-inset-bottom)); gap: 2px; }
+  .wa-inbox .wa-composer-tool { min-width: 40px; width: 40px; min-height: 44px; }
+  .wa-inbox .wa-composer > .hl-btn-primary { min-width: 44px; min-height: 44px; }
+  .wa-inbox .wa-composer-input { font-size: 16px; padding: 10px; }
+  .wa-inbox .wa-speed-chip, .wa-quick-label { min-height: 36px; }
+  .wa-conversation-menu-panel button { min-height: 44px; }
+  .wa-inbox-filters .hl-tab { min-height: 40px; }
+  .wa-inbox .wa-message-actions { opacity: 1; right: 0; padding: 0; top: 0; border: 0; box-shadow: none; background: transparent; }
+  .wa-bubble-enter { padding-right: 40px; }
+  .wa-message-actions button { display: none; }
+  .wa-message-actions button:last-child { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 36px; margin: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wa-inbox *, .wa-inbox *::before, .wa-inbox *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

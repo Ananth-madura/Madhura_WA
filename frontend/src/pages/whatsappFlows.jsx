@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import axios from "axios";
 import { API } from "../config/api";
 import WAStorageAndSenders from "../components/WAStorageAndSenders";
-import WhatsAppNav from "../components/WhatsAppNav";
 import WAInteractiveOptions from "../components/WAInteractiveOptions";
 import { getInteractiveMessage } from "../utils/waInteractiveMessage";
 import WAVariablePicker from "../components/WAVariablePicker";
@@ -17,7 +16,8 @@ import {
   ZoomIn, ZoomOut, Maximize2, Minimize2, Grid, RotateCcw, Copy,
   ArrowDownRight, CheckSquare, Settings2, Sliders, MessageSquare,
   AlertCircle, Compass, Share2, Tag, Shield, Terminal, ArrowUpRight,
-  Sun, Moon, CornerDownRight, HelpCircle as QuestionIcon, ChevronLeft
+  Sun, Moon, CornerDownRight, HelpCircle as QuestionIcon, ChevronLeft,
+  Undo2, Redo2, Wand2, MoreHorizontal
 } from "lucide-react";
 
 // Standard & Advanced WhatsApp Flow Placeholders
@@ -116,6 +116,120 @@ const PALETTE_CATEGORIES = [
   }
 ];
 
+// ── Graph Helpers (module scope: shared by canvas, pre-flight checks & save) ──
+const cloneNodes = (list) => JSON.parse(JSON.stringify(list || []));
+
+// Steps that are allowed to finish a branch without a follow-up wire.
+const TERMINAL_NODE_TYPES = new Set(["end", "handoff"]);
+
+// Every outgoing link a node owns. Target keys may be stale — callers decide
+// whether a dangling reference is an error (validation) or simply skipped (wires).
+const getOutgoingLinks = (node) => {
+  const cfg = node.config || {};
+  const links = [];
+  const push = (target, label) => {
+    if (target) links.push({ target: String(target), label });
+  };
+
+  if (node.node_type === "interactive_menu") {
+    const sections = Array.isArray(cfg.sections) && cfg.sections.length
+      ? cfg.sections
+      : [{ buttons: cfg.buttons || [] }];
+    sections.forEach((sec, sIdx) =>
+      (sec.buttons || []).forEach((b, bIdx) =>
+        push(b.nextNodeId || b.next_node_key, b.label || b.title || `Option ${bIdx + 1} (S${sIdx + 1})`)
+      )
+    );
+  } else if (node.node_type === "send_buttons") {
+    (cfg.buttons || []).forEach((b, i) => push(b.next_node_key || b.nextNodeId, b.title || b.label || `Option ${i + 1}`));
+  } else if (node.node_type === "send_list") {
+    (cfg.rows || cfg.buttons || []).forEach((b, i) => push(b.next_node_key || b.nextNodeId, b.title || b.label || `Row ${i + 1}`));
+  } else if (node.node_type === "condition") {
+    push(cfg.true_next, "YES (True)");
+    push(cfg.false_next, "NO (False)");
+  } else if (node.node_type === "ai_intent") {
+    Object.entries(cfg.branches || {}).forEach(([intent, tgt]) => push(tgt, intent));
+  } else if (node.node_type === "crm_lookup") {
+    push(cfg.found_next, "Found");
+    push(cfg.not_found_next, "Not Found");
+    push(cfg.next_node_key, "Next");
+  } else {
+    push(cfg.next_node_key, "Next");
+  }
+  return links;
+};
+
+// n8n-style pre-flight validation: broken wires, dead ends, empty content and
+// steps that can never be reached from the entry node.
+const getFlowIssues = (list, entryKey) => {
+  const issues = [];
+  const nodeMap = {};
+  (list || []).forEach(n => { nodeMap[n.node_key] = n; });
+
+  (list || []).forEach(node => {
+    const cfg = node.config || {};
+    const links = getOutgoingLinks(node);
+
+    links.forEach(l => {
+      if (!nodeMap[l.target]) {
+        issues.push({
+          severity: "error",
+          nodeKey: node.node_key,
+          text: `Broken link on "${l.label}" → step "${l.target}" does not exist`,
+        });
+      }
+    });
+
+    if (!TERMINAL_NODE_TYPES.has(node.node_type) && links.length === 0) {
+      issues.push(
+        node.node_type === "condition"
+          ? { severity: "error", nodeKey: node.node_key, text: `Condition "${node.node_key}" has no YES/NO branch connected` }
+          : { severity: "warn", nodeKey: node.node_key, text: `"${node.node_key}" is a dead end — nothing follows it` }
+      );
+    }
+
+    const body = cfg.text ?? cfg.prompt_text ?? cfg.body ?? cfg.message ?? "";
+    if (
+      ["send_message", "interactive_menu", "send_buttons", "send_list", "send_cta", "collect_input"].includes(node.node_type) &&
+      !String(body).trim()
+    ) {
+      issues.push({ severity: "warn", nodeKey: node.node_key, text: `"${node.node_key}" has no message text` });
+    }
+
+    if (node.node_type === "send_cta" && !String(cfg.url || "").replace(/^https?:\/\/$/i, "").trim()) {
+      issues.push({ severity: "warn", nodeKey: node.node_key, text: `"${node.node_key}" has no destination URL` });
+    }
+  });
+
+  // Reachability sweep from the entry step
+  const entry = (entryKey && nodeMap[entryKey]) ? entryKey : (list?.[0]?.node_key);
+  if (list && list.length > 0) {
+    if (entry && nodeMap[entry]) {
+      const seen = new Set([entry]);
+      const queue = [entry];
+      while (queue.length) {
+        const cur = nodeMap[queue.shift()];
+        if (!cur) continue;
+        getOutgoingLinks(cur).forEach(l => {
+          if (nodeMap[l.target] && !seen.has(l.target)) {
+            seen.add(l.target);
+            queue.push(l.target);
+          }
+        });
+      }
+      list.forEach(n => {
+        if (!seen.has(n.node_key)) {
+          issues.push({ severity: "warn", nodeKey: n.node_key, text: `"${n.node_key}" is unreachable from the entry step` });
+        }
+      });
+    } else {
+      issues.push({ severity: "error", nodeKey: null, text: "Entry step could not be resolved" });
+    }
+  }
+
+  return issues;
+};
+
 export default function WhatsAppFlows() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -138,8 +252,23 @@ export default function WhatsAppFlows() {
   const [flowEntryNode, setFlowEntryNode] = useState("start");
   const [nodes, setNodes] = useState([]);
   const [selectedNodeKey, setSelectedNodeKey] = useState(null);
+  // Draft buffer for the inspector's node-key rename (committed on blur / Enter)
+  const [keyDraft, setKeyDraft] = useState(null); // { nodeKey, value }
   const [activeInspectorTab, setActiveInspectorTab] = useState("config"); // "config" | "preview" | "audit"
   const [saving, setSaving] = useState(false);
+
+  // Editing history (undo / redo) + unsaved-changes tracking — the canvas keeps
+  // a stack of node snapshots so every structural change can be reverted.
+  const [dirty, setDirty] = useState(false);
+  const undoStackRef = useRef([]);
+  const redoStackRef = useRef([]);
+  const nodesRef = useRef(nodes);
+  const dragSnapshotRef = useRef(null);
+  const lastConfigSnapshotRef = useRef(0);
+  // Latest handler bindings for the global keyboard listener.
+  const shortcutsRef = useRef({});
+  // Which toolbar dropdown is open: "templates" | "issues" | "more" | null
+  const [openMenu, setOpenMenu] = useState(null);
 
   // Canvas Viewport State (Pan & Zoom)
   const [zoom, setZoom] = useState(1);
@@ -184,6 +313,23 @@ export default function WhatsAppFlows() {
   const [paletteFilter, setPaletteFilter] = useState("");
   const simChatBottomRef = useRef(null);
 
+  // Keep a mirror of the canvas graph for the history stack (always the last
+  // committed value, so a snapshot taken before a mutation is the pre-state).
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+
+  // Warn before the tab is closed with unsaved canvas changes.
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const handler = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
   // Auto-scroll phone simulator chat bottom on new message or typing
   useEffect(() => {
     if (simChatBottomRef.current) {
@@ -191,21 +337,102 @@ export default function WhatsAppFlows() {
     }
   }, [simMessages, simTyping]);
 
-  // Global keybindings: Escape cancels active port connection / popups
+  // Expose the newest handlers/state to the window-level keyboard listener.
+  // No dependency array on purpose: it always re-binds to the latest render.
   useEffect(() => {
+    shortcutsRef.current = {
+      connectingFrom,
+      simListPopup,
+      openMenu,
+      cancelConnection: () => setConnectingFrom(null),
+      closePopup: () => setSimListPopup(null),
+      closeMenus: () => setOpenMenu(null),
+      undo,
+      redo,
+      deleteSelected,
+      duplicateSelected,
+      nudgeSelected,
+      zoomBy,
+      fitToScreen,
+      saveDraft,
+    };
+  });
+
+  // Global keybindings: Escape cancels active port connection / popups, plus
+  // n8n-style canvas shortcuts (undo, redo, delete, duplicate, save, zoom …).
+  useEffect(() => {
+    const isTypingTarget = (target) => {
+      const tag = target?.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !!target?.isContentEditable;
+    };
+
     const handleKeyDown = (e) => {
+      const s = shortcutsRef.current;
+      const mod = e.ctrlKey || e.metaKey;
+
       if (e.key === "Escape") {
-        if (connectingFrom) {
-          setConnectingFrom(null);
-        }
-        if (simListPopup) {
-          setSimListPopup(null);
-        }
+        if (s.connectingFrom) s.cancelConnection();
+        if (s.simListPopup) s.closePopup();
+        if (s.openMenu) s.closeMenus();
+        return;
+      }
+
+      if (mod && (e.key === "s" || e.key === "S")) { e.preventDefault(); s.saveDraft(); return; }
+      if (mod && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) s.redo(); else s.undo(); return; }
+      if (mod && (e.key === "y" || e.key === "Y")) { e.preventDefault(); s.redo(); return; }
+      if (mod && (e.key === "d" || e.key === "D")) { e.preventDefault(); s.duplicateSelected(); return; }
+      if (mod && e.key === "0") { e.preventDefault(); s.fitToScreen(); return; }
+      if (mod && (e.key === "=" || e.key === "+")) { e.preventDefault(); s.zoomBy(0.1); return; }
+      if (mod && e.key === "-") { e.preventDefault(); s.zoomBy(-0.1); return; }
+      if (mod) return;
+
+      if (isTypingTarget(e.target)) return;
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        s.deleteSelected();
+        return;
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        const step = e.shiftKey ? 40 : 8;
+        const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+        const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+        s.nudgeSelected(dx, dy);
       }
     };
+
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [connectingFrom, simListPopup]);
+  }, []);
+
+  // Wheel / trackpad canvas navigation: scroll pans the board, ctrl/cmd + scroll
+  // zooms around the cursor (native non-passive listener so ctrl+scroll does not
+  // trigger the browser's page zoom).
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!showStudio || !el) return undefined;
+
+    const onWheel = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const rect = el.getBoundingClientRect();
+        const cursorX = e.clientX - rect.left;
+        const cursorY = e.clientY - rect.top;
+        const next = Math.min(1.8, Math.max(0.4, Number((zoom + (e.deltaY > 0 ? -0.08 : 0.08)).toFixed(2))));
+        if (next === zoom) return;
+        const worldX = (cursorX - pan.x) / zoom;
+        const worldY = (cursorY - pan.y) / zoom;
+        setPan({ x: Math.round(cursorX - worldX * next), y: Math.round(cursorY - worldY * next) });
+        setZoom(next);
+      } else {
+        setPan(p => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+      }
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [showStudio, zoom, pan]);
 
   // Versions Modal State
   const [showVersionsModal, setShowVersionsModal] = useState(false);
@@ -295,6 +522,9 @@ export default function WhatsAppFlows() {
   }, [location.pathname, flowId]);
 
   const handleCloseStudio = () => {
+    if (dirty && !window.confirm("You have unsaved canvas changes. Leave the studio anyway?")) {
+      return;
+    }
     setShowStudio(false);
     navigate("/whatsapp/flows");
   };
@@ -353,6 +583,117 @@ export default function WhatsAppFlows() {
       setShowRightPanel(true);
       setActiveInspectorTab("config");
     }
+  };
+
+  // ── Canvas History (undo / redo) ───────────────────────────────────────────
+  const recordHistory = useCallback((snapshot) => {
+    undoStackRef.current.push(snapshot);
+    if (undoStackRef.current.length > 60) undoStackRef.current.shift();
+    redoStackRef.current = [];
+    setDirty(true);
+  }, []);
+
+  // Snapshot the graph as it currently stands — call BEFORE mutating nodes.
+  const snapshotNodes = useCallback(() => {
+    recordHistory(cloneNodes(nodesRef.current));
+  }, [recordHistory]);
+
+  // Throttled snapshot for high-frequency edits (typing in the inspector) so a
+  // burst of keystrokes collapses into a single undo step.
+  const snapshotNodesThrottled = useCallback(() => {
+    const now = Date.now();
+    if (now - lastConfigSnapshotRef.current > 900) {
+      lastConfigSnapshotRef.current = now;
+      snapshotNodes();
+    }
+  }, [snapshotNodes]);
+
+  const undo = useCallback(() => {
+    if (!undoStackRef.current.length) return;
+    redoStackRef.current.push(cloneNodes(nodesRef.current));
+    const prev = undoStackRef.current.pop();
+    setNodes(prev);
+    setSelectedNodeKey(k => (k && prev.some(n => n.node_key === k) ? k : null));
+    setDirty(true);
+  }, []);
+
+  const redo = useCallback(() => {
+    if (!redoStackRef.current.length) return;
+    undoStackRef.current.push(cloneNodes(nodesRef.current));
+    const next = redoStackRef.current.pop();
+    setNodes(next);
+    setSelectedNodeKey(k => (k && next.some(n => n.node_key === k) ? k : null));
+    setDirty(true);
+  }, []);
+
+  // ── Viewport & editing shortcuts helpers ───────────────────────────────────
+  const zoomBy = (delta) => {
+    setZoom(z => Math.min(1.8, Math.max(0.4, Number((z + delta).toFixed(2)))));
+  };
+
+  const nudgeSelected = (dx, dy) => {
+    if (!selectedNodeKey || selectedNodeKey === "start") return;
+    snapshotNodesThrottled();
+    setNodes(prev => prev.map(n => (
+      n.node_key === selectedNodeKey
+        ? { ...n, position_x: Math.max(0, (Number(n.position_x) || 0) + dx), position_y: Math.max(0, (Number(n.position_y) || 0) + dy) }
+        : n
+    )));
+  };
+
+  const saveDraft = () => {
+    handleSaveFlow(false);
+  };
+
+  const deleteSelected = () => {
+    if (selectedNodeKey) deleteNode(selectedNodeKey);
+  };
+
+  const duplicateSelected = () => {
+    const node = nodes.find(n => n.node_key === selectedNodeKey);
+    if (node) duplicateNode(node);
+  };
+
+  // ── Auto-arrange ("tidy up"): layered left-to-right layout from the entry ──
+  const autoLayout = () => {
+    if (!nodes.length) return;
+    snapshotNodes();
+
+    const nodeMap = {};
+    nodes.forEach(n => { nodeMap[n.node_key] = n; });
+    const entry = (entryNodeKey && nodeMap[entryNodeKey]) ? entryNodeKey : nodes[0].node_key;
+
+    const depth = { [entry]: 0 };
+    const seen = new Set([entry]);
+    const queue = [entry];
+    while (queue.length) {
+      const current = nodeMap[queue.shift()];
+      if (!current) continue;
+      getOutgoingLinks(current).forEach(l => {
+        if (nodeMap[l.target] && !seen.has(l.target)) {
+          seen.add(l.target);
+          depth[l.target] = depth[current.node_key] + 1;
+          queue.push(l.target);
+        }
+      });
+    }
+
+    const deepest = seen.size ? Math.max(...Array.from(seen).map(k => depth[k] || 0)) : 0;
+    const columns = {};
+    nodes.forEach(n => {
+      if (depth[n.node_key] === undefined) depth[n.node_key] = deepest + 1;
+      const d = depth[n.node_key];
+      (columns[d] = columns[d] || []).push(n.node_key);
+    });
+
+    const laid = nodes.map(n => {
+      const d = depth[n.node_key];
+      const row = columns[d].indexOf(n.node_key);
+      return { ...n, position_x: 70 + d * 360, position_y: 80 + row * 265 };
+    });
+
+    setNodes(laid);
+    setTimeout(() => fitToScreen(laid), 80);
   };
 
   // ── Open Visual Studio for a Flow ───────────────────────────────────────────
@@ -892,6 +1233,23 @@ export default function WhatsAppFlows() {
       return;
     }
 
+    // Pre-flight gate before going live: broken wires / unconnected branches
+    if (isPublishing) {
+      const entryKey = (nodes.some(n => n.node_key === flowEntryNode))
+        ? flowEntryNode
+        : (nodes.find(n => n.node_type === "start" || n.node_type?.includes("trigger"))?.node_key || nodes[0]?.node_key || null);
+      const blocking = getFlowIssues(nodes, entryKey).filter(i => i.severity === "error");
+      if (blocking.length > 0) {
+        const list = blocking.slice(0, 6).map(i => `• ${i.text}`).join("\n");
+        const more = blocking.length > 6 ? `\n…and ${blocking.length - 6} more` : "";
+        const proceed = window.confirm(`⚠️ ${blocking.length} blocking issue(s) found:\n\n${list}${more}\n\nPublish anyway?`);
+        if (!proceed) {
+          setOpenMenu("issues");
+          return;
+        }
+      }
+    }
+
     try {
       setSaving(true);
       const token = localStorage.getItem("token");
@@ -933,6 +1291,7 @@ export default function WhatsAppFlows() {
       }
 
       await fetchFlows();
+      setDirty(false);
       return flowId;
     } catch (err) {
       alert("Error saving flow: " + (err.response?.data?.error || err.message));
@@ -1014,6 +1373,7 @@ export default function WhatsAppFlows() {
       const fetchedFlow = res.data;
       setFlowName(fetchedFlow.name);
       setFlowDesc(fetchedFlow.description || "");
+      snapshotNodes(); // restoring a version is itself undoable
       setNodes(fetchedFlow.nodes || []);
       setSelectedNodeKey(fetchedFlow.nodes[0]?.node_key || "start");
       alert("✅ Successfully restored version snapshot!");
@@ -1039,6 +1399,11 @@ export default function WhatsAppFlows() {
     if (isPanning) {
       setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
     } else if (draggingNodeKey) {
+      // First actual move of a drag commits one undo step for the whole drag
+      if (dragSnapshotRef.current) {
+        recordHistory(dragSnapshotRef.current);
+        dragSnapshotRef.current = null;
+      }
       const newX = (e.clientX - pan.x - dragOffset.x) / zoom;
       const newY = (e.clientY - pan.y - dragOffset.y) / zoom;
       setNodes(prev => prev.map(n => n.node_key === draggingNodeKey ? { ...n, position_x: Math.max(0, newX), position_y: Math.max(0, newY) } : n));
@@ -1056,6 +1421,7 @@ export default function WhatsAppFlows() {
   const handleCanvasMouseUp = () => {
     setIsPanning(false);
     setDraggingNodeKey(null);
+    dragSnapshotRef.current = null; // click without movement keeps history untouched
     // Keep connectingFrom active so user can click-to-connect by clicking the destination node
   };
 
@@ -1068,6 +1434,7 @@ export default function WhatsAppFlows() {
     }
     setSelectedNodeKey(nodeKey);
     setDraggingNodeKey(nodeKey);
+    dragSnapshotRef.current = cloneNodes(nodes); // pending pre-drag snapshot
     const node = nodes.find(n => n.node_key === nodeKey);
     if (node) {
       setDragOffset({
@@ -1099,6 +1466,7 @@ export default function WhatsAppFlows() {
 
     const { nodeKey: srcKey, portType, sectionIdx, buttonIdx, intentKey } = connectingFrom;
 
+    snapshotNodes();
     setNodes(prev => prev.map(n => {
       if (n.node_key !== srcKey) return n;
       const cfg = { ...(n.config || {}) };
@@ -1158,6 +1526,7 @@ export default function WhatsAppFlows() {
   // Disconnect / detach wire link directly from canvas
   const disconnectWire = (wire) => {
     if (!wire || !wire.srcKey) return;
+    snapshotNodes();
     setNodes(prev => prev.map(n => {
       if (n.node_key !== wire.srcKey) return n;
       const cfg = JSON.parse(JSON.stringify(n.config || {}));
@@ -1287,6 +1656,7 @@ export default function WhatsAppFlows() {
       position_y: Math.max(50, canvasCenterY + (Math.random() * 40 - 20))
     };
 
+    snapshotNodes();
     setNodes(prev => [...prev, newNode]);
     setSelectedNodeKey(uniqueKey);
   };
@@ -1296,6 +1666,7 @@ export default function WhatsAppFlows() {
       alert("The start entry node cannot be deleted.");
       return;
     }
+    snapshotNodes();
     setNodes(prev => prev.filter(n => n.node_key !== nodeKey));
     if (selectedNodeKey === nodeKey) setSelectedNodeKey(null);
   };
@@ -1308,7 +1679,51 @@ export default function WhatsAppFlows() {
       position_x: (node.position_x || 0) + 40,
       position_y: (node.position_y || 0) + 40
     };
+    snapshotNodes();
     setNodes(prev => [...prev, copy]);
+    setSelectedNodeKey(newKey);
+  };
+
+  // ── Rename a step: rewrite the key AND every reference pointing at it ─────
+  const renameNodeKey = (oldKey, newKey) => {
+    if (!newKey || newKey === oldKey) return;
+    if (nodes.some(n => n.node_key === newKey)) {
+      alert(`A step named "${newKey}" already exists — pick another key.`);
+      return;
+    }
+
+    const remap = (val) => (val === oldKey ? newKey : val);
+    const remapButton = (b) => {
+      const nb = { ...b };
+      if (nb.next_node_key) nb.next_node_key = remap(nb.next_node_key);
+      if (nb.nextNodeId) nb.nextNodeId = remap(nb.nextNodeId);
+      return nb;
+    };
+    const remapConfig = (cfg) => {
+      const out = { ...cfg };
+      ["next_node_key", "nextNodeId", "true_next", "false_next", "found_next", "not_found_next"].forEach(field => {
+        if (out[field]) out[field] = remap(out[field]);
+      });
+      if (out.branches) {
+        const branches = {};
+        Object.entries(out.branches).forEach(([k, v]) => { branches[k] = remap(v); });
+        out.branches = branches;
+      }
+      if (Array.isArray(out.buttons)) out.buttons = out.buttons.map(remapButton);
+      if (Array.isArray(out.rows)) out.rows = out.rows.map(remapButton);
+      if (Array.isArray(out.sections)) {
+        out.sections = out.sections.map(s => ({ ...s, buttons: (s.buttons || []).map(remapButton) }));
+      }
+      return out;
+    };
+
+    snapshotNodesThrottled();
+    setNodes(prev => prev.map(n => (
+      n.node_key === oldKey
+        ? { ...n, node_key: newKey }
+        : { ...n, config: remapConfig(n.config || {}) }
+    )));
+    if (flowEntryNode === oldKey) setFlowEntryNode(newKey);
     setSelectedNodeKey(newKey);
   };
 
@@ -1389,6 +1804,42 @@ export default function WhatsAppFlows() {
   };
 
   const selectedNode = nodes.find(n => n.node_key === selectedNodeKey);
+
+  // ── Pre-flight validation (n8n-style issue list) ───────────────────────────
+  const entryNodeKey = useMemo(() => {
+    if (nodes.some(n => n.node_key === flowEntryNode)) return flowEntryNode;
+    const start = nodes.find(n => n.node_type === "start" || n.node_type?.includes("trigger")) || nodes[0];
+    return start ? start.node_key : null;
+  }, [nodes, flowEntryNode]);
+
+  const flowIssues = useMemo(() => getFlowIssues(nodes, entryNodeKey), [nodes, entryNodeKey]);
+
+  const issuesByNode = useMemo(() => {
+    const map = {};
+    flowIssues.forEach(issue => {
+      if (!issue.nodeKey) return;
+      (map[issue.nodeKey] = map[issue.nodeKey] || []).push(issue);
+    });
+    return map;
+  }, [flowIssues]);
+
+  const errorCount = flowIssues.filter(i => i.severity === "error").length;
+
+  // Jump the viewport to the step a validation issue points at
+  const focusIssue = (issue) => {
+    if (!issue?.nodeKey) return;
+    const node = nodes.find(n => n.node_key === issue.nodeKey);
+    setSelectedNodeKey(issue.nodeKey);
+    setOpenMenu(null);
+    if (node && canvasRef.current) {
+      const w = canvasRef.current.clientWidth;
+      const h = canvasRef.current.clientHeight;
+      setPan({
+        x: Math.round(w / 2 - ((Number(node.position_x) || 0) + 135) * zoom),
+        y: Math.round(h / 2 - ((Number(node.position_y) || 0) + 95) * zoom),
+      });
+    }
+  };
 
   // ── Calculate SVG Connections between Nodes ─────────────────────────────────
   const getWirePaths = () => {
@@ -1566,6 +2017,21 @@ export default function WhatsAppFlows() {
                     Entry
                   </span>
                 )}
+                {(issuesByNode[node.node_key] || []).length > 0 && (() => {
+                  const nodeIssues = issuesByNode[node.node_key];
+                  const hasError = nodeIssues.some(i => i.severity === "error");
+                  return (
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full font-extrabold text-[9px] inline-flex items-center gap-0.5 ${
+                        hasError ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"
+                      }`}
+                      title={nodeIssues.map(i => i.text).join("\n")}
+                    >
+                      <AlertCircle size={9} />
+                      {nodeIssues.length}
+                    </span>
+                  );
+                })()}
               </div>
               <p className="text-[10px] text-slate-400 truncate">{typeMeta.label}</p>
             </div>
@@ -2069,6 +2535,7 @@ export default function WhatsAppFlows() {
 
     const cfg = selectedNode.config || {};
     const updateConfig = (newCfg) => {
+      snapshotNodesThrottled();
       setNodes(prev => prev.map(n => n.node_key === selectedNode.node_key ? { ...n, config: { ...cfg, ...newCfg } } : n));
     };
 
@@ -2081,13 +2548,24 @@ export default function WhatsAppFlows() {
           </label>
           <input
             type="text"
-            value={selectedNode.node_key}
-            onChange={(e) => {
-              const newKey = e.target.value.replace(/[^a-zA-Z0-9_]/g, "");
-              setNodes(prev => prev.map(n => n.node_key === selectedNode.node_key ? { ...n, node_key: newKey } : n));
-              setSelectedNodeKey(newKey);
+            value={keyDraft && keyDraft.nodeKey === selectedNode.node_key ? keyDraft.value : selectedNode.node_key}
+            onChange={(e) => setKeyDraft({ nodeKey: selectedNode.node_key, value: e.target.value.replace(/[^a-zA-Z0-9_]/g, "") })}
+            onBlur={() => {
+              if (keyDraft && keyDraft.nodeKey === selectedNode.node_key && keyDraft.value !== selectedNode.node_key) {
+                const target = selectedNode.node_key;
+                const value = keyDraft.value;
+                setKeyDraft(null);
+                renameNodeKey(target, value);
+              } else {
+                setKeyDraft(null);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") setKeyDraft(null);
             }}
             disabled={selectedNode.node_key === "start"}
+            title="Rename step — all incoming and outgoing wires are re-pointed automatically"
             className="w-full px-3 py-1.5 text-xs font-mono font-bold bg-slate-50 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
@@ -3490,32 +3968,34 @@ export default function WhatsAppFlows() {
         }}
         className="bg-slate-900 text-slate-100 flex flex-col font-sans select-none overflow-hidden"
       >
-        {/* Top Studio Action Bar */}
-        <div className="h-14 w-full min-w-0 bg-slate-950 border-b border-slate-800 px-2 sm:px-4 flex items-center justify-between shrink-0 z-30 relative gap-2 overflow-x-auto wa-no-scrollbar">
-          {/* Left: Exit + Title + Trigger Info + Blocks Toggle */}
-          <div className="flex items-center gap-2.5 shrink-0 min-w-0">
+        {/* Top Studio Action Bar — responsive by design: the left group flexes
+            down to the smallest viewport (never overflows) and secondary actions
+            fold into the ⋯ menu instead of scrolling out of reach. */}
+        <div className="h-14 w-full min-w-0 bg-slate-950 border-b border-slate-800 px-2 sm:px-4 flex items-center justify-between shrink-0 z-30 relative gap-1.5 sm:gap-2">
+          {/* Left: Exit + Title + History + Validation + Blocks */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink min-w-0 flex-1">
             <button
               onClick={handleCloseStudio}
-              className="px-2.5 py-1.5 text-slate-300 hover:text-white rounded-xl hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-semibold shrink-0"
+              className="px-2 sm:px-2.5 py-1.5 text-slate-300 hover:text-white rounded-xl hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-semibold shrink-0"
               title="Close Studio & Return to Flows"
             >
               <ChevronLeft size={16} />
               <span className="hidden sm:inline">Exit</span>
             </button>
 
-            <div className="flex items-center gap-2 border-l border-slate-800 pl-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold shrink-0">
+            <div className="flex items-center gap-2 border-l border-slate-800 pl-1.5 sm:pl-2.5 min-w-0 flex-1">
+              <div className="hidden sm:flex w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 items-center justify-center font-bold shrink-0">
                 <GitFork size={16} />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <input
                   type="text"
                   value={flowName}
-                  onChange={(e) => setFlowName(e.target.value)}
+                  onChange={(e) => { setFlowName(e.target.value); setDirty(true); }}
                   placeholder="Flow Name..."
-                  className="bg-transparent text-xs sm:text-sm font-bold text-white outline-none hover:bg-slate-800/60 px-1.5 py-0.5 rounded focus:ring-1 focus:ring-emerald-500 max-w-[140px] sm:max-w-xs truncate"
+                  className="bg-transparent text-xs sm:text-sm font-bold text-white outline-none hover:bg-slate-800/60 px-1.5 py-0.5 rounded focus:ring-1 focus:ring-emerald-500 w-full min-w-0 max-w-[96px] sm:max-w-[170px] lg:max-w-xs"
                 />
-                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 px-1.5">
+                <div className="hidden md:flex items-center gap-1.5 text-[10px] text-slate-400 px-1.5">
                   <span>Trigger:</span>
                   <select
                     value={flowTriggerType || "manual"}
@@ -3531,9 +4011,108 @@ export default function WhatsAppFlows() {
               </div>
             </div>
 
+            {/* History: undo / redo / tidy-up */}
+            <div className="hidden sm:flex items-center gap-0.5 shrink-0">
+              <button
+                type="button"
+                onClick={undo}
+                disabled={!undoStackRef.current.length}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition disabled:opacity-30 disabled:hover:bg-transparent"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo2 size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={redo}
+                disabled={!redoStackRef.current.length}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition disabled:opacity-30 disabled:hover:bg-transparent"
+                title="Redo (Ctrl+Shift+Z)"
+              >
+                <Redo2 size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={autoLayout}
+                className="hidden lg:flex px-2 py-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition items-center gap-1"
+                title="Auto-arrange every step (tidy up)"
+              >
+                <Wand2 size={13} />
+                <span>Tidy</span>
+              </button>
+            </div>
+
+            {/* Pre-flight validation */}
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setOpenMenu(m => (m === "issues" ? null : "issues"))}
+                className={`px-2 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
+                  flowIssues.length === 0
+                    ? "bg-emerald-950/50 text-emerald-300 border-emerald-800/70"
+                    : errorCount > 0
+                      ? "bg-rose-950/60 text-rose-300 border-rose-800/70"
+                      : "bg-amber-950/60 text-amber-300 border-amber-800/70"
+                }`}
+                title="Run a pre-flight check on this workflow (broken wires, dead ends, unreachable steps)"
+              >
+                <AlertCircle size={13} />
+                <span className="hidden sm:inline">
+                  {flowIssues.length === 0 ? "Valid" : `${flowIssues.length} Issue${flowIssues.length > 1 ? "s" : ""}`}
+                </span>
+              </button>
+
+              {openMenu === "issues" && (
+                <div className="absolute left-0 sm:left-auto sm:right-0 mt-1.5 w-[19rem] max-w-[92vw] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 animate-in fade-in duration-100">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800">
+                    <span className="text-[11px] font-extrabold text-white uppercase tracking-wider">Pre-flight Check</span>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        flowIssues.length === 0
+                          ? "bg-emerald-500/15 text-emerald-300"
+                          : errorCount > 0
+                            ? "bg-rose-500/15 text-rose-300"
+                            : "bg-amber-500/15 text-amber-300"
+                      }`}
+                    >
+                      {flowIssues.length === 0 ? "All good" : `${errorCount} blocking · ${flowIssues.length - errorCount} warnings`}
+                    </span>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto wa-custom-scrollbar p-1.5 space-y-1">
+                    {flowIssues.length === 0 ? (
+                      <p className="text-[11px] text-emerald-300 px-2 py-3 leading-relaxed">
+                        ✓ Every step is wired up and reachable from the entry node — safe to publish.
+                      </p>
+                    ) : (
+                      flowIssues.map((issue, idx) => (
+                        <button
+                          key={`${issue.nodeKey}-${idx}`}
+                          type="button"
+                          onClick={() => focusIssue(issue)}
+                          className="w-full text-left p-2 rounded-xl hover:bg-slate-800 flex items-start gap-2 transition"
+                          title="Jump to this step"
+                        >
+                          <AlertCircle
+                            size={13}
+                            className={`shrink-0 mt-0.5 ${issue.severity === "error" ? "text-rose-400" : "text-amber-400"}`}
+                          />
+                          <div className="min-w-0">
+                            <div className="text-[11px] text-slate-200 leading-snug">{issue.text}</div>
+                            {issue.nodeKey && (
+                              <div className="text-[10px] font-mono text-slate-500 truncate">{issue.nodeKey}</div>
+                            )}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={() => setShowPalette(p => !p)}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 shrink-0 ${
+              className={`hidden md:flex px-2.5 py-1.5 rounded-xl text-xs font-bold border transition items-center gap-1.5 shrink-0 ${
                 showPalette
                   ? "bg-slate-800 text-white border-slate-700"
                   : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
@@ -3541,7 +4120,7 @@ export default function WhatsAppFlows() {
               title="Toggle Component Palette"
             >
               <Grid size={13} className={showPalette ? "text-emerald-400" : ""} />
-              <span className="hidden md:inline">Blocks</span>
+              <span className="hidden lg:inline">Blocks</span>
             </button>
           </div>
 
@@ -3584,25 +4163,28 @@ export default function WhatsAppFlows() {
 
           {/* Right: Actions (Templates, Simulator, Inspector, Save, Publish) */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Quick Template Switcher */}
-            <div className="relative group">
+            {/* Quick Template Switcher — click-driven so it also works on touch */}
+            <div className={`relative ${openMenu === "templates" ? "block" : "hidden lg:block"}`}>
               <button
                 type="button"
+                onClick={() => setOpenMenu(m => (m === "templates" ? null : "templates"))}
                 className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1.5 transition"
               >
                 <Sparkles size={13} className="text-amber-400" />
                 <span className="hidden sm:inline">Templates</span>
-                <ChevronDown size={11} />
+                <ChevronDown size={11} className={`transition-transform ${openMenu === "templates" ? "rotate-180" : ""}`} />
               </button>
-              <div className="absolute right-0 mt-1 w-64 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2 hidden group-hover:block z-50 animate-in fade-in duration-100">
+              <div className="absolute right-0 mt-1.5 w-64 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in duration-100">
                 <button
                   type="button"
                   onClick={() => {
+                    setOpenMenu(null);
                     setFlowName("Food & Products Flow Bot");
                     setFlowDesc("Interactive flow bot: Buttons -> View All Categories -> Products -> Orders & Inquiries");
                     setFlowTriggerType("manual");
                     setFlowKeywords("menu");
                     const starter = getFoodBotStarterNodes();
+                    snapshotNodes();
                     setNodes(starter);
                     setSelectedNodeKey("welcome_menu");
                     resetSimulation();
@@ -3619,11 +4201,13 @@ export default function WhatsAppFlows() {
                 <button
                   type="button"
                   onClick={() => {
+                    setOpenMenu(null);
                     setFlowName("Interactive Banking & Account Services Bot");
                     setFlowDesc("Multi-section interactive banking menu");
                     setFlowTriggerType("manual");
                     setFlowKeywords("menu, banking");
                     const starter = getDefaultStarterNodes();
+                    snapshotNodes();
                     setNodes(starter);
                     setSelectedNodeKey("banking_menu");
                     resetSimulation();
@@ -3646,7 +4230,7 @@ export default function WhatsAppFlows() {
                 const phone = prompt("Enter customer phone number to test-send WhatsApp menu (e.g. 919876543210):");
                 if (phone) triggerFlowForPhone(phone);
               }}
-              className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/60 flex items-center gap-1.5 transition"
+              className="hidden md:flex px-2.5 py-1.5 rounded-xl text-xs font-bold bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/60 items-center gap-1.5 transition"
               title="Send flow menu directly to WhatsApp phone"
             >
               <Send size={13} />
@@ -3656,7 +4240,7 @@ export default function WhatsAppFlows() {
             {/* WhatsApp Phone Simulator Toggle */}
             <button
               onClick={togglePreview}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
+              className={`hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold border transition items-center gap-1.5 ${
                 showRightPanel && activeInspectorTab === "preview"
                   ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm ring-1 ring-emerald-500/30"
                   : "bg-slate-800 text-slate-300 border-slate-700 hover:text-white"
@@ -3670,7 +4254,7 @@ export default function WhatsAppFlows() {
             {/* Node Inspector Toggle */}
             <button
               onClick={toggleInspector}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
+              className={`hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold border transition items-center gap-1.5 ${
                 showRightPanel && activeInspectorTab === "config"
                   ? "bg-slate-700 text-white border-slate-600 shadow-sm"
                   : "bg-slate-800 text-slate-300 border-slate-700 hover:text-white"
@@ -3684,13 +4268,26 @@ export default function WhatsAppFlows() {
             {editingFlowId && (
               <button
                 onClick={() => openVersions(editingFlowId)}
-                className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1.5 transition"
+                className="hidden lg:flex px-2.5 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 items-center gap-1.5 transition"
                 title="Version History"
               >
                 <Layers size={13} />
                 <span className="hidden lg:inline">Versions</span>
               </button>
             )}
+
+            {/* Unsaved-changes indicator */}
+            <span
+              className={`hidden md:flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border shrink-0 transition-colors ${
+                dirty
+                  ? "bg-amber-500/15 text-amber-300 border-amber-600/50"
+                  : "bg-slate-800 text-slate-400 border-slate-700"
+              }`}
+              title={dirty ? "Unsaved canvas changes — Ctrl+S to save" : "All changes saved"}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${dirty ? "bg-amber-400 animate-pulse" : "bg-emerald-400"}`} />
+              {dirty ? "Unsaved" : "Saved"}
+            </span>
 
             <button
               onClick={() => handleSaveFlow(false)}
@@ -3707,10 +4304,84 @@ export default function WhatsAppFlows() {
               className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 transition hover:scale-105"
             >
               <Play size={13} />
-              <span>Publish Live</span>
+              <span className="hidden sm:inline">Publish Live</span>
+              <span className="sm:hidden">Publish</span>
             </button>
+
+            {/* Overflow menu: everything hidden at this width, one tap away */}
+            <div className="relative lg:hidden">
+              <button
+                type="button"
+                onClick={() => setOpenMenu(m => (m === "more" ? null : "more"))}
+                className="px-2 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1 transition"
+                title="More actions"
+                aria-label="More actions"
+              >
+                <MoreHorizontal size={15} />
+              </button>
+
+              {openMenu === "more" && (
+                <div className="absolute right-0 top-full mt-1.5 w-60 max-w-[86vw] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 p-1.5 animate-in fade-in duration-100">
+                  <div className="flex items-center gap-1 px-1 pb-1.5 mb-1 border-b border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => { setOpenMenu(null); undo(); }}
+                      disabled={!undoStackRef.current.length}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-bold text-slate-300 hover:bg-slate-800 transition disabled:opacity-30"
+                    >
+                      <Undo2 size={13} /> Undo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setOpenMenu(null); redo(); }}
+                      disabled={!redoStackRef.current.length}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-bold text-slate-300 hover:bg-slate-800 transition disabled:opacity-30"
+                    >
+                      <Redo2 size={13} /> Redo
+                    </button>
+                  </div>
+
+                  {[
+                    { icon: <Sparkles size={13} className="text-amber-400" />, label: "Quick Templates", action: () => setOpenMenu("templates") },
+                    { icon: <Grid size={13} className="text-slate-400" />, label: showPalette ? "Hide Blocks" : "Blocks Palette", action: () => { setShowPalette(p => !p); setOpenMenu(null); } },
+                    { icon: <Smartphone size={13} className="text-slate-400" />, label: "WhatsApp Preview", action: () => { togglePreview(); setOpenMenu(null); } },
+                    { icon: <Sliders size={13} className="text-slate-400" />, label: "Node Inspector", action: () => { toggleInspector(); setOpenMenu(null); } },
+                    { icon: <Send size={13} className="text-cyan-400" />, label: "Test on Phone", action: () => {
+                      setOpenMenu(null);
+                      const phone = prompt("Enter customer phone number to test-send WhatsApp menu (e.g. 919876543210):");
+                      if (phone) triggerFlowForPhone(phone);
+                    } },
+                    ...(editingFlowId ? [{ icon: <Layers size={13} className="text-slate-400" />, label: "Version History", action: () => { setOpenMenu(null); openVersions(editingFlowId); } }] : []),
+                    { icon: <Wand2 size={13} className="text-slate-400" />, label: "Tidy Layout", action: () => { setOpenMenu(null); autoLayout(); } },
+                    { icon: <Maximize2 size={13} className="text-slate-400" />, label: "Fit to Screen", action: () => { setOpenMenu(null); fitToScreen(); } },
+                    { icon: <RotateCcw size={13} className="text-slate-400" />, label: "Reset View", action: () => { setOpenMenu(null); setZoom(1); setPan({ x: 80, y: 80 }); } },
+                  ].map(item => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={item.action}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[11px] font-semibold text-slate-200 hover:bg-slate-800 transition text-left"
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Backdrop: click-away close for toolbar dropdowns (sits under the
+            toolbar itself, so the open menu stays clickable) */}
+        {openMenu && (
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={() => setOpenMenu(null)}
+            className="fixed inset-0 z-20 cursor-default"
+          />
+        )}
 
         {/* Studio Workspace Layout */}
         <div className="flex-1 flex w-full min-w-0 min-h-0 relative overflow-hidden">
@@ -3955,7 +4626,32 @@ export default function WhatsAppFlows() {
             </div>
 
             {/* Floating Bottom Center Canvas Quick Toolbar */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-slate-900/90 border border-slate-800/80 backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-2xl text-xs text-slate-300 select-none">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 sm:gap-2 bg-slate-900/90 border border-slate-800/80 backdrop-blur-md px-2.5 sm:px-3.5 py-2 rounded-2xl shadow-2xl text-xs text-slate-300 select-none">
+              <button
+                onClick={undo}
+                disabled={!undoStackRef.current.length}
+                className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition disabled:opacity-30 disabled:hover:bg-transparent"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo2 size={13} />
+              </button>
+              <button
+                onClick={redo}
+                disabled={!redoStackRef.current.length}
+                className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition disabled:opacity-30 disabled:hover:bg-transparent"
+                title="Redo (Ctrl+Shift+Z)"
+              >
+                <Redo2 size={13} />
+              </button>
+              <button
+                onClick={autoLayout}
+                className="hidden sm:flex px-2 py-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition items-center gap-1"
+                title="Auto-arrange every step (tidy up)"
+              >
+                <Wand2 size={13} />
+                <span className="hidden md:inline">Tidy</span>
+              </button>
+              <div className="h-3 w-px bg-slate-700" />
               <button
                 onClick={() => fitToScreen()}
                 className="px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 font-bold rounded-lg transition flex items-center gap-1.5"
@@ -4161,9 +4857,7 @@ export default function WhatsAppFlows() {
   );
 
   return (
-    <div className="hl-page bg-slate-50 font-sans">
-      <WhatsAppNav />
-      <WAStorageAndSenders />
+    <div className="hl-page bg-slate-50 font-sans">      <WAStorageAndSenders />
 
       <div className="max-w-7xl mx-auto w-full min-w-0 px-3 sm:px-4 lg:px-6 py-5 sm:py-8 space-y-6">
         {/* Header Hero Banner */}

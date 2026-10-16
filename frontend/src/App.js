@@ -9,6 +9,7 @@ import WALayout from "./layout/WALayout";
 import WhatsAppPage from "./pages/whatsapp";
 import WAContacts from "./pages/whatsappContacts";
 import WATemplates from "./pages/whatsappTemplates";
+import WATemplateCreate from "./pages/whatsappTemplateCreate";
 import WAGroups from "./pages/whatsappGroups";
 import WACampaigns from "./pages/whatsappCampaigns";
 import WAAutomations from "./pages/whatsappAutomations";
@@ -168,6 +169,8 @@ export default function App() {
               <Route index element={<WhatsAppPage />} />
               <Route path="contacts" element={<WAContacts />} />
               <Route path="templates" element={<WATemplates />} />
+              <Route path="templates/create" element={<WATemplateCreate />} />
+              <Route path="templates/:templateId/edit" element={<WATemplateCreate />} />
               <Route path="groups" element={<WAGroups />} />
               <Route path="campaigns" element={<WACampaigns />} />
               <Route path="automations" element={<WAAutomations />} />

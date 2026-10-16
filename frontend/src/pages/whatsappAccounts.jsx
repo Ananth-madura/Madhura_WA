@@ -15,7 +15,6 @@ import axios from "axios";
 import { API } from "../config/api";
 import socket from "../socket/socket";
 import WAStorageAndSenders from "../components/WAStorageAndSenders";
-import WhatsAppNav from "../components/WhatsAppNav";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 import { useAuth } from "../auth/AuthContext";
 import { useEnterprise } from "../context/EnterpriseContext";
@@ -1059,9 +1058,7 @@ export default function WhatsAppAccounts() {
   };
 
   return (
-    <div className="hl-page">
-      <WhatsAppNav />
-      <WAStorageAndSenders settings />
+    <div className="hl-page">      <WAStorageAndSenders settings />
 
       {/* Multi-Tenant Multi-Branch Scope & Quota Meter */}
       <div className="mb-4 sm:mb-6 p-4 sm:p-5 rounded-2xl border bg-gradient-to-r from-emerald-950/20 via-slate-900/40 to-slate-950/40 border-emerald-500/20 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">

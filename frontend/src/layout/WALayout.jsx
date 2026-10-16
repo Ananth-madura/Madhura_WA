@@ -1,5 +1,5 @@
 import { waUiStorage } from "../utils/waUiStorage";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
 import axios from "axios";
 import {
@@ -24,8 +24,10 @@ import socket from "../socket/socket";
 import WAConfigPrompt from "../components/WAConfigPrompt";
 import WAAccountBalanceModal from "../components/WAAccountBalanceModal";
 import WAPlanModal from "../components/WAPlanModal";
+import WhatsAppNav from "../components/WhatsAppNav";
 import OrganizationSwitcher from "../components/OrganizationSwitcher";
 import BranchSwitcher from "../components/BranchSwitcher";
+import "../pages/whatsapp-workspace.css";
 
 // Corporate Shell for Whatsapp_CRM — Hallmark Workbench shell (design.md).
 // Deep-navy slab, yellow hairline, quiet type. Routes and logic untouched.
@@ -46,6 +48,100 @@ export default function WALayout() {
   const [balanceData, setBalanceData] = useState(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  // The demo-mode banner is informational — let the operator dismiss it for
+  // the rest of the session instead of pinning it above every page.
+  const [demoBannerClosed, setDemoBannerClosed] = useState(false);
+
+  // ── Auto-hiding top bar ───────────────────────────────────────────────────
+  // The shell header retracts a moment after the pointer stops using it (the
+  // page content fills the space) and slides back down as soon as the cursor
+  // returns to the top edge or a control inside it receives focus. Pointer-less
+  // devices (touch / no-hover) keep it pinned, and Escape brings it back too.
+  const topbarRef = useRef(null);
+  const topbarHideTimer = useRef(null);
+  const topbarHiddenRef = useRef(false);
+  const [topbarHidden, setTopbarHidden] = useState(false);
+  const [topbarHeight, setTopbarHeight] = useState(56);
+  const [autoHideTopbar, setAutoHideTopbar] = useState(false);
+
+  useEffect(() => {
+    setAutoHideTopbar(
+      typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(hover: hover) and (pointer: fine)").matches
+    );
+  }, []);
+
+  // Measure the bar while it is expanded — the collapse animates from the real
+  // height, which grows when the right-hand controls wrap on narrow windows.
+  // scrollHeight is used so a stale inline height can never feed itself back in.
+  useEffect(() => {
+    if (!autoHideTopbar) return undefined;
+    const measure = () => {
+      const el = topbarRef.current;
+      if (!el) return;
+      const h = Math.round(el.scrollHeight);
+      if (h > 0) setTopbarHeight((prev) => (Math.abs(prev - h) > 1 ? h : prev));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [autoHideTopbar, topbarHidden]);
+
+  useEffect(() => {
+    if (!autoHideTopbar) return undefined;
+
+    const REVEAL_ZONE = 16; // px from the top edge that brings the bar back
+    const HIDE_AFTER = 1500; // ms of the pointer not using the bar
+
+    const hideTopbar = () => {
+      if (topbarHiddenRef.current) return;
+      topbarHiddenRef.current = true;
+      setTopbarHidden(true);
+    };
+    const showTopbar = () => {
+      if (topbarHideTimer.current) {
+        clearTimeout(topbarHideTimer.current);
+        topbarHideTimer.current = null;
+      }
+      if (topbarHiddenRef.current) {
+        topbarHiddenRef.current = false;
+        setTopbarHidden(false);
+      }
+    };
+    const scheduleHide = () => {
+      if (topbarHiddenRef.current || topbarHideTimer.current) return;
+      topbarHideTimer.current = setTimeout(() => {
+        topbarHideTimer.current = null;
+        hideTopbar();
+      }, HIDE_AFTER);
+    };
+
+    const onPointerMove = (e) => {
+      const overBar = !!topbarRef.current?.contains(e.target);
+      if (overBar || e.clientY <= REVEAL_ZONE) showTopbar();
+      else scheduleHide();
+    };
+    const onFocusIn = (e) => {
+      if (topbarRef.current?.contains(e.target)) showTopbar();
+    };
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") showTopbar();
+    };
+
+    window.addEventListener("mousemove", onPointerMove, { passive: true });
+    window.addEventListener("focusin", onFocusIn);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      if (topbarHideTimer.current) {
+        clearTimeout(topbarHideTimer.current);
+        topbarHideTimer.current = null;
+      }
+      window.removeEventListener("mousemove", onPointerMove);
+      window.removeEventListener("focusin", onFocusIn);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [autoHideTopbar]);
 
   const isChatView = location.pathname === "/whatsapp" || location.pathname === "/whatsapp/";
   const localCacheWarning = useWALocalInbox();
@@ -208,7 +304,7 @@ export default function WALayout() {
       }
     >
       {localCacheWarning && <div role="alert" className="px-4 py-2 text-sm bg-[var(--color-paper)] text-[var(--color-ink)]">{localCacheWarning}</div>}
-      {demoMode && (
+      {demoMode && !demoBannerClosed && (
         <div
           role="status"
           className="shrink-0 flex items-center justify-between gap-3 px-3 sm:px-6 py-2"
@@ -229,13 +325,32 @@ export default function WALayout() {
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 text-[11px] text-[var(--color-ink-2)]">
             <span className="hidden md:inline">API: https://madhura-wa-backend.onrender.com</span>
+            <button
+              type="button"
+              onClick={() => setDemoBannerClosed(true)}
+              aria-label="Dismiss demo mode notice"
+              title="Close"
+              className="ml-1 p-1 rounded-lg shrink-0 transition hover:bg-black/5 hover:text-[var(--color-ink)] focus-visible:outline-2"
+            >
+              <X size={14} />
+            </button>
           </div>
         </div>
       )}
 
       <header
+        ref={topbarRef}
         className="hl-shell hl-safe-top flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 shrink-0"
-        style={{ minHeight: 56 }}
+        style={{
+          minHeight: topbarHidden ? 0 : 56,
+          height: topbarHidden ? 0 : topbarHeight,
+          overflow: topbarHidden ? "hidden" : "visible",
+          opacity: topbarHidden ? 0 : 1,
+          pointerEvents: topbarHidden ? "none" : "auto",
+          transition:
+            "height .3s cubic-bezier(.4, 0, .2, 1), min-height .3s cubic-bezier(.4, 0, .2, 1), opacity .18s ease",
+        }}
+        aria-hidden={topbarHidden || undefined}
       >
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Link to="/whatsapp" className="flex items-center gap-2 shrink-0 py-0.5" title="Madhura WhatsApp CRM">
@@ -413,15 +528,22 @@ export default function WALayout() {
         />
       )}
 
-      <main
-        className={
-          isChatView
-            ? "flex-1 min-h-0 w-full min-w-0 p-1.5 sm:p-2.5 overflow-hidden flex flex-col"
-            : "flex-1 min-h-0 w-full min-w-0 p-3 sm:p-4 lg:p-5 overflow-y-auto overflow-x-hidden wa-scroll"
-        }
-      >
-        <Outlet />
-      </main>
+      {/* Persistent workspace sidebar — mounted once by the shell so the same
+          rail is fixed on every /whatsapp route instead of being re-created,
+          re-fetched and re-laid-out inside each page. */}
+      <div className="wa-shell-body">
+        <WhatsAppNav />
+        <main
+          data-wa-route={isChatView ? undefined : location.pathname}
+          className={
+            isChatView
+              ? "flex-1 min-h-0 w-full min-w-0 p-1.5 sm:p-2.5 overflow-hidden flex flex-col"
+              : "wa-page-workspace flex-1 min-h-0 w-full min-w-0 p-3 sm:p-4 lg:p-5 overflow-y-auto overflow-x-hidden wa-scroll"
+          }
+        >
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
-import WhatsAppNav from "../components/WhatsAppNav";
 
 // CSV Export Utility
 const exportToCsv = (filename, headers, rows) => {
@@ -189,8 +188,6 @@ export default function WAAnalytics() {
 
   return (
     <div className="hl-page bg-[var(--color-paper)]">
-      <WhatsAppNav />
-
       {/* Header Banner */}
       <div className="hl-commandbar hl-card flex-col md:flex-row md:items-center gap-3 p-4 sm:p-5">
         <div className="flex items-center gap-3.5">

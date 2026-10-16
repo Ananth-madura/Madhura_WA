@@ -1,5 +1,4 @@
 import React from "react";
-import WhatsAppNav from "../components/WhatsAppNav";
 import WhatsAppInteractiveReminders from "../components/WhatsAppInteractiveReminders";
 import { Bell, Sparkles, Bot, Zap, ShieldCheck, CheckCircle2, Clock } from "lucide-react";
 
@@ -7,8 +6,6 @@ export default function WhatsAppReminders() {
   return (
     <div className="hl-page" style={{ background: "var(--color-paper)", fontFamily: "var(--font-body)" }}>
       {/* WhatsApp Subsystem Navigation Bar */}
-      <WhatsAppNav />
-
       {/* Header Banner */}
       <div className="hl-card" style={{ padding: "var(--space-sm) var(--space-md)", marginBottom: "var(--space-sm)" }}>
         <div className="hl-commandbar relative z-10">

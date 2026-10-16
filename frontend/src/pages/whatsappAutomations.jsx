@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
-import WhatsAppNav from "../components/WhatsAppNav";
 import WhatsAppInteractiveReminders from "../components/WhatsAppInteractiveReminders";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 import WAConditionEditor, { parseConditions } from "../components/WAConditionEditor";
@@ -408,8 +407,6 @@ export default function WhatsAppAutomations() {
 
   return (
     <div className="hl-page">
-      <WhatsAppNav />
-
       {/* Header Banner */}
       <div className="hl-commandbar hl-card flex-col md:flex-row md:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 p-4 sm:p-5">
         <div className="flex items-center gap-3.5 min-w-0">

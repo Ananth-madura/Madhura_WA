@@ -8,7 +8,6 @@ import axios from "axios";
 import { API } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
 import { DEMO_CAMPAIGNS, DEMO_TEMPLATES } from "../auth/demoData";
-import WhatsAppNav from "../components/WhatsAppNav";
 import WhatsAppCampaignWizard from "../components/WhatsAppCampaignWizard";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 
@@ -284,8 +283,6 @@ export default function WACampaigns() {
 
   return (
     <div className="hl-page">
-      <WhatsAppNav />
-
       {/* Header Banner */}
       <div className="hl-commandbar">
         <div className="flex items-center gap-3">

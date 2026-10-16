@@ -21,7 +21,7 @@ import {
   Bell,
   GitBranch,
 } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import { API } from "../config/api";
 import socket from "../socket/socket";
@@ -260,16 +260,17 @@ export default function WhatsAppNav() {
     return location.pathname.startsWith(tab.path);
   };
 
-  const isChatView = location.pathname === "/whatsapp" || location.pathname === "/whatsapp/";
+  // The rail holds more tabs than a short viewport shows, so keep the current
+  // route's tab in view instead of stranding it below the fold. "nearest"
+  // scrolls only the rail/strip, never the page itself.
+  const activeTabRef = useRef(null);
+
+  useEffect(() => {
+    activeTabRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [location.pathname]);
 
   return (
-    <div
-      className="hl-card hl-reveal w-full min-w-0"
-      style={{
-        marginBottom: isChatView ? 4 : 12,
-        padding: isChatView ? "4px 6px" : "6px 8px",
-      }}
-    >
+    <div className="hl-card hl-reveal w-full min-w-0 wa-workspace-nav">
       <div className="flex items-center min-w-0 w-full overflow-hidden">
         {/* Top Tabs — responsive full-width strip with zero horizontal scroll on desktop */}
         <div className="wa-nav-tabs-bar">
@@ -279,10 +280,12 @@ export default function WhatsAppNav() {
             return (
               <button
                 key={tab.id}
+                ref={active ? activeTabRef : undefined}
                 onClick={() => navigate(tab.path)}
                 className={`wa-nav-tab-btn${active ? " is-active" : ""}`}
                 title={tab.title}
                 type="button"
+                aria-current={active ? "page" : undefined}
               >
                 <span className="inline-flex items-center justify-center gap-1.5 min-w-0">
                   <Icon size={15} className="shrink-0" />

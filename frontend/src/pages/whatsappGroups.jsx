@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from "react";
 import { Users, Plus, Trash2, Upload, Download, X, ChevronDown, ChevronRight, Loader2, UserPlus, Send, Search, CheckSquare, Square, Building2, Phone, Filter } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
-import WhatsAppNav from "../components/WhatsAppNav";
 import WhatsAppCampaignWizard from "../components/WhatsAppCampaignWizard";
 
 export default function WAGroups() {
@@ -206,9 +205,7 @@ export default function WAGroups() {
   };
 
   return (
-    <div className="hl-page">
-      <WhatsAppNav />
-      <div className="hl-commandbar">
+    <div className="hl-page">      <div className="hl-commandbar">
         <div className="flex items-center gap-3">
           <Users size={28} style={{ color: "var(--color-ink)" }} />
           <h1 className="hl-title">Contact Groups</h1>

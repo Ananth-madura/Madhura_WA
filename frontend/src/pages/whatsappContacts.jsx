@@ -11,7 +11,6 @@ import { API } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
 import { useEnterprise } from "../context/EnterpriseContext";
 import { DEMO_CONTACTS } from "../auth/demoData";
-import WhatsAppNav from "../components/WhatsAppNav";
 import WAContactAvatar from "../components/WAContactAvatar";
 
 const FILTERS = [
@@ -379,8 +378,6 @@ export default function WhatsAppContacts() {
 
   return (
     <div className="hl-page" style={{ background: "var(--color-paper)", fontFamily: "var(--font-body)" }}>
-      <WhatsAppNav />
-
       {/* Header Banner */}
       <div className="hl-commandbar hl-card flex-col md:flex-row md:items-center gap-3" style={{ padding: "var(--space-sm)" }}>
         <div className="flex items-center gap-3.5">

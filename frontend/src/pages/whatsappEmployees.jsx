@@ -30,7 +30,6 @@ import axios from "axios";
 import { API } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
 import { useEnterprise } from "../context/EnterpriseContext";
-import WhatsAppNav from "../components/WhatsAppNav";
 
 const ACCESS_LEVEL_META = {
   full: {
@@ -293,9 +292,7 @@ export default function WAEmployees() {
   // Strict employee isolation guard: if regular employee, show isolated view
   if (user?.role === "employee") {
     return (
-      <div className="crm-layout-content p-4 sm:p-6 max-w-4xl mx-auto">
-        <WhatsAppNav />
-        <div
+      <div className="hl-page wa-employees-page crm-layout-content p-4 sm:p-6 max-w-4xl mx-auto">        <div
           className="hl-card text-center p-8 sm:p-12 mt-6"
           style={{
             background: "var(--color-paper)",
@@ -336,10 +333,8 @@ export default function WAEmployees() {
   }
 
   return (
-    <div className="crm-layout-content p-3 sm:p-6 w-full max-w-7xl mx-auto space-y-4">
+    <div className="hl-page wa-employees-page crm-layout-content p-3 sm:p-6 w-full max-w-7xl mx-auto space-y-4">
       {/* Top Navigation Strip */}
-      <WhatsAppNav />
-
       {/* Toast Notification */}
       {toast && (
         <div className="fixed bottom-5 right-5 z-[9999] animate-bounce-short">
