@@ -467,11 +467,10 @@ export const HEADER_NAV = [
  * so it draws a short list from the same registry instead of a second nav.
  */
 export const LANDING_NAV = [
-  { label: "Product", path: "/features" },
-  { label: "Solutions", path: "/solutions" },
-  { label: "Industries", path: "/industries" },
-  { label: "Developers", path: "/developers" },
-  { label: "Pricing", path: "/pricing" },
+  { label: "Product", path: "/product/crm" },
+  { label: "Features", path: "/features" },
+  { label: "Automation", path: "/product/automations" },
+  { label: "Integrations", path: "/platform/integrations" },
 ];
 
 /* ── Footer ────────────────────────────────────────────────────────────────── */

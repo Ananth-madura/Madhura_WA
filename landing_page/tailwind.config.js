@@ -31,11 +31,29 @@ const navy = {
   950: "hsl(var(--navy-950))",
 };
 
+/* Real product blue. `blue` stays remapped to gold, so surfaces that must read
+   as blue — primary CTAs, section eyebrows, the integration cards — reach for
+   `azure-*` instead. Nothing else in the site uses this scale yet. */
+const azure = {
+  50: "#eff6ff",
+  100: "#dbeafe",
+  200: "#bfdbfe",
+  300: "#93c5fd",
+  400: "#60a5fa",
+  500: "#3b82f6",
+  600: "#2563eb",
+  700: "#1d4ed8",
+  800: "#1e40af",
+  900: "#1e3a8a",
+  950: "#172554",
+};
+
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       colors: {
+        azure,
         blue: gold,
         cyan: gold,
         indigo: gold,
@@ -83,12 +101,22 @@ export default {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.6" },
         },
+        "bridge-flow": {
+          "0%": { transform: "translateX(-110%)" },
+          "100%": { transform: "translateX(210%)" },
+        },
+        "shine-sweep": {
+          "0%": { transform: "translateX(-120%) skewX(-18deg)" },
+          "100%": { transform: "translateX(320%) skewX(-18deg)" },
+        },
       },
       animation: {
         "fade-in": "fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         "scale-in": "scale-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         float: "float-subtle 3.5s ease-in-out infinite",
         "pulse-slow": "pulse-slow 2s ease-in-out infinite",
+        "bridge-flow": "bridge-flow 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite",
+        "shine-sweep": "shine-sweep 2.8s ease-in-out infinite",
       },
     },
   },

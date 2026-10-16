@@ -436,11 +436,11 @@ export const LEGAL_PAGES = [
         id: "compliance",
         heading: "9. Compliance and privacy",
         paragraphs: [
-          "Our controls are mapped against ISO 27001 control families and SOC 2 criteria. Formal certification is in progress; the current control mapping and evidence pack are available to prospective enterprise customers under NDA.",
+          "Our control set is documented so that it can be assessed against the enterprise security frameworks your organisation already works with. The current control descriptions and evidence pack are available to prospective enterprise customers under NDA — request them through the contact page to run your review.",
           "Personal data handling is described in our Privacy Policy, and a data processing agreement is available for all customers processing personal data through the Platform.",
         ],
         list: [
-          "Control mapping against ISO 27001 and SOC 2 criteria",
+          "Documented control set available for review under NDA",
           "Data processing agreement available for all customers",
           "GDPR-aligned data subject request tooling",
           "WhatsApp opt-in records retained as evidence of consent",

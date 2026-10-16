@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { ArrowRight, ChevronDown, Menu, X } from "lucide-react";
 import { appUrl, isSignedIn } from "../../config/site";
-import SiteFooter from "../../components/SiteFooter";
+import SiteFooter from "../../components/SiteFooter"; // used by the commented-out footer below
+import LandingHeader from "../../components/LandingHeader";
+import LandingFooter from "../../components/LandingFooter";
+import BrandLogo from "../../components/BrandLogo";
 import { HEADER_NAV } from "./siteNav";
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -13,17 +16,8 @@ import { HEADER_NAV } from "./siteNav";
 
 function BrandMark() {
   return (
-    <Link to="/" className="flex items-center gap-2.5 group shrink-0" aria-label="Madhura home">
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-cyan-400 p-0.5 shadow-lg shadow-blue-500/25">
-        <div className="w-full h-full bg-[#050e2f] rounded-[10px] flex items-center justify-center">
-          <span className="font-black text-xl bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
-            M
-          </span>
-        </div>
-      </div>
-      <span className="text-xl font-extrabold tracking-tight text-white group-hover:text-blue-400 transition">
-        MADHURA
-      </span>
+    <Link to="/" className="flex items-center group shrink-0" aria-label="Madhura home">
+      <BrandLogo variant="on-dark" className="h-8" />
     </Link>
   );
 }
@@ -143,6 +137,13 @@ export default function MarketingLayout({ children, page }) {
         Skip to content
       </a>
 
+      {/* ─── ORIGINAL MARKETING HEADER (mega menu) — COMMENTED OUT ─────────────
+          Kept for later: delete the <LandingHeader /> line below, then
+          uncomment this whole block (Cmd+/ or Ctrl+/).
+          It needs: openMenu / drawerOpen / toggle / isAuthed / BrandMark /
+          DesktopMenu / HEADER_NAV — all still defined in this file.
+          ───────────────────────────────────────────────────────────────────── */}
+      {/*
       <header className="sticky top-0 z-50 bg-[#050e2f]/90 backdrop-blur-md border-b border-white/[0.08]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-6">
           <BrandMark />
@@ -275,6 +276,10 @@ export default function MarketingLayout({ children, page }) {
           </div>
         )}
       </header>
+      */}
+
+      {/* The HOME page header, shown on every marketing URL (shared component). */}
+      <LandingHeader />
 
       <main id="main-content">
         {page?.hero ? (
@@ -331,7 +336,14 @@ export default function MarketingLayout({ children, page }) {
         {children}
       </main>
 
-      <SiteFooter />
+      {/* ─── ORIGINAL MARKETING FOOTER (SiteFooter) — COMMENTED OUT ────────────
+          Kept for later: delete the <LandingFooter /> line below, then
+          uncomment <SiteFooter /> (Cmd+/ or Ctrl+/). Its import is still here.
+          ───────────────────────────────────────────────────────────────────── */}
+      {/* <SiteFooter /> */}
+
+      {/* The HOME page footer, shown on every marketing URL (shared component). */}
+      <LandingFooter />
     </div>
   );
 }

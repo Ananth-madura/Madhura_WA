@@ -876,4 +876,103 @@ export const LEGAL_EXTRA_PAGES = {
     ],
     related: ["/legal/acceptable-use", "/legal/dpa", "/legal/data-deletion"],
   },
+
+  "/accessibility": {
+    path: "/accessibility",
+    section: "Legal",
+    renderer: "legal",
+    title: "Accessibility Statement",
+    description:
+      "Madhura's commitment to an accessible website and platform, the standards we work to, what is and is not yet conformant, and how to report a barrier.",
+    wordCount: 700,
+    link: { label: "Contact support", to: "/support" },
+    meta: {
+      title: "Accessibility Statement | Madhura",
+      description:
+        "How Madhura approaches accessibility across its website and WhatsApp CRM platform, the standards we target, known limitations, and how to report a barrier.",
+    },
+    document: {
+      title: "Accessibility Statement",
+      subtitle:
+        "This statement explains how Madhura approaches accessibility for its website, marketing content and the WhatsApp CRM platform, and what to do if something gets in your way.",
+      lastUpdated: "October 2026",
+      owner: "Legal & Compliance",
+    },
+    sections: [
+      {
+        id: "commitment",
+        heading: "1. Our commitment",
+        paragraphs: [
+          "We want people who use Madhura — customers, prospects, evaluators and visitors — to be able to find information, complete tasks and get help regardless of the device, browser, assistive technology or input method they use. Accessibility is treated as a requirement in how we design and build, not as a clean-up pass before release.",
+          "This statement covers the public marketing website, the help and documentation content published on it, and the authenticated platform at large. Where a part of the product has a known barrier, we say so below rather than letting the silence stand in for an answer.",
+        ],
+      },
+      {
+        id: "standard",
+        heading: "2. The standard we work to",
+        paragraphs: [
+          "We aim to conform with the Web Content Accessibility Guidelines (WCAG) 2.2 at Level AA. Those guidelines explain how to make content perceivable, operable, understandable and robust — for example: sufficient colour contrast, keyboard reachability, visible focus, text that reflows without loss of content, and labels that name controls for screen readers.",
+          "Conformance is assessed with a mix of automated tooling, manual keyboard-only passes, screen reader checks on the flows that matter most (sign-in, inbox, contacts, campaign creation and billing), and feedback from people who rely on assistive technology day to day.",
+        ],
+      },
+      {
+        id: "what-we-do",
+        heading: "3. How we apply it",
+        paragraphs: [
+          "Accessibility acceptance criteria are part of the definition of done for new features. Design components carry focus states, error messaging and label patterns with them, so the accessible option is the default one rather than a special case each team invents.",
+        ],
+        list: [
+          "Keyboard support for every interactive element, with a visible focus indicator",
+          "Semantic headings, landmarks and labels so screen readers can navigate by structure",
+          "Colour contrast meeting WCAG 2.2 AA for text, controls and status indicators",
+          "Text and controls that reflow to 320 CSS pixels and work at 200% zoom",
+          "Reduced-motion preferences respected for animation and auto-playing media",
+          "Form errors announced and described in text, not colour alone",
+          "Plain-language defaults for policy, billing and error messages",
+        ],
+      },
+      {
+        id: "known-limitations",
+        heading: "4. Known limitations",
+        paragraphs: [
+          "We publish what we know is not there yet. Two areas currently fall short of our target, and each has a planned route rather than an open-ended wait.",
+        ],
+        list: [
+          "Some archived case-study and tutorial media ships without captions or a transcript — the source recordings are being re-cut with text alternatives",
+          "A few dense reporting tables in the analytics module rely on visual grouping that a screen reader cannot convey; tabular equivalents are on the backlog",
+        ],
+      },
+      {
+        id: "third-party",
+        heading: "5. Third-party content and services",
+        paragraphs: [
+          "Parts of the experience are delivered by other providers — the WhatsApp conversation surface, payment processing, embedded maps or video, and font hosting. We choose providers that publish their own accessibility statements, but their content is under their control, so we can only raise issues with them, not change their code.",
+          "Documents we publish (policies, invoices, quotations) are produced from accessible templates with real headings and selectable text rather than images of text.",
+        ],
+      },
+      {
+        id: "feedback",
+        heading: "6. Reporting a barrier",
+        paragraphs: [
+          "If something on this site or in the platform stops you from getting what you need, tell us and we will treat it as a defect, not a suggestion. Email support@madhuratech.com with the page address or screen, what you were trying to do, the browser and assistive technology you use, and a screenshot or short recording if you can. Screenshots are optional — a description in your own words is enough to start.",
+          "We acknowledge accessibility reports within two business days and give you an initial assessment within five. If a fix will take longer, you get a date and a workaround in the meantime wherever one exists.",
+        ],
+      },
+      {
+        id: "enforcement",
+        heading: "7. If you are not satisfied",
+        paragraphs: [
+          "If our response does not resolve the problem, reply to the same thread and it is escalated to the product owner for the affected area. Nothing about this statement limits any right you have under applicable equality or disability discrimination legislation.",
+        ],
+      },
+      {
+        id: "review",
+        heading: "8. Reviewing this statement",
+        paragraphs: [
+          "This statement is reviewed every six months and whenever we ship a material change to the platform's interface. The date at the top of the document is the date of the most recent review. Changes that add or remove a known limitation are called out in the changelog.",
+        ],
+      },
+    ],
+    related: ["/legal/privacy", "/support", "/legal/acceptable-use"],
+  },
 };

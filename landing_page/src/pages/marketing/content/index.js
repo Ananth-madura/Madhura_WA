@@ -43,7 +43,7 @@ const RAW_PAGES = [
   ...DEVELOPER_PAGES,
   ...RESOURCE_PAGES,
   ...Object.values(SUPPORT_PAGES),
-  ...TRUST_PAGES,
+  ...Object.values(TRUST_PAGES),
 ];
 
 const DEFAULT_CTA = {

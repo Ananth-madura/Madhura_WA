@@ -144,7 +144,7 @@ export const PRODUCT_EXTRA_PAGES = {
       primary: { label: "Start free trial", to: "/signup" },
       secondary: { label: "See it in a demo", to: "/company/contact" },
     },
-    related: ["/product", "/product/whatsapp-inbox", "/features"],
+    related: ["/product/live-inbox", "/product/crm", "/features"],
   },
 
   "/product/flows": {
@@ -284,7 +284,7 @@ export const PRODUCT_EXTRA_PAGES = {
       primary: { label: "Start free trial", to: "/signup" },
       secondary: { label: "See it in a demo", to: "/company/contact" },
     },
-    related: ["/product/automation", "/product/automations", "/product/ai-chatbot"],
+    related: ["/product/flows", "/product/automations", "/product/ai-chatbot"],
   },
 
   "/product/ai-chatbot": {
@@ -424,7 +424,7 @@ export const PRODUCT_EXTRA_PAGES = {
       primary: { label: "Start free trial", to: "/signup" },
       secondary: { label: "Talk to sales", to: "/company/contact" },
     },
-    related: ["/product/automation", "/product/flows", "/pricing"],
+    related: ["/product/automations", "/product/flows", "/pricing"],
   },
 
   "/product/crm": {
@@ -564,7 +564,7 @@ export const PRODUCT_EXTRA_PAGES = {
       primary: { label: "Start free trial", to: "/signup" },
       secondary: { label: "See it in a demo", to: "/company/contact" },
     },
-    related: ["/product", "/product/multi-branch", "/features"],
+    related: ["/product/live-inbox", "/product/multi-branch", "/features"],
   },
 
   "/product/multi-branch": {
@@ -704,6 +704,6 @@ export const PRODUCT_EXTRA_PAGES = {
       primary: { label: "Start free trial", to: "/signup" },
       secondary: { label: "Talk to sales", to: "/company/contact" },
     },
-    related: ["/product", "/product/crm", "/pricing"],
+    related: ["/product/live-inbox", "/product/crm", "/pricing"],
   },
 };

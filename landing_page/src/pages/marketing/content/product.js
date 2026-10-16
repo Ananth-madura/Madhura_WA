@@ -108,8 +108,8 @@ export const PRODUCT_PAGES = [
       items: [
         { icon: "Building", title: "Branch-aware", desc: "Each branch or brand keeps its own queues and permissions while leadership sees one consolidated view." },
         { icon: "Search", title: "Deep search", desc: "Search message text, contact fields, tags, order numbers and attachment names across the whole history." },
-        { icon: "Paperclip", title: "Rich media", desc: "Images, documents, audio notes, stickers and location with inline previews and virus-scanned downloads." },
-        { icon: "Radio", title: "Realtime by default", desc: "Socket-driven updates mean a new message appears on every open screen without a refresh." },
+        { icon: "Download", title: "Rich media", desc: "Images, documents, audio notes, stickers and location with inline previews and virus-scanned downloads." },
+        { icon: "Activity", title: "Realtime by default", desc: "Socket-driven updates mean a new message appears on every open screen without a refresh." },
         { icon: "Lock", title: "Granular permissions", desc: "Control who can export, delete, assign, or message outside office hours — per role and per branch." },
       ],
     },
@@ -216,7 +216,7 @@ export const PRODUCT_PAGES = [
         desc: "Test two bodies or headers on a slice of the audience, pick the winner on open rate, and send it to the remaining recipients.",
       },
       {
-        icon: "RotateCw",
+        icon: "RefreshCw",
         title: "Retry & recovery",
         desc: "Retryable failures are requeued automatically; permanent failures move to a review list with the reason attached.",
       },

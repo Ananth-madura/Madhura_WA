@@ -1,1269 +1,886 @@
-/* Resource centre: help, getting started, blog, tutorials, videos, case studies, faqs, compare.
+/* Resource centre: help, getting started, blog, tutorials, videos, case studies,
+   FAQs and the comparison framework.
    Keep the shape stable: path / section / renderer / meta / hero / …
    Anything omitted is filled in by content/index.js (meta, cta, related). */
 
-/* ── /help ────────────────────────────────────────────────────────────────────── */
-const HELP_PAGE = {
-  path: "/help",
-  section: "Resources",
-  renderer: "help",
-  meta: {
-    title: "Help Center — Searchable Knowledge Base | Madhura",
-    description:
-      "Find instant answers to WhatsApp CRM setup, template rejections, delivery failures, billing, and multi-branch configuration questions.",
-  },
-  hero: {
-    badge: "Help Center",
-    title: "Instant answers, zero wait time.",
-    highlight: "zero wait time",
-    subtitle:
-      "Search our indexed knowledge base covering workspace setup, Meta approval workflows, delivery troubleshooting, billing, and enterprise administration.",
-    points: [
-      "Searchable across 50+ indexed help articles",
-      "Step-by-step quick-fix resolutions for common blockers",
-      "Direct WhatsApp support channel with < 5 min response",
-      "Enterprise SLA-backed ticket escalation portal",
-    ],
-    primaryCta: { label: "Start free trial", to: "/signup" },
-    secondaryCta: { label: "Contact support", to: "/company/contact" },
-  },
-  stats: [
-    { value: "50+", label: "Help articles indexed", note: "searchable by keyword" },
-    { value: "<5 min", label: "Average first response", note: "WhatsApp support channel" },
-    { value: "97%", label: "First-contact resolution", note: "across all plan tiers" },
-    { value: "24/7", label: "Enterprise coverage", note: "with dedicated SLA" },
-  ],
-  categories: [
-    { id: "setup", title: "Setup & Configuration", icon: "Settings", desc: "Workspace creation, number onboarding, team invitations, and branch configuration." },
-    { id: "messaging", title: "Messaging & Delivery", icon: "Send", desc: "Template approvals, campaign delivery, quality ratings, and message status troubleshooting." },
-    { id: "automation", title: "Automation & Flows", icon: "Zap", desc: "Journey triggers, flow canvas, conditional branching, and dry-run debugging." },
-    { id: "billing", title: "Billing & Plans", icon: "FileText", desc: "Plan upgrades, conversation-based pricing, invoice history, and payment methods." },
-  ],
-  quickFixes: [
-    {
-      id: "qf-template-rejected",
-      badge: "Most Common",
-      title: "Template Rejected by Meta",
-      problem: "Your template was submitted but came back with a rejection notice. This blocks campaigns and automations that depend on it.",
-      steps: [
-        "Open Templates → find the rejected template → read the rejection reason next to the flagged line",
-        "Check: Does the body contain promotional language while declared as Utility? If yes, re-categorize or rewrite",
-        "Ensure every {{variable}} has a sample value — missing samples cause instant rejection",
-        "Re-submit after edits. The pre-flight validator must pass green before Meta reviews",
-      ],
-    },
-    {
-      id: "qf-not-delivered",
-      badge: "Delivery Issue",
-      title: "Messages Sent But Never Delivered",
-      problem: "The delivery funnel shows 'Sent' but stays stuck — no 'Delivered' or 'Read' status appears.",
-      steps: [
-        "Confirm the recipient is registered on WhatsApp — send a test from the consumer app",
-        "Check if the recipient has blocked your business number (Meta does not reveal this explicitly)",
-        "Verify your number's messaging tier limit hasn't been exhausted — Settings → Numbers → Limits",
-        "Check the system status page for any regional Meta API outages before changing configuration",
-      ],
-    },
-    {
-      id: "qf-quality-rating",
-      badge: "Quality Alert",
-      title: "Number Quality Rating Dropped",
-      problem: "Your WhatsApp number quality went from Green to Yellow or Red, throttling outbound throughput.",
-      steps: [
-        "Pause all marketing campaigns immediately — continued sends on a degraded rating compound the penalty",
-        "Review the last 7 days of campaigns for opt-out and block rate spikes in Analytics → Delivery",
-        "Tighten segments: restrict to contacts active within 90 days with explicit opt-in recorded",
-        "Wait 7 days of clean sending before the rating recovers — there is no manual override",
-      ],
-    },
-    {
-      id: "qf-webhook-failing",
-      badge: "Integration Issue",
-      title: "Webhooks Stopped Firing",
-      problem: "Your external system (CRM, billing, or analytics) stopped receiving events from Madhura.",
-      steps: [
-        "Check Settings → Webhooks → Delivery Log for HTTP status codes — 4xx means your endpoint rejects the payload",
-        "Verify the webhook signature validation hasn't broken after a key rotation on your side",
-        "If the endpoint returned non-2xx 5 consecutive times, Madhura auto-disables it — re-enable after fixing",
-        "Test with a fresh 'message.received' event using the 'Send Test Event' button on the webhook config page",
-      ],
-    },
-  ],
-  articles: [
-    { id: "a1", category: "setup", title: "How to create your first workspace", summary: "Step-by-step guide to creating an organisation, setting timezone, currency, and inviting your first team members.", readTime: "3 min", content: ["A workspace is the top-level container that owns numbers, templates, agents, and billing. Start by navigating to Settings → Organisation and filling in your business details.", "Once created, add at least one branch (even if you operate from a single location) — branches control business hours, routing queues, and reporting segmentation."], steps: ["Navigate to Settings → Organisation → Create Workspace", "Set default timezone and currency for billing", "Create your first branch with business hours", "Invite team members via email with appropriate roles"], note: "You can always add more branches later without disrupting existing configuration." },
-    { id: "a2", category: "setup", title: "Connecting a WhatsApp Business number", summary: "Direct Cloud API onboarding vs. BSP migration — verification, webhook setup, and display name approval.", readTime: "5 min", content: ["You can connect a number directly through Meta's Cloud API or migrate from an existing BSP. Both paths end with a verified webhook pointing at your Madhura workspace.", "The number must be able to receive SMS or voice for verification and must NOT be active in the WhatsApp consumer app."], steps: ["Complete Meta Business Manager verification", "Register the number and request display name approval", "Point the webhook URL at Settings → Numbers → Webhook Endpoint", "Send a test message and confirm the thread appears in your inbox"], note: "Display name approval can take 24–48 hours. Do not send at volume until approved." },
-    { id: "a3", category: "setup", title: "Setting up team roles and permissions", summary: "Admin, Supervisor, Agent, and Analyst — what each role can and cannot do, and how to create custom roles.", readTime: "4 min", content: ["Roles control what actions a user can perform: reply to threads, publish templates, export data, delete contacts, or view analytics. Every action is scoped to a branch.", "Custom roles let you mix permissions — for example, a 'Senior Agent' who can reply and export but not delete."], steps: ["Go to Settings → Roles → View default roles", "Create a custom role if defaults don't fit", "Assign roles per branch when inviting users", "Test by logging in as a restricted user to verify access"] },
-    { id: "a4", category: "messaging", title: "Getting templates approved on the first submission", summary: "The five rejection reasons that account for 80% of failures, and how to avoid each one.", readTime: "6 min", content: ["Meta reviews templates against a published policy. The pre-flight validator in Templates mirrors the most common rejection rules.", "The most frequent causes: missing variable samples, marketing language in a Utility template, incomplete sentences, URL buttons pointing to unverified domains, and authentication templates with media."], steps: ["Supply sample values for every {{variable}}", "Match the category to the actual content — don't declare marketing as utility", "Use complete sentences with no truncation", "Ensure URL button domains match your verified business"] },
-    { id: "a5", category: "messaging", title: "Understanding the 24-hour service window", summary: "When you can send free-form messages vs. when you must use a template, and what happens at the boundary.", readTime: "3 min", content: ["When a customer messages you, a 24-hour window opens during which you can reply with any message type — text, media, interactive buttons. This is the service window.", "Once it closes, the next outbound must be a pre-approved template. This is a Meta rule enforced at the API level, not a platform restriction."] },
-    { id: "a6", category: "messaging", title: "Diagnosing campaign delivery drops", summary: "Why delivery rate dropped after a campaign send, and the three metrics to check first.", readTime: "4 min", content: ["Delivery drops are almost always caused by stale segments. Contacts who haven't engaged in 6+ months are far more likely to block than to read.", "Check three numbers immediately: opt-out rate, block rate, and the ratio of Sent-to-Delivered. An opt-out rate above 1% on marketing sends is a tighten-segment signal."], steps: ["Open Analytics → Campaign → select the problematic campaign", "Check opt-out rate — above 1% means the segment is too broad", "Check block rate — rising blocks degrade your quality rating", "Restrict future sends to contacts active within 90 days"] },
-    { id: "a7", category: "automation", title: "Building your first automation journey", summary: "Trigger → Condition → Wait → Action: the four node types and how they chain together.", readTime: "5 min", content: ["Every automation is a directed graph. A trigger enters the graph, conditions route, waits hold, and actions send. Each run records the path taken at every node for debugging.", "Start simple: a welcome message triggered by a new contact opt-in. Once that works reliably, add conditions and branches."], steps: ["Go to Automations → Create New Journey", "Add a Trigger node (e.g., 'Contact opted in')", "Add an Action node (e.g., 'Send welcome template')", "Publish and test with a real contact opt-in event"] },
-    { id: "a8", category: "automation", title: "Debugging a journey that stopped mid-run", summary: "Using the Run Inspector to find exactly which node failed and why.", readTime: "4 min", content: ["Open the Run Inspector for the affected contact. If there's no run entry, the trigger didn't fire — verify keyword match, filter conditions, and suppression rules.", "If a run exists but stopped, the inspector shows the failing node's payload — usually a missing template approval or a frequency cap hit."], steps: ["Navigate to the contact's profile → Automation Runs", "Find the stuck run and open the node-by-node timeline", "Read the error payload on the failing node", "Fix the root cause (approve template, adjust cap) and re-trigger"] },
-    { id: "a9", category: "billing", title: "Understanding conversation-based pricing", summary: "How Meta charges per conversation category, and how Madhura passes through costs with zero markup.", readTime: "4 min", content: ["Meta bills per 24-hour conversation window, not per message. A conversation starts when you send a template (business-initiated) or when a customer messages you (user-initiated).", "MADHURA passes Meta's conversation fees through at cost with zero markup. Your monthly bill = platform subscription + Meta conversation charges at the published rate card."] },
-    { id: "a10", category: "billing", title: "Upgrading or downgrading your plan", summary: "How mid-cycle changes work, what carries over, and how billing is prorated.", readTime: "3 min", content: ["Upgrades take effect immediately — you get access to the higher tier's features and seat limits right away. The difference is prorated for the remaining billing cycle.", "Downgrades take effect at the next billing cycle start. You keep your current tier's features until renewal."], steps: ["Go to Settings → Billing → Change Plan", "Select the new tier and review the prorated amount", "Confirm — upgrades are instant, downgrades are queued for renewal"] },
-    { id: "a11", category: "setup", title: "Configuring business hours per branch", summary: "How business hours affect SLA clocks, quiet hours, and automation wait nodes.", readTime: "3 min", content: ["Business hours are set per branch and affect three systems: SLA response timers pause outside hours, quiet-hour rules suppress sends during off-hours, and automation wait nodes can be set to 'resume at next business hour'.", "Get this right early — retrofitting business hours after agents are already working means recalculating all historical SLA metrics."] },
-    { id: "a12", category: "messaging", title: "Using interactive message buttons effectively", summary: "Quick Reply vs. URL vs. Call buttons — when to use each and the 3-button limit.", readTime: "3 min", content: ["Interactive messages let you attach up to 3 buttons. Quick Reply buttons send a predefined text back (great for routing). URL buttons open a link. Call buttons trigger a phone dialer.", "Keep button labels short (≤ 20 chars) and action-oriented. A/B test button labels across campaigns to find what drives the highest click-through."] },
-  ],
-  cta: {
-    title: "Still need help?",
-    sub: "Our support engineers read every message — no ticket bot in between.",
-    primary: { label: "Contact support", to: "/company/contact" },
-    secondary: { label: "Browse documentation", to: "/docs" },
-  },
-  related: ["/docs", "/getting-started", "/faqs"],
-};
-
-/* ── /getting-started ─────────────────────────────────────────────────────────── */
-const GETTING_STARTED_PAGE = {
-  path: "/getting-started",
-  section: "Resources",
-  renderer: "getting-started",
-  meta: {
-    title: "Getting Started — 6-Step Launch Roadmap | Madhura",
-    description:
-      "Connect a WhatsApp number, import contacts, configure teams, and send your first broadcast in under an hour with this interactive onboarding roadmap.",
-  },
-  hero: {
-    badge: "Getting Started",
-    title: "From zero to first campaign in 6 steps.",
-    highlight: "6 steps",
-    subtitle:
-      "This interactive roadmap walks you through workspace creation, number onboarding, contact import, template approval, team setup, and your first live broadcast — with progress tracking.",
-    points: [
-      "Interactive checklist with completion tracking",
-      "Copy-paste webhook URLs and API snippets",
-      "Pre-flight production readiness verification",
-      "Estimated total setup time: under 60 minutes",
-    ],
-    primaryCta: { label: "Start free trial", to: "/signup" },
-    secondaryCta: { label: "Book onboarding call", to: "/demo" },
-  },
-  stats: [
-    { value: "<60 min", label: "End-to-end setup", note: "for a single-branch workspace" },
-    { value: "6", label: "Onboarding milestones", note: "interactive progress tracker" },
-    { value: "0", label: "Message markup", note: "direct Meta Cloud API pricing" },
-    { value: "24h", label: "Display name approval", note: "typical Meta turnaround" },
-  ],
-  onboardingSteps: [
-    {
-      id: "step-1",
-      shortTitle: "Create Workspace",
-      title: "Create Your Organisation & First Branch",
-      description: "Set up the top-level container that owns numbers, templates, agents, and billing. Add your first branch with business hours configured.",
-      category: "Foundation",
-      estimatedTime: "5 minutes",
-      tasks: [
-        { action: "Create a new organisation", detail: "Navigate to app.madhura.co/signup, enter your business name, and set the default timezone and currency." },
-        { action: "Add your first branch", detail: "Even single-location teams need one branch — it controls business hours, routing queues, and reporting segmentation." },
-        { action: "Configure business hours", detail: "Set the operating schedule per branch. SLA clocks, quiet hours, and automation waits all read from this calendar." },
-        { action: "Define team roles", detail: "Review the default roles (Admin, Supervisor, Agent, Analyst) and create custom roles if needed." },
-      ],
-      tip: "Set business hours before inviting agents. Quiet-hour rules and SLA timers depend on this being correct from day one.",
-    },
-    {
-      id: "step-2",
-      shortTitle: "Connect Number",
-      title: "Connect Your WhatsApp Business Number",
-      description: "Onboard a new number through Meta's Cloud API or migrate an existing BSP number. Both paths end with a verified webhook.",
-      category: "WhatsApp Setup",
-      estimatedTime: "15 minutes",
-      tasks: [
-        { action: "Complete Meta Business verification", detail: "Go to business.facebook.com → Security Center → Start Verification. You'll need a business document." },
-        { action: "Register your phone number", detail: "The number must receive an SMS or voice call for verification. It cannot be active in the WhatsApp consumer app." },
-        { action: "Request display name approval", detail: "Meta reviews display names within 24–48 hours. Do not send at volume until approved." },
-        { action: "Configure webhook endpoint", detail: "Copy the webhook URL from Settings → Numbers and paste it into your Meta App Dashboard." },
-      ],
-      code: {
-        label: "Webhook callback URL format",
-        snippet: "https://<your-workspace>.madhura.co/api/wa/webhook/<workspace-token>",
-      },
-      tip: "If migrating from a BSP, request number release from your current provider first. Two services cannot share the same number simultaneously.",
-    },
-    {
-      id: "step-3",
-      shortTitle: "Import Contacts",
-      title: "Import Your Contact Database",
-      description: "Upload existing contacts via CSV, map custom fields, and configure opt-in status to comply with Meta's messaging consent requirements.",
-      category: "Data Migration",
-      estimatedTime: "10 minutes",
-      tasks: [
-        { action: "Prepare your CSV file", detail: "Required columns: phone (E.164 format), name. Optional: email, tags, custom fields. Max 50,000 rows per upload." },
-        { action: "Map CSV columns to Madhura fields", detail: "The import wizard auto-detects common column names. Manually map any custom fields." },
-        { action: "Set opt-in status correctly", detail: "Only mark contacts as opted-in if you have documented consent. Sending to non-opted-in contacts degrades quality." },
-        { action: "Verify import results", detail: "Check the import summary for skipped rows (invalid phone format, duplicates) and fix source data if needed." },
-      ],
-      tip: "Start with a small batch (100 contacts) to validate field mapping before running the full import. It's much easier to fix mapping issues on a small set.",
-    },
-    {
-      id: "step-4",
-      shortTitle: "Approve Templates",
-      title: "Create & Submit Your First Templates",
-      description: "Author message templates with variables, submit to Meta for approval, and understand the approval timeline.",
-      category: "Messaging Setup",
-      estimatedTime: "10 minutes",
-      tasks: [
-        { action: "Create a welcome template", detail: "Go to Templates → New. Choose 'Marketing' category. Write a greeting with your business name and a clear CTA." },
-        { action: "Add variables with sample values", detail: "Use {{1}} for customer name, {{2}} for dynamic content. Every variable MUST have a sample value or Meta rejects." },
-        { action: "Run the pre-flight validator", detail: "The built-in validator catches the 5 most common rejection reasons before submission. Fix all warnings." },
-        { action: "Submit and wait for approval", detail: "Typical approval time: 1–24 hours. Do NOT re-submit while pending — it resets the queue position." },
-      ],
-      code: {
-        label: "Example welcome template body",
-        snippet: "Hi {{1}}, welcome to {{2}}! 🎉\n\nWe're here to help you get the most out of our platform.\nReply with \"START\" to begin your setup, or tap the button below.\n\n— The {{2}} Team",
-      },
-      tip: "Create at least 3 templates before your first campaign: a welcome message, a follow-up, and a support handoff. This gives your automation flows enough building blocks.",
-    },
-    {
-      id: "step-5",
-      shortTitle: "Configure Team",
-      title: "Invite Your Team & Set Up Routing",
-      description: "Add agents to branches, configure inbox assignment rules, and set up the routing logic that determines who handles each conversation.",
-      category: "Team Configuration",
-      estimatedTime: "10 minutes",
-      tasks: [
-        { action: "Invite agents by email", detail: "Settings → Team → Invite. Assign each agent to a branch and a role. They'll receive an activation email." },
-        { action: "Set up assignment rules", detail: "Choose round-robin (even distribution), skill-based (language/product tags), or branch-based (location routing)." },
-        { action: "Configure SLA response targets", detail: "Set first-response and resolution targets per queue. These drive the SLA dashboard and escalation alerts." },
-        { action: "Test the routing", detail: "Send a test message to your number and verify it lands in the correct agent's inbox with the right assignment." },
-      ],
-      tip: "Put the most specific routing rule first — rules are evaluated in order and the first match wins. 'Spanish-language → Spanish team' should come before 'All → General queue'.",
-    },
-    {
-      id: "step-6",
-      shortTitle: "First Campaign",
-      title: "Send Your First Broadcast Campaign",
-      description: "Create a segment, select an approved template, schedule delivery waves, and monitor the real-time delivery funnel.",
-      category: "Go Live",
-      estimatedTime: "10 minutes",
-      tasks: [
-        { action: "Create a contact segment", detail: "Contacts → Segments → New. Filter by tags, opt-in status, and last-active date. Start with your most engaged contacts." },
-        { action: "Select an approved template", detail: "Only templates with 'Approved' status can be used in campaigns. Check Templates for the green badge." },
-        { action: "Configure wave delivery", detail: "Split large segments into waves with 5–10 minute spacing. This prevents quality rating drops from burst sends." },
-        { action: "Monitor the delivery funnel live", detail: "Watch Sent → Delivered → Read in real-time. Pause immediately if failure rate exceeds 5%." },
-      ],
-      tip: "Your first campaign should go to fewer than 500 contacts who engaged in the last 30 days. This establishes a healthy sending reputation before scaling volume.",
-    },
-  ],
-  preflightChecks: [
-    { title: "Business verification complete", desc: "Meta Business Manager shows 'Verified' status — required for API access and template submissions." },
-    { title: "Display name approved", desc: "Your WhatsApp display name is approved and visible to recipients. Sending before approval risks rejection." },
-    { title: "Webhook receiving events", desc: "Send a test inbound message and verify it appears in your inbox within 3 seconds." },
-    { title: "At least one template approved", desc: "You need at minimum one approved template before any outbound campaign or automation can fire." },
-    { title: "Team roles assigned correctly", desc: "Each agent should only have access to their branch and their permitted actions." },
-    { title: "Business hours configured", desc: "SLA timers, quiet hours, and automation waits all read from business hours. Wrong hours = wrong SLAs." },
-    { title: "Opt-in consent documented", desc: "Every contact marked as opted-in must have a verifiable consent record. Meta audits this." },
-    { title: "Test campaign completed successfully", desc: "Run a small campaign (< 50 contacts) and verify the full Sent → Delivered → Read funnel before scaling." },
-  ],
-  cta: {
-    title: "Ready to go live?",
-    sub: "Most teams complete the full onboarding in under 60 minutes.",
-    primary: { label: "Start free trial", to: "/signup" },
-    secondary: { label: "Book onboarding call", to: "/demo" },
-  },
-  related: ["/docs", "/help", "/tutorials"],
-};
-
-/* ── /blog ────────────────────────────────────────────────────────────────────── */
-const BLOG_PAGE = {
-  path: "/blog",
-  section: "Resources",
-  renderer: "blog",
-  meta: {
-    title: "Blog & Insights — WhatsApp CRM Strategy | Madhura",
-    description:
-      "Deep-dives into WhatsApp API pricing, template strategy, automation patterns, and enterprise conversational commerce.",
-  },
-  hero: {
-    badge: "Blog & Insights",
-    title: "Strategy, engineering, and results.",
-    highlight: "results",
-    subtitle:
-      "Deep-dives into WhatsApp Cloud API pricing, template approval tactics, automation architecture, and the metrics that separate 90% delivery from 99%.",
-    points: [
-      "Monthly Meta API pricing and policy analysis",
-      "Automation pattern libraries with code samples",
-      "Enterprise-scale deliverability engineering",
-      "Customer success frameworks and benchmarks",
-    ],
-    primaryCta: { label: "Start free trial", to: "/signup" },
-    secondaryCta: { label: "Subscribe to newsletter", to: "#newsletter" },
-  },
-  stats: [
-    { value: "12+", label: "In-depth articles", note: "published monthly" },
-    { value: "8 min", label: "Average read time", note: "practical, not theoretical" },
-    { value: "6", label: "Content categories", note: "strategy to engineering" },
-    { value: "Bi-weekly", label: "Newsletter cadence", note: "curated analysis" },
-  ],
-  categories: ["Strategy", "Engineering", "Deliverability", "Automation", "Enterprise", "Product Updates"],
-  featuredArticle: {
-    id: "blog-featured",
-    title: "Meta's 2026 Conversation Pricing Overhaul: What Enterprise Teams Must Change",
-    summary: "Meta restructured WhatsApp Business API pricing from per-template categories to a unified conversation model. This analysis breaks down the changes, models the cost impact at 100K+ message volumes, and recommends the template mix that minimises spend while preserving engagement.",
-    author: "Arjun Krishnan",
-    date: "Oct 2026",
-    readTime: "12 min read",
-    category: "Strategy",
-    keyTakeaways: [
-      "Utility conversations now cost 40% less than marketing conversations — reclassify where possible",
-      "The free-tier of 1,000 user-initiated conversations per month was removed for new accounts",
-      "Authentication templates remain the cheapest category — use them for OTP and verification flows",
-      "Consolidate multiple outbound touches into a single 24-hour window to avoid duplicate charges",
-    ],
-    sections: [
-      {
-        heading: "The pricing shift explained",
-        paragraphs: [
-          "Before October 2026, Meta billed per conversation with four category tiers. The new model simplifies to three: Marketing, Utility, and Authentication, with significant price differences between them.",
-          "The key insight: a single customer interaction that spans marketing and utility content is now billed at the higher marketing rate for the entire 24-hour window. This means template categorisation is no longer just a compliance exercise — it directly impacts your per-conversation cost.",
-        ],
-      },
-      {
-        heading: "Impact modelling at enterprise scale",
-        paragraphs: [
-          "For a team sending 150,000 conversations per month, the category mix determines whether the pricing change saves or costs money. A mix heavy on utility (order updates, shipping, appointment confirmations) benefits. A mix heavy on marketing (promotions, re-engagement) may see a 15–25% cost increase.",
-        ],
-        bullets: [
-          "Audit your current template library — reclassify any template that serves a transactional purpose as Utility",
-          "Move payment confirmations and delivery updates out of Marketing category immediately",
-          "Batch promotional touches: send one rich marketing template per window instead of multiple follow-ups",
-          "Track per-category spend weekly in Analytics → Billing → Conversation Categories",
-        ],
-      },
-      {
-        heading: "Recommended template strategy",
-        paragraphs: [
-          "The optimal strategy is to lead with a Utility or Authentication template (lower cost), let the customer reply (opening a user-initiated window at the lowest rate), and then follow up with richer marketing content within that same window at no additional charge.",
-          "This 'lead utility, follow marketing' pattern can reduce per-contact outbound costs by 30–50% for teams that currently open every conversation with a marketing template.",
-        ],
-      },
-    ],
-  },
-  articles: [
-    {
-      id: "blog-1",
-      title: "Template Rejection Rate: How to Get to 95% First-Pass Approval",
-      summary: "Analysis of 10,000 template submissions revealing the five patterns that cause 80% of rejections, with before-and-after rewrites.",
-      author: "Priya Mehta",
-      date: "Sep 2026",
-      readTime: "8 min",
-      category: "Strategy",
-      sections: [
-        { heading: "The rejection landscape", paragraphs: ["After analysing 10,000 template submissions across 200 workspaces, five rejection patterns account for 80% of failures. Understanding these patterns is the fastest path to a 95%+ first-pass approval rate."], bullets: ["Missing variable samples (28% of rejections)", "Category mismatch — marketing content in Utility (22%)", "Incomplete sentences or mid-sentence truncation (18%)", "URL button domain doesn't match verified business (8%)", "Authentication template with media attachment (4%)"] },
-        { heading: "Rewrite framework", paragraphs: ["For each rejection pattern, we developed a rewrite template that addresses the root cause while preserving the original marketing intent. The key insight: Meta's reviewers are looking for clear category alignment, complete grammar, and verifiable business identity — not creative copywriting."] },
-      ],
-    },
-    {
-      id: "blog-2",
-      title: "Building Payment Recovery Automations That Actually Collect",
-      summary: "A complete automation blueprint for failed payment recovery via WhatsApp, with cadence timing, template sequences, and escalation rules.",
-      author: "Rahul Sharma",
-      date: "Sep 2026",
-      readTime: "10 min",
-      category: "Automation",
-      sections: [
-        { heading: "Why WhatsApp outperforms email for recovery", paragraphs: ["WhatsApp payment recovery messages see 4x the open rate and 2.5x the click-through rate compared to email. The immediacy of the channel and the ability to embed a payment link button makes the conversion friction almost zero."] },
-        { heading: "The optimal cadence", paragraphs: ["Our data across 50 workspaces shows the optimal cadence is: 1 hour after failure, 24 hours, 72 hours, then human handoff. More than 3 automated attempts show diminishing returns and increased opt-out risk."], bullets: ["Hour 1: Gentle reminder with one-tap payment link", "Hour 24: Urgency framing — 'Your subscription expires in 48 hours'", "Hour 72: Final automated attempt with human agent offer", "Day 4+: Assign to collections queue for personal outreach"] },
-      ],
-    },
-    {
-      id: "blog-3",
-      title: "Multi-Branch Architecture: Lessons from a 50-Location Retail Deployment",
-      summary: "How a national retail chain structured branches, routing, and analytics across 50 stores without a single cross-branch data leak.",
-      author: "Arjun Krishnan",
-      date: "Aug 2026",
-      readTime: "9 min",
-      category: "Enterprise",
-      sections: [
-        { heading: "The isolation challenge", paragraphs: ["When 50 store managers share one platform, the primary risk isn't performance — it's data isolation. Store A's customer conversations must be invisible to Store B's agents, while the regional manager sees both."] },
-        { heading: "Branch-scoped everything", paragraphs: ["The architecture decision: every entity — contacts, threads, templates, queues, analytics — belongs to exactly one branch. Cross-branch visibility is granted upward (supervisors see their branches) but never laterally."], bullets: ["Each branch gets its own WhatsApp number for clear identity", "Templates are shared at the org level but campaigns are branch-scoped", "Analytics dashboards show branch-level data by default, with roll-up views for leadership", "Export permissions are branch-scoped — an agent cannot export contacts from another branch"] },
-      ],
-    },
-    {
-      id: "blog-4",
-      title: "Deliverability Engineering: From 90% to 99.2% Delivery Rate",
-      summary: "The technical interventions that moved a high-volume sender from a 90% delivery rate to 99.2%, with before-and-after data.",
-      author: "Vikram Patel",
-      date: "Aug 2026",
-      readTime: "11 min",
-      category: "Deliverability",
-      sections: [
-        { heading: "Diagnosing the 10% loss", paragraphs: ["A 90% delivery rate means 1 in 10 messages never reaches the recipient. For a team sending 100,000 messages per month, that's 10,000 lost conversations — and the revenue they would have driven."], bullets: ["40% of failures: sending to numbers not registered on WhatsApp", "25%: recipients who had blocked the business number", "20%: messaging tier limit exhausted mid-campaign", "15%: template or quality rating issues throttling throughput"] },
-        { heading: "The fix sequence", paragraphs: ["The interventions, in order of impact: (1) validate phone numbers against WhatsApp registration before adding to segments, (2) implement progressive wave delivery to stay within tier limits, (3) monitor quality rating daily and pause sends at Yellow."] },
-      ],
-    },
-    {
-      id: "blog-5",
-      title: "WhatsApp Flows vs. Automation Journeys: When to Use Each",
-      summary: "A decision framework for choosing between in-chat interactive Flow screens and backend automation journeys for customer self-service.",
-      author: "Priya Mehta",
-      date: "Jul 2026",
-      readTime: "7 min",
-      category: "Engineering",
-      sections: [
-        { heading: "Two tools, different strengths", paragraphs: ["WhatsApp Flows are in-chat screens — forms, selectors, confirmations rendered inside the WhatsApp app. Automation journeys are backend workflows triggered by events. Both serve self-service, but the UX and implementation are fundamentally different."] },
-        { heading: "Decision matrix", paragraphs: ["Use Flows when the interaction is form-like (collecting structured data, multi-step selection). Use journeys when the interaction is event-driven (reacting to a webhook, time-based follow-up, conditional branching based on CRM data)."], bullets: ["Flows: appointment booking, product selection, feedback surveys", "Journeys: payment recovery, onboarding sequences, re-engagement drips", "Hybrid: Journey triggers a Flow for data collection, then continues with conditional routing"] },
-      ],
-    },
-    {
-      id: "blog-6",
-      title: "CSAT Measurement on WhatsApp: Beyond the Thumbs Up",
-      summary: "How to implement structured satisfaction measurement in WhatsApp conversations without disrupting the customer experience.",
-      author: "Rahul Sharma",
-      date: "Jul 2026",
-      readTime: "6 min",
-      category: "Strategy",
-      sections: [
-        { heading: "The WhatsApp CSAT challenge", paragraphs: ["Traditional CSAT surveys (email links, web forms) get 5–15% response rates. WhatsApp interactive buttons get 40–60%. The constraint: you have 3 buttons maximum, and the survey must feel like a natural conversation close, not a corporate form."] },
-        { heading: "The recommended pattern", paragraphs: ["Send a single-question CSAT template with 3 Quick Reply buttons: '😊 Great', '😐 OK', '😞 Poor'. On 'Poor', auto-assign the thread to a supervisor for immediate follow-up. On 'Great', send a one-tap Google review link."], bullets: ["Trigger CSAT 2 hours after thread resolution, not immediately", "Cap at one CSAT per contact per 30 days to avoid survey fatigue", "Track CSAT by agent, branch, and resolution type in Analytics"] },
-      ],
-    },
-  ],
-  cta: {
-    title: "Get insights delivered",
-    sub: "Bi-weekly analysis of WhatsApp API changes, automation patterns, and enterprise scaling strategies.",
-    primary: { label: "Start free trial", to: "/signup" },
-    secondary: { label: "Browse documentation", to: "/docs" },
-  },
-  related: ["/tutorials", "/case-studies", "/docs"],
-};
-
-/* ── /tutorials ───────────────────────────────────────────────────────────────── */
-const TUTORIALS_PAGE = {
-  path: "/tutorials",
-  section: "Resources",
-  renderer: "tutorials",
-  meta: {
-    title: "Tutorials — Hands-On Technical Walkthroughs | Madhura",
-    description:
-      "Step-by-step tutorials with code snippets for WhatsApp automations, webhook integrations, broadcast scheduling, and flow canvas design.",
-  },
-  hero: {
-    badge: "Tutorials",
-    title: "Hands-on guides with expected output.",
-    highlight: "expected output",
-    subtitle:
-      "Short, task-focused walkthroughs covering webhook integrations, automation recipes, broadcast wave scheduling, and multi-branch routing configurations.",
-    points: [
-      "Copy-paste code snippets for every integration",
-      "Difficulty-graded from beginner to advanced",
-      "Verification steps so you know it worked",
-      "Real API payloads, not placeholder examples",
-    ],
-    primaryCta: { label: "Start free trial", to: "/signup" },
-    secondaryCta: { label: "View API docs", to: "/developers" },
-  },
-  stats: [
-    { value: "12+", label: "Technical tutorials", note: "task-focused" },
-    { value: "3", label: "Difficulty levels", note: "beginner → advanced" },
-    { value: "5", label: "Topic areas", note: "API, flows, campaigns, CRM, admin" },
-    { value: "100%", label: "Include verification", note: "prove it worked" },
-  ],
-  topics: ["Webhooks & API", "Automations", "Campaigns", "Flows", "Admin & Setup"],
-  tutorials: [
-    {
-      id: "tut-1",
-      title: "Abandoned Cart Recovery via Shopify Webhook",
-      description: "Connect Shopify's abandoned checkout webhook to a Madhura automation that sends a recovery template with a cart link after 1 hour.",
-      difficulty: "Intermediate",
-      duration: "25 min",
-      topic: "Webhooks & API",
-      tags: ["shopify", "e-commerce", "webhook", "cart-recovery"],
-      prerequisites: ["Active Madhura workspace with an approved template", "Shopify store with webhook access", "Basic understanding of JSON payloads"],
-      steps: [
-        { title: "Create the recovery template", instructions: "Go to Templates → New → Marketing. Write a recovery message with {{1}} for customer name and a URL button pointing to the checkout recovery link.", code: { label: "Template body example", snippet: "Hi {{1}}, you left items in your cart! 🛒\n\nYour selections are still available — complete your order before they sell out.\n\nTap below to return to your cart." } },
-        { title: "Set up the Shopify webhook", instructions: "In Shopify Admin → Settings → Notifications → Webhooks → Create webhook. Event: 'Checkout abandonment'. URL: your Madhura webhook endpoint.", code: { label: "Shopify webhook URL", snippet: "https://api.madhura.co/api/wa/webhooks/inbound/<workspace-id>" } },
-        { title: "Build the automation journey", instructions: "Automations → New Journey → Trigger: 'Webhook received' with filter checkout.abandoned = true. Add a Wait node (1 hour). Add an Action node: send recovery template with cart URL.", tip: "Set a condition node after the wait: if the order status is already 'paid', exit the journey. This prevents sending recovery messages for carts that converted naturally." },
-        { title: "Test with a real abandonment", instructions: "Add a product to your Shopify cart, start checkout but don't complete payment. Wait 1 hour and verify the WhatsApp recovery message arrives on your test number." },
-      ],
-      verification: "Check the Automation → Run Inspector for the test contact. You should see: Trigger → Wait (1h) → Send Template → Completed. The message should show 'Delivered' in the inbox thread.",
-    },
-    {
-      id: "tut-2",
-      title: "Post-Purchase CSAT Survey Flow",
-      description: "Build a WhatsApp Flow screen that collects a 1–5 star rating and optional comment 24 hours after order delivery, with auto-escalation on low scores.",
-      difficulty: "Intermediate",
-      duration: "20 min",
-      topic: "Flows",
-      tags: ["csat", "survey", "flow-canvas", "customer-satisfaction"],
-      prerequisites: ["Approved CSAT template", "Understanding of WhatsApp Flow screens"],
-      steps: [
-        { title: "Design the Flow screen", instructions: "Flows → New Flow → Add a Rating input (1–5 stars), a Text input for optional comments, and a Submit button. Keep it to one screen — multi-screen surveys see 40% drop-off." },
-        { title: "Create the trigger automation", instructions: "Build an automation triggered by the 'order.delivered' webhook. Add a 24-hour wait, then an Action that sends the Flow as an interactive message." },
-        { title: "Handle low scores", instructions: "Add a Condition node after the Flow response: if rating ≤ 2, auto-assign the thread to a supervisor queue with an internal note containing the score and comment.", tip: "Tag low-CSAT contacts with 'at-risk' for future campaign exclusion. Never send a promotional campaign to someone who just gave you 1 star." },
-        { title: "Build the analytics dashboard", instructions: "In Analytics → Custom Reports, create a CSAT trend chart grouped by branch and agent. Set alerts for any branch averaging below 3.5 stars." },
-      ],
-      verification: "Trigger a test 'order.delivered' event for a test contact. After 24 hours, you should receive the Flow survey. Submit a rating of 2 stars and verify the thread gets assigned to the supervisor queue with the correct internal note.",
-    },
-    {
-      id: "tut-3",
-      title: "Wave-Scheduled Broadcast Campaign",
-      description: "Send a campaign to 50,000 contacts in 10 waves with 5-minute spacing to protect your quality rating and stay within messaging tier limits.",
-      difficulty: "Beginner",
-      duration: "15 min",
-      topic: "Campaigns",
-      tags: ["broadcast", "wave-delivery", "quality-rating", "segments"],
-      prerequisites: ["At least one approved marketing template", "A contact segment with opt-in status"],
-      steps: [
-        { title: "Create the target segment", instructions: "Contacts → Segments → New. Filter: opt-in = true AND last active within 90 days AND tag = 'marketing-eligible'. Preview the count — aim for your most engaged contacts first." },
-        { title: "Configure wave delivery", instructions: "Campaigns → New → Select template → Select segment → Enable 'Wave Delivery'. Set waves to 5,000 contacts each with 5-minute intervals between waves." },
-        { title: "Set the delivery schedule", instructions: "Schedule the first wave to start during business hours (10 AM local time is optimal). The system will automatically space subsequent waves at your configured interval.", tip: "Never schedule the first wave of a large campaign for Monday morning. Tuesday-Thursday mid-morning consistently shows the highest open rates across our customer base." },
-        { title: "Monitor in real-time", instructions: "Once the campaign starts, open Analytics → Campaign → Live View. Watch the Sent → Delivered → Read funnel. If failure rate exceeds 3% in any wave, pause immediately." },
-      ],
-      verification: "After all waves complete, the campaign summary should show: total sent, total delivered, delivery rate, read rate, opt-out count, and block count. A healthy campaign shows > 95% delivery and < 0.5% opt-out.",
-    },
-    {
-      id: "tut-4",
-      title: "Webhook Signature Verification in Node.js",
-      description: "Implement HMAC-SHA256 signature verification for incoming Madhura webhooks to ensure payload integrity and prevent replay attacks.",
-      difficulty: "Advanced",
-      duration: "20 min",
-      topic: "Webhooks & API",
-      tags: ["webhook", "security", "node.js", "hmac", "signature"],
-      prerequisites: ["Node.js runtime", "Madhura webhook secret from Settings → Webhooks"],
-      steps: [
-        { title: "Extract the signature header", instructions: "Madhura sends the HMAC-SHA256 signature in the X-Madhura-Signature header. Your middleware must extract this before processing the payload.", code: { label: "Express middleware", snippet: "const crypto = require('crypto');\n\nfunction verifyWebhook(req, res, next) {\n  const signature = req.headers['x-madhura-signature'];\n  const payload = JSON.stringify(req.body);\n  const expected = crypto\n    .createHmac('sha256', process.env.MADHURA_WEBHOOK_SECRET)\n    .update(payload)\n    .digest('hex');\n\n  if (signature !== expected) {\n    return res.status(401).json({ error: 'Invalid signature' });\n  }\n  next();\n}" } },
-        { title: "Handle idempotency", instructions: "Webhooks may be delivered more than once (retries on timeout). Use the event_id field as an idempotency key — store processed event IDs and skip duplicates.", code: { label: "Idempotency check", snippet: "const processedEvents = new Set();\n\napp.post('/webhook', verifyWebhook, (req, res) => {\n  const { event_id, event_type, data } = req.body;\n  \n  if (processedEvents.has(event_id)) {\n    return res.status(200).json({ status: 'duplicate' });\n  }\n  processedEvents.add(event_id);\n  \n  // Process the event...\n  res.status(200).json({ status: 'processed' });\n});" } },
-        { title: "Respond quickly", instructions: "Return a 200 status within 5 seconds. If your processing takes longer, acknowledge receipt immediately and process asynchronously via a queue.", tip: "A non-2xx response triggers retries at 30s, 2m, 10m, 1h, 6h intervals. After 5 consecutive failures, the endpoint is auto-disabled." },
-      ],
-      verification: "Use the 'Send Test Event' button in Settings → Webhooks. Your endpoint should return 200, log the verified payload, and the webhook delivery log should show a green checkmark.",
-    },
-    {
-      id: "tut-5",
-      title: "Multi-Language Routing Setup",
-      description: "Configure skill-based routing that detects the customer's language from their first message and assigns the thread to the matching language team.",
-      difficulty: "Beginner",
-      duration: "10 min",
-      topic: "Admin & Setup",
-      tags: ["routing", "multi-language", "skills", "assignment"],
-      prerequisites: ["At least two agents tagged with different language skills"],
-      steps: [
-        { title: "Tag agents with language skills", instructions: "Settings → Team → select agent → Skills → add 'Hindi', 'Tamil', 'English' etc. Each agent can have multiple language tags." },
-        { title: "Create language detection rules", instructions: "Settings → Routing → New Rule → Condition: 'Message language is Hindi' → Action: 'Assign to agents with skill Hindi'. Create one rule per language." },
-        { title: "Set fallback routing", instructions: "Add a catch-all rule at the bottom: 'Any language → Assign to General queue (round-robin)'. This ensures no conversation is ever unassigned.", tip: "Put specific rules first — the engine evaluates top-to-bottom and the first match wins. 'Hindi → Hindi team' must come before 'Any → General'." },
-        { title: "Test with messages in different languages", instructions: "Send test messages in Hindi, Tamil, and English to your number. Verify each lands in the correct agent's inbox." },
-      ],
-      verification: "Send 3 test messages in 3 different languages. Each should appear in the inbox of an agent tagged with that language skill. The routing log (Settings → Routing → Log) shows which rule matched.",
-    },
-    {
-      id: "tut-6",
-      title: "REST API: Send a Template Message via cURL",
-      description: "Send your first API-driven template message using cURL, including variable substitution and button configuration.",
-      difficulty: "Beginner",
-      duration: "10 min",
-      topic: "Webhooks & API",
-      tags: ["api", "curl", "template", "rest"],
-      prerequisites: ["API key from Settings → API Keys", "At least one approved template"],
-      steps: [
-        { title: "Get your API key", instructions: "Settings → API Keys → Generate. Scope the key to 'Messages: Send' only — follow the principle of least privilege." },
-        { title: "Find your template name and variables", instructions: "Templates → select your template → copy the template name and note the variable positions ({{1}}, {{2}}, etc.)." },
-        { title: "Send the request", instructions: "Use cURL to send a template message with variable substitution.", code: { label: "cURL command", snippet: "curl -X POST https://api.madhura.co/api/wa/messages/template \\\n  -H \"Authorization: Bearer $MADHURA_API_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"to\": \"919876543210\",\n    \"template_name\": \"welcome_message\",\n    \"language\": \"en\",\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": \"Priya\" },\n          { \"type\": \"text\", \"text\": \"Madhura\" }\n        ]\n      }\n    ]\n  }'" } },
-        { title: "Check the response", instructions: "A successful send returns { \"message_id\": \"...\", \"status\": \"sent\" }. Check the inbox to see the thread appear." },
-      ],
-      verification: "The API returns a 200 with a message_id. The message appears in the contact's thread in the inbox. The delivery status updates to 'delivered' within seconds.",
-    },
-  ],
-  cta: {
-    title: "Ready to build?",
-    sub: "Every tutorial is runnable against a free trial workspace. No credit card required.",
-    primary: { label: "Start free trial", to: "/signup" },
-    secondary: { label: "API documentation", to: "/developers" },
-  },
-  related: ["/docs", "/videos", "/developers"],
-};
-
-/* ── /videos ──────────────────────────────────────────────────────────────────── */
-const VIDEOS_PAGE = {
-  path: "/videos",
-  section: "Resources",
-  renderer: "videos",
-  meta: {
-    title: "Video Guides — Visual Walkthroughs | Madhura",
-    description:
-      "Recorded visual walkthroughs of workspace setup, Flow canvas design, campaign scheduling, analytics configuration, and API integration.",
-  },
-  hero: {
-    badge: "Video Guides",
-    title: "See the platform in action, step by step.",
-    highlight: "in action",
-    subtitle:
-      "Bite-sized video walkthroughs covering workspace configuration, flow canvas design, campaign wave throttling, template management, and webhook integration.",
-    points: [
-      "Chaptered playback with direct timestamp navigation",
-      "Organised into learning tracks by topic",
-      "Concise 5–15 minute sessions with key takeaways",
-      "Screen recordings from real production workspaces",
-    ],
-    primaryCta: { label: "Start free trial", to: "/signup" },
-    secondaryCta: { label: "Read tutorials", to: "/tutorials" },
-  },
-  stats: [
-    { value: "9", label: "Video guides published", note: "new episodes monthly" },
-    { value: "3", label: "Learning tracks", note: "Setup, Operations, Engineering" },
-    { value: "8 min", label: "Average video length", note: "focused & concise" },
-    { value: "100%", label: "Chaptered with timestamps", note: "skip to what matters" },
-  ],
-  tracks: ["Setup & Onboarding", "Daily Operations", "Developer & API"],
-  videos: [
-    {
-      id: "vid-1",
-      title: "Workspace Setup from Scratch",
-      description: "Create an organisation, add your first branch, configure business hours, and invite your first team member — all in one 8-minute walkthrough.",
-      track: "Setup & Onboarding",
-      duration: "8:24",
-      instructor: "Arjun Krishnan",
-      tags: ["workspace", "branch", "onboarding", "business-hours"],
-      chapters: [
-        { timestamp: "00:00", title: "Introduction & prerequisites" },
-        { timestamp: "01:15", title: "Creating the organisation" },
-        { timestamp: "03:00", title: "Adding a branch with business hours" },
-        { timestamp: "05:30", title: "Configuring roles & inviting agents" },
-        { timestamp: "07:15", title: "Verification & next steps" },
-      ],
-      takeaways: [
-        "Always set business hours before inviting agents — SLA timers depend on this",
-        "One branch per location, even for single-location teams",
-        "Custom roles let you mix permissions for senior agents",
-      ],
-      transcript: [
-        "Welcome to the Madhura workspace setup walkthrough. By the end of this video, you'll have a fully configured workspace ready to connect a WhatsApp number.",
-        "We'll start by creating your organisation, which is the top-level container for everything — numbers, templates, agents, and billing.",
-        "Then we'll add a branch, configure business hours, set up team roles, and invite your first agent.",
-      ],
-    },
-    {
-      id: "vid-2",
-      title: "Connecting Your WhatsApp Number",
-      description: "Step-by-step number onboarding through Meta's Cloud API, including business verification, display name approval, and webhook configuration.",
-      track: "Setup & Onboarding",
-      duration: "12:10",
-      instructor: "Priya Mehta",
-      tags: ["number", "cloud-api", "meta", "webhook", "verification"],
-      chapters: [
-        { timestamp: "00:00", title: "Overview of the onboarding process" },
-        { timestamp: "02:00", title: "Meta Business Manager verification" },
-        { timestamp: "05:30", title: "Registering the phone number" },
-        { timestamp: "08:00", title: "Display name approval timeline" },
-        { timestamp: "09:45", title: "Webhook URL configuration" },
-        { timestamp: "11:20", title: "Sending your first test message" },
-      ],
-      takeaways: [
-        "The number cannot be active in the WhatsApp consumer app during registration",
-        "Display name approval typically takes 24–48 hours",
-        "Always send a test message before launching campaigns",
-        "BSP migration requires a number release from the current provider first",
-      ],
-      transcript: [
-        "Connecting a WhatsApp Business number is the foundation of your Madhura setup. In this walkthrough, I'll take you through both paths — onboarding a fresh number via Meta Cloud API, and migrating from an existing BSP.",
-      ],
-    },
-    {
-      id: "vid-3",
-      title: "Building Your First Automation Journey",
-      description: "Design a welcome-to-payment-recovery automation from scratch using the visual journey builder, with triggers, conditions, waits, and actions.",
-      track: "Daily Operations",
-      duration: "14:35",
-      instructor: "Rahul Sharma",
-      tags: ["automation", "journey", "welcome", "payment-recovery"],
-      chapters: [
-        { timestamp: "00:00", title: "Automation concepts: triggers, nodes, runs" },
-        { timestamp: "02:30", title: "Creating a welcome message journey" },
-        { timestamp: "06:00", title: "Adding conditions and branching logic" },
-        { timestamp: "09:00", title: "Building a payment recovery sequence" },
-        { timestamp: "12:00", title: "Testing with dry-run mode" },
-        { timestamp: "13:45", title: "Reading the Run Inspector" },
-      ],
-      takeaways: [
-        "Every automation carries an idempotency key — replay-safe by design",
-        "Dry-run executes the full graph with sends suppressed",
-        "Always test against real contacts, not synthetic samples",
-        "The Run Inspector shows the exact path taken and where failures occurred",
-      ],
-      transcript: [
-        "Automations are where Madhura really shines. In this video, I'll build two complete journeys from scratch — a welcome sequence for new contacts, and a payment recovery flow triggered by a billing webhook.",
-      ],
-    },
-    {
-      id: "vid-4",
-      title: "Campaign Broadcasting with Wave Delivery",
-      description: "Schedule a campaign to 50,000 contacts using wave delivery, monitor the live delivery funnel, and react to quality signals in real-time.",
-      track: "Daily Operations",
-      duration: "10:18",
-      instructor: "Vikram Patel",
-      tags: ["campaign", "broadcast", "wave", "delivery", "quality"],
-      chapters: [
-        { timestamp: "00:00", title: "Why wave delivery protects your reputation" },
-        { timestamp: "02:15", title: "Creating and verifying the segment" },
-        { timestamp: "04:30", title: "Configuring wave size and spacing" },
-        { timestamp: "06:45", title: "Real-time delivery monitoring" },
-        { timestamp: "08:30", title: "When and how to pause mid-campaign" },
-        { timestamp: "09:50", title: "Post-campaign health check" },
-      ],
-      takeaways: [
-        "Wave delivery prevents quality rating drops from burst sends",
-        "5,000 contacts per wave with 5-minute spacing is the safe default",
-        "Pause immediately if failure rate exceeds 3% in any wave",
-        "Review opt-out and block rates before scheduling the next campaign",
-      ],
-    },
-    {
-      id: "vid-5",
-      title: "Template Management & Approval Workflow",
-      description: "Author templates with variables, run the pre-flight validator, submit to Meta, and manage the approval lifecycle.",
-      track: "Daily Operations",
-      duration: "9:42",
-      instructor: "Priya Mehta",
-      tags: ["template", "approval", "meta", "variables", "pre-flight"],
-      chapters: [
-        { timestamp: "00:00", title: "Template categories explained" },
-        { timestamp: "02:00", title: "Writing templates that pass review" },
-        { timestamp: "04:30", title: "Variable samples and the pre-flight validator" },
-        { timestamp: "06:15", title: "Submission and approval timeline" },
-        { timestamp: "08:00", title: "Handling rejections: reading reasons and rewriting" },
-      ],
-      takeaways: [
-        "Category alignment is the #1 cause of rejection — match content to category exactly",
-        "Every variable must have a sample value or Meta auto-rejects",
-        "The pre-flight validator catches 80% of rejection causes before submission",
-      ],
-    },
-    {
-      id: "vid-6",
-      title: "Shared Team Inbox Deep Dive",
-      description: "Navigating the inbox, agent assignment, collision detection, internal notes, canned responses, and SLA timer management.",
-      track: "Daily Operations",
-      duration: "11:05",
-      instructor: "Arjun Krishnan",
-      tags: ["inbox", "assignment", "sla", "collision", "canned-responses"],
-      chapters: [
-        { timestamp: "00:00", title: "Inbox layout and thread navigation" },
-        { timestamp: "02:30", title: "Agent assignment and collision detection" },
-        { timestamp: "05:00", title: "Internal notes and thread context" },
-        { timestamp: "07:00", title: "Canned responses for speed" },
-        { timestamp: "09:00", title: "SLA timers and escalation alerts" },
-        { timestamp: "10:30", title: "Best practices for high-volume teams" },
-      ],
-      takeaways: [
-        "Collision detection prevents two agents from replying to the same thread simultaneously",
-        "Internal notes are visible to agents but never sent to the customer",
-        "SLA timers pause outside business hours automatically",
-      ],
-    },
-    {
-      id: "vid-7",
-      title: "REST API Authentication & First Request",
-      description: "Generate an API key, scope permissions, send your first API request, and handle the response — complete with cURL examples.",
-      track: "Developer & API",
-      duration: "7:30",
-      instructor: "Vikram Patel",
-      tags: ["api", "authentication", "curl", "developer", "rest"],
-      chapters: [
-        { timestamp: "00:00", title: "API key vs. JWT session authentication" },
-        { timestamp: "01:45", title: "Generating and scoping an API key" },
-        { timestamp: "03:30", title: "Your first GET request: listing contacts" },
-        { timestamp: "05:00", title: "Sending a template message via API" },
-        { timestamp: "06:30", title: "Error handling and rate limits" },
-      ],
-      takeaways: [
-        "Scope API keys to minimum required permissions",
-        "Rotate keys on a schedule — never embed them in client-side code",
-        "Rate limits are per-key: 100 requests/second for Enterprise plans",
-      ],
-    },
-    {
-      id: "vid-8",
-      title: "Webhook Integration & Event Processing",
-      description: "Configure webhook endpoints, verify signatures, handle retries, and build a reliable event processing pipeline.",
-      track: "Developer & API",
-      duration: "13:22",
-      instructor: "Rahul Sharma",
-      tags: ["webhook", "events", "signature", "retry", "integration"],
-      chapters: [
-        { timestamp: "00:00", title: "Webhook concepts and event types" },
-        { timestamp: "03:00", title: "Configuring your endpoint URL" },
-        { timestamp: "05:00", title: "Signature verification (HMAC-SHA256)" },
-        { timestamp: "08:00", title: "Handling retries and idempotency" },
-        { timestamp: "10:30", title: "Building async processing with queues" },
-        { timestamp: "12:00", title: "Monitoring webhook health" },
-      ],
-      takeaways: [
-        "Always verify the HMAC signature before processing any webhook payload",
-        "Use the event_id as an idempotency key to handle duplicate deliveries",
-        "Respond with 200 within 5 seconds — process asynchronously if needed",
-        "5 consecutive non-2xx responses auto-disables the endpoint",
-      ],
-    },
-    {
-      id: "vid-9",
-      title: "Analytics Dashboard & Custom Reports",
-      description: "Navigate the built-in analytics, create custom report views, set up automated alerts, and export data for external BI tools.",
-      track: "Daily Operations",
-      duration: "8:50",
-      instructor: "Arjun Krishnan",
-      tags: ["analytics", "reports", "dashboard", "export", "alerts"],
-      chapters: [
-        { timestamp: "00:00", title: "Analytics dashboard overview" },
-        { timestamp: "02:00", title: "Delivery funnel analysis" },
-        { timestamp: "04:00", title: "Agent performance metrics" },
-        { timestamp: "05:30", title: "Building custom report views" },
-        { timestamp: "07:00", title: "Automated alerts and scheduled exports" },
-      ],
-      takeaways: [
-        "The delivery funnel (Sent → Delivered → Read) is the single most important dashboard",
-        "Custom reports can be scheduled for daily email delivery to leadership",
-        "Export to CSV or connect to your BI tool via the Analytics API",
-      ],
-    },
-  ],
-  cta: {
-    title: "Watch, learn, build",
-    sub: "Every video walkthrough uses a real production workspace — no mockups, no placeholders.",
-    primary: { label: "Start free trial", to: "/signup" },
-    secondary: { label: "Read tutorials", to: "/tutorials" },
-  },
-  related: ["/tutorials", "/docs", "/getting-started"],
-};
-
-/* ── /case-studies ────────────────────────────────────────────────────────────── */
-const CASE_STUDIES_PAGE = {
-  path: "/case-studies",
-  section: "Resources",
-  renderer: "case-studies",
-  meta: {
-    title: "Case Studies — Customer Success Stories | Madhura",
-    description:
-      "How enterprise teams cut response times, recovered abandoned revenue, and scaled multi-branch WhatsApp operations with Madhura.",
-  },
-  hero: {
-    badge: "Case Studies",
-    title: "Results measured in revenue, not features.",
-    highlight: "revenue",
-    subtitle:
-      "See how multi-branch retailers, healthcare networks, e-commerce brands, and education platforms scaled WhatsApp engagement without degrading delivery quality.",
-    points: [
-      "Verified before-and-after metrics from production workspaces",
-      "Challenge → Solution → Result format for each story",
-      "Enterprise-grade multi-branch deployment patterns",
-      "Executive quotes from CXOs and operations leads",
-    ],
-    primaryCta: { label: "Start free trial", to: "/signup" },
-    secondaryCta: { label: "Book a demo", to: "/demo" },
-  },
-  stats: [
-    { value: "4", label: "Published case studies", note: "across industries" },
-    { value: "68%", label: "Average response time reduction", note: "vs. pre-Madhura" },
-    { value: "3.2x", label: "Recovery revenue lift", note: "from automated cart recovery" },
-    { value: "50+", label: "Branches managed", note: "largest single deployment" },
-  ],
-  industries: ["E-Commerce", "Healthcare", "Education", "Retail"],
-  caseStudies: [
-    {
-      id: "cs-1",
-      company: "FreshCart India",
-      industry: "E-Commerce",
-      companyScale: "200K+ orders/month",
-      headline: "3.2x recovery revenue from abandoned cart automation",
-      summary: "FreshCart was losing ₹18L/month to abandoned carts with email-only recovery achieving 4% click-through. A WhatsApp automation journey with one-tap payment links recovered 3.2x more revenue within the first 45 days.",
-      metrics: [
-        { value: "3.2x", label: "Recovery revenue increase" },
-        { value: "38%", label: "Cart recovery rate" },
-        { value: "₹58L", label: "Recovered revenue (Q3)" },
-        { value: "4.1%", label: "Overall conversion lift" },
-      ],
-      challenge: {
-        title: "Email recovery wasn't reaching customers",
-        description: "With a 12% email open rate and 4% click-through on recovery emails, FreshCart was losing ₹18 lakh per month in abandonments that a timely nudge could have saved.",
-        points: [
-          "Recovery emails landed in promotions tabs — 12% open rate",
-          "4% click-through on recovery links — most carts expired before conversion",
-          "No automated follow-up cadence — manual process, inconsistent execution",
-          "No visibility into which carts were high-value vs. low-value",
-        ],
-      },
-      solution: {
-        title: "WhatsApp automation with smart cart scoring",
-        description: "Madhura's automation engine scores each abandoned cart by value, sends a 3-touch recovery sequence via WhatsApp with one-tap payment buttons, and escalates high-value carts to human agents.",
-        points: [
-          "Cart value scoring: high-value carts (> ₹5,000) get a human agent call within 2 hours",
-          "3-touch WhatsApp sequence: 1h reminder, 24h urgency, 72h last-chance with discount",
-          "One-tap payment link buttons — no redirect friction, no login required",
-          "Auto-exit when payment completes — no embarrassing 'did you forget?' after purchase",
-        ],
-      },
-      quote: {
-        text: "We went from losing ₹18 lakh a month in abandoned carts to recovering ₹58 lakh in a single quarter. The ROI was visible in the first week.",
-        author: "Deepak Ramanathan",
-        role: "VP of Growth, FreshCart India",
-      },
-    },
-    {
-      id: "cs-2",
-      company: "MedAssist Group",
-      industry: "Healthcare",
-      companyScale: "32 clinics, 4 cities",
-      headline: "72% reduction in missed appointments across 32 clinics",
-      summary: "MedAssist's 32-clinic network was losing ₹12L/month to no-shows. Automated WhatsApp appointment reminders with one-tap rescheduling cut the no-show rate from 28% to 8% within 60 days.",
-      metrics: [
-        { value: "72%", label: "No-show reduction" },
-        { value: "8%", label: "New no-show rate (from 28%)" },
-        { value: "₹12L/mo", label: "Revenue recovered" },
-        { value: "32", label: "Clinics on one platform" },
-      ],
-      challenge: {
-        title: "28% no-show rate across multi-city operations",
-        description: "With 32 clinics across 4 cities, manual appointment reminder calls consumed 2 full-time staff per clinic. Still, 28% of patients didn't show up.",
-        points: [
-          "Manual reminder calls: 2 staff per clinic, 64 people doing phone calls",
-          "28% no-show rate — highest in evening and weekend slots",
-          "No rescheduling option in reminders — patients had to call back to change",
-          "Zero analytics on which clinic/slot/doctor had the worst no-show patterns",
-        ],
-      },
-      solution: {
-        title: "Branch-scoped automation with one-tap rescheduling",
-        description: "Each of the 32 clinics operates as a Madhura branch with its own number and automation. Patients get a 3-touch reminder sequence with interactive reschedule buttons.",
-        points: [
-          "48-hour, 24-hour, and 2-hour reminders with escalating urgency",
-          "Interactive buttons: 'Confirm', 'Reschedule', 'Cancel' — one tap, no call needed",
-          "Freed slot immediately offered to the waitlist via automated message",
-          "Branch-level no-show analytics dashboard for clinic managers",
-        ],
-      },
-      quote: {
-        text: "We eliminated 64 full-time reminder staff across our network and cut no-shows by 72%. The patients actually prefer the WhatsApp reminders to phone calls.",
-        author: "Dr. Kavitha Subramanian",
-        role: "COO, MedAssist Group",
-      },
-    },
-    {
-      id: "cs-3",
-      company: "LearnBridge Academy",
-      industry: "Education",
-      companyScale: "15,000 students, 6 campuses",
-      headline: "94% fee collection rate via automated payment sequences",
-      summary: "LearnBridge reduced overdue fee balances by ₹2.4 Cr per semester by replacing manual follow-up calls with structured WhatsApp payment sequences tied to their ERP.",
-      metrics: [
-        { value: "94%", label: "On-time fee collection" },
-        { value: "₹2.4 Cr", label: "Overdue balance reduction" },
-        { value: "85%", label: "Parent engagement rate" },
-        { value: "6", label: "Campuses unified" },
-      ],
-      challenge: {
-        title: "Manual fee follow-up consuming admin staff bandwidth",
-        description: "With 15,000 students across 6 campuses, fee follow-up was entirely manual — phone calls and printed letters. On-time collection was 71%, creating a ₹4.2 Cr overdue balance each semester.",
-        points: [
-          "71% on-time fee collection — 29% required manual follow-up",
-          "Admin staff spending 40% of time on fee-related phone calls",
-          "No visibility into which campuses had the worst collection rates",
-          "Parents complained about impersonal dunning letters",
-        ],
-      },
-      solution: {
-        title: "ERP-integrated payment automation per campus branch",
-        description: "Each campus is a Madhura branch connected to the ERP via webhooks. Automated payment sequences with one-tap payment links replaced manual follow-up entirely.",
-        points: [
-          "ERP webhook triggers payment reminder at due date −7, −1, +1, +7 days",
-          "One-tap payment link via WhatsApp — no portal login required",
-          "Personalized messaging: student name, amount, due date, installment plan options",
-          "Escalation to human finance officer for amounts overdue > 30 days",
-        ],
-      },
-      quote: {
-        text: "Our fee collection rate went from 71% to 94% in one semester. Parents actually thanked us for the WhatsApp reminders — they said it was easier than remembering portal logins.",
-        author: "Ramesh Nair",
-        role: "Director of Operations, LearnBridge Academy",
-      },
-    },
-    {
-      id: "cs-4",
-      company: "StyleHub Retail",
-      industry: "Retail",
-      companyScale: "50 stores, nationwide",
-      headline: "68% faster response time with zero cross-branch data leaks",
-      summary: "StyleHub unified 50 retail stores onto a single Madhura platform with strict branch isolation, reducing average customer response time from 4.2 hours to 1.3 hours.",
-      metrics: [
-        { value: "68%", label: "Faster response time" },
-        { value: "1.3h", label: "New avg. response (from 4.2h)" },
-        { value: "50", label: "Stores on one platform" },
-        { value: "0", label: "Cross-branch data incidents" },
-      ],
-      challenge: {
-        title: "50 stores with siloed, inconsistent customer service",
-        description: "Each store managed its own WhatsApp number with personal phones. No SLAs, no routing, no analytics. Average response time was 4.2 hours — if the customer got a reply at all.",
-        points: [
-          "Personal phones: no audit trail, no handoff when staff changed shifts",
-          "4.2-hour average response — ranging from 20 minutes to never",
-          "No cross-store visibility for regional managers",
-          "Customer complaints about getting responses from the wrong store",
-        ],
-      },
-      solution: {
-        title: "50-branch platform with SLA enforcement and role isolation",
-        description: "Every store operates as a Madhura branch with its own number, team, and SLA targets. Regional managers see cross-branch dashboards. Store agents see only their store's conversations.",
-        points: [
-          "Branch-scoped data: contacts, threads, templates, exports — all isolated",
-          "SLA response targets: 15 minutes for first response, 4 hours for resolution",
-          "Escalation alerts when SLA is at risk — sent to store manager via WhatsApp",
-          "Leadership dashboard with cross-branch CSAT, response time, and volume heatmaps",
-        ],
-      },
-      quote: {
-        text: "For the first time, I can see response times across all 50 stores on one screen. The platform paid for itself in the first month through the customer complaints it prevented.",
-        author: "Anita Desai",
-        role: "Head of Customer Experience, StyleHub Retail",
-      },
-    },
-  ],
-  cta: {
-    title: "Write your own success story",
-    sub: "Join the teams that measure WhatsApp in revenue and resolution time, not in messages sent.",
-    primary: { label: "Start free trial", to: "/signup" },
-    secondary: { label: "Book a demo", to: "/demo" },
-  },
-  related: ["/compare", "/blog", "/features"],
-};
-
-/* ── /faqs ────────────────────────────────────────────────────────────────────── */
-const FAQS_PAGE = {
-  path: "/faqs",
-  section: "Resources",
-  renderer: "faqs",
-  meta: {
-    title: "FAQs — Common Questions Answered | Madhura",
-    description:
-      "Transparent answers about WhatsApp Cloud API pricing, template policies, multi-branch setup, data security, compliance, and migration timelines.",
-  },
-  hero: {
-    badge: "FAQs",
-    title: "Transparent answers to real questions.",
-    highlight: "real questions",
-    subtitle:
-      "Pricing, compliance, migration, messaging policies, template rules, security architecture, and setup timelines — answered without sales language.",
-    points: [
-      "Searchable across 20+ categorised questions",
-      "Expand-all / collapse-all for quick scanning",
-      "Linked to documentation for deeper context",
-      "Updated monthly based on support ticket trends",
-    ],
-    primaryCta: { label: "Start free trial", to: "/signup" },
-    secondaryCta: { label: "Contact sales", to: "/company/contact" },
-  },
-  stats: [
-    { value: "20+", label: "Questions answered", note: "across 5 categories" },
-    { value: "Monthly", label: "Update frequency", note: "from support ticket trends" },
-    { value: "0", label: "Sales language", note: "straight technical answers" },
-    { value: "5", label: "Topic categories", note: "pricing to compliance" },
-  ],
-  categories: [
-    { id: "pricing", label: "Pricing & Billing" },
-    { id: "setup", label: "Setup & Migration" },
-    { id: "messaging", label: "Messaging & Templates" },
-    { id: "security", label: "Security & Compliance" },
-    { id: "platform", label: "Platform & Features" },
-  ],
-  faqItems: [
-    { category: "pricing", q: "How does Madhura pricing work?", a: "Madhura charges a monthly platform subscription based on your plan tier (seats, branches, and feature access). WhatsApp conversation fees from Meta are passed through at cost with zero markup. Your bill = platform subscription + Meta's published conversation rates.", details: ["No per-message markup — Meta's rates passed through directly", "Plans scale by seats and branches, not by message volume", "Annual billing saves 20% compared to monthly", "Enterprise plans include custom pricing for high-volume teams"] },
-    { category: "pricing", q: "Is there a free trial?", a: "Yes, a 14-day free trial with full feature access. No credit card required to start. The trial includes up to 5 agent seats, 1 branch, and 1,000 free conversations (Meta's standard free tier).", details: ["14 days with full feature access", "No credit card required", "Up to 5 agent seats and 1 branch", "Data preserved if you upgrade before trial ends"] },
-    { category: "pricing", q: "What happens when I exceed my plan limits?", a: "Seat and branch limits are hard caps — you'll need to upgrade to add more. Message volume has no platform cap; you only pay Meta's conversation fees. If you approach your messaging tier limit, the platform warns you before throttling kicks in." },
-    { category: "pricing", q: "Can I change plans mid-cycle?", a: "Upgrades take effect immediately with prorated billing. Downgrades take effect at the next billing cycle start — you keep current-tier features until renewal." },
-    { category: "setup", q: "How long does setup take?", a: "A single-branch workspace can be fully operational in under 60 minutes. The main variable is Meta's display name approval (24–48 hours). Multi-branch enterprise deployments typically take 3–5 business days including team training.", details: ["Workspace creation: 5 minutes", "Number connection: 15 minutes + Meta approval wait", "Contact import: 10 minutes for up to 50,000 contacts", "Team setup and routing: 10–15 minutes"] },
-    { category: "setup", q: "Can I migrate from another WhatsApp BSP?", a: "Yes. Request a number release from your current BSP, then connect the same number to Madhura. Conversation history from the previous provider cannot be imported (this is a Meta limitation), but contacts and templates can be recreated.", details: ["Number release must be completed by your current BSP first", "Templates need to be re-submitted and re-approved on the new setup", "Contact data can be CSV-imported with all tags and custom fields", "The migration typically completes in 24–48 hours"] },
-    { category: "setup", q: "Do I need a Meta Business Manager account?", a: "Yes. A verified Meta Business Manager account is required for WhatsApp Business API access. Madhura guides you through the verification process, but the verification itself is performed by Meta." },
-    { category: "setup", q: "Can I use my existing WhatsApp number?", a: "Yes, as long as it's not currently active in the WhatsApp consumer app. You'll need to deregister it from the consumer app first. The same number can then be connected to the Business API through Madhura." },
-    { category: "messaging", q: "What is the 24-hour service window?", a: "When a customer messages you, a 24-hour window opens during which you can reply with any message type (text, media, interactive buttons) at no additional cost. Once the window closes, the next outbound must be a pre-approved template.", details: ["Window starts when the customer sends a message", "Free-form replies are unlimited during the window", "After 24 hours, only templates can initiate the next conversation", "This is a Meta rule, not a Madhura restriction"] },
-    { category: "messaging", q: "Why was my template rejected?", a: "The most common rejection reasons: missing variable sample values, marketing content declared as Utility, incomplete sentences, URL buttons pointing to unverified domains, and authentication templates containing media. The pre-flight validator catches most of these before submission." },
-    { category: "messaging", q: "What is a quality rating and why does it matter?", a: "Meta assigns each WhatsApp number a quality rating (Green, Yellow, Red) based on recipient behaviour — specifically block rates and spam reports. A Yellow or Red rating throttles your outbound throughput. The rating recovers after 7 days of clean sending.", details: ["Green: full messaging capacity", "Yellow: throughput reduced, under observation", "Red: severely limited, risk of messaging tier downgrade", "Recovery: 7 days of clean, consent-based sending"] },
-    { category: "messaging", q: "Is there a limit on how many messages I can send?", a: "Yes, Meta assigns messaging tiers: 1K, 10K, 100K, or unlimited conversations per 24-hour rolling window. Tiers upgrade automatically when you maintain healthy quality ratings and increasing volume. Madhura does not add any additional platform limits on top of Meta's tiers." },
-    { category: "security", q: "Where is my data stored?", a: "Customer data is stored in encrypted-at-rest databases hosted on cloud infrastructure in the Asia-Pacific region. Madhura does not store WhatsApp message content beyond what is needed for the inbox and thread display — no long-term archival of media unless explicitly configured." },
-    { category: "security", q: "Is Madhura GDPR compliant?", a: "Yes. Madhura supports GDPR data subject rights including access, rectification, erasure, and portability. A Data Processing Agreement (DPA) is available for all plans and is included by default in Enterprise contracts.", details: ["Right to access: export all contact data on request", "Right to erasure: permanent deletion with audit trail", "Data portability: CSV and API-based data export", "DPA available at /legal/dpa"] },
-    { category: "security", q: "How is API authentication handled?", a: "Two methods: workspace API keys (for server-to-server integrations) and JWT sessions (for user-context operations). API keys should be scoped to minimum required permissions and rotated on a schedule." },
-    { category: "security", q: "Do you process payment card data?", a: "No. Madhura does not process, store, or transmit payment card data. Payment links in messages redirect to your payment gateway. Subscription billing is handled by our payment processor (Razorpay/Stripe) — card details never touch Madhura servers." },
-    { category: "platform", q: "How many branches can I create?", a: "Depends on your plan. Pro supports up to 5 branches. Enterprise supports unlimited branches. Each branch gets its own number, team, routing rules, and analytics — with full data isolation between branches." },
-    { category: "platform", q: "Can I integrate Madhura with my existing CRM?", a: "Yes, through the REST API, webhooks, or the Universal CRM Connector. The connector maps Madhura entities (contacts, threads, tags, events) onto your CRM's object model through configuration — no custom integration code required for supported CRMs.", details: ["REST API: full CRUD on contacts, messages, templates", "Webhooks: real-time events for contacts, messages, and automations", "Universal CRM Connector: pre-built mappings for major CRMs", "Zapier integration for no-code workflows"] },
-    { category: "platform", q: "Does Madhura support multiple languages?", a: "The platform UI is in English. Templates and messages can be created in any language that WhatsApp supports (which covers most major world languages). Skill-based routing can direct conversations to agents tagged with specific language skills." },
-    { category: "platform", q: "Is there an API rate limit?", a: "Yes. API rate limits depend on your plan: 20 req/sec on Starter, 50 req/sec on Pro, 100 req/sec on Enterprise. Burst allowances are available for Enterprise plans on request. Rate limit headers are included in every API response." },
-  ],
-  cta: {
-    title: "Still have questions?",
-    sub: "Talk to a solution architect — no pitch, just answers.",
-    primary: { label: "Book a demo", to: "/demo" },
-    secondary: { label: "Contact sales", to: "/company/contact" },
-  },
-  related: ["/help", "/compare", "/docs"],
-};
-
-/* ── /compare ─────────────────────────────────────────────────────────────────── */
-const COMPARE_PAGE = {
-  path: "/compare",
-  section: "Resources",
-  renderer: "compare",
-  meta: {
-    title: "Compare Solutions — MADHURA vs. Alternatives | Madhura",
-    description:
-      "Honest side-by-side comparison of Madhura against WhatsApp BSPs, legacy helpdesks, and generic CRM suites across pricing, features, and architecture.",
-  },
-  hero: {
-    badge: "Compare Solutions",
-    title: "An honest comparison, not a sales pitch.",
-    highlight: "honest comparison",
-    subtitle:
-      "See how MADHURA stacks up against traditional WhatsApp BSPs, legacy helpdesks, and generic CRM suites on the dimensions that actually matter: pricing transparency, multi-branch isolation, automation depth, and enterprise governance.",
-    points: [
-      "Side-by-side feature matrix with 3 competitor categories",
-      "Interactive TCO calculator for message markup savings",
-      "Honest acknowledgement of where alternatives may be stronger",
-      "Architecture differentiators explained, not just listed",
-    ],
-    primaryCta: { label: "Start free trial", to: "/signup" },
-    secondaryCta: { label: "Book a demo", to: "/demo" },
-  },
-  stats: [
-    { value: "$0", label: "Message markup", note: "Meta rates passed through" },
-    { value: "100%", label: "Multi-branch isolation", note: "zero data leaks" },
-    { value: "3", label: "Competitor categories", note: "BSPs, helpdesks, CRMs" },
-    { value: "30–50%", label: "Potential TCO savings", note: "at enterprise volume" },
-  ],
-  comparisons: {
-    bsps: {
-      competitorName: "Traditional BSPs (Wati, Interakt, Aisensy)",
-      matrix: [
-        {
-          categoryName: "Pricing & Cost",
-          items: [
-            { feature: "Per-message markup", note: "On top of Meta's conversation fee", madhura: true, madhuraLabel: "$0 markup", competitor: true, competitorLabel: "$0.003–0.006/msg" },
-            { feature: "Transparent Meta pass-through", madhura: true, competitor: false },
-            { feature: "Seat-based pricing (not message-based)", madhura: true, competitor: "partial", competitorLabel: "Varies by provider" },
-            { feature: "Free trial without credit card", madhura: true, competitor: "partial" },
-          ],
-        },
-        {
-          categoryName: "Multi-Branch & Governance",
-          items: [
-            { feature: "Multi-branch with data isolation", note: "Separate contacts, threads, analytics per branch", madhura: true, competitor: false, competitorLabel: "Single-tenant only" },
-            { feature: "Branch-scoped roles & permissions", madhura: true, competitor: false },
-            { feature: "Cross-branch leadership dashboards", madhura: true, competitor: false },
-            { feature: "Per-branch WhatsApp numbers", madhura: true, competitor: "partial", competitorLabel: "Multi-number but no isolation" },
-          ],
-        },
-        {
-          categoryName: "Automation & Flows",
-          items: [
-            { feature: "Visual automation journey builder", madhura: true, competitor: true },
-            { feature: "WhatsApp Flow screens (in-chat forms)", madhura: true, competitor: "partial" },
-            { feature: "Dry-run testing with real contacts", madhura: true, competitor: false },
-            { feature: "Run Inspector (node-level debugging)", madhura: true, competitor: false },
-            { feature: "Idempotent replay-safe runs", madhura: true, competitor: false },
-          ],
-        },
-        {
-          categoryName: "API & Developer Experience",
-          items: [
-            { feature: "Full REST API with OpenAPI spec", madhura: true, competitor: "partial" },
-            { feature: "Webhook signature verification", madhura: true, competitor: "partial" },
-            { feature: "API key scoping (least-privilege)", madhura: true, competitor: false },
-            { feature: "Universal CRM Connector", madhura: true, competitor: false },
-          ],
-        },
-      ],
-    },
-    helpdesks: {
-      competitorName: "Legacy Helpdesks (Zendesk, Freshdesk)",
-      matrix: [
-        {
-          categoryName: "WhatsApp-Native Capabilities",
-          items: [
-            { feature: "Built specifically for WhatsApp Business API", madhura: true, competitor: false, competitorLabel: "WhatsApp is an add-on channel" },
-            { feature: "Template management with pre-flight validator", madhura: true, competitor: false },
-            { feature: "WhatsApp Flow screen builder", madhura: true, competitor: false },
-            { feature: "WhatsApp-aware quality rating monitoring", madhura: true, competitor: false },
-          ],
-        },
-        {
-          categoryName: "Campaign & Broadcast",
-          items: [
-            { feature: "Segmented broadcast campaigns", madhura: true, competitor: false, competitorLabel: "Not designed for outbound" },
-            { feature: "Wave delivery with quality protection", madhura: true, competitor: false },
-            { feature: "Campaign analytics (delivery funnel)", madhura: true, competitor: "partial" },
-          ],
-        },
-        {
-          categoryName: "Multi-Channel Support",
-          items: [
-            { feature: "Email ticketing", madhura: false, madhuraLabel: "WhatsApp-focused", competitor: true },
-            { feature: "Phone/voice support", madhura: false, competitor: true },
-            { feature: "Multi-channel unified inbox", madhura: "partial", madhuraLabel: "WhatsApp-first", competitor: true },
-          ],
-        },
-        {
-          categoryName: "Pricing",
-          items: [
-            { feature: "Per-agent pricing", madhura: true, madhuraLabel: "From $29/seat", competitor: true, competitorLabel: "From $49–89/seat" },
-            { feature: "WhatsApp included in base plan", madhura: true, competitor: false, competitorLabel: "Paid add-on ($)" },
-          ],
-        },
-      ],
-    },
-    crms: {
-      competitorName: "Generic CRMs (HubSpot, Zoho, Salesforce)",
-      matrix: [
-        {
-          categoryName: "WhatsApp Integration Depth",
-          items: [
-            { feature: "Native WhatsApp Business API integration", madhura: true, competitor: "partial", competitorLabel: "Via 3rd-party connector" },
-            { feature: "Template lifecycle management", madhura: true, competitor: false },
-            { feature: "In-app WhatsApp inbox for agents", madhura: true, competitor: "partial", competitorLabel: "Basic chat widget" },
-            { feature: "Conversation-aware CRM records", madhura: true, competitor: false },
-          ],
-        },
-        {
-          categoryName: "CRM Capabilities",
-          items: [
-            { feature: "Pipeline & deal management", madhura: true, madhuraLabel: "WhatsApp-attached", competitor: true, competitorLabel: "Full-featured" },
-            { feature: "Contact lifecycle stages", madhura: true, competitor: true },
-            { feature: "Email marketing & sequences", madhura: false, madhuraLabel: "WhatsApp-focused", competitor: true },
-            { feature: "Advanced reporting & BI", madhura: true, madhuraLabel: "WhatsApp metrics", competitor: true, competitorLabel: "Cross-channel" },
-          ],
-        },
-        {
-          categoryName: "Automation",
-          items: [
-            { feature: "WhatsApp-native automations", madhura: true, competitor: false, competitorLabel: "Generic workflow rules" },
-            { feature: "Visual flow builder", madhura: true, competitor: true },
-            { feature: "WhatsApp delivery-aware triggers", madhura: true, competitor: false },
-          ],
-        },
-        {
-          categoryName: "Total Cost of Ownership",
-          items: [
-            { feature: "All-in-one for WhatsApp CRM", madhura: true, madhuraLabel: "Single platform", competitor: false, competitorLabel: "CRM + BSP + connector fees" },
-            { feature: "Zero per-message markup", madhura: true, competitor: false, competitorLabel: "BSP markup passed through" },
-          ],
-        },
-      ],
-    },
-  },
-  differentiators: [
-    { title: "Zero Message Markup", description: "Meta's conversation fees are passed through at cost. No per-message surcharge, no hidden platform fees on top of what Meta charges." },
-    { title: "Multi-Branch Data Isolation", description: "Every branch gets its own contacts, threads, templates, queues, and analytics. Agents in Store A cannot see Store B's conversations — but leadership sees all branches." },
-    { title: "Enterprise Role Governance", description: "Granular, branch-scoped permissions on every action: reply, publish, export, delete. Custom roles let you create hybrids like 'Senior Agent' with elevated but bounded access." },
-    { title: "Replay-Safe Automations", description: "Every automation run carries an idempotency key. A replayed webhook cannot double-message a contact. The Run Inspector shows the exact path taken and where failures occurred." },
-    { title: "WhatsApp Quality Monitoring", description: "Real-time quality rating tracking, automatic campaign pause on Yellow rating, and segment health scoring to prevent quality degradation before it happens." },
-    { title: "Direct Meta Cloud API", description: "No BSP middleman. Your workspace connects directly to Meta's Cloud API, giving you the latest API features, best latency, and no dependency on a third-party gateway." },
-  ],
-  cta: {
-    title: "Ready to see it in action?",
-    sub: "A 30-minute demo tailored to your current stack and your actual pain points.",
-    primary: { label: "Book a demo", to: "/demo" },
-    secondary: { label: "Start free trial", to: "/signup" },
-  },
-  related: ["/features", "/case-studies", "/pricing"],
-};
-
 export const RESOURCE_PAGES = [
-  HELP_PAGE,
-  GETTING_STARTED_PAGE,
-  BLOG_PAGE,
-  TUTORIALS_PAGE,
-  VIDEOS_PAGE,
-  CASE_STUDIES_PAGE,
-  FAQS_PAGE,
-  COMPARE_PAGE,
+  /* ── Help ────────────────────────────────────────────────────────────────── */
+  {
+    path: "/help",
+    section: "Resources",
+    meta: {
+      title: "Help Center — Answers by Topic | Madhura",
+      description:
+        "Find answers by topic — billing, inbox, templates, automations and analytics — then open a support ticket with the details that get it resolved.",
+    },
+    hero: {
+      badge: "Resources · Help Center",
+      title: "Search by topic before you open a ticket.",
+      subtitle:
+        "The help centre is indexed the way support triages issues: billing and plans, the shared inbox, templates and messaging policy, automations, and analytics. Each article names the screen and setting involved, so you can act on it without a call. When an answer is not written up, a ticket with the right four details gets a substantive reply.",
+      points: [
+        "Six topic areas, each with its own index",
+        "Search matches the exact error text on screen",
+        "Four details make a ticket answerable",
+        "Status page and escalation path linked from every article",
+      ],
+      primaryCta: { label: "Start free trial", to: "/signup" },
+      secondaryCta: { label: "Book a demo", to: "/demo" },
+    },
+    stats: [
+      { value: "6", label: "Topic areas", note: "billing through analytics" },
+      { value: "4", label: "Details per ticket", note: "workspace, number, time, screenshot" },
+      { value: "1 day", label: "First reply target", note: "on new general enquiries" },
+      { value: "24h", label: "Security acknowledgement", note: "reports to the security team" },
+    ],
+    overview: {
+      heading: "How to find what you need",
+      paragraphs: [
+        "Support tickets fall into the same handful of shapes: something did not send, something did not deliver, a template was rejected, a number stopped responding, or a report does not match what an agent actually did. Each shape has a documented cause and a documented fix, so the help centre is indexed by the shape of the problem rather than by product area.",
+        "Start with search. It matches article titles, headings and the rejection or error strings you see in the console, which is usually enough on its own. If search comes back empty, browse the six topic indexes — each one ends with the escalation path for that area, including when to skip the article and open a ticket.",
+      ],
+      bullets: [
+        "Billing and plans: invoices, seats, plan changes, cancellation and plan-dependent limits",
+        "Inbox: assignment rules, queues, snooze, collision detection and per-branch permissions",
+        "Templates: categories, Meta approval, rejection reasons and quality rating",
+        "Automations and analytics: triggers, journey steps, filters and report definitions",
+        "Search with the exact wording from the console — rejection reasons are indexed verbatim",
+        "Every article names when to escalate instead of reading further",
+      ],
+    },
+    features: [
+      {
+        icon: "Search",
+        title: "Search the wording you see",
+        desc: "Paste the status, error or rejection text from the screen. Articles carry those strings verbatim, so you do not have to guess what we called it.",
+      },
+      {
+        icon: "Layers",
+        title: "Six topic indexes",
+        desc: "Billing, inbox, templates, automations, analytics and account access — each index lists articles in the order operators hit them.",
+      },
+      {
+        icon: "Activity",
+        title: "Check status first",
+        desc: "If delivery is degraded, no article will help. The status page is linked from the help navigation, and incident notes live there.",
+      },
+      {
+        icon: "FileText",
+        title: "A ticket that gets answered",
+        desc: "Workspace ID, the number involved, the time it happened and a screenshot. Those four details remove two round trips from most resolutions.",
+      },
+      {
+        icon: "Send",
+        title: "Escalation by severity",
+        desc: "Live delivery stops, broken webhooks and suspected account compromise skip the queue; cosmetic and how-to questions do not.",
+      },
+    ],
+    workflow: {
+      heading: "Before you open a ticket",
+      steps: [
+        {
+          title: "Search the exact message",
+          desc: "Copy the status or rejection text from the console and search it — most template and delivery questions are already written up.",
+        },
+        {
+          title: "Check the status page",
+          desc: "Rule out a platform or Meta-side incident before you diagnose your own configuration; incident notes are posted there.",
+        },
+        {
+          title: "Gather the four details",
+          desc: "Workspace ID, the number involved, the timestamp in your time zone, and a screenshot of what you saw.",
+        },
+        {
+          title: "Open with a severity",
+          desc: "Say what stopped working and who is affected. Anything blocking live sends is flagged for the on-call engineer.",
+        },
+      ],
+    },
+    capabilities: {
+      heading: "Where each kind of question belongs",
+      items: [
+        { icon: "Percent", title: "Billing and plan limits", desc: "Seats, usage and add-ons are plan-dependent; the pricing page shows the tiers and the help centre explains the invoice." },
+        { icon: "ShieldCheck", title: "Messaging policy", desc: "Opt-in, opt-out, template categories and quality rating questions route to the policy articles, not to a support workaround." },
+        { icon: "Terminal", title: "API and webhook questions", desc: "Endpoints, payloads and retry behaviour are documented in the docs rather than in help articles, with samples you can run." },
+        { icon: "Lock", title: "Security and privacy", desc: "Vulnerability reports go to security@madhuratech.com; data requests and DPA questions are answered from the trust and legal pages." },
+      ],
+    },
+    faq: [
+      {
+        q: "How do I contact support?",
+        a: "Open a ticket from the support page, or email support@madhuratech.com from an address that belongs to the workspace. Sales and pricing go to the sales inbox, security reports to the security inbox — using the right one is the fastest way to get a real reply.",
+      },
+      {
+        q: "What should a ticket include?",
+        a: "Workspace ID, the WhatsApp number involved, the time it happened with your time zone, and a screenshot of the screen or error text. If it affects sending, add roughly how many conversations are blocked and since when.",
+      },
+      {
+        q: "Where do billing and plan questions live?",
+        a: "In the billing and plans topic: invoices, seat changes, plan upgrades, cancellation and what is included at each tier. Plan-dependent limits are stated on the pricing page, so check the tier before opening a ticket about a limit.",
+      },
+      {
+        q: "Is there a status page?",
+        a: "Yes — /status shows component health, scheduled maintenance windows and incident history. Check it before diagnosing a delivery problem, because it separates a platform incident from something in your own configuration.",
+      },
+    ],
+  },
+
+  /* ── Getting started ─────────────────────────────────────────────────────── */
+  {
+    path: "/getting-started",
+    section: "Resources",
+    meta: {
+      title: "Getting Started — First-Day Checklist | Madhura",
+      description:
+        "The first-day checklist for a new workspace: connect a number, verify the business, import contacts, build a template, send and invite the team.",
+    },
+    hero: {
+      badge: "Resources · Getting Started",
+      title: "Six steps from a number to your first campaign.",
+      subtitle:
+        "This is the sequence we run with new workspaces on day one, because most first-week problems are ordering problems. Each step states what has to be true before the next one starts, and none of them require code. A workspace admin with access to your Meta Business account and a contact export can complete the list in a day.",
+      points: [
+        "Connect and verify the number you already own",
+        "Import contacts with tags and opt-in records kept",
+        "Draft templates and read Meta's decision with its reason",
+        "Send to a small segment, then invite the team",
+      ],
+      primaryCta: { label: "Start free trial", to: "/signup" },
+      secondaryCta: { label: "Book a demo", to: "/demo" },
+    },
+    stats: [
+      { value: "6", label: "First-day steps", note: "number connection to team invite" },
+      { value: "24h", label: "Service window", note: "free-form replies after a customer messages you" },
+      { value: "1", label: "Business verification", note: "per Meta business account, not per number" },
+      { value: "3", label: "Template categories", note: "marketing, utility, authentication — all Meta-reviewed" },
+    ],
+    overview: {
+      heading: "The first day, in order",
+      paragraphs: [
+        "Teams that send before consent is recorded, or invite twenty agents before assignment rules exist, spend the rest of the week untangling duplicates and double replies. Working the checklist in sequence avoids that, because every step produces something the next step needs: the number produces the webhook, the import produces the segments, the segments produce the first send.",
+        "Nothing here is a migration commitment. You can start with a fresh number, import a small list, send to fifty contacts and widen from there — the order matters more than the volume.",
+      ],
+      bullets: [
+        "Take a number you already own; porting and a new Cloud API number both work, with different lead times",
+        "Start Meta business verification on day one even if you send before it completes",
+        "Import contacts with the opt-in source and timestamp kept as their own columns",
+        "Draft templates with variables you can actually fill from your CRM data",
+        "Send the first campaign to a small segment before you touch the full list",
+        "Invite agents only after queues and assignment rules exist",
+      ],
+    },
+    features: [
+      {
+        icon: "MessageCircle",
+        title: "Connect the number",
+        desc: "Add the number you own, confirm the webhook is receiving, and exchange a test message in both directions. Delivery receipts on both sides mean it is live.",
+      },
+      {
+        icon: "ShieldCheck",
+        title: "Verify the business",
+        desc: "Verification sits at the Meta business account level, not per number, and it unlocks the template categories and volume your use case needs.",
+      },
+      {
+        icon: "Users",
+        title: "Import contacts",
+        desc: "Upload a CSV with tags and consent columns preserved. The importer flags duplicates instead of creating them, and the opt-in source survives the import.",
+      },
+      {
+        icon: "FileText",
+        title: "Build the first template",
+        desc: "Write it, pick a category, fill sample variables and submit. Meta's decision and the rejection reason appear on the same screen as the draft.",
+      },
+      {
+        icon: "Send",
+        title: "Send the first campaign",
+        desc: "Pick a small segment, check delivery and quality on that send, and only then widen the audience to the rest of the consented list.",
+      },
+      {
+        icon: "Lock",
+        title: "Invite the team",
+        desc: "Roles and branch scope first, seats second. No agent should be able to open another branch's conversations because nobody set a boundary.",
+      },
+    ],
+    workflow: {
+      heading: "The four phases of day one",
+      steps: [
+        {
+          title: "Connect and verify",
+          desc: "Number connected, webhook confirmed with a two-way test, business verification started so it is not blocking you later.",
+        },
+        {
+          title: "Import and segment",
+          desc: "Contacts uploaded with tags and consent records intact, deduplicated, and grouped into the segments you will actually send to.",
+        },
+        {
+          title: "Draft and submit templates",
+          desc: "Category chosen deliberately, variables mapped to real fields, sample values filled, submitted for Meta review with a reason tracked.",
+        },
+        {
+          title: "Send, then invite",
+          desc: "A small first send with delivery read first, then agents invited with roles, queues and business hours already configured.",
+        },
+      ],
+    },
+    capabilities: {
+      heading: "What has to be true before you send",
+      items: [
+        { icon: "CheckCircle2", title: "Consent is on record", desc: "Opt-in source and timestamp are stored with the contact, because an opt-out or a complaint is answered from that record." },
+        { icon: "FileText", title: "Templates are approved", desc: "Meta reviews every template. Draft, submit and track the decision in the console rather than assuming it went through." },
+        { icon: "GitBranch", title: "Assignment rules exist", desc: "Without a queue rule, the first inbound conversation becomes everyone's problem and the second becomes nobody's." },
+        { icon: "Clock", title: "Business hours are set", desc: "Response expectations, auto-handoff and after-hours behaviour all read from this setting, so set it before the first reply." },
+        { icon: "BarChart3", title: "You know which report answers your question", desc: "Pick the two or three signals you will check after the first send — delivery, replies, opt-outs — before you send them." },
+      ],
+    },
+    faq: [
+      {
+        q: "How long does connecting a number take?",
+        a: "Registering a new number is quick; porting an existing one depends on the carrier releasing it, so start that process separately if you need it. Many teams run a new number from day one and port later, which keeps the first campaign off the critical path.",
+      },
+      {
+        q: "Do we need business verification before the first campaign?",
+        a: "You can connect a number and start the verification in parallel, but verification gates higher-volume sending and some template categories, so begin it on day one. Treat it as a background task rather than a gate you sit and watch.",
+      },
+      {
+        q: "We already have contacts in another tool. What moves?",
+        a: "Contacts, tags and consent columns move through a CSV import; message history usually does not, so export anything you need for reference first. Templates have to be submitted again, because Meta reviews every template per business rather than accepting another tool's approvals.",
+      },
+      {
+        q: "Who should be invited first?",
+        a: "A supervisor and the two or three people who will handle replies. Set queues, assignment rules and roles on that small group, get one day of real conversations through it, and then widen the invite — it is much harder to fix permissions after thirty agents have created their own habits.",
+      },
+    ],
+  },
+  /* ── Blog ────────────────────────────────────────────────────────────────── */
+  {
+    path: "/blog",
+    section: "Resources",
+    meta: {
+      title: "Blog & Insights — WhatsApp Operations Writing | Madhura",
+      description:
+        "MADHURA's blog covers deliverability, WhatsApp policy changes, operations playbooks and product notes — two posts a week, every claim sourced.",
+    },
+    hero: {
+      badge: "Resources · Blog",
+      title: "Writing that tells you what changed and why.",
+      subtitle:
+        "Four recurring columns: deliverability, WhatsApp policy changes, operations playbooks and product notes. Every post names the setting, screen or policy clause it refers to, so you can act on it the same day. Nothing here is sponsored, and nothing is published that we cannot point at a source for.",
+      points: [
+        "Four columns: deliverability, policy, playbooks, product notes",
+        "Two posts a week, Tuesday and Thursday",
+        "Every claim points at a doc, a screen or a changelog",
+        "No sponsored posts and no republished press releases",
+      ],
+      primaryCta: { label: "Start free trial", to: "/signup" },
+      secondaryCta: { label: "Book a demo", to: "/demo" },
+    },
+    stats: [
+      { value: "4", label: "Recurring columns", note: "deliverability, policy, playbooks, product notes" },
+      { value: "2/wk", label: "Publishing cadence", note: "Tuesday and Thursday" },
+      { value: "0", label: "Sponsored posts", note: "editorial is not for sale" },
+      { value: "1", label: "Source per claim", note: "a Meta doc, a screen or a changelog" },
+    ],
+    overview: {
+      heading: "What we write about, and what we skip",
+      paragraphs: [
+        "Deliverability covers the mechanics that decide whether a message lands: template quality rating, categorisation, send pacing and what a failure code actually means. Policy coverage follows Meta's changelog and tells you what to change in your templates and journeys before it costs you a send. Playbooks are the operational side — queues, staffing against the 24-hour service window, segment hygiene. Product notes explain what shipped and what it replaces.",
+        "We do not publish predictions dressed as facts, vendor-versus-vendor roundups we have not tested, or any result we cannot show the method behind. Corrections are added at the foot of a post rather than made quietly.",
+      ],
+      bullets: [
+        "Why your template quality rating dropped after a festival campaign",
+        "What the 24-hour service window does to your staffing roster",
+        "Reading Meta's policy changelog before it costs you a send",
+        "Assigning two hundred conversations a day without double replies",
+      ],
+    },
+    features: [
+      {
+        icon: "FileText",
+        title: "Sourcing rule",
+        desc: "Each post links the Meta documentation, the console screen or the changelog entry it rests on. If we cannot link it, we do not assert it.",
+      },
+      {
+        icon: "RefreshCw",
+        title: "Corrections are visible",
+        desc: "When a post is wrong, the correction is added at the foot with the date — the original claim stays readable so you can see what changed.",
+      },
+      {
+        icon: "ShieldCheck",
+        title: "Policy coverage with actions",
+        desc: "A policy change is published with the specific thing to do: which template category to re-check, which journey to update, which consent field to start capturing.",
+      },
+      {
+        icon: "Terminal",
+        title: "Product notes tie to the changelog",
+        desc: "Feature posts name the release, the setting and what the old behaviour was, so you can decide whether the change affects a live journey.",
+      },
+      {
+        icon: "Users",
+        title: "Written for operators",
+        desc: "Written for the person who runs the queue on Monday, not for a search engine — steps, settings and trade-offs rather than definitions.",
+      },
+    ],
+    capabilities: {
+      heading: "The four columns",
+      items: [
+        { icon: "Activity", title: "Deliverability", desc: "Quality rating, categorisation, failure codes, pacing and what actually moves when a template starts underperforming." },
+        { icon: "ShieldCheck", title: "WhatsApp policy changes", desc: "Meta's changelog translated into operational changes: template categories, consent, messaging windows and rate behaviour." },
+        { icon: "GitBranch", title: "Operations playbooks", desc: "Queue design, routing, staffing against the service window, segment hygiene and the reporting rituals that keep a team honest." },
+        { icon: "Zap", title: "Product notes", desc: "What shipped in MADHURA, which setting it lives behind, and what it replaces — dated and tied to the changelog." },
+      ],
+    },
+    faq: [
+      {
+        q: "How often do you publish?",
+        a: "Twice a week, on Tuesday and Thursday. When Meta ships something that changes how teams should send, that post goes out early rather than waiting for the slot.",
+      },
+      {
+        q: "Do you accept guest posts?",
+        a: "Not at the moment. If you have an operator story with a method you are willing to show, send it through the contact page — that is a better fit for a case study than a guest column, and case studies carry the measurement section.",
+      },
+      {
+        q: "What happens when a post turns out to be wrong?",
+        a: "We add a dated correction at the foot of the post and, if the change affects advice teams have already acted on, we announce it on the news page. We do not quietly edit the original wording.",
+      },
+      {
+        q: "Where do product releases get announced?",
+        a: "On the news page first, with the changelog carrying the versioned detail. Blog product notes explain the reasoning behind a release; the news page is the dated record of what went live.",
+      },
+    ],
+  },
+
+  /* ── Tutorials ───────────────────────────────────────────────────────────── */
+  {
+    path: "/tutorials",
+    section: "Resources",
+    meta: {
+      title: "Tutorials — Task Walkthroughs with Expected Output | Madhura",
+      description:
+        "Task-focused walkthroughs with a stated expected output — connect a number, submit a template, import contacts, send a broadcast and more.",
+    },
+    hero: {
+      badge: "Resources · Tutorials",
+      title: "Short walkthroughs that end with a checkable result.",
+      subtitle:
+        "Each tutorial is one task: what you need before you start, the exact screens involved, and the output you should be able to verify when you are done. They run in the console against a workspace, so you can practise on a test number before anything touches production. No video scrubbing, no slide decks.",
+      points: [
+        "One task per tutorial, start to verified output",
+        "Expected output stated before you begin",
+        "Screens named, so you never hunt for a setting",
+        "Prerequisites listed up front, including plan-dependent limits",
+      ],
+      primaryCta: { label: "Start free trial", to: "/signup" },
+      secondaryCta: { label: "Book a demo", to: "/demo" },
+    },
+    stats: [
+      { value: "6", label: "Tutorials", note: "first number through first report" },
+      { value: "15 min", label: "Typical runtime", note: "the contact import is the longest" },
+      { value: "1", label: "Expected output", note: "stated up front, checkable at the end" },
+      { value: "0", label: "Code required", note: "every tutorial is click-through in the console" },
+    ],
+    overview: {
+      heading: "How to work through a tutorial",
+      paragraphs: [
+        "Read the expected output first. Every tutorial opens with the thing you should be able to see at the end — a connected number, a submitted template with a decision, a segment that counted correctly — so you know when to stop instead of trusting that you finished.",
+        "Then check the prerequisites. Some need an admin role, some need a contact file with an opt-in column, and one needs a template already approved by Meta, which is a review you do not control. Tutorials that depend on someone else's decision say so before you start, not halfway through.",
+      ],
+      bullets: [
+        "Practise on a test number and a small segment before you repeat it on production data",
+        "Do them in order the first time — later tutorials assume the number and contacts exist",
+        "If your console looks different, check the changelog: tutorials are versioned with the product",
+        "Each tutorial links the matching docs page for the settings it does not explain",
+        "Something broken or unclear? That is a support ticket, and a useful one",
+      ],
+    },
+    features: [
+      {
+        icon: "MessageCircle",
+        title: "Connect a WhatsApp number to a workspace",
+        desc: "Output: the number shows as connected, an exchange in both directions succeeds, and delivery receipts appear for each message.",
+      },
+      {
+        icon: "FileText",
+        title: "Submit your first message template",
+        desc: "Output: a draft with sample variables is submitted, and the Meta decision lands on the same screen with its reason if it is rejected.",
+      },
+      {
+        icon: "Users",
+        title: "Import contacts with tags and opt-in records",
+        desc: "Output: rows land with tags applied, duplicates are flagged rather than created, and the consent columns survive the import intact.",
+      },
+      {
+        icon: "Inbox",
+        title: "Build an inbox queue with assignment rules",
+        desc: "Output: an inbound conversation is routed to the right agent automatically, and a second agent cannot claim it while someone is replying.",
+      },
+      {
+        icon: "Send",
+        title: "Send a broadcast to a segment and read the report",
+        desc: "Output: a small segment sends, and the report breaks the result into delivered, read, failed and opted-out counts.",
+      },
+      {
+        icon: "GitBranch",
+        title: "Trigger an automation from an inbound keyword",
+        desc: "Output: a reply containing your keyword starts a journey, tags the contact and hands off to a human at the step you configured.",
+      },
+    ],
+    capabilities: {
+      heading: "What every tutorial guarantees",
+      items: [
+        { icon: "CheckCircle2", title: "Stated output", desc: "The result is defined before the first click, so you can tell the difference between done and almost done." },
+        { icon: "Clock", title: "Prerequisites first", desc: "Role, plan-dependent features and external waits such as Meta template review are listed at the top, not discovered mid-task." },
+        { icon: "Terminal", title: "Console, not slides", desc: "Every step is a screen you can reproduce in your own workspace, with the menu path written out for each one." },
+        { icon: "RefreshCw", title: "Versioned with the product", desc: "When a screen moves, the tutorial is updated with the release; the changelog records which version it was written against." },
+        { icon: "Download", title: "Sample files included", desc: "Import tutorials ship the CSV structure they expect, with consent columns already in place, so you are not guessing at the format." },
+      ],
+    },
+    faq: [
+      {
+        q: "Do I need a workspace before I start?",
+        a: "Yes — tutorials assume you are signed in to a workspace with an admin or setup role. If you have not created one yet, the first-day checklist walks you through connecting a number and importing contacts before you come back here.",
+      },
+      {
+        q: "What if my console looks different from the screenshots?",
+        a: "Check the changelog for the release your workspace is on. Screenshots are updated with the release that changed them, and the tutorial states the version it was written against so you know whether it is you or us.",
+      },
+      {
+        q: "Can I follow along without affecting live data?",
+        a: "Use a test number and a small segment. Tutorials that would touch production data — broadcasts, imports, automation triggers — say so in the prerequisites and suggest a sandbox run first.",
+      },
+      {
+        q: "Where do API and webhook tasks live?",
+        a: "In the docs and the developer guides, not here. Tutorials cover the console; if your task starts with an endpoint, start at the API reference instead.",
+      },
+    ],
+  },
+  /* ── Videos ──────────────────────────────────────────────────────────────── */
+  {
+    path: "/videos",
+    section: "Resources",
+    meta: {
+      title: "Video Guides — Setup, Campaigns, Reporting | Madhura",
+      description:
+        "Five video series by role, from workspace setup to reporting. One task per video, five to twelve minutes, captions on every video.",
+    },
+    hero: {
+      badge: "Resources · Videos",
+      title: "One task per video, one series per role.",
+      subtitle:
+        "The library is grouped by the person watching — a new admin, a support lead, marketing operations, an automation builder, a manager reading reports. Each video runs between five and twelve minutes, shows one task on a real console, and stops at the result you should see. Nothing is gated behind a form.",
+      points: [
+        "Five series, from workspace setup to reporting",
+        "One task per video, shown end to end",
+        "Five to twelve minutes, captions on every video",
+        "Grouped by role, so you skip what is not yours",
+      ],
+      primaryCta: { label: "Start free trial", to: "/signup" },
+      secondaryCta: { label: "Book a demo", to: "/demo" },
+    },
+    stats: [
+      { value: "5", label: "Series", note: "setup, inbox, campaigns, automation, reporting" },
+      { value: "8 min", label: "Average runtime", note: "five to twelve minutes per video" },
+      { value: "1", label: "Task per video", note: "the result appears before the end" },
+      { value: "0", label: "Email gates", note: "the library plays without a form" },
+    ],
+    overview: {
+      heading: "What the library covers",
+      paragraphs: [
+        "The library runs from first connection to the report you show leadership: connecting and verifying a number, importing contacts, the shared inbox and its routing rules, templates and broadcasts, automations and WhatsApp Flows, and finally analytics and per-branch rollups. Each series is self-contained, so a support lead never has to sit through campaign setup to learn queue assignment.",
+        "Videos are recorded against a training workspace with dummy contacts, then updated when a screen they show changes materially. The dated detail lives in the changelog; the videos are for seeing the flow of the task rather than for pixel-matching a menu.",
+      ],
+      bullets: [
+        "New admins start with Getting Started and stop when the number is live",
+        "Support leads can take Inbox and Routing without touching campaigns",
+        "Marketing operations gets template categories, rejections and segmentation",
+        "Managers get the reporting series without needing console access first",
+        "Captions are on every video, and the UI is captured at a readable size",
+      ],
+    },
+    features: [
+      {
+        icon: "Rocket",
+        title: "Getting Started",
+        desc: "For admins setting up a workspace: connect a number, confirm the webhook, verify the business, import contacts, invite the team. Around eight minutes each.",
+      },
+      {
+        icon: "Inbox",
+        title: "Inbox and Routing",
+        desc: "For support leads: queues, assignment rules, collision detection, snooze and saved replies, plus what happens when the 24-hour window closes.",
+      },
+      {
+        icon: "Send",
+        title: "Campaigns and Templates",
+        desc: "For marketing operations: choosing a template category, reading a rejection reason, building a segment and sending the first broadcast.",
+      },
+      {
+        icon: "GitBranch",
+        title: "Automation and Flows",
+        desc: "For operations builders: triggers and conditions, WhatsApp Flows, handoff to a human, and where the AI chatbot should stop and escalate.",
+      },
+      {
+        icon: "BarChart3",
+        title: "Analytics and Reporting",
+        desc: "For managers: delivery and failure breakdowns, response time, template quality rating, and how branch rollups differ from per-branch views.",
+      },
+    ],
+    capabilities: {
+      heading: "How the library is produced",
+      items: [
+        { icon: "Users", title: "Grouped by role", desc: "Series follow the job rather than the feature list, so you can watch the two videos that apply to your week and stop." },
+        { icon: "CheckCircle2", title: "The result is shown", desc: "Every video ends on the screen that proves the task worked — the receipt, the decision, the routed conversation, the report row." },
+        { icon: "RefreshCw", title: "Updated on material change", desc: "When a workflow a video shows is redesigned, the video is re-recorded rather than annotated with a disclaimer." },
+        { icon: "Lock", title: "No gate", desc: "No email form, no gated download. If a colleague needs to see it, send them the link." },
+      ],
+    },
+    faq: [
+      {
+        q: "Do I need to watch the series in order?",
+        a: "Only within a series. Getting Started is sequential because each step depends on the last; the others are independent, so a support lead can open Inbox and Routing on day one and skip everything about campaigns.",
+      },
+      {
+        q: "Are these recorded on a real customer workspace?",
+        a: "No. Videos are recorded against a training workspace with dummy contacts and test numbers, which is also why the library can show mistakes — a rejection, a failed send — without exposing anyone's data.",
+      },
+      {
+        q: "How often are videos updated?",
+        a: "When a workflow they show changes materially, not on a calendar. The changelog records the release that triggered a re-record, so you can tell whether the video you just watched is current.",
+      },
+      {
+        q: "Is there a video for something you have not covered?",
+        a: "Ask through support, and check the tutorials in the meantime — most videos have a written equivalent with the same expected output, which is faster to follow when you are at your own keyboard.",
+      },
+    ],
+  },
+
+  /* ── Case studies ────────────────────────────────────────────────────────── */
+  {
+    path: "/case-studies",
+    section: "Resources",
+    meta: {
+      title: "Case Studies — Situation, Change, Measurement | Madhura",
+      description:
+        "How to read a MADHURA case study: situation, change, measurement. Anonymised profiles only — no names, no logos, no attributed numbers.",
+    },
+    hero: {
+      badge: "Resources · Case Studies",
+      title: "Read the situation, the change, the measurement.",
+      subtitle:
+        "Every MADHURA case study has the same three sections, and every profile is anonymised: industry, size and geography, never a company name or a logo. You get the pattern of what changed and how the team could tell — not a headline figure we are not permitted to attribute to anyone.",
+      points: [
+        "Three sections: situation, change, measurement",
+        "Profiles anonymised — no names, no logos",
+        "Outcomes described as patterns, not attributed numbers",
+        "Method shown, so you can judge the claim yourself",
+      ],
+      primaryCta: { label: "Start free trial", to: "/signup" },
+      secondaryCta: { label: "Book a demo", to: "/demo" },
+    },
+    stats: [
+      { value: "3", label: "Sections per study", note: "situation, change, measurement" },
+      { value: "0", label: "Named customers", note: "no names, no logos, no attributed quotes" },
+      { value: "6", label: "Countries served", note: "through partners and direct" },
+      { value: "1", label: "Question answered", note: "what changed, and how they could tell" },
+    ],
+    overview: {
+      heading: "How to read a MADHURA case study",
+      paragraphs: [
+        "The situation section describes the constraint the team lived with: how many outlets or brokers, how conversations arrived today, who was answering them, and what broke first as volume grew. It names the mechanism, not the tool they happened to replace — vendor names are rarely the useful part of a story.",
+        "The change section lists what was actually configured: queues and assignment rules, template categories chosen deliberately, consent capture added to the intake form, automations built and the ones deliberately left alone. The measurement section says which signal moved, how it was observed before and after, and over what period — then stops. Precise figures stay with the customer unless they have given written permission to publish them, so we describe direction and mechanism instead.",
+      ],
+      bullets: [
+        "The situation names the constraint, not the previous vendor",
+        "The change lists what was configured, not what was promised",
+        "The measurement names the signal and how it was observed",
+        "Profiles carry industry, size and geography — never a company",
+        "No precise figure is attributed to a customer without written permission",
+        "If a study cannot say how it was measured, we do not publish it",
+      ],
+    },
+    features: [
+      {
+        icon: "Building",
+        title: "The situation",
+        desc: "Scale, channels and the failure mode in plain terms — how many outlets or brokers, how messages arrived, and which part of the process broke at volume.",
+      },
+      {
+        icon: "GitBranch",
+        title: "The change",
+        desc: "What was configured and in what order: routing, templates, consent capture, journeys, per-branch permissions — including the decisions the team chose not to make.",
+      },
+      {
+        icon: "BarChart3",
+        title: "The measurement",
+        desc: "The signal that moved, how it was observed before and after, and the observation window — written so a sceptical operator could repeat the measurement.",
+      },
+      {
+        icon: "Filter",
+        title: "What we leave out",
+        desc: "Company names, logos, attributed quotes and precise customer figures. Those appear only when the customer has approved the wording in writing.",
+      },
+      {
+        icon: "MessageSquare",
+        title: "A deeper walkthrough",
+        desc: "For shortlisted evaluations we can arrange a conversation with a customer whose consent is on record — through the contact page, under NDA.",
+      },
+    ],
+    capabilities: {
+      heading: "The anonymised profiles you will see",
+      items: [
+        { icon: "Building", title: "40-outlet specialty retail chain, South India", desc: "Branch-scoped queues, festival-season broadcasts and per-store reporting rolled up for the regional team." },
+        { icon: "Globe", title: "Multi-city real-estate brokerage", desc: "Lead routing across brokers, listing and follow-up templates, and handoff when an enquiry goes quiet." },
+        { icon: "Activity", title: "Multi-location healthcare group", desc: "Appointment and reminder templates under a strict consent record, with branch-level permissions for front-desk teams." },
+        { icon: "Clock", title: "Regional logistics operator", desc: "Status updates as utility templates, exception conversations pulled into a shared queue, and after-hours routing." },
+      ],
+    },
+    faq: [
+      {
+        q: "Why are there no numbers in the studies?",
+        a: "Because the numbers belong to the customer. We publish the signal that moved, how it was measured and in which direction — the customer keeps the figures unless they explicitly approve publishing them, and most will not, for reasons that are entirely theirs.",
+      },
+      {
+        q: "Can we speak to a customer ourselves?",
+        a: "For shortlisted evaluations, yes — arranged case by case, with the customer's consent and under NDA, through the contact page. We do not hand out contact details, and we will tell you plainly if there is no reference available in your industry.",
+      },
+      {
+        q: "How is a case study written and approved?",
+        a: "The implementation lead and the customer's operations owner write it together from their own records, and the customer reviews the final wording before publication. That is also why the anonymisation holds: approval is on the text, not on a brand guideline.",
+      },
+      {
+        q: "Do you publish studies for our industry?",
+        a: "Ask. Profiles exist for retail, healthcare, real estate, logistics and education, and if your sector is missing we would rather say so than imply a pattern we cannot evidence. A scoping call usually answers whether the pattern transfers.",
+      },
+    ],
+  },
+  /* ── FAQs ────────────────────────────────────────────────────────────────── */
+  {
+    path: "/faqs",
+    section: "Resources",
+    meta: {
+      title: "Frequently Asked Questions — Pricing, Policy, Migration | Madhura",
+      description:
+        "Six groups of common questions — pricing, compliance, migration, security, support and onboarding — each answered briefly with a link deeper.",
+    },
+    hero: {
+      badge: "Resources · FAQs",
+      title: "Every common question, with the page that answers it.",
+      subtitle:
+        "Six groups: pricing and billing, compliance and messaging policy, migration from another tool, security, support and onboarding. The answers here are deliberately short and point at the page that goes deeper, so you can route yourself in one click. If your question is not here, support will answer it and it will probably appear next.",
+      points: [
+        "Pricing and billing, with plan-dependent limits named",
+        "Compliance, consent and template policy",
+        "Migration from another tool, and security review",
+        "Support response targets and what onboarding includes",
+      ],
+      primaryCta: { label: "Start free trial", to: "/signup" },
+      secondaryCta: { label: "Book a demo", to: "/demo" },
+    },
+    stats: [
+      { value: "6", label: "Question groups", note: "billing, policy, migration, security, support, onboarding" },
+      { value: "1", label: "Answer per question", note: "short here, deeper on the linked page" },
+      { value: "24h", label: "Security acknowledgement", note: "vulnerability reports" },
+      { value: "1 day", label: "Sales reply target", note: "for new enquiries" },
+    ],
+    overview: {
+      heading: "Route yourself to the right page",
+      paragraphs: [
+        "These are the questions that come up in almost every demo, grouped the way a buying team asks them: what it costs, whether it is allowed, whether you can move, whether it is safe, who answers when something breaks, and what happens in the first weeks. Each answer here is a summary with a destination, not a substitute for the full page.",
+        "Nothing on this page describes a fixed price or a fixed limit. Seats, branches, message volume and plan-dependent features are set out on the pricing page, and anything contractual — retention, response targets, residency — is written into the agreement rather than promised in an FAQ.",
+      ],
+      bullets: [
+        "Pricing and billing: tiers, seats and usage on the pricing page, invoices in the help centre",
+        "Compliance: consent, template categories and opt-out on the messaging consent page",
+        "Migration: what moves, what has to be rebuilt, and the order that avoids double sends",
+        "Security: controls, sub-processors and evidence on the trust and legal pages",
+        "Support: channels and per-plan response targets on the support pages",
+        "Onboarding: what implementation covers and who does what, on the onboarding page",
+      ],
+    },
+    features: [
+      {
+        icon: "Percent",
+        title: "Pricing and billing",
+        desc: "What each tier includes, how seats and usage are counted, what changes at scale, and how billing reacts when you upgrade mid-cycle.",
+      },
+      {
+        icon: "ShieldCheck",
+        title: "Compliance and messaging policy",
+        desc: "Consent records, opt-out handling, template categories and Meta approval, the 24-hour service window, and what quality rating does to your sends.",
+      },
+      {
+        icon: "RefreshCw",
+        title: "Migration",
+        desc: "Which contact fields move, why templates are re-submitted rather than copied, how numbers are handled, and how to avoid messaging anyone twice.",
+      },
+      {
+        icon: "Lock",
+        title: "Security",
+        desc: "Access control, audit logging, data export and deletion, sub-processors, and the evidence pack available for a procurement review.",
+      },
+      {
+        icon: "Inbox",
+        title: "Support",
+        desc: "How to open a ticket, what to include, how severity is decided, and the response target that applies to your plan.",
+      },
+      {
+        icon: "Rocket",
+        title: "Onboarding",
+        desc: "What implementation covers — number connection, template strategy, contact import, queue design and agent training — and what your team owns.",
+      },
+    ],
+    capabilities: {
+      heading: "Go deeper: the pages behind these answers",
+      items: [
+        { icon: "Sliders", title: "Plan-dependent limits", desc: "The pricing page is the source for tiers, seats and usage rules; enterprise terms are documented rather than implied." },
+        { icon: "ShieldCheck", title: "Messaging consent", desc: "The consent page covers opt-in capture, opt-out enforcement and what must be retained if a complaint arrives." },
+        { icon: "Download", title: "Migration and export", desc: "Docs carry the migration order and file formats; the console lets admins export contact data directly." },
+        { icon: "Lock", title: "Trust and legal", desc: "Architecture, controls, sub-processors, DPA and retention terms live in the trust centre and the legal pages." },
+      ],
+    },
+    faq: [
+      {
+        q: "What does MADHURA cost?",
+        a: "It is plan-dependent: seats, branches, message volume and which modules are switched on all change the number, so there is no single figure worth quoting here. The pricing page sets out the tiers and what each includes; enterprise terms — residency, retention, response targets — are documented and agreed in writing.",
+      },
+      {
+        q: "Do we need consent before we message someone?",
+        a: "Yes, and the record has to be answerable later: opt-in source and timestamp are stored with the contact, opt-out is honoured at send time, and template categories plus Meta approval decide what can go out at all. The messaging consent page covers what to capture at the point of collection.",
+      },
+      {
+        q: "Can we move from another tool?",
+        a: "Contacts, tags and consent columns move through an import; templates are submitted again because Meta reviews them per business; numbers are connected or ported depending on what you want to keep. The migration order in the docs exists specifically to avoid messaging the same person twice during the cutover.",
+      },
+      {
+        q: "How do we know the platform is secure?",
+        a: "Start with the trust centre, which describes access control, audit logging, export and deletion, and incident handling, and the legal pages, which name sub-processors and retention terms. We answer security questionnaires for enterprise review and provide a DPA — where we are not audited for something, we do not claim it.",
+      },
+      {
+        q: "How do we reach support, and how fast?",
+        a: "Open a ticket from the support page or email support@madhuratech.com. Response targets vary by plan and are published on the support plans page rather than summarised here, and anything affecting live sends is escalated to an on-call engineer.",
+      },
+      {
+        q: "What does onboarding actually include?",
+        a: "Number connection, template strategy, contact import, queue and permission design, and agent training — delivered with your team rather than handed over as documentation. What your side owns is written into the plan before the start date, so neither team assumes the other will do it.",
+      },
+    ],
+  },
+
+  /* ── Compare ─────────────────────────────────────────────────────────────── */
+  {
+    path: "/compare",
+    section: "Resources",
+    meta: {
+      title: "Compare WhatsApp CRM Tools — A Fair Framework | Madhura",
+      description:
+        "A comparison framework built on five testable dimensions, how MADHURA positions on each, and the cases where we are the wrong fit.",
+    },
+    hero: {
+      badge: "Resources · Compare",
+      title: "Compare on five dimensions you can actually test.",
+      subtitle:
+        "This is the framework we hand to teams running an evaluation: inbox model, multi-branch support, template workflow, API surface and pricing transparency. It explains how MADHURA positions on each, and it ends with the situations where we are the wrong choice. No competitor names and no feature matrix scored by the vendor writing it.",
+      points: [
+        "Five dimensions, each with a test you can run",
+        "How MADHURA positions, in plain terms, on each one",
+        "Where we are not the right fit, stated openly",
+        "No competitor names and no self-scored matrix",
+      ],
+      primaryCta: { label: "Start free trial", to: "/signup" },
+      secondaryCta: { label: "Book a demo", to: "/demo" },
+    },
+    stats: [
+      { value: "5", label: "Dimensions", note: "inbox, branches, templates, API, pricing" },
+      { value: "0", label: "Competitor names", note: "we do not publish comparisons we have not run" },
+      { value: "4", label: "Wrong-fit cases", note: "listed at the bottom of this page" },
+      { value: "1", label: "Sandbox to settle it", note: "test with your own number, not our slides" },
+    ],
+    overview: {
+      heading: "What to compare, and how",
+      paragraphs: [
+        "Feature matrices flatter whoever drew them. The useful comparison is the model underneath each capability: how a conversation gets assigned when two agents want it, whether a branch is a tag or a boundary for data and permissions, whether templates are a list or a workflow with rejection handling, whether the API covers what the UI does, and whether a buyer can read the pricing without booking a call.",
+        "Each dimension below states what to ask every vendor — including us — how MADHURA answers, and the test you can run in a sandbox in under an hour. Where two vendors tie, decide on implementation support and exit cost: what it takes to go live, and what it takes to leave.",
+      ],
+      bullets: [
+        "Inbox: what happens when two agents open the same conversation at once?",
+        "Multi-branch: is a branch a tag, or a boundary for data, permissions and reports?",
+        "Templates: where does the rejection reason live, and who approves the next draft?",
+        "API: can everything the interface does be done over REST and webhooks?",
+        "Pricing: can a buyer see tiers, seats and overage rules without booking a call?",
+      ],
+    },
+    features: [
+      {
+        icon: "Inbox",
+        title: "Inbox model",
+        desc: "Ask what assignment actually does. MADHURA treats the inbox as a routing system — queue rules, ownership, collision detection and an audit trail — rather than a chat window everyone watches.",
+      },
+      {
+        icon: "Building",
+        title: "Multi-branch support",
+        desc: "Ask whether a branch is a filter or a boundary. Here it is a boundary: numbers, agents, templates, hours and reporting are scoped per branch and rolled up for leadership.",
+      },
+      {
+        icon: "FileText",
+        title: "Template workflow",
+        desc: "Ask where rejections are handled. Drafts carry sample variables, the submission and Meta's decision sit on the same screen, the reason is attached, and quality rating is monitored per number.",
+      },
+      {
+        icon: "Terminal",
+        title: "API surface",
+        desc: "Ask whether an interface action has an endpoint. Sends, contacts, conversations and events are covered by REST and signed webhooks; a UI action without an endpoint is treated as a gap, not a premium tier.",
+      },
+      {
+        icon: "Percent",
+        title: "Pricing transparency",
+        desc: "Ask to see the tiers before the call. Plan tiers and plan-dependent limits are published, enterprise terms are documented in writing, and nothing changes at renewal without notice.",
+      },
+    ],
+    workflow: {
+      heading: "How to run the comparison",
+      steps: [
+        {
+          title: "Weight the five dimensions",
+          desc: "Score them for your situation first. A single-brand team weighs the inbox differently from a forty-branch chain, and the weighting decides the outcome.",
+        },
+        {
+          title: "Write one test per dimension",
+          desc: "Two agents on one conversation, a branch-scoped permission, a deliberately rejected template, one API call, one invoice question.",
+        },
+        {
+          title: "Run it in a sandbox",
+          desc: "Use your own number and a small contact file. A vendor willing to configure a sandbox with your data is telling you something about implementation too.",
+        },
+        {
+          title: "Decide on exit terms",
+          desc: "Data export, API coverage, contract length and the implementation load each option puts on your team — the cost of leaving is part of the cost of buying.",
+        },
+      ],
+    },
+    capabilities: {
+      heading: "When MADHURA is not the right fit",
+      items: [
+        { icon: "MessageCircle", title: "One number, one person", desc: "A small team handling a handful of chats on the WhatsApp Business app rarely needs queues, branch permissions and an audit trail — you may not need a CRM at all yet." },
+        { icon: "Percent", title: "Lowest sticker price wins", desc: "Implementation and plan-dependent limits are part of what this costs. If the decision is purely on per-seat price, we will usually lose it and we will say so early." },
+        { icon: "Layers", title: "Resale under our brand", desc: "White-labelling and resale happen only under a written partner agreement. If you need to put your brand on the platform tomorrow, start with the partner program." },
+        { icon: "ShieldCheck", title: "Consent you cannot evidence", desc: "If opt-in records cannot be produced or maintained, no tool fixes that. We would rather surface it in the first call than in a compliance review later." },
+      ],
+    },
+    faq: [
+      {
+        q: "Why do you not name competitors?",
+        a: "Because a published matrix scored by the vendor is marketing, not comparison. We describe our own model in enough detail that you can test it against anyone else's — and the framework is built so the questions are the same whichever logo is on the other side of the table.",
+      },
+      {
+        q: "How do we compare two vendors fairly?",
+        a: "Weight the five dimensions for your situation, write one concrete test per dimension, and run each vendor through the same script in a sandbox with your own data. Consistency of the test matters far more than breadth of the checklist.",
+      },
+      {
+        q: "We already run another tool. Is switching worth it?",
+        a: "It depends on what is breaking. If the constraint is routing, branch boundaries or reporting, the migration order in the docs avoids messaging anyone twice during cutover; if your current tool already answers those, the honest answer is to stay and solve the specific gap.",
+      },
+      {
+        q: "Can we see the API before we buy?",
+        a: "Yes — the API reference and webhook documentation are public, and the developer sandbox lets you authenticate and send against a test number. Evaluate the endpoints you would actually build against rather than a demo environment we control.",
+      },
+    ],
+  },
 ];
