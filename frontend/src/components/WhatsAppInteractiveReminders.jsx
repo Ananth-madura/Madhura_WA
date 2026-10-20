@@ -178,7 +178,9 @@ function interpolateText(text = "", vars = {}) {
   return evaluateMessagePlaceholders(text, vars);
 }
 
-export default function WhatsAppInteractiveReminders() {
+export default function WhatsAppInteractiveReminders({ workspace = false }) {
+  const [workspaceError, setWorkspaceError] = useState("");
+  const [queueError, setQueueError] = useState("");
   // Navigation tabs
   const [activeTab, setActiveTab] = useState("queue"); // "queue" | "logs" | "cadence"
 
@@ -288,6 +290,7 @@ export default function WhatsAppInteractiveReminders() {
   // ── Fetch Master Data ────────────────────────────────────────────────────────
   const fetchData = async () => {
     setLoading(true);
+    setWorkspaceError("");
     try {
       const [sumRes, remRes, setRes, cadRes] = await Promise.all([
         axios.get(`${API}/api/wa/reminders/summary`, { headers: headers() }).catch(() => null),
@@ -296,18 +299,22 @@ export default function WhatsAppInteractiveReminders() {
         axios.get(`${API}/api/wa/reminders/cadence-rules`, { headers: headers() }).catch(() => null),
       ]);
 
+      if ([sumRes, remRes, setRes, cadRes].some(result => !result)) setWorkspaceError("Some reminder data could not be loaded. Retry before relying on these totals or changing settings.");
+
       if (sumRes?.data) setSummary(sumRes.data);
       if (remRes?.data) setReminders(remRes.data);
       if (setRes?.data) setSettings(setRes.data);
       if (cadRes?.data) setCadenceRules(cadRes.data);
     } catch (err) {
       console.error("Error loading interactive reminders:", err);
+      setWorkspaceError("Reminders could not be loaded. Check your connection and retry.");
     }
     setLoading(false);
   };
 
   const fetchQueue = async () => {
     setQueueLoading(true);
+    setQueueError("");
     try {
       const { data } = await axios.get(`${API}/api/wa/reminders/pending-queue`, { headers: headers() });
       if (data?.items) {
@@ -315,6 +322,7 @@ export default function WhatsAppInteractiveReminders() {
       }
     } catch (err) {
       console.error("Error loading pending queue:", err);
+      setQueueError("The pending reminder queue could not be refreshed.");
     }
     setQueueLoading(false);
   };
@@ -663,6 +671,7 @@ export default function WhatsAppInteractiveReminders() {
 
   return (
     <div className="space-y-6">
+      {workspace && (workspaceError || queueError) && <div role="alert" className="wa-form-error flex flex-wrap items-center justify-between gap-3"><span>{workspaceError || queueError}</span><button type="button" className="hl-btn-secondary" disabled={loading || queueLoading} onClick={() => { fetchData(); fetchQueue(); }}>Retry loading</button></div>}
       {/* ── Top Summary & Response Rate Bar ── */}
       <div className="hl-kpis grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
         <div className="hl-kpi bg-[var(--color-paper-2)] p-4 rounded-2xl border border-[var(--color-rule)] shadow-sm space-y-1 transition">
@@ -728,11 +737,11 @@ export default function WhatsAppInteractiveReminders() {
           <div className="flex items-center gap-2.5">
             <h2 className="hl-title text-base font-bold flex items-center gap-2 text-[var(--color-ink)]">
               <Bot size={20} className="text-[var(--color-focus)]" />
-              <span>Multi-Dynamic Personalized Reminders</span>
+              <span>{workspace ? "Reminder operations" : "Multi-Dynamic Personalized Reminders"}</span>
             </h2>
             <span className="hl-badge hl-badge-success text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
               <Zap size={11} className="text-[var(--color-ink)]" />
-              <span>Auto-Pilot Ready</span>
+              <span>{workspace ? "CRM schedules" : "Auto-Pilot Ready"}</span>
             </span>
           </div>
           <p className="hl-subtitle text-xs mt-1 text-[var(--color-ink-2)]">
@@ -771,7 +780,7 @@ export default function WhatsAppInteractiveReminders() {
             className="hl-btn-primary flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition shadow-md"
           >
             <Plus size={15} />
-            <span>Instant Personalized Send</span>
+            <span>{workspace ? "Send reminder" : "Instant Personalized Send"}</span>
           </button>
         </div>
       </div>

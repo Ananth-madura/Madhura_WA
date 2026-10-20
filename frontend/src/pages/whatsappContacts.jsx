@@ -1,3 +1,5 @@
+import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
+import useWADialog from "../hooks/useWADialog";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Users, Plus, Search, RefreshCw, UserCheck, UserX, ShieldOff, Shield,
@@ -62,6 +64,7 @@ const exportToCsv = (filename, headers, rows) => {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 };
 
 function StatCard({ label, value, color, icon: Icon }) {
@@ -83,6 +86,8 @@ export default function WhatsAppContacts() {
   const { activeTenant, activeBranch, branches, enterpriseHeaders } = useEnterprise();
   const [contacts, setContacts] = useState([]);
   const [stats, setStats] = useState({});
+  const [contactsError, setContactsError] = useState("");
+  const [statsError, setStatsError] = useState("");
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -91,6 +96,9 @@ export default function WhatsAppContacts() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showModal, setShowModal] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactFormError, setContactFormError] = useState("");
+  const contactDialog = useWADialog(showModal, () => setShowModal(false), savingContact);
   const [editContact, setEditContact] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -107,11 +115,13 @@ export default function WhatsAppContacts() {
   });
 
   const [showCsvModal, setShowCsvModal] = useState(false);
+  const [showImportMenu, setShowImportMenu] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
   const [csvPreview, setCsvPreview] = useState([]);
   const [csvUploading, setCsvUploading] = useState(false);
 
   const fileInputRef = useRef(null);
+  const contactsRequest = useRef(0);
 
   const token = () => localStorage.getItem("token");
   const headers = () => ({
@@ -122,9 +132,15 @@ export default function WhatsAppContacts() {
   const { demoMode } = useAuth();
 
   const fetchContacts = useCallback(async (p = page, f = filter, s = search, b = selectedBranch) => {
+    const requestId = ++contactsRequest.current;
     setLoading(true);
+    setContactsError("");
     if (demoMode) {
       let filtered = [...DEMO_CONTACTS];
+      if (f === "opted_in") filtered = filtered.filter(c => Number(c.opt_in_status) === 1);
+      if (f === "blocked") filtered = filtered.filter(c => Number(c.is_blocked) === 1 || c.status === "blocked");
+      if (f === "unsubscribed") filtered = filtered.filter(c => Number(c.opt_in_status) === 0);
+      if (b !== "all") filtered = filtered.filter(c => String(c.branch_id) === String(b));
       if (s) {
         filtered = filtered.filter(c => (c.name || "").toLowerCase().includes(s.toLowerCase()) || (c.phone || "").includes(s));
       }
@@ -143,34 +159,38 @@ export default function WhatsAppContacts() {
         ...(b !== "all" && { branchId: b }),
       });
       const { data } = await axios.get(`${API}/api/wa/contacts?${params}`, { headers: headers() });
-      setContacts(data.contacts && data.contacts.length ? data.contacts : DEMO_CONTACTS);
-      setTotal(data.total || DEMO_CONTACTS.length);
+      if (requestId !== contactsRequest.current) return;
+      setContacts(Array.isArray(data.contacts) ? data.contacts : []);
+      setTotal(data.total ?? data.contacts?.length ?? 0);
       setTotalPages(data.totalPages || 1);
-    } catch {
-      setContacts(DEMO_CONTACTS);
-      setTotal(DEMO_CONTACTS.length);
+    } catch (err) {
+      if (requestId !== contactsRequest.current) return;
+      setContacts([]);
+      setTotal(0);
       setTotalPages(1);
+      setContactsError(err.response?.data?.message || err.response?.data?.error || "Contacts could not be loaded. Check your connection and retry.");
     }
     setLoading(false);
   }, [demoMode, page, filter, search, selectedBranch, enterpriseHeaders]);
 
   const fetchStats = useCallback(async () => {
+    setStatsError("");
     if (demoMode) {
       setStats({ total: DEMO_CONTACTS.length, opted_in: DEMO_CONTACTS.length, blocked: 0 });
       return;
     }
     try {
       const { data } = await axios.get(`${API}/api/wa/contacts/stats/summary`, { headers: headers() });
-      setStats(data || { total: DEMO_CONTACTS.length, opted_in: DEMO_CONTACTS.length, blocked: 0 });
-    } catch {
-      setStats({ total: DEMO_CONTACTS.length, opted_in: DEMO_CONTACTS.length, blocked: 0 });
+      setStats(data || {});
+    } catch (err) {
+      setStats({});
+      setStatsError(err.response?.data?.message || err.response?.data?.error || "Contact totals could not be refreshed.");
     }
-  }, [demoMode]);
+  }, [demoMode, enterpriseHeaders]);
 
   useEffect(() => {
-    fetchContacts(1, filter, search, selectedBranch);
     fetchStats();
-  }, [filter, selectedBranch]);
+  }, [fetchStats]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -178,9 +198,10 @@ export default function WhatsAppContacts() {
       setPage(1);
     }, 400);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search, filter, selectedBranch, enterpriseHeaders, demoMode]);
 
   const openCreate = () => {
+    setContactFormError("");
     setEditContact(null);
     setForm({
       name: "",
@@ -196,6 +217,7 @@ export default function WhatsAppContacts() {
   };
 
   const openEdit = (c) => {
+    setContactFormError("");
     setEditContact(c);
     setForm({
       name: c.name,
@@ -211,9 +233,14 @@ export default function WhatsAppContacts() {
   };
 
   const handleSave = async () => {
-    if (!form.name || !form.phone) return;
+    if (savingContact) return;
+    setContactFormError("");
+    if (!form.name.trim() || !form.phone.trim()) { setContactFormError("Enter a contact name and phone number."); return; }
+    const digits = form.phone.replace(/\D/g, "");
+    if (digits.length < 7 || digits.length > 15) { setContactFormError("Enter a valid phone number, between 7 and 15 digits."); return; }
+    setSavingContact(true);
     const tagsArr = form.tags ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : [];
-    const payload = { ...form, tags: tagsArr };
+    const payload = { ...form, name: form.name.trim(), phone: digits, tags: tagsArr };
     try {
       if (editContact) {
         await axios.put(`${API}/api/wa/contacts/${editContact.id}`, payload, { headers: headers() });
@@ -224,23 +251,31 @@ export default function WhatsAppContacts() {
       fetchContacts(page, filter, search);
       fetchStats();
     } catch (err) {
-      alert(err.response?.data?.error || "Failed to save contact");
+      setContactFormError(err.response?.data?.error || "The contact could not be saved. Check the details and retry.");
+    } finally {
+      setSavingContact(false);
     }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this contact permanently?")) return;
-    await axios.delete(`${API}/api/wa/contacts/${id}`, { headers: headers() });
-    fetchContacts(page, filter, search);
-    fetchStats();
+    setActionLoading(id);
+    try {
+      await axios.delete(`${API}/api/wa/contacts/${id}`, { headers: headers() });
+      fetchContacts(page, filter, search);
+      fetchStats();
+    } catch (err) { setContactsError(err.response?.data?.error || "The contact could not be deleted. Retry when the connection is restored."); }
+    finally { setActionLoading(null); }
   };
 
   const handleBlock = async (id, blocked) => {
     setActionLoading(id);
-    await axios.post(`${API}/api/wa/contacts/${id}/${blocked ? "unblock" : "block"}`, {}, { headers: headers() });
-    setActionLoading(null);
-    fetchContacts(page, filter, search);
-    fetchStats();
+    try {
+      await axios.post(`${API}/api/wa/contacts/${id}/${blocked ? "unblock" : "block"}`, {}, { headers: headers() });
+      fetchContacts(page, filter, search);
+      fetchStats();
+    } catch (err) { setContactsError(err.response?.data?.error || "The contact's block status could not be changed. Retry to update it."); }
+    finally { setActionLoading(null); }
   };
 
   const handleImport = async (source) => {
@@ -378,6 +413,7 @@ export default function WhatsAppContacts() {
 
   return (
     <div className="hl-page" style={{ background: "var(--color-paper)", fontFamily: "var(--font-body)" }}>
+      <WAWorkspaceGuide section="contacts" />
       {/* Header Banner */}
       <div className="hl-commandbar hl-card flex-col md:flex-row md:items-center gap-3" style={{ padding: "var(--space-sm)" }}>
         <div className="flex items-center gap-3.5">
@@ -386,7 +422,7 @@ export default function WhatsAppContacts() {
           </div>
           <div>
             <div className="flex items-center gap-2.5">
-              <h1 className="hl-title">WhatsApp Contacts Manager</h1>
+              <h1 className="hl-title">Contacts</h1>
               <span className="hl-badge">
                 {total.toLocaleString()} Contacts
               </span>
@@ -419,8 +455,12 @@ export default function WhatsAppContacts() {
           </button>
 
           {/* CRM Import Dropdown */}
-          <div className="relative group">
+          <div className="relative">
             <button
+              type="button"
+              aria-expanded={showImportMenu}
+              aria-haspopup="menu"
+              onClick={() => setShowImportMenu((open) => !open)}
               disabled={importing}
               className="hl-btn-secondary"
             >
@@ -428,7 +468,7 @@ export default function WhatsAppContacts() {
               <span>Import from CRM</span>
               <ChevronDown size={12} />
             </button>
-            <div className="hl-card absolute right-0 top-full z-20 w-48 hidden group-hover:block" style={{ padding: "var(--space-3xs)", marginTop: "var(--space-3xs)" }}>
+            {showImportMenu && <div role="menu" className="hl-card absolute right-0 top-full z-20 w-56" style={{ padding: "var(--space-3xs)", marginTop: "var(--space-3xs)" }}>
               {[
                 { key: "all", label: "✨ All CRM Sources" },
                 { key: "clients", label: "💼 Clients (Accounts)" },
@@ -438,14 +478,15 @@ export default function WhatsAppContacts() {
               ].map((src) => (
                 <button
                   key={src.key}
-                  onClick={() => handleImport(src.key === "all" ? null : src.key)}
-                  className="block w-full px-3 py-2 text-left"
+                  role="menuitem"
+                  onClick={() => { setShowImportMenu(false); handleImport(src.key === "all" ? null : src.key); }}
+                  className="block w-full px-3 py-2 text-left min-h-11"
                   style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)", fontSize: "var(--text-sm)", fontWeight: 600 }}
                 >
                   {src.label}
                 </button>
               ))}
-            </div>
+            </div>}
           </div>
 
           <button
@@ -479,6 +520,14 @@ export default function WhatsAppContacts() {
           </button>
         </div>
       </div>
+
+      {contactsError && (
+        <div className="hl-card flex flex-wrap items-center justify-between gap-3 p-3 text-sm" role="alert" style={{ borderColor: "var(--color-error)", color: "var(--color-error)" }}>
+          <span className="flex min-w-0 items-center gap-2"><AlertCircle size={17} className="shrink-0" />{contactsError}</span>
+          <button type="button" onClick={() => fetchContacts(page, filter, search, selectedBranch)} className="hl-btn-secondary">Retry</button>
+        </div>
+      )}
+      {statsError && <p className="text-xs" role="status" style={{ color: "var(--color-ink-2)" }}>{statsError}</p>}
 
       {/* Import Result Alert */}
       {importResult && (
@@ -613,8 +662,8 @@ export default function WhatsAppContacts() {
                 <tr>
                   <td colSpan={8} className="hl-empty">
                     <UserCheck size={44} className="mx-auto mb-2" style={{ color: "var(--color-ink-2)" }} />
-                    <p className="hl-empty-title">No contacts found matching filter</p>
-                    <p className="hl-subtitle">Click "Import from CRM" or "Add Contact" to populate.</p>
+                    <p className="hl-empty-title">{search || filter !== "all" || selectedBranch !== "all" ? "No contacts match these filters" : "No contacts yet"}</p>
+                    <p className="hl-subtitle">Import contacts from your CRM or add a contact to get started.</p>
                   </td>
                 </tr>
               ) : (
@@ -778,19 +827,20 @@ export default function WhatsAppContacts() {
 
       {/* Add / Edit Contact Modal */}
       {showModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: "color-mix(in srgb, var(--color-shell) 60%, transparent)" }} onClick={() => setShowModal(false)}>
-          <div className="hl-card w-full max-w-lg flex flex-col overflow-hidden" style={{ maxHeight: "92dvh" }} onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: "color-mix(in srgb, var(--color-shell) 60%, transparent)" }} onClick={() => { if (!savingContact) setShowModal(false); }}>
+          <div ref={contactDialog} role="dialog" aria-modal="true" aria-label={editContact ? "Edit contact" : "Create contact"} className="hl-card w-full max-w-lg flex flex-col overflow-hidden" style={{ maxHeight: "92dvh" }} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between shrink-0" style={{ padding: "var(--space-sm)", background: "var(--color-ink)", color: "var(--color-paper-2)" }}>
               <div>
                 <h2 className="hl-title" style={{ color: "var(--color-paper-2)", fontSize: "var(--text-md)" }}>{editContact ? "Edit Contact" : "Add WhatsApp Contact"}</h2>
                 <p className="hl-subtitle" style={{ color: "var(--color-paper-2)", opacity: 0.8 }}>Save customer profile for bulk campaigns and automations</p>
               </div>
-              <button onClick={() => setShowModal(false)} className="p-1.5 flex items-center" style={{ color: "var(--color-paper-2)" }}>
+              <button disabled={savingContact} aria-label="Close contact editor" onClick={() => setShowModal(false)} className="p-1.5 flex items-center" style={{ color: "var(--color-paper-2)" }}>
                 <X size={18} />
               </button>
             </div>
 
             <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0 wa-custom-scrollbar overscroll-contain" style={{ fontFamily: "var(--font-body)", fontSize: "var(--text-sm)" }}>
+              {contactFormError && <p role="alert" className="wa-form-error">{contactFormError}</p>}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="hl-section-label block mb-1">Full Name *</label>
@@ -910,10 +960,10 @@ export default function WhatsAppContacts() {
                 <button
                   type="button"
                   onClick={handleSave}
-                  disabled={!form.name || !form.phone}
+                  disabled={savingContact || !form.name.trim() || !form.phone.trim()}
                   className="hl-btn-primary flex-1 py-2.5"
                 >
-                  {editContact ? "Save Changes" : "Create Contact"}
+                  {savingContact ? "Saving…" : editContact ? "Save changes" : "Create contact"}
                 </button>
               </div>
             </div>

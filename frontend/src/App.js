@@ -154,6 +154,7 @@ export default function App() {
             {/* Back-compat: old /dashboard/whatsapp bookmarks keep working */}
             <Route path="/dashboard/whatsapp/*" element={<Navigate to="/whatsapp" replace />} />
             <Route path="/flows" element={<Navigate to="/whatsapp/flows" replace />} />
+            <Route path="/flows/create" element={<Navigate to="/whatsapp/flows/create" replace />} />
             <Route path="/flows/build" element={<Navigate to="/whatsapp/flows/build" replace />} />
             <Route path="/flows/build/:flowId" element={<FlowParamRedirect />} />
             <Route path="/flows/builder" element={<Navigate to="/whatsapp/flows/build" replace />} />
@@ -176,6 +177,7 @@ export default function App() {
               <Route path="automations" element={<WAAutomations />} />
               <Route path="reminders" element={<WAReminders />} />
               <Route path="flows" element={<WAFlows />} />
+              <Route path="flows/create" element={<WAFlows />} />
               <Route path="flows/build" element={<WAFlows />} />
               <Route path="flows/build/:flowId" element={<WAFlows />} />
               <Route path="flows/builder" element={<WAFlows />} />

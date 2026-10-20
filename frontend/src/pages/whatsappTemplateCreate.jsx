@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, AlertTriangle, CheckCircle2, FileText, Loader2, Tag, Trash2
@@ -324,6 +325,7 @@ export default function WATemplateCreate() {
 
   return (
     <div className="hl-page">
+      <WAWorkspaceGuide section="templates" />
       {/* Page Header */}
       <div className="hl-commandbar flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         <div className="flex items-start gap-3 min-w-0">

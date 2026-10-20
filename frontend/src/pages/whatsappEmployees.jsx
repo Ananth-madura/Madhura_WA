@@ -1,3 +1,5 @@
+import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
+import useWADialog from "../hooks/useWADialog";
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Users,
@@ -118,6 +120,7 @@ export default function WAEmployees() {
   }, [activeBranch]);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
+  const employeeDialog = useWADialog(showCreateModal, () => setShowCreateModal(false), formLoading);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });
@@ -158,20 +161,24 @@ export default function WAEmployees() {
     fetchEmployees();
   }, [fetchEmployees]);
 
-  const handleCopy = (code, id) => {
+  const handleCopy = async (code, id) => {
     if (!code) return;
-    navigator.clipboard.writeText(code);
-    setCopiedCodeId(id);
-    showToast(`Access code "${code}" copied to clipboard!`);
-    setTimeout(() => setCopiedCodeId(null), 2500);
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCodeId(id);
+      showToast("Access code copied.");
+      setTimeout(() => setCopiedCodeId(null), 2500);
+    } catch { showToast("Clipboard access is unavailable. Select and copy the access code manually.", "error"); }
   };
 
-  const handleCopyInvitation = (emp) => {
+  const handleCopyInvitation = async (emp) => {
     const signupUrl = `${window.location.origin}/signup`;
     const message = `Hi ${emp.first_name},\n\nYou have been invited to access our WhatsApp CRM workspace!\n\n1. Go to: ${signupUrl}\n2. Select "Join with Access Code"\n3. Enter your Access Code: ${emp.access_code}\n4. Email: ${emp.email}\n5. Set your password to activate your ${ACCESS_LEVEL_META[emp.whatsapp_access_level || "full"]?.shortLabel || "employee"} WhatsApp access.`;
 
-    navigator.clipboard.writeText(message);
-    showToast(`Invitation instructions for ${emp.first_name} copied!`);
+    try {
+      await navigator.clipboard.writeText(message);
+      showToast(`Invitation instructions for ${emp.first_name} copied.`);
+    } catch { showToast("The invitation could not be copied. Check browser clipboard permissions and retry.", "error"); }
   };
 
   const handleRegenerateCode = async (empId, empName) => {
@@ -292,7 +299,8 @@ export default function WAEmployees() {
   // Strict employee isolation guard: if regular employee, show isolated view
   if (user?.role === "employee") {
     return (
-      <div className="hl-page wa-employees-page crm-layout-content p-4 sm:p-6 max-w-4xl mx-auto">        <div
+      <div className="hl-page wa-employees-page crm-layout-content p-4 sm:p-6 max-w-4xl mx-auto">
+      <WAWorkspaceGuide section="employees" />        <div
           className="hl-card text-center p-8 sm:p-12 mt-6"
           style={{
             background: "var(--color-paper)",
@@ -363,7 +371,7 @@ export default function WAEmployees() {
       )}
 
       {/* Page Header */}
-      <div className="hl-card p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="hl-commandbar p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <div
@@ -373,11 +381,11 @@ export default function WAEmployees() {
               <Users size={18} />
             </div>
             <h1 className="hl-title text-xl sm:text-2xl" style={{ margin: 0 }}>
-              Employee Management &amp; Access Codes
+              Employees &amp; access
             </h1>
           </div>
           <p className="text-xs sm:text-sm" style={{ color: "var(--color-ink-2)", margin: 0 }}>
-            Generate unique Access Codes for employee onboarding, configure granular WhatsApp access levels, and monitor staff productivity.
+            Assign branches, manage permissions and track employee activation.
           </p>
         </div>
 
@@ -811,6 +819,10 @@ export default function WAEmployees() {
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm">
           <div
+            ref={employeeDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add employee"
             className="hl-card w-full max-w-lg max-h-[92dvh] flex flex-col overflow-hidden animate-scale-up rounded-2xl shadow-2xl"
             style={{ background: "var(--color-paper)" }}
           >

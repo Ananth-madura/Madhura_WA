@@ -586,32 +586,6 @@ export default function Signup() {
                 <span>Join with Code</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("request_access");
-                  setError("");
-                }}
-                style={{
-                  flex: 1,
-                  padding: "7px 10px",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  borderRadius: 6,
-                  border: "none",
-                  cursor: "pointer",
-                  background: mode === "request_access" ? "var(--color-paper, #ffffff)" : "transparent",
-                  color: mode === "request_access" ? "var(--color-ink)" : "var(--color-ink-2)",
-                  boxShadow: mode === "request_access" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 5,
-                }}
-              >
-                <Briefcase size={13} />
-                <span>Request Access</span>
-              </button>
             </div>
 
             {error && (

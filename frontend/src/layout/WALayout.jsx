@@ -28,6 +28,7 @@ import WhatsAppNav from "../components/WhatsAppNav";
 import OrganizationSwitcher from "../components/OrganizationSwitcher";
 import BranchSwitcher from "../components/BranchSwitcher";
 import "../pages/whatsapp-workspace.css";
+import "../pages/whatsapp-operations.css";
 
 // Corporate Shell for Whatsapp_CRM — Hallmark Workbench shell (design.md).
 // Deep-navy slab, yellow hairline, quiet type. Routes and logic untouched.

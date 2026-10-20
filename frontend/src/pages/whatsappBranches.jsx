@@ -1,7 +1,9 @@
+import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
+import useWADialog from "../hooks/useWADialog";
 /**
  * whatsappBranches.jsx
  *
- * Enterprise Multi-Branch Management Page.
+ * Enterprise Multi-Branches Page.
  * Displays branches, operational hours, managers, staff assignments, and sender counts.
  * Reference: MADHURA_WHATSAPP_ENTERPRISE_SAAS_MASTER_BLUEPRINT.md §3, §16, §21
  */
@@ -34,11 +36,14 @@ export default function WABranches() {
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState(null);
+  const [search, setSearch] = useState("");
+  const visibleBranches = branches.filter(branch => `${branch.name || ""} ${branch.code || ""} ${branch.address || ""}`.toLowerCase().includes(search.toLowerCase()));
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingBranch, setEditingBranch] = useState(null);
   const [saving, setSaving] = useState(false);
+  const branchDialog = useWADialog(showCreateModal || Boolean(editingBranch), () => { setShowCreateModal(false); setEditingBranch(null); }, saving);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -106,6 +111,8 @@ export default function WABranches() {
 
   const handleSaveBranch = async (e) => {
     e.preventDefault();
+    if (saving) return;
+    if (!formData.name.trim() || !formData.code.trim()) { setNotice({ type: "error", text: "Enter a branch name and code." }); return; }
     setSaving(true);
     setNotice(null);
 
@@ -165,7 +172,8 @@ export default function WABranches() {
   const isQuotaReached = currentBranchCount >= maxBranches;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8">
+    <div className="wa-branches-page hl-page">
+      <WAWorkspaceGuide section="branches" />
       {/* Top Banner Notice */}
       {notice && (
         <div
@@ -190,7 +198,7 @@ export default function WABranches() {
         <div>
           <div className="flex items-center gap-2">
             <GitBranch className="text-emerald-400" size={24} />
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Branch Management</h1>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Branches</h1>
             <span className="ml-2 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">
               {currentBranchCount} / {maxBranches} Branches
             </span>
@@ -229,16 +237,17 @@ export default function WABranches() {
         </div>
       )}
 
+      <div className="wa-group-toolbar"><label><Building2 size={16} /><input aria-label="Find a branch" value={search} onChange={e => setSearch(e.target.value)} placeholder="Find a branch by name, code or location" /></label><span>{visibleBranches.length} of {branches.length} branches</span><button type="button" className="hl-btn-secondary" disabled={loading} onClick={fetchBranches}>Refresh</button></div>
       {/* Loading state */}
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center text-slate-500">
           <Loader2 size={32} className="animate-spin mb-3 text-emerald-500" />
-          <p className="text-sm">Loading branch infrastructure...</p>
+          <p className="text-sm">Loading branches?</p>
         </div>
-      ) : (
+      ) : visibleBranches.length === 0 ? <div className="hl-card hl-empty"><h2>{search ? "No matching branches" : "No branches available"}</h2><p>{search ? "Try a different name, branch code or location." : "Create your first branch to assign staff and route conversations."}</p>{search && <button type="button" className="hl-btn-secondary mt-4" onClick={() => setSearch("")}>Clear search</button>}</div> : (
         /* Branch Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mt-6">
-          {branches.map((b) => (
+          {visibleBranches.map((b) => (
             <div
               key={b.id}
               className={`rounded-xl border p-5 transition-all relative flex flex-col justify-between ${
@@ -345,7 +354,8 @@ export default function WABranches() {
       {/* Create / Edit Modal */}
       {(showCreateModal || editingBranch) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-lg w-full p-6 animate-in zoom-in-95">
+          <div ref={branchDialog} role="dialog" aria-modal="true" aria-label={editingBranch ? "Edit branch" : "Create branch"} className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-lg w-full p-6 animate-in zoom-in-95 max-h-[90dvh] overflow-y-auto">
+            {notice?.type === "error" && <p role="alert" className="wa-form-error">{notice.text}</p>}
             <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <Building2 size={18} className="text-emerald-400" />

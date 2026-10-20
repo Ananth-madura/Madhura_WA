@@ -1,11 +1,11 @@
 /* WhatsApp operations workspace. Scoped away from the conversation route. */
 .wa-page-workspace {
-  --wa-workspace-navy: #182541;
-  --wa-workspace-navy-2: #263654;
-  --wa-workspace-yellow: #f2c94c;
-  --wa-workspace-line: #d9dee8;
-  --wa-workspace-muted: #657087;
-  background: #f3f5f8;
+  --wa-workspace-navy: #202c52;
+  --wa-workspace-navy-2: #2b385f;
+  --wa-workspace-yellow: #fcbd16;
+  --wa-workspace-line: #e4e7ed;
+  --wa-workspace-muted: #667085;
+  background: #f5f5f5;
   color: var(--color-ink);
 }
 
@@ -157,7 +157,7 @@
 .wa-page-workspace .hl-card,
 .wa-page-workspace .cp-paper {
   border: 1px solid var(--wa-workspace-line);
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fff;
   box-shadow: none;
 }
@@ -173,11 +173,7 @@
 }
 
 .wa-page-workspace .hl-commandbar::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: var(--wa-workspace-yellow);
-  content: "";
+  content: none;
 }
 
 .wa-page-workspace .hl-title,
@@ -293,23 +289,47 @@
   background: #fafbfc;
 }
 
-.wa-page-workspace .animate-ping,
-.wa-page-workspace .animate-pulse,
-.wa-page-workspace .animate-bounce-short {
-  animation: none !important;
-}
-
-.wa-page-workspace .bg-gradient-to-r,
-.wa-page-workspace .bg-gradient-to-br {
-  background-image: none !important;
-}
-
 .wa-page-workspace .rounded-3xl {
-  border-radius: 10px !important;
+  border-radius: 12px !important;
 }
 
-.wa-page-workspace [class*="shadow-"] {
-  box-shadow: none !important;
+.wa-flow-list > .w-full {
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+}
+
+.wa-flow-list .hl-commandbar {
+  margin-bottom: 0;
+}
+
+.wa-flow-list .bg-emerald-50 {
+  background-color: #fff8df;
+}
+
+.wa-flow-list .text-emerald-800,
+.wa-flow-list .text-emerald-700 {
+  color: #202c52;
+}
+
+.wa-flow-list [class*="border-emerald-"]:hover {
+  border-color: #e9aa00;
+}
+
+.wa-page-workspace :where(table) {
+  max-width: 100%;
+}
+
+.wa-page-workspace :where(button, a, input, select, textarea) {
+  transition-property: color, background-color, border-color, box-shadow, transform;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.wa-page-workspace .hl-commandbar,
+.wa-page-workspace .hl-card,
+.wa-page-workspace .cp-paper {
+  min-width: 0;
 }
 
 @media (max-width: 1099px) {
@@ -340,6 +360,31 @@
   .wa-page-workspace a[role="button"] {
     min-height: 44px;
   }
+
+  .wa-page-workspace :where(.overflow-x-auto) {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 480px) {
+  .wa-page-workspace .hl-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wa-flow-list .hl-commandbar > div:last-child {
+    width: 100%;
+  }
+
+  .wa-flow-list .hl-commandbar > div:last-child > button {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 640px) {
+  #madhura-visual-flow-studio button,
+  #madhura-visual-flow-studio a[role="button"] {
+    min-height: 44px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -351,4 +396,118 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* Flow studio surfaces follow the shared Madhura palette. The canvas is
+   intentionally quiet; the signal yellow is reserved for selection and publish. */
+#madhura-visual-flow-studio.flow-studio-shell {
+  --studio-navy: #202c52;
+  --studio-navy-raised: #2b385f;
+  --studio-paper: #f5f5f5;
+  --studio-white: #fff;
+  --studio-rule: #dfe3eb;
+  --studio-muted: #667085;
+  --studio-yellow: #fcbd16;
+  --studio-yellow-soft: #fff6d8;
+  background: var(--studio-paper) !important;
+  color: var(--studio-navy) !important;
+  font-family: var(--font-body, Inter, sans-serif);
+  animation: flow-studio-enter 160ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+
+@keyframes flow-studio-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+#madhura-visual-flow-studio .flow-studio-topbar {
+  min-height: 56px;
+  background: var(--studio-navy) !important;
+  border-color: var(--studio-navy-raised) !important;
+  color: #fff !important;
+}
+#madhura-visual-flow-studio .flow-studio-topbar [class*="text-slate-"] { color: #e5e9f1 !important; }
+#madhura-visual-flow-studio .flow-studio-topbar [class*="text-emerald-"],
+#madhura-visual-flow-studio .flow-studio-topbar [class*="text-amber-"] { color: var(--studio-yellow) !important; }
+#madhura-visual-flow-studio .flow-studio-topbar [class*="border-slate-"] { border-color: rgba(255,255,255,.16) !important; }
+#madhura-visual-flow-studio .flow-studio-topbar [class*="bg-slate-"] { background-color: var(--studio-navy-raised) !important; }
+#madhura-visual-flow-studio .flow-studio-topbar button:hover { background-color: #39476e !important; }
+#madhura-visual-flow-studio .flow-studio-topbar input { color: #fff !important; }
+#madhura-visual-flow-studio .flow-studio-topbar input:focus { background: rgba(255,255,255,.1) !important; outline: 2px solid var(--studio-yellow) !important; outline-offset: 1px; }
+#madhura-visual-flow-studio .flow-studio-topbar select { color: var(--studio-yellow) !important; background: var(--studio-navy-raised) !important; border-color: rgba(255,255,255,.2) !important; }
+#madhura-visual-flow-studio .flow-studio-topbar button[class*="bg-emerald-600"] { background: var(--studio-yellow) !important; border-color: var(--studio-yellow) !important; color: var(--studio-navy) !important; box-shadow: none !important; }
+#madhura-visual-flow-studio .flow-studio-topbar button[class*="bg-emerald-600"]:hover { background: #f4b900 !important; transform: none !important; }
+
+#madhura-visual-flow-studio .flow-studio-popover {
+  background: var(--studio-white) !important;
+  border-color: var(--studio-rule) !important;
+  color: var(--studio-navy) !important;
+  box-shadow: 0 12px 28px rgba(32,44,82,.16) !important;
+}
+#madhura-visual-flow-studio .flow-studio-popover [class*="text-slate-"] { color: var(--studio-muted) !important; }
+#madhura-visual-flow-studio .flow-studio-popover [class*="text-white"] { color: var(--studio-navy) !important; }
+#madhura-visual-flow-studio .flow-studio-popover [class*="bg-slate-"] { background: #f5f6f8 !important; }
+#madhura-visual-flow-studio .flow-studio-popover [class*="border-slate-"] { border-color: var(--studio-rule) !important; }
+
+#madhura-visual-flow-studio .flow-studio-workspace { background: var(--studio-paper); }
+#madhura-visual-flow-studio .flow-studio-palette {
+  background: var(--studio-white) !important;
+  border-color: var(--studio-rule) !important;
+  color: var(--studio-navy) !important;
+  box-shadow: 8px 0 24px rgba(32,44,82,.08) !important;
+}
+#madhura-visual-flow-studio .flow-studio-palette [class*="bg-slate-950"] { background: #f7f8fa !important; }
+#madhura-visual-flow-studio .flow-studio-palette [class*="bg-slate-900"] { background: #f1f3f6 !important; }
+#madhura-visual-flow-studio .flow-studio-palette [class*="text-slate-"] { color: var(--studio-muted) !important; }
+#madhura-visual-flow-studio .flow-studio-palette [class*="text-white"] { color: var(--studio-navy) !important; }
+#madhura-visual-flow-studio .flow-studio-palette [class*="border-slate-"] { border-color: var(--studio-rule) !important; }
+#madhura-visual-flow-studio .flow-studio-palette [class*="bg-emerald-"] { background: var(--studio-yellow-soft) !important; }
+#madhura-visual-flow-studio .flow-studio-palette [class*="text-emerald-"] { color: var(--studio-navy) !important; }
+#madhura-visual-flow-studio .flow-studio-palette svg { color: var(--studio-navy); }
+#madhura-visual-flow-studio .flow-studio-palette button:hover { background-color: var(--studio-yellow-soft) !important; border-color: #e9aa00 !important; color: var(--studio-navy) !important; }
+#madhura-visual-flow-studio .flow-studio-palette input { background: #fff !important; color: var(--studio-navy) !important; border-color: var(--studio-rule) !important; }
+
+#madhura-visual-flow-studio .flow-studio-canvas { background-color: var(--studio-paper) !important; background-image: radial-gradient(#d7dce5 1px, transparent 1px) !important; }
+#madhura-visual-flow-studio .flow-studio-canvas-tools { background: #fff !important; border-color: var(--studio-rule) !important; color: var(--studio-navy) !important; box-shadow: 0 5px 16px rgba(32,44,82,.12) !important; }
+#madhura-visual-flow-studio .flow-studio-canvas-tools [class*="text-slate-"] { color: var(--studio-muted) !important; }
+#madhura-visual-flow-studio .flow-studio-canvas-tools [class*="bg-slate-"] { background: #f3f4f6 !important; }
+#madhura-visual-flow-studio .flow-studio-canvas-tools button:hover { background: var(--studio-yellow-soft) !important; color: var(--studio-navy) !important; }
+#madhura-visual-flow-studio .flow-studio-inspector { background: #fff !important; border-color: var(--studio-rule) !important; color: var(--studio-navy) !important; box-shadow: -8px 0 24px rgba(32,44,82,.08) !important; }
+#madhura-visual-flow-studio .flow-studio-inspector > div:first-child { background: #f7f8fa !important; border-color: var(--studio-rule) !important; }
+#madhura-visual-flow-studio .flow-studio-inspector > div:first-child [class*="text-slate-"] { color: var(--studio-muted) !important; }
+#madhura-visual-flow-studio .flow-studio-inspector > div:first-child button[class*="bg-slate-800"] { background: var(--studio-navy) !important; color: #fff !important; }
+#madhura-visual-flow-studio .flow-studio-inspector > div:first-child button[class*="bg-emerald-600"] { background: var(--studio-yellow-soft) !important; color: var(--studio-navy) !important; }
+#madhura-visual-flow-studio .flow-studio-inspector-config [class*="text-slate-"] { color: var(--studio-muted) !important; }
+#madhura-visual-flow-studio .flow-studio-inspector-config [class*="bg-slate-950"],
+#madhura-visual-flow-studio .flow-studio-inspector-config [class*="bg-slate-900"],
+#madhura-visual-flow-studio .flow-studio-inspector-config [class*="bg-slate-800"] { background: #f5f6f8 !important; }
+#madhura-visual-flow-studio .flow-studio-inspector-config [class*="border-slate-"] { border-color: var(--studio-rule) !important; }
+#madhura-visual-flow-studio .flow-studio-inspector input,
+#madhura-visual-flow-studio .flow-studio-inspector select,
+#madhura-visual-flow-studio .flow-studio-inspector textarea { max-width: 100%; border-color: var(--studio-rule); }
+
+#madhura-visual-flow-studio .flow-studio-canvas [class*="border-emerald-500"] { border-color: #d29a00 !important; }
+#madhura-visual-flow-studio .flow-studio-canvas [class*="ring-emerald-"] { --tw-ring-color: rgba(252,189,22,.32) !important; }
+#madhura-visual-flow-studio .flow-studio-canvas [class*="border-blue-500"] { border-color: var(--studio-navy) !important; }
+#madhura-visual-flow-studio .flow-studio-canvas [class*="cursor-crosshair"][class*="bg-"] { background-color: var(--studio-navy) !important; }
+#madhura-visual-flow-studio .flow-studio-canvas [class*="cursor-crosshair"][class*="bg-"]:hover { background-color: #d29a00 !important; }
+#madhura-visual-flow-studio .flow-studio-canvas [class*="bg-emerald-600"] { background-color: var(--studio-yellow) !important; color: var(--studio-navy) !important; }
+#madhura-visual-flow-studio .flow-studio-canvas [class*="text-emerald-800"] { color: var(--studio-navy) !important; }
+#madhura-visual-flow-studio .flow-studio-canvas [class*="bg-emerald-100"] { background-color: var(--studio-yellow-soft) !important; }
+#madhura-visual-flow-studio .flow-studio-canvas button:hover { transform: none !important; }
+#madhura-visual-flow-studio .flow-studio-canvas [class*="hover:scale"]:hover { scale: 1 !important; }
+#madhura-visual-flow-studio :where(button, input, select, textarea):focus-visible { outline: 2px solid var(--studio-yellow) !important; outline-offset: 2px; }
+#madhura-visual-flow-studio button { touch-action: manipulation; }
+
+@media (max-width: 767px) {
+  #madhura-visual-flow-studio .flow-studio-topbar { height: auto; min-height: 56px; padding-inline: 8px; }
+  #madhura-visual-flow-studio .flow-studio-toolbar-left,
+  #madhura-visual-flow-studio .flow-studio-toolbar-right { gap: 4px; }
+  #madhura-visual-flow-studio .flow-studio-canvas-tools { bottom: max(8px, env(safe-area-inset-bottom)); max-width: calc(100% - 16px); overflow-x: auto; white-space: nowrap; }
+  #madhura-visual-flow-studio .flow-studio-inspector { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #madhura-visual-flow-studio,
+  #madhura-visual-flow-studio * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import WAWorkspaceGuide from '../components/WAWorkspaceGuide';
 import { Link } from 'react-router-dom';
 import { Copy, ExternalLink, FilePlus, Plus, RefreshCw, Settings, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
@@ -41,5 +42,5 @@ function ManagerContent() {
 }
 export default function ClientPortalManage() {
   const { user } = useAuth();
-  return user?.role === 'admin' ? <ManagerContent /> : <div className="cp-empty"><h1>Administrator access required</h1><p>Only administrators can manage client invitations and published documents.</p><Link to="/whatsapp">Return to your workspace</Link></div>;
+  return user?.role === 'admin' ? <><WAWorkspaceGuide section="client-portal" /><ManagerContent /></> : <div className="cp-empty"><h1>Administrator access required</h1><p>Only administrators can manage client invitations and published documents.</p><Link to="/whatsapp">Return to your workspace</Link></div>;
 }

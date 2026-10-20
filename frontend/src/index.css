@@ -3059,3 +3059,177 @@ main > * {
   padding: 0.75rem 0.875rem;
   border: 1px solid var(--color-rule);
 }
+
+.lp-auth-panel :where(button, a) {
+  touch-action: manipulation;
+}
+.lp-auth-panel :where(input:not([type="checkbox"]), select, textarea) {
+  min-height: 2.75rem;
+}
+.lp-auth-panel :where(button) {
+  min-height: 2.75rem;
+}
+.lp-auth-panel :where(a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible) {
+  outline: 3px solid color-mix(in srgb, var(--color-focus) 45%, transparent);
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .lp-auth {
+    align-items: flex-start;
+    padding: 0.75rem !important;
+  }
+  .lp-auth-panel {
+    padding: 1rem;
+    margin-block: 0.25rem;
+    border-radius: 0.75rem;
+  }
+  .lp-auth-panel .lp-auth-back {
+    margin-bottom: 0.75rem;
+  }
+}
+
+/* Auth surfaces: keep login and signup in the same navy, paper and saffron
+   language as the CRM workspace. Scoped here so other product pages retain
+   their own semantic status colors. */
+.lp-auth {
+  align-items: flex-start;
+  padding: clamp(1rem, 4vh, 2.5rem) 1rem;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(43, 56, 95, 0.72), transparent 58%),
+    var(--color-primary-dark);
+}
+.lp-auth-panel {
+  --auth-ink: #202c52;
+  --auth-muted: #667085;
+  --auth-line: #e3e6ed;
+  --auth-yellow: #fcbd16;
+  color: var(--auth-ink);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 14px;
+  box-shadow: 0 28px 80px rgba(2, 8, 28, 0.28), 0 2px 8px rgba(2, 8, 28, 0.08);
+  animation: auth-panel-enter 280ms cubic-bezier(.2,.75,.25,1) both;
+}
+.lp-auth-panel h1,
+.lp-auth-panel h2 {
+  color: var(--auth-ink);
+  letter-spacing: -0.025em;
+}
+.lp-auth-panel > p,
+.lp-auth-panel label {
+  color: var(--auth-muted);
+}
+.lp-auth-back {
+  color: #667085;
+  transition: color 160ms ease, transform 160ms ease;
+}
+.lp-auth-back:hover {
+  color: var(--auth-ink);
+  transform: translateX(-2px);
+}
+.lp-auth-panel .hl-input {
+  border: 1px solid #d9deea;
+  border-radius: 8px;
+  color: #202c52;
+  background-color: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.025);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+.lp-auth-panel .hl-input::placeholder { color: #98a2b3; }
+.lp-auth-panel .hl-input:hover { border-color: #aab4c8; }
+.lp-auth-panel .hl-input:focus {
+  border-color: #d99d00;
+  box-shadow: 0 0 0 3px rgba(252, 189, 22, 0.2);
+  outline: none;
+}
+.lp-auth-panel .hl-btn-primary,
+.lp-auth-panel button[style*="linear-gradient"] {
+  min-height: 46px;
+  border-radius: 8px;
+  color: #fff;
+  background: #202c52 !important;
+  border: 1px solid #202c52 !important;
+  box-shadow: 0 2px 5px rgba(32, 44, 82, 0.14);
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+.lp-auth-panel .hl-btn-primary:hover:not(:disabled),
+.lp-auth-panel button[style*="linear-gradient"]:hover:not(:disabled) {
+  background: #2b385f !important;
+  border-color: #2b385f !important;
+  box-shadow: 0 5px 12px rgba(32, 44, 82, 0.2);
+  transform: translateY(-1px);
+}
+.lp-auth-panel .hl-btn-primary:active:not(:disabled) { transform: translateY(0); }
+.lp-auth-panel .hl-btn-primary:disabled { opacity: 0.6; cursor: wait; }
+.lp-auth-panel .hl-btn-secondary {
+  border-radius: 8px;
+  border-color: #d9deea;
+  color: #202c52;
+  background: #fff;
+}
+.lp-auth-panel .hl-btn-secondary:hover { background: #f5f6f8; border-color: #aab4c8; }
+.lp-auth-panel button[style*="var(--color-paper"] {
+  border-radius: 6px !important;
+  transition: color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+.lp-auth-panel button[style*="var(--color-paper"]:not(:disabled) {
+  box-shadow: inset 0 -2px #fcbd16, 0 1px 3px rgba(16, 24, 40, 0.08) !important;
+}
+.lp-auth-panel .text-emerald-700,
+.lp-auth-panel .text-emerald-800,
+.lp-auth-panel .text-emerald-900,
+.lp-auth-panel .text-emerald-950,
+.lp-auth-panel .text-emerald-600 { color: #202c52 !important; }
+.lp-auth-panel .bg-emerald-50,
+.lp-auth-panel .bg-emerald-50\/60,
+.lp-auth-panel .bg-emerald-50\/70,
+.lp-auth-panel .bg-emerald-100,
+.lp-auth-panel .bg-emerald-600 { background-color: #fff4cc !important; }
+.lp-auth-panel .border-emerald-200,
+.lp-auth-panel .border-emerald-200\/80,
+.lp-auth-panel .border-emerald-300,
+.lp-auth-panel .border-emerald-600 { border-color: #efd47b !important; }
+.lp-auth-panel .ring-emerald-500 { --tw-ring-color: rgba(252, 189, 22, 0.65) !important; }
+.lp-auth-panel .shadow-sm { box-shadow: 0 2px 8px rgba(32, 44, 82, 0.08); }
+.lp-auth-panel .text-white.bg-emerald-600,
+.lp-auth-panel .bg-emerald-600.text-white { color: #202c52 !important; }
+.lp-auth-panel [style*="rgba(16, 185, 129"],
+.lp-auth-panel [style*="#ECFDF3"] {
+  background: #fff8e3 !important;
+  border-color: #efd47b !important;
+  color: #202c52 !important;
+}
+.lp-auth-panel [style*="#047857"],
+.lp-auth-panel [style*="#067647"] { color: #202c52 !important; }
+.lp-auth-note {
+  background: #fff8e3;
+  border-color: #efd47b;
+  color: #202c52;
+}
+.lp-auth-error {
+  border-radius: 8px;
+  background: #fff1ef;
+  border-color: #ffd0ca;
+}
+.lp-auth-panel a:not(.lp-auth-back) { transition: color 150ms ease; }
+.lp-auth-panel a:not(.lp-auth-back):hover { color: #9a6c00 !important; }
+.lp-auth-panel :where(a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible) {
+  outline: 3px solid rgba(252, 189, 22, 0.72);
+  outline-offset: 2px;
+}
+@keyframes auth-panel-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-auth-panel { animation: none; }
+  .lp-auth-panel *, .lp-auth-panel *::before, .lp-auth-panel *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+@media (max-width: 640px) {
+  .lp-auth { align-items: flex-start; padding: 0.75rem !important; }
+  .lp-auth-panel { border-radius: 12px; }
+  .lp-auth-panel h1 { font-size: 1.35rem !important; line-height: 1.3; }
+  .lp-auth-panel .grid.grid-cols-1.sm\:grid-cols-2 { grid-template-columns: minmax(0, 1fr); }
+}

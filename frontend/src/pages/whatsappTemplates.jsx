@@ -1,3 +1,4 @@
+import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
 import { useState, useEffect } from "react";
 import {
   FileText, Plus, Edit2, Trash2, Copy, Loader2, Sparkles,
@@ -44,6 +45,7 @@ export default function WATemplates() {
   const location = useLocation();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [copiedId, setCopiedId] = useState(null);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
@@ -56,6 +58,8 @@ export default function WATemplates() {
   const { demoMode } = useAuth();
 
   const fetchTemplates = async () => {
+    setLoading(true);
+    setLoadError("");
     if (demoMode) {
       setTemplates(DEMO_TEMPLATES);
       setLoading(false);
@@ -66,11 +70,13 @@ export default function WATemplates() {
       const { data } = await axios.get(`${API}/api/wa/templates`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setTemplates(data && data.length ? data : DEMO_TEMPLATES);
+      setTemplates(Array.isArray(data) ? data : Array.isArray(data?.templates) ? data.templates : []);
     } catch (err) {
-      setTemplates(DEMO_TEMPLATES);
+      setTemplates([]);
+      setLoadError(err.response?.data?.message || err.response?.data?.error || "Templates could not be loaded. Check your connection and retry.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -98,17 +104,22 @@ export default function WATemplates() {
       });
       fetchTemplates();
     } catch (err) {
-      console.error(err);
+      setLoadError(err.response?.data?.message || err.response?.data?.error || "The template could not be deleted.");
     }
   };
 
-  const copyToClipboard = (text, id) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2500);
+  const copyToClipboard = async (text, id) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2500);
+    } catch {
+      setLoadError("Clipboard access is unavailable. Select and copy the template text instead.");
+    }
   };
 
   const handleRestorePrebuilt = async () => {
+    setLoadError("");
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
@@ -117,9 +128,9 @@ export default function WATemplates() {
       });
       await fetchTemplates();
     } catch (err) {
-      alert(err.response?.data?.error || "Failed to load prebuilt templates");
+      setLoadError(err.response?.data?.message || err.response?.data?.error || "Prebuilt templates could not be loaded.");
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const filteredTemplates = templates.filter(t => {
@@ -130,6 +141,7 @@ export default function WATemplates() {
 
   return (
     <div className="hl-page">
+      <WAWorkspaceGuide section="templates" />
       {/* Header Banner */}
       <div className="hl-commandbar flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         <div>
@@ -139,13 +151,13 @@ export default function WATemplates() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="hl-title">WhatsApp Message Templates</h1>
+                <h1 className="hl-title">Message templates</h1>
                 <span className="hl-badge hl-badge-success">
-                  {templates.length} Active Templates
+                  {templates.length} templates
                 </span>
               </div>
               <p className="hl-subtitle">
-                Create reusable message templates with dynamic CRM placeholders and one-click campaign launch.
+                Prepare consistent customer messages with reusable CRM variables.
               </p>
             </div>
           </div>
@@ -157,7 +169,7 @@ export default function WATemplates() {
             className="hl-btn-secondary flex items-center gap-1.5"
           >
             <Sparkles size={14} style={{ color: "var(--color-ink-2)" }} />
-            <span>Load Prebuilt Templates</span>
+            <span>Load starter templates</span>
           </button>
           <button
             onClick={openCreate}
@@ -168,6 +180,13 @@ export default function WATemplates() {
           </button>
         </div>
       </div>
+
+      {loadError && (
+        <div role="alert" className="hl-card flex flex-wrap items-center justify-between gap-3 p-3 text-sm" style={{ borderColor: "var(--color-error)", color: "var(--color-error)" }}>
+          <span>{loadError}</span>
+          <button type="button" className="hl-btn-secondary" onClick={fetchTemplates}>Retry</button>
+        </div>
+      )}
 
       {/* Save confirmation from the editor page */}
       {savedNotice && (
@@ -192,15 +211,15 @@ export default function WATemplates() {
       )}
 
       {/* Placeholders Quick Reference Bar */}
-      <div className="hl-card p-4" style={{ marginBottom: "var(--space-sm)" }}>
-        <div className="flex items-center justify-between mb-2.5">
+      <details className="hl-card p-4" style={{ marginBottom: "var(--space-sm)" }}>
+        <summary className="wa-template-reference flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Tag size={15} style={{ color: "var(--color-ink)" }} />
             <span className="hl-section-label">Available Dynamic Placeholders</span>
           </div>
           <span className="text-[11px] hidden sm:inline" style={{ color: "var(--color-ink-2)" }}>Automatically filled from CRM customer records</span>
-        </div>
-        <div className="flex flex-wrap gap-2">
+        </summary>
+        <div className="flex flex-wrap gap-2 mt-4">
           {PLACEHOLDER_ITEMS.map((p) => (
             <div
               key={p.key}
@@ -212,7 +231,7 @@ export default function WATemplates() {
             </div>
           ))}
         </div>
-      </div>
+      </details>
 
       {/* Search & Category Filter Tabs */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3" style={{ marginBottom: "var(--space-sm)" }}>
@@ -238,6 +257,7 @@ export default function WATemplates() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search templates..."
+            aria-label="Search message templates"
             className="hl-input w-full"
           />
         </div>
@@ -245,21 +265,22 @@ export default function WATemplates() {
 
       {/* Templates Grid */}
       {loading ? (
-        <div className="flex justify-center py-20">
+        <div role="status" className="flex items-center gap-3 justify-center py-20">
           <Loader2 size={36} className="animate-spin" style={{ color: "var(--color-ink)" }} />
+          Loading templates…
         </div>
       ) : filteredTemplates.length === 0 ? (
         <div className="hl-card hl-empty">
           <FileText size={48} className="mx-auto mb-3" style={{ color: "var(--color-ink-2)", opacity: 0.5 }} />
-          <p className="hl-empty-title">No Templates Found</p>
+          <p className="hl-empty-title">{search || selectedCategory !== "ALL" ? "No matching templates" : "No templates yet"}</p>
           <p className="text-xs mt-1 max-w-sm mx-auto" style={{ color: "var(--color-ink-2)" }}>
-            Click "New Template" or "Load Prebuilt Templates" to start creating customized WhatsApp templates.
+            {search || selectedCategory !== "ALL" ? "Try another search or reset the category filter." : "Create a reusable message or choose a starter template."}
           </p>
           <button
-            onClick={openCreate}
+            onClick={search || selectedCategory !== "ALL" ? () => { setSearch(""); setSelectedCategory("ALL"); } : openCreate}
             className="hl-btn-primary mt-4 inline-flex items-center gap-1.5"
           >
-            <Plus size={14} /> Create First Template
+            <Plus size={14} /> {search || selectedCategory !== "ALL" ? "Clear filters" : "Create template"}
           </button>
         </div>
       ) : (
@@ -350,14 +371,14 @@ export default function WATemplates() {
                       <button
                         onClick={() => navigate("/whatsapp/campaigns")}
                         className="hl-badge hl-badge-success flex items-center gap-1 font-bold"
-                        title="Launch bulk campaign with this template"
+                        title="Open campaigns"
                       >
                         <Send size={11} />
                         <span>Campaign</span>
                       </button>
 
                       <button
-                        onClick={() => navigate("/whatsapp/automations")}
+                        onClick={() => navigate("/whatsapp/automations", { state: { templateId: t.id } })}
                         className="hl-badge flex items-center gap-1 font-bold"
                         title="Use in CRM automations"
                       >

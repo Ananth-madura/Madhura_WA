@@ -1,3 +1,4 @@
+import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   BarChart3, TrendingUp, Users, Send, CheckCircle2, Eye, XCircle,
@@ -36,6 +37,7 @@ const exportToCsv = (filename, headers, rows) => {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 };
 
 function StatCard({ label, value, color, icon: Icon, subtitle, rate, rateLabel, badge }) {
@@ -66,9 +68,10 @@ function StatCard({ label, value, color, icon: Icon, subtitle, rate, rateLabel, 
             <ArrowUpRight size={14} /> {rate}% {rateLabel || "rate"}
           </span>
         ) : (
-          <span className="text-[var(--color-ink-2)]">Live Metric</span>
+          <span className="text-[var(--color-ink-2)]">No comparison available</span>
         )}
       </div>
+
     </div>
   );
 }
@@ -109,48 +112,65 @@ export default function WAAnalytics() {
   const [logSearch, setLogSearch] = useState("");
 
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState("");
+  const [logsError, setLogsError] = useState("");
   const [days, setDays] = useState(7);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const autoPollRef = useRef(null);
+  const analyticsRequest = useRef(0);
+  const logsRequest = useRef(0);
 
   const fetchAll = async () => {
+    const requestId = ++analyticsRequest.current;
+    setLoading(true);
     try {
       const token = localStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       const [dRes, cRes, aRes, fRes, dlRes, wRes] = await Promise.all([
-        axios.get(`${API}/api/wa/analytics/dashboard`, { headers }).catch(() => ({ data: null })),
-        axios.get(`${API}/api/wa/analytics/campaigns`, { headers }).catch(() => ({ data: [] })),
-        axios.get(`${API}/api/wa/analytics/automations`, { headers }).catch(() => ({ data: [] })),
-        axios.get(`${API}/api/wa/analytics/flows`, { headers }).catch(() => ({ data: [] })),
-        axios.get(`${API}/api/wa/analytics/daily?days=${days}`, { headers }).catch(() => ({ data: [] })),
-        axios.get(`${API}/api/wa/analytics/webhook-events?limit=30`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/api/wa/analytics/dashboard`, { headers }).catch(() => ({ data: null, failed: true })),
+        axios.get(`${API}/api/wa/analytics/campaigns`, { headers }).catch(() => ({ data: [], failed: true })),
+        axios.get(`${API}/api/wa/analytics/automations`, { headers }).catch(() => ({ data: [], failed: true })),
+        axios.get(`${API}/api/wa/analytics/flows`, { headers }).catch(() => ({ data: [], failed: true })),
+        axios.get(`${API}/api/wa/analytics/daily?days=${days}`, { headers }).catch(() => ({ data: [], failed: true })),
+        axios.get(`${API}/api/wa/analytics/webhook-events?limit=30`, { headers }).catch(() => ({ data: [], failed: true })),
       ]);
 
+      if (requestId !== analyticsRequest.current) return;
       setDashboard(dRes.data);
       setCampaigns(cRes.data || []);
       setAutomations(aRes.data || []);
       setFlows(fRes.data || []);
       setDaily(dlRes.data || []);
       setWebhookEvents(wRes.data || []);
-      setLastUpdated(new Date());
+      if (!dRes.failed) setLastUpdated(new Date());
+      const failedSources = [dRes, cRes, aRes, fRes, dlRes, wRes].filter((result) => result.failed).length;
+      setFetchError(failedSources ? `${failedSources} analytics source${failedSources === 1 ? "" : "s"} could not be reached. Some figures may be incomplete.` : "");
     } catch (err) {
+      if (requestId !== analyticsRequest.current) return;
       console.error("Error fetching analytics:", err);
+      setFetchError(err.response?.data?.message || err.response?.data?.error || "Analytics could not be loaded. Check your connection and retry.");
+    } finally {
+      if (requestId === analyticsRequest.current) setLoading(false);
     }
-    setLoading(false);
   };
 
   const fetchLogs = async () => {
+    const requestId = ++logsRequest.current;
+    setLogsError("");
     try {
       const token = localStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       const queryParams = `?page=${logPage}&limit=40${logStatus ? `&status=${logStatus}` : ""}${logDirection ? `&direction=${logDirection}` : ""}${logSearch ? `&search=${encodeURIComponent(logSearch)}` : ""}`;
       const res = await axios.get(`${API}/api/wa/analytics/logs${queryParams}`, { headers });
+      if (requestId !== logsRequest.current) return;
       setLogs(res.data.logs || []);
       setLogsTotal(res.data.total || 0);
     } catch (err) {
+      if (requestId !== logsRequest.current) return;
       console.error("Error fetching message logs:", err);
+      setLogsError(err.response?.data?.message || err.response?.data?.error || "Message logs could not be loaded.");
     }
   };
 
@@ -188,6 +208,7 @@ export default function WAAnalytics() {
 
   return (
     <div className="hl-page bg-[var(--color-paper)]">
+      <WAWorkspaceGuide section="analytics" />
       {/* Header Banner */}
       <div className="hl-commandbar hl-card flex-col md:flex-row md:items-center gap-3 p-4 sm:p-5">
         <div className="flex items-center gap-3.5">
@@ -196,7 +217,7 @@ export default function WAAnalytics() {
           </div>
           <div>
             <div className="flex items-center gap-2.5">
-              <h1 className="hl-title">WhatsApp Reports & Analytics Hub</h1>
+              <h1 className="hl-title">Messaging analytics</h1>
               {autoRefresh && (
                 <span className="hl-badge hl-badge-success">
                   <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--color-success)" }} />
@@ -240,6 +261,13 @@ export default function WAAnalytics() {
         </div>
       </div>
 
+      {fetchError && (
+        <div role="status" className="hl-card flex flex-wrap items-center justify-between gap-3 p-3 text-sm" style={{ borderColor: "var(--color-focus)", color: "var(--color-ink)" }}>
+          <span>{fetchError}</span>
+          <button type="button" className="hl-btn-secondary" onClick={fetchAll}>Refresh data</button>
+        </div>
+      )}
+
       {/* 5 Main Specialized Navigation Tabs */}
       <div className="hl-tabs mb-6 pb-2 overflow-x-auto">
         {[
@@ -267,6 +295,8 @@ export default function WAAnalytics() {
         })}
       </div>
 
+      {activeTab === "logs" && logsError && <div role="alert" className="hl-card flex flex-wrap items-center justify-between gap-3 p-3 text-sm" style={{ borderColor: "var(--color-error)", color: "var(--color-error)" }}><span>{logsError}</span><button type="button" className="hl-btn-secondary" onClick={fetchLogs}>Retry logs</button></div>}
+
       {loading && !dashboard ? (
         <div className="flex justify-center py-24">
           <Loader2 size={36} className="animate-spin text-[var(--color-success)]" />
@@ -283,7 +313,7 @@ export default function WAAnalytics() {
                   value={d.totalContacts}
                   color="bg-[var(--color-ink)] text-[var(--color-paper-2)]"
                   icon={Users}
-                  subtitle={`${d.optedIn || d.totalContacts || 0} Opted-In Active`}
+                  subtitle={`${d.optedIn ?? 0} Opted-In Active`}
                 />
                 <StatCard
                   label="Messages Dispatched"
@@ -297,7 +327,7 @@ export default function WAAnalytics() {
                   value={d.delivered}
                   color="bg-[var(--color-info)] text-[var(--color-paper-2)]"
                   icon={CheckCircle2}
-                  rate={d.deliveryRate || 98}
+                  rate={d.deliveryRate}
                   rateLabel="delivery"
                 />
                 <StatCard
@@ -305,7 +335,7 @@ export default function WAAnalytics() {
                   value={d.read}
                   color="bg-[var(--color-ink)] text-[var(--color-paper-2)]"
                   icon={Eye}
-                  rate={d.readRate || 75}
+                  rate={d.readRate}
                   rateLabel="read rate"
                 />
               </div>
@@ -317,7 +347,7 @@ export default function WAAnalytics() {
                   value={d.replied}
                   color="bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
                   icon={MessageCircle}
-                  rate={d.replyRate || 22}
+                  rate={d.replyRate}
                   rateLabel="reply rate"
                 />
                 <StatCard
@@ -336,11 +366,10 @@ export default function WAAnalytics() {
                 />
                 <StatCard
                   label="Meta Engine Status"
-                  value={d.totalAccounts || 1}
+                  value={d.totalAccounts}
                   color="bg-[var(--color-success)] text-[var(--color-paper-2)]"
                   icon={ShieldCheck}
-                  badge="High Quality"
-                  subtitle="Anti-Ban Protected"
+                  subtitle="Connected WhatsApp accounts"
                 />
               </div>
 
@@ -357,7 +386,7 @@ export default function WAAnalytics() {
                     </p>
                   </div>
                   <span className="hl-badge hl-badge-accent">
-                    ⚡ Delivery Success Rate: {d.deliveryRate || 98}%
+                    ⚡ Delivery Success Rate: {(d.deliveryRate ?? 0)}%
                   </span>
                 </div>
 
@@ -366,7 +395,7 @@ export default function WAAnalytics() {
                   <div className="rounded-2xl p-4 border" style={{ background: "var(--color-shell-2)", borderColor: "var(--color-shell-2)", color: "var(--color-paper-2)" }}>
                     <span className="hl-section-label" style={{ color: "var(--color-accent)" }}>Step 1 • Dispatched</span>
                     <p className="hl-kpi-num mt-1" style={{ color: "var(--color-paper-2)" }}>{funnelSent.toLocaleString()}</p>
-                    <p className="text-xs mt-1" style={{ color: "var(--color-paper-2)", opacity: 0.7 }}>100% Outbound Traffic</p>
+                    <p className="text-xs mt-1" style={{ color: "var(--color-paper-2)", opacity: 0.7 }}>{d.sent > 0 ? "All outbound messages in this period" : "No messages sent in this period"}</p>
                     <div className="w-full h-1.5 rounded-full mt-3 bg-[var(--color-rule)]">
                       <div className="h-1.5 rounded-full w-full bg-[var(--color-accent)]" />
                     </div>
@@ -376,9 +405,9 @@ export default function WAAnalytics() {
                   <div className="rounded-2xl p-4 border" style={{ background: "var(--color-shell-2)", borderColor: "var(--color-shell-2)", color: "var(--color-paper-2)" }}>
                     <span className="hl-section-label" style={{ color: "var(--color-paper-2)" }}>Step 2 • Delivered</span>
                     <p className="hl-kpi-num mt-1" style={{ color: "var(--color-paper-2)" }}>{funnelDelivered.toLocaleString()}</p>
-                    <p className="text-xs mt-1" style={{ color: "var(--color-paper-2)", opacity: 0.7 }}>{d.deliveryRate || 98}% Handset Reach</p>
+                    <p className="text-xs mt-1" style={{ color: "var(--color-paper-2)", opacity: 0.7 }}>{(d.deliveryRate ?? 0)}% Handset Reach</p>
                     <div className="w-full h-1.5 rounded-full mt-3 bg-[var(--color-rule)]">
-                      <div className="h-1.5 rounded-full bg-[var(--color-info)]" style={{ width: `${d.deliveryRate || 98}%` }} />
+                      <div className="h-1.5 rounded-full bg-[var(--color-info)]" style={{ width: `${(d.deliveryRate ?? 0)}%` }} />
                     </div>
                   </div>
 
@@ -386,9 +415,9 @@ export default function WAAnalytics() {
                   <div className="rounded-2xl p-4 border" style={{ background: "var(--color-shell-2)", borderColor: "var(--color-shell-2)", color: "var(--color-paper-2)" }}>
                     <span className="hl-section-label" style={{ color: "var(--color-paper-2)" }}>Step 3 • Read & Opened</span>
                     <p className="hl-kpi-num mt-1" style={{ color: "var(--color-paper-2)" }}>{funnelRead.toLocaleString()}</p>
-                    <p className="text-xs mt-1" style={{ color: "var(--color-paper-2)", opacity: 0.7 }}>{d.readRate || 75}% Read Rate</p>
+                    <p className="text-xs mt-1" style={{ color: "var(--color-paper-2)", opacity: 0.7 }}>{(d.readRate ?? 0)}% Read Rate</p>
                     <div className="w-full h-1.5 rounded-full mt-3 bg-[var(--color-rule)]">
-                      <div className="h-1.5 rounded-full bg-[var(--color-paper-2)]" style={{ width: `${d.readRate || 75}%` }} />
+                      <div className="h-1.5 rounded-full bg-[var(--color-paper-2)]" style={{ width: `${(d.readRate ?? 0)}%` }} />
                     </div>
                   </div>
 
@@ -396,9 +425,9 @@ export default function WAAnalytics() {
                   <div className="rounded-2xl p-4 border" style={{ background: "var(--color-shell-2)", borderColor: "var(--color-shell-2)", color: "var(--color-paper-2)" }}>
                     <span className="hl-section-label" style={{ color: "var(--color-paper-2)" }}>Step 4 • Customer Replies</span>
                     <p className="hl-kpi-num mt-1" style={{ color: "var(--color-paper-2)" }}>{funnelReplied.toLocaleString()}</p>
-                    <p className="text-xs mt-1" style={{ color: "var(--color-paper-2)", opacity: 0.7 }}>{d.replyRate || 22}% Inbound Engaged</p>
+                    <p className="text-xs mt-1" style={{ color: "var(--color-paper-2)", opacity: 0.7 }}>{(d.replyRate ?? 0)}% Inbound Engaged</p>
                     <div className="w-full h-1.5 rounded-full mt-3 bg-[var(--color-rule)]">
-                      <div className="h-1.5 rounded-full bg-[var(--color-focus)]" style={{ width: `${Math.max(d.replyRate || 22, 10)}%` }} />
+                      <div className="h-1.5 rounded-full bg-[var(--color-focus)]" style={{ width: `${Math.max((d.replyRate ?? 0), 10)}%` }} />
                     </div>
                   </div>
                 </div>
@@ -477,10 +506,10 @@ export default function WAAnalytics() {
                       <span>Delivery & Read Ratios</span>
                     </h2>
                     <div className="space-y-3.5">
-                      <MiniBar label="Delivered" value={d.delivered} max={Math.max(d.sent, 1)} color="bg-[var(--color-info)]" percentage={d.deliveryRate || 98} />
-                      <MiniBar label="Read & Opened" value={d.read} max={Math.max(d.sent, 1)} color="bg-[var(--color-ink)]" percentage={d.readRate || 75} />
-                      <MiniBar label="Customer Replied" value={d.replied} max={Math.max(d.sent, 1)} color="bg-[var(--color-accent)]" percentage={d.replyRate || 22} />
-                      <MiniBar label="Delivery Failed" value={d.failed} max={Math.max(d.sent, 1)} color="bg-[var(--color-error)]" />
+                      <MiniBar label="Delivered" value={d.delivered} max={Math.max(d.sent || 0, 1)} color="bg-[var(--color-info)]" percentage={d.deliveryRate} />
+                      <MiniBar label="Read & Opened" value={d.read} max={Math.max(d.sent || 0, 1)} color="bg-[var(--color-ink)]" percentage={d.readRate} />
+                      <MiniBar label="Customer Replied" value={d.replied} max={Math.max(d.sent || 0, 1)} color="bg-[var(--color-accent)]" percentage={d.replyRate} />
+                      <MiniBar label="Delivery Failed" value={d.failed} max={Math.max(d.sent || 0, 1)} color="bg-[var(--color-error)]" />
                     </div>
                   </div>
 
@@ -818,14 +847,14 @@ export default function WAAnalytics() {
                       type="text"
                       placeholder="Search phone or text..."
                       value={logSearch}
-                      onChange={(e) => setLogSearch(e.target.value)}
+                      onChange={(e) => { setLogSearch(e.target.value); setLogPage(1); }}
                       className="bg-transparent outline-none text-xs w-44"
                     />
                   </div>
 
                   <select
                     value={logStatus}
-                    onChange={(e) => setLogStatus(e.target.value)}
+                    onChange={(e) => { setLogStatus(e.target.value); setLogPage(1); }}
                     className="hl-select text-xs font-semibold"
                   >
                     <option value="">All Statuses</option>
@@ -837,7 +866,7 @@ export default function WAAnalytics() {
 
                   <select
                     value={logDirection}
-                    onChange={(e) => setLogDirection(e.target.value)}
+                    onChange={(e) => { setLogDirection(e.target.value); setLogPage(1); }}
                     className="hl-select text-xs font-semibold"
                   >
                     <option value="">All Directions</option>

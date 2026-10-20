@@ -1,3 +1,6 @@
+import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
+import useWADialog from "../hooks/useWADialog";
+import { useLocation, useNavigate } from "react-router-dom";
 import React, { useState, useEffect } from "react";
 import {
   Zap, Plus, X, Edit2, Loader2, CheckCircle2, XCircle, Play,
@@ -69,6 +72,8 @@ const PLACEHOLDERS = [
 ];
 
 export default function WhatsAppAutomations() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [automations, setAutomations] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -76,10 +81,14 @@ export default function WhatsAppAutomations() {
   const [logs, setLogs] = useState([]);
   const [stats, setStats] = useState({ totalRules: 0, activeRules: 0, totalRuns: 0, sentCount: 0, failedCount: 0 });
   const [loading, setLoading] = useState(true);
+  const [pageNotice, setPageNotice] = useState(null);
   const [activeTab, setActiveTab] = useState("rules"); // "rules" | "welcome" | "logs"
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
+  const [savingRule, setSavingRule] = useState(false);
+  const [ruleError, setRuleError] = useState("");
+  const automationDialog = useWADialog(showModal, () => setShowModal(false), savingRule);
   const [editAutomation, setEditAutomation] = useState(null);
   const [toggling, setToggling] = useState(null);
   const [seeding, setSeeding] = useState(false);
@@ -99,7 +108,7 @@ export default function WhatsAppAutomations() {
   const [simSendReal, setSimSendReal] = useState(false);
   const [simLoading, setSimLoading] = useState(false);
   const [simResult, setSimResult] = useState(null);
-  const [showExplainer, setShowExplainer] = useState(true);
+  const [showExplainer, setShowExplainer] = useState(false);
 
   // Welcome Auto-Reply Settings (Disabled by default for safety)
   const [welcomeSettings, setWelcomeSettings] = useState({
@@ -153,6 +162,7 @@ export default function WhatsAppAutomations() {
 
   const fetchData = async () => {
     setLoading(true);
+    setPageNotice(null);
     try {
       const [aRes, tRes, lRes, wRes, gRes, fRes, sRes] = await Promise.all([
         axios.get(`${API}/api/wa/automations`, { headers: headers() }),
@@ -172,6 +182,7 @@ export default function WhatsAppAutomations() {
       if (sRes.data) setStats(sRes.data);
     } catch (err) {
       console.error("Error fetching automations:", err);
+      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Automation data could not be loaded. Retry to reconnect." });
     }
     setLoading(false);
   };
@@ -187,7 +198,9 @@ export default function WhatsAppAutomations() {
     try {
       await axios.post(`${API}/api/wa/automations/${action}`, {}, { headers: headers() });
       await fetchData();
-    } catch {}
+    } catch (err) {
+      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Automation rules could not be updated." });
+    }
     setBulkToggling(false);
   };
 
@@ -196,14 +209,15 @@ export default function WhatsAppAutomations() {
     try {
       const { data } = await axios.post(`${API}/api/wa/automations/seed`, {}, { headers: headers() });
       await fetchData();
-      alert(`🎉 Successfully installed ${data.count || 10} prebuilt CRM automation rules!`);
+      setPageNotice({ type: "success", message: `${data.count ?? 0} prebuilt automation rules installed.` });
     } catch (err) {
-      alert("Failed to seed automations: " + (err.response?.data?.error || err.message));
+      setPageNotice({ type: "error", message: err.response?.data?.error || err.response?.data?.message || err.message || "Prebuilt automations could not be installed." });
     }
     setSeeding(false);
   };
 
   const openCreate = () => {
+    setRuleError("");
     setConditions({ match: "all", rules: [] });
     setEditAutomation(null);
     setForm({
@@ -230,7 +244,23 @@ export default function WhatsAppAutomations() {
     setShowModal(true);
   };
 
+  useEffect(() => {
+    const templateId = location.state?.templateId;
+    if (!templateId || loading) return;
+    const template = templates.find(item => String(item.id) === String(templateId));
+    if (template) {
+      setEditAutomation(null);
+      setRuleError("");
+      setForm(previous => ({ ...previous, name: "", msg_kind: "template", template_id: template.id }));
+      setShowModal(true);
+    } else {
+      setPageNotice({ type: "error", message: "The selected template is unavailable. Refresh templates and try again." });
+    }
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, loading, templates, navigate]);
+
   const openEdit = async (a) => {
+    setRuleError("");
     setConditions(parseConditions(a.conditions));
     setEditAutomation(a);
     const hasSeq = Boolean(a.followup_message_text || a.followup_media_url || a.followup_template_id);
@@ -262,7 +292,9 @@ export default function WhatsAppAutomations() {
     try {
       const { data } = await axios.get(`${API}/api/wa/automations/${a.id}/options`, { headers: headers() });
       setMenuOptions((data || []).map((o) => ({ label: o.label, reply_text: o.reply_text })));
-    } catch {}
+    } catch (err) {
+      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Automation reply options could not be loaded." });
+    }
   };
 
   const handleToggle = async (a) => {
@@ -272,7 +304,9 @@ export default function WhatsAppAutomations() {
       setAutomations((prev) =>
         prev.map((item) => (item.id === a.id ? { ...item, is_active: item.is_active ? 0 : 1 } : item))
       );
-    } catch {}
+    } catch (err) {
+      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "The rule could not be updated." });
+    }
     setToggling(null);
   };
 
@@ -281,7 +315,9 @@ export default function WhatsAppAutomations() {
     try {
       await axios.delete(`${API}/api/wa/automations/${id}`, { headers: headers() });
       fetchData();
-    } catch {}
+    } catch (err) {
+      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "The rule could not be deleted." });
+    }
   };
 
   const insertPlaceholder = (field, tag) => {
@@ -289,10 +325,21 @@ export default function WhatsAppAutomations() {
   };
 
   const handleSave = async () => {
-    if (!form.name || !form.trigger_type) return alert("Rule name and trigger type are required");
+    if (savingRule) return;
+    setRuleError("");
+    if (!form.name.trim() || !form.trigger_type) {
+      setRuleError("Enter a rule name and choose a trigger type.");
+      return;
+    }
+    if (!form.flow_id && ((form.msg_kind === "template" && !form.template_id) || (form.msg_kind === "text" && !form.message_text.trim()) || (form.msg_kind === "media" && !form.media_url.trim()))) {
+      setRuleError("Choose a template, enter a message or provide a media URL before saving.");
+      return;
+    }
+    if (Number(form.delay_minutes) < 0) { setRuleError("The delay cannot be negative."); return; }
+    setSavingRule(true);
 
     const payload = {
-      name: form.name,
+      name: form.name.trim(),
       trigger_type: form.trigger_type,
       template_id: form.msg_kind === "template" ? form.template_id || null : null,
       message_text: form.msg_kind !== "template" ? form.message_text : null,
@@ -317,13 +364,16 @@ export default function WhatsAppAutomations() {
       } else {
         const { data } = await axios.post(`${API}/api/wa/automations`, payload, { headers: headers() });
         automationId = data.id;
+        setEditAutomation({ id: automationId });
       }
       const validOptions = menuOptions.filter((o) => o.label.trim() && o.reply_text.trim());
       await axios.put(`${API}/api/wa/automations/${automationId}/options`, { options: validOptions }, { headers: headers() });
       setShowModal(false);
       fetchData();
     } catch (err) {
-      alert(err.response?.data?.error || "Save failed");
+      setRuleError(err.response?.data?.error || "The automation could not be fully saved. Retry to finish saving this rule.");
+    } finally {
+      setSavingRule(false);
     }
   };
 
@@ -376,9 +426,9 @@ export default function WhatsAppAutomations() {
     try {
       const { data } = await axios.put(`${API}/api/wa/automations/welcome-settings`, welcomeSettings, { headers: headers() });
       setWelcomeSettings(data);
-      alert("✅ Welcome Auto-Reply settings saved successfully!");
+      setPageNotice({ type: "success", message: "Welcome reply settings saved." });
     } catch (err) {
-      alert(err.response?.data?.error || "Failed to save welcome settings");
+      setPageNotice({ type: "error", message: err.response?.data?.error || err.response?.data?.message || "Welcome reply settings could not be saved." });
     }
     setWelcomeSaving(false);
   };
@@ -407,6 +457,7 @@ export default function WhatsAppAutomations() {
 
   return (
     <div className="hl-page">
+      <WAWorkspaceGuide section="automations" />
       {/* Header Banner */}
       <div className="hl-commandbar hl-card flex-col md:flex-row md:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 p-4 sm:p-5">
         <div className="flex items-center gap-3.5 min-w-0">
@@ -415,7 +466,7 @@ export default function WhatsAppAutomations() {
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h1 className="hl-title">WhatsApp Event Automations</h1>
+              <h1 className="hl-title">Event automations</h1>
               <span className="hl-badge hl-badge-accent">
                 {automations.length} Active Rules
               </span>
@@ -469,6 +520,16 @@ export default function WhatsAppAutomations() {
           </button>
         </div>
       </div>
+
+      {pageNotice && (
+        <div role={pageNotice.type === "error" ? "alert" : "status"} className="hl-card flex flex-wrap items-center justify-between gap-3 p-3 text-sm" style={{ borderColor: pageNotice.type === "error" ? "var(--color-error)" : "var(--color-success)", color: pageNotice.type === "error" ? "var(--color-error)" : "var(--color-success)" }}>
+          <span className="min-w-0">{pageNotice.message}</span>
+          <div className="flex flex-wrap gap-2">
+            {pageNotice.type === "error" && <button type="button" className="hl-btn-secondary" onClick={fetchData}>Retry</button>}
+            <button type="button" className="hl-btn-secondary" onClick={() => setPageNotice(null)} aria-label="Dismiss message">Dismiss</button>
+          </div>
+        </div>
+      )}
 
       {/* Metrics Summary Row */}
       <div className="hl-kpis mb-6">
@@ -804,7 +865,7 @@ export default function WhatsAppAutomations() {
 
           <div className="flex items-center justify-between border-b pb-4">
             <div>
-              <h2 className="hl-title">Welcome Auto-Reply & Cooldown Manager</h2>
+              <h2 className="hl-title">Welcome replies & cooldown</h2>
               <p className="hl-subtitle mt-0.5">Greets new contacts on their first inbound message with strict one-time cooldown protection</p>
             </div>
 
@@ -1117,7 +1178,7 @@ export default function WhatsAppAutomations() {
         <div className="hl-card p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="hl-title">Automation Trigger Audit Logs</h2>
+              <h2 className="hl-title">Automation audit log</h2>
               <p className="hl-subtitle">Live feed of all automated messages triggered by CRM events</p>
             </div>
             <button onClick={fetchData} className="hl-btn-secondary p-2">
@@ -1189,8 +1250,8 @@ export default function WhatsAppAutomations() {
 
       {/* ── MODAL: Create / Edit Automation ── */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3" onClick={() => setShowModal(false)}>
-          <div className="hl-card w-full max-w-3xl max-h-[92dvh] min-h-0 flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3" onClick={() => { if (!savingRule) setShowModal(false); }}>
+          <div ref={automationDialog} role="dialog" aria-modal="true" aria-label={editAutomation ? "Edit automation" : "Create automation"} className="hl-card w-full max-w-3xl max-h-[92dvh] min-h-0 flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 flex items-center justify-center">
@@ -1203,12 +1264,13 @@ export default function WhatsAppAutomations() {
                   <p className="hl-subtitle">Configure background event triggers, anti-ban pacing, and follow-ups</p>
                 </div>
               </div>
-              <button onClick={() => setShowModal(false)} className="hl-btn-secondary p-1">
+              <button disabled={savingRule} aria-label="Close automation editor" onClick={() => setShowModal(false)} className="hl-btn-secondary p-1">
                 <X size={20} />
               </button>
             </div>
 
             <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1 min-h-0 wa-custom-scrollbar overscroll-contain">
+              {ruleError && <p role="alert" className="wa-form-error">{ruleError}</p>}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="hl-section-label block mb-1">Rule Name *</label>
@@ -1485,10 +1547,11 @@ export default function WhatsAppAutomations() {
               <button
                 type="button"
                 onClick={handleSave}
+                disabled={savingRule}
                 className="hl-btn-primary flex-1 py-2.5 flex items-center justify-center gap-1.5"
               >
                 <CheckCircle2 size={15} />
-                <span>{editAutomation ? "Update Rule" : "Create Automation"}</span>
+                <span>{savingRule ? "Saving…" : editAutomation ? "Save rule" : "Create rule"}</span>
               </button>
             </div>
           </div>
@@ -1588,7 +1651,7 @@ export default function WhatsAppAutomations() {
                   <PlayCircle size={22} />
                 </div>
                 <div>
-                  <h3 className="hl-title">CRM Event Trigger Simulator</h3>
+                  <h3 className="hl-title">Test a CRM event</h3>
                   <p className="hl-subtitle">Test how WhatsApp rules respond to CRM database events</p>
                 </div>
               </div>

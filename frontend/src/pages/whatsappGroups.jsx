@@ -1,4 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
+import useWADialog from "../hooks/useWADialog";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Users, Plus, Trash2, Upload, Download, X, ChevronDown, ChevronRight, Loader2, UserPlus, Send, Search, CheckSquare, Square, Building2, Phone, Filter } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
@@ -8,6 +10,8 @@ export default function WAGroups() {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const groupDialog = useWADialog(showCreate, () => setShowCreate(false), creatingGroup);
   const [groupName, setGroupName] = useState("");
   const [groupDesc, setGroupDesc] = useState("");
   const [expandedGroup, setExpandedGroup] = useState(null);
@@ -27,28 +31,37 @@ export default function WAGroups() {
   const [clientSearch, setClientSearch] = useState("");
   const [clientFilter, setClientFilter] = useState("all");
   const [addingContacts, setAddingContacts] = useState(false);
+  const [pageNotice, setPageNotice] = useState(null);
+  const [groupSearch, setGroupSearch] = useState("");
+  const [groupSort, setGroupSort] = useState("name");
+  const groupRequest = useRef(0);
+  const visibleGroups = groups.filter(group => `${group.name || ""} ${group.description || ""}`.toLowerCase().includes(groupSearch.toLowerCase())).sort((a, b) => groupSort === "size" ? Number(b.contact_count || 0) - Number(a.contact_count || 0) : (a.name || "").localeCompare(b.name || ""));
 
   const fetchGroups = async () => {
+    setLoading(true);
     try {
       const token = localStorage.getItem("token");
       const { data } = await axios.get(`${API}/api/wa/groups`, { headers: { Authorization: `Bearer ${token}` } });
-      setGroups(data);
-    } catch (err) { console.error(err); }
+      setGroups(Array.isArray(data) ? data : []);
+    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Groups could not be loaded." }); }
     setLoading(false);
   };
 
   useEffect(() => { fetchGroups(); }, []);
 
   const handleCreate = async () => {
-    if (!groupName) return;
+    if (creatingGroup || !groupName.trim()) return;
+    setCreatingGroup(true);
     try {
       const token = localStorage.getItem("token");
-      await axios.post(`${API}/api/wa/groups`, { name: groupName, description: groupDesc }, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.post(`${API}/api/wa/groups`, { name: groupName.trim(), description: groupDesc.trim() }, { headers: { Authorization: `Bearer ${token}` } });
       setShowCreate(false);
       setGroupName("");
       setGroupDesc("");
       fetchGroups();
-    } catch (err) { console.error(err); }
+      setPageNotice({ type: "success", message: "Group created." });
+    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Group could not be created." }); }
+    finally { setCreatingGroup(false); }
   };
 
   const handleDelete = async (id) => {
@@ -58,19 +71,22 @@ export default function WAGroups() {
       await axios.delete(`${API}/api/wa/groups/${id}`, { headers: { Authorization: `Bearer ${token}` } });
       if (expandedGroup === id) setExpandedGroup(null);
       fetchGroups();
-    } catch (err) { console.error(err); }
+    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Group could not be deleted." }); }
   };
 
   const toggleExpand = async (id) => {
+    const requestId = ++groupRequest.current;
     if (expandedGroup === id) { setExpandedGroup(null); return; }
     setExpandedGroup(id);
+    setGroupContacts([]);
     setContactsLoading(true);
     try {
       const token = localStorage.getItem("token");
       const { data } = await axios.get(`${API}/api/wa/groups/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (requestId !== groupRequest.current) return;
       setGroupContacts(data.contacts || []);
-    } catch (err) { console.error(err); }
-    setContactsLoading(false);
+    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Group contacts could not be loaded." }); }
+    if (requestId === groupRequest.current) setContactsLoading(false);
   };
 
   const handleDeleteContact = async (groupId, contactId) => {
@@ -79,7 +95,7 @@ export default function WAGroups() {
       await axios.delete(`${API}/api/wa/groups/${groupId}/contacts/${contactId}`, { headers: { Authorization: `Bearer ${token}` } });
       setGroupContacts(prev => prev.filter(c => c.id !== contactId));
       fetchGroups();
-    } catch (err) { console.error(err); }
+    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Contact could not be removed." }); }
   };
 
   const handleBulkImport = async (id) => {
@@ -97,17 +113,17 @@ export default function WAGroups() {
       setImportModal(null);
       toggleExpand(id);
       fetchGroups();
-    } catch (err) { console.error(err); }
+    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Contacts could not be imported." }); }
   };
 
   const handleImportCustomers = async (id) => {
     try {
       const token = localStorage.getItem("token");
       const { data } = await axios.post(`${API}/api/wa/groups/${id}/import-customers`, {}, { headers: { Authorization: `Bearer ${token}` } });
-      alert(`Imported ${data.imported} customers. Total contacts: ${data.totalContacts}`);
+      setPageNotice({ type: "success", message: `Imported ${data.imported ?? 0} customers. Group total: ${data.totalContacts ?? 0}.` });
       toggleExpand(id);
       fetchGroups();
-    } catch (err) { alert(err.response?.data?.error || "Import failed"); }
+    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.error || err.response?.data?.message || "Customer import failed." }); }
   };
 
   const downloadCSV = (contacts, groupName) => {
@@ -133,8 +149,8 @@ export default function WAGroups() {
       const { data } = await axios.get(`${API}/api/contacts`, { headers: { Authorization: `Bearer ${token}` } });
       setAllClients(data.contacts || data || []);
     } catch (err) {
-      console.error(err);
       setAllClients([]);
+      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "CRM contacts could not be loaded." });
     }
     setClientsLoading(false);
   };
@@ -188,7 +204,7 @@ export default function WAGroups() {
         .filter(c => c.phone.length >= 10);
 
       if (contacts.length === 0) {
-        alert("No valid phone numbers found in selected contacts.");
+        setPageNotice({ type: "error", message: "The selected contacts do not have valid phone numbers." });
         setAddingContacts(false);
         return;
       }
@@ -198,14 +214,14 @@ export default function WAGroups() {
       toggleExpand(pickerGroupId);
       fetchGroups();
     } catch (err) {
-      console.error(err);
-      alert("Failed to add contacts");
+      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Selected contacts could not be added." });
     }
     setAddingContacts(false);
   };
 
   return (
-    <div className="hl-page">      <div className="hl-commandbar">
+    <div className="hl-page">
+      <WAWorkspaceGuide section="groups" />      <div className="hl-commandbar">
         <div className="flex items-center gap-3">
           <Users size={28} style={{ color: "var(--color-ink)" }} />
           <h1 className="hl-title">Contact Groups</h1>
@@ -216,19 +232,23 @@ export default function WAGroups() {
         </button>
       </div>
 
+      {pageNotice && <div role={pageNotice.type === "error" ? "alert" : "status"} className="hl-card flex flex-wrap items-center justify-between gap-3 p-3 text-sm" style={{ borderColor: pageNotice.type === "error" ? "var(--color-error)" : "var(--color-success)", color: pageNotice.type === "error" ? "var(--color-error)" : "var(--color-success)" }}><span>{pageNotice.message}</span><div className="flex gap-2">{pageNotice.type === "error" && <button type="button" className="hl-btn-secondary" onClick={fetchGroups}>Retry</button>}<button type="button" className="hl-btn-secondary" onClick={() => setPageNotice(null)}>Dismiss</button></div></div>}
+
+      <div className="wa-group-toolbar"><label><Search size={16} /><input aria-label="Search contact groups" placeholder="Search groups by name or description" value={groupSearch} onChange={e => setGroupSearch(e.target.value)} /></label><label>Sort by<select value={groupSort} onChange={e => setGroupSort(e.target.value)}><option value="name">Group name</option><option value="size">Most contacts</option></select></label><span aria-live="polite">{visibleGroups.length} groups</span></div>
       {loading ? (
-        <div className="flex justify-center py-20"><Loader2 size={32} className="animate-spin" style={{ color: "var(--color-ink)" }} /></div>
+        <div role="status" className="flex items-center justify-center gap-3 py-20"><Loader2 size={24} className="animate-spin" style={{ color: "var(--color-ink)" }} />Loading groups…</div>
       ) : groups.length === 0 ? (
         <div className="hl-card hl-empty">
           <Users size={48} className="mx-auto mb-4 opacity-50" />
           <p className="hl-empty-title">No groups yet</p>
           <p className="text-sm">Create contact groups to organize your audience</p>
         </div>
-      ) : (
+      ) : visibleGroups.length === 0 ? <div className="hl-card hl-empty"><p className="hl-empty-title">No matching groups</p><p>Try a different group name or clear your search.</p><button type="button" className="hl-btn-secondary mt-4" onClick={() => setGroupSearch("")}>Clear search</button></div> : (
         <div className="space-y-3">
-          {groups.map((g) => (
+          {visibleGroups.map((g) => (
             <div key={g.id} className="hl-card overflow-hidden">
-              <div className="flex items-center justify-between p-4 cursor-pointer" onClick={() => toggleExpand(g.id)}>
+              <div className="wa-group-row flex items-center justify-between p-4">
+                <button type="button" className="wa-group-expand" aria-expanded={expandedGroup === g.id} aria-label={`${expandedGroup === g.id ? "Collapse" : "Expand"} ${g.name}`} onClick={() => toggleExpand(g.id)}>
                 <div className="flex items-center gap-3">
                   {expandedGroup === g.id ? <ChevronDown size={18} style={{ color: "var(--color-ink-2)" }} /> : <ChevronRight size={18} style={{ color: "var(--color-ink-2)" }} />}
                   <div>
@@ -236,7 +256,8 @@ export default function WAGroups() {
                     <p className="hl-subtitle">{g.contact_count || 0} contacts{g.description ? ` — ${g.description}` : ""}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                </button>
+                <div className="flex items-center gap-2 flex-wrap" onClick={e => e.stopPropagation()}>
                   <button
                     onClick={() => openContactPicker(g.id)}
                     className="hl-btn-primary"
@@ -307,7 +328,8 @@ export default function WAGroups() {
 
       {showCreate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCreate(false)}>
-          <div className="hl-card w-full max-w-md" onClick={e => e.stopPropagation()}>
+          <div ref={groupDialog} role="dialog" aria-modal="true" aria-label="Create contact group" className="hl-card w-full max-w-md" onClick={e => e.stopPropagation()}>
+            {pageNotice?.type === "error" && <p role="alert" className="wa-form-error m-4">{pageNotice.message}</p>}
             <div className="flex items-center justify-between p-5" style={{ borderBottom: "1px solid var(--color-rule)" }}>
               <h2 className="text-lg font-bold">New Contact Group</h2>
               <button onClick={() => setShowCreate(false)}><X size={20} style={{ color: "var(--color-ink-2)" }} /></button>
@@ -324,7 +346,7 @@ export default function WAGroups() {
             </div>
             <div className="flex gap-3 p-5" style={{ borderTop: "1px solid var(--color-rule)" }}>
               <button onClick={() => setShowCreate(false)} className="hl-btn-secondary flex-1">Cancel</button>
-              <button onClick={handleCreate} disabled={!groupName} className="hl-btn-primary flex-1">Create</button>
+              <button onClick={handleCreate} disabled={creatingGroup || !groupName.trim()} className="hl-btn-primary flex-1">{creatingGroup ? "Creating…" : "Create group"}</button>
             </div>
           </div>
         </div>

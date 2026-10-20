@@ -47,6 +47,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [demoLoadingRole, setDemoLoadingRole] = useState(null);
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [twoFactorEmail, setTwoFactorEmail] = useState("");
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [resendingCode, setResendingCode] = useState(false);
 
   // Pre-fill query parameters if any (e.g. ?code=AC-X9B2-4821 or ?tab=code)
   useEffect(() => {
@@ -109,7 +112,9 @@ export default function Login() {
 
       const data = res.data;
       if (data?.requires2FA) {
-        setError("This account has 2FA enabled. Enter the verification code sent to your email.");
+        setTwoFactorEmail(data.email || cleanEmail);
+        setTwoFactorCode("");
+        setNotice("A verification code was sent to your email. It expires after five minutes.");
         return;
       }
       if (!data?.token) {
@@ -137,6 +142,40 @@ export default function Login() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const submitTwoFactor = async (e) => {
+    e.preventDefault();
+    if (!twoFactorCode.trim()) return setError("Enter the verification code from your email.");
+    setLoading(true);
+    setError("");
+    try {
+      const { data } = await axios.post(`${API}/api/auth/verify-2fa`, {
+        email: twoFactorEmail,
+        otp: twoFactorCode.trim(),
+      }, { timeout: 15000 });
+      if (!data?.token) throw new Error("Verification did not return a session token.");
+      login({ ...data.user, token: data.token, demoMode: false });
+      const returnUrl = new URLSearchParams(location.search).get("returnUrl") || "/whatsapp";
+      navigate(returnUrl, { replace: true });
+    } catch (err) {
+      setError(err.response?.data?.message || err.response?.data?.error || err.message || "The verification code could not be confirmed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendTwoFactor = async () => {
+    setResendingCode(true);
+    setError("");
+    try {
+      const { data } = await axios.post(`${API}/api/auth/resend-2fa`, { email: twoFactorEmail }, { timeout: 15000 });
+      setNotice(data.message || "A new verification code has been sent.");
+    } catch (err) {
+      setError(err.response?.data?.message || err.response?.data?.error || "A new verification code could not be sent.");
+    } finally {
+      setResendingCode(false);
     }
   };
 
@@ -219,6 +258,7 @@ export default function Login() {
         >
           <button
             type="button"
+            disabled={!!twoFactorEmail}
             onClick={() => {
               setActiveTab("credentials");
               setError("");
@@ -244,35 +284,10 @@ export default function Login() {
             <span>Work Account</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("access_code");
-              setError("");
-            }}
-            style={{
-              flex: 1,
-              padding: "7px 10px",
-              fontSize: 12,
-              fontWeight: 600,
-              borderRadius: 6,
-              border: "none",
-              cursor: "pointer",
-              background: activeTab === "access_code" ? "var(--color-paper, #ffffff)" : "transparent",
-              color: activeTab === "access_code" ? "var(--color-ink)" : "var(--color-ink-2)",
-              boxShadow: activeTab === "access_code" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 5,
-            }}
-          >
-            <KeyRound size={13} />
-            <span>Access Code</span>
-          </button>
 
           <button
             type="button"
+            disabled={!!twoFactorEmail}
             onClick={() => {
               setActiveTab("demo");
               setError("");
@@ -312,8 +327,24 @@ export default function Login() {
           </div>
         )}
 
+        {twoFactorEmail && (
+          <form onSubmit={submitTwoFactor} className="space-y-3" aria-label="Two-step verification">
+            <div>
+              <h2 className="text-base font-bold text-[var(--color-ink)]">Verify your sign-in</h2>
+              <p className="text-sm text-[var(--color-ink-2)] mt-1">Enter the code sent to <strong>{twoFactorEmail}</strong>.</p>
+            </div>
+            <label htmlFor="two-factor-code" className="hl-section-label block">Email verification code</label>
+            <input id="two-factor-code" inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={twoFactorCode} onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ""))} className="hl-input w-full" autoFocus required />
+            <button type="submit" disabled={loading || !twoFactorCode.trim()} className="hl-btn-primary w-full min-h-11">{loading ? "Verifying…" : "Verify and sign in"}</button>
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <button type="button" onClick={resendTwoFactor} disabled={resendingCode} className="text-[var(--color-primary)] underline disabled:opacity-60">{resendingCode ? "Sending…" : "Send a new code"}</button>
+              <button type="button" onClick={() => { setTwoFactorEmail(""); setTwoFactorCode(""); setNotice(""); setError(""); }} className="text-[var(--color-ink-2)] underline">Back to sign in</button>
+            </div>
+          </form>
+        )}
+
         {/* TAB 1: WORKSPACE ACCOUNT LOGIN */}
-        {activeTab === "credentials" && (
+        {!twoFactorEmail && activeTab === "credentials" && (
           <form onSubmit={submitCredentials} noValidate>
             <div className="mb-4">
               <label htmlFor="hl-email" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">

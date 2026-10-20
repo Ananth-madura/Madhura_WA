@@ -1,3 +1,4 @@
+import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
 import { waUiStorage } from "../utils/waUiStorage";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
@@ -1058,7 +1059,8 @@ export default function WhatsAppAccounts() {
   };
 
   return (
-    <div className="hl-page">      <WAStorageAndSenders settings />
+    <div className="hl-page">
+      <WAWorkspaceGuide section="accounts" />      <WAStorageAndSenders settings />
 
       {/* Multi-Tenant Multi-Branch Scope & Quota Meter */}
       <div className="mb-4 sm:mb-6 p-4 sm:p-5 rounded-2xl border bg-gradient-to-r from-emerald-950/20 via-slate-900/40 to-slate-950/40 border-emerald-500/20 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1119,7 +1121,7 @@ export default function WhatsAppAccounts() {
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="hl-title">WhatsApp Settings & Control Hub</h1>
+                <h1 className="hl-title">Accounts & service settings</h1>
                 <span className={`hl-badge flex items-center gap-1.5 ${
                   cloudConfigured || webConnected ? "hl-badge-success" : "bg-gray-100 text-gray-600 border-gray-200"
                 }`}>
@@ -1134,7 +1136,7 @@ export default function WhatsAppAccounts() {
                 </span>
               </div>
               <p className="hl-subtitle mt-1">
-                Full real-time control over AI Intelligence, API Keys, Multi-Device WhatsApp Web QR, Meta Cloud API, and Automated Workflows.
+                Manage WhatsApp connections, sender routing and automated replies.
               </p>
             </div>
           </div>

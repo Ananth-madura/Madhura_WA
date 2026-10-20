@@ -1,3 +1,7 @@
+import WAFlowEditor from "../components/WAFlowEditor";
+import { flowPorts, setFlowPort, removeFlowNodes, duplicateFlowNodes } from "../utils/waFlowGraph";
+import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
+import WAFlowOutline from "../components/WAFlowOutline";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
@@ -6,19 +10,7 @@ import { API } from "../config/api";
 import WAStorageAndSenders from "../components/WAStorageAndSenders";
 import WAInteractiveOptions from "../components/WAInteractiveOptions";
 import { getInteractiveMessage } from "../utils/waInteractiveMessage";
-import WAVariablePicker from "../components/WAVariablePicker";
-import {
-  Bot, Plus, Play, Edit2, Trash2, Loader2, GitFork, Send, X,
-  Sparkles, PhoneCall, ArrowRight, Smartphone, Database, Globe,
-  CheckCircle2, Clock, UserCheck, ShieldAlert, Cpu, ListOrdered,
-  Layers, BarChart2, RefreshCw, HelpCircle, FileText,
-  MoveUp, MoveDown, Zap, Search, Eye, Check, ChevronDown, ChevronRight,
-  ZoomIn, ZoomOut, Maximize2, Minimize2, Grid, RotateCcw, Copy,
-  ArrowDownRight, CheckSquare, Settings2, Sliders, MessageSquare,
-  AlertCircle, Compass, Share2, Tag, Shield, Terminal, ArrowUpRight,
-  Sun, Moon, CornerDownRight, HelpCircle as QuestionIcon, ChevronLeft,
-  Undo2, Redo2, Wand2, MoreHorizontal
-} from "lucide-react";
+import { Bot, Plus, Play, Trash2, Loader2, GitFork, Send, X, PhoneCall, Database, Globe, CheckCircle2, Clock, ShieldAlert, ListOrdered, Layers, BarChart2, RefreshCw, Zap, Search, ChevronRight, RotateCcw, Sliders, MessageSquare, AlertCircle, Shield, Sun, Moon } from "lucide-react";
 
 // Standard & Advanced WhatsApp Flow Placeholders
 const PLACEHOLDERS = [
@@ -116,6 +108,14 @@ const PALETTE_CATEGORIES = [
   }
 ];
 
+const makeEntryNode = () => ({
+  node_key: "start",
+  node_type: "start",
+  config: { next_node_key: "" },
+  position_x: 100,
+  position_y: 100,
+});
+
 // ── Graph Helpers (module scope: shared by canvas, pre-flight checks & save) ──
 const cloneNodes = (list) => JSON.parse(JSON.stringify(list || []));
 
@@ -124,51 +124,32 @@ const TERMINAL_NODE_TYPES = new Set(["end", "handoff"]);
 
 // Every outgoing link a node owns. Target keys may be stale — callers decide
 // whether a dangling reference is an error (validation) or simply skipped (wires).
-const getOutgoingLinks = (node) => {
-  const cfg = node.config || {};
-  const links = [];
-  const push = (target, label) => {
-    if (target) links.push({ target: String(target), label });
-  };
-
-  if (node.node_type === "interactive_menu") {
-    const sections = Array.isArray(cfg.sections) && cfg.sections.length
-      ? cfg.sections
-      : [{ buttons: cfg.buttons || [] }];
-    sections.forEach((sec, sIdx) =>
-      (sec.buttons || []).forEach((b, bIdx) =>
-        push(b.nextNodeId || b.next_node_key, b.label || b.title || `Option ${bIdx + 1} (S${sIdx + 1})`)
-      )
-    );
-  } else if (node.node_type === "send_buttons") {
-    (cfg.buttons || []).forEach((b, i) => push(b.next_node_key || b.nextNodeId, b.title || b.label || `Option ${i + 1}`));
-  } else if (node.node_type === "send_list") {
-    (cfg.rows || cfg.buttons || []).forEach((b, i) => push(b.next_node_key || b.nextNodeId, b.title || b.label || `Row ${i + 1}`));
-  } else if (node.node_type === "condition") {
-    push(cfg.true_next, "YES (True)");
-    push(cfg.false_next, "NO (False)");
-  } else if (node.node_type === "ai_intent") {
-    Object.entries(cfg.branches || {}).forEach(([intent, tgt]) => push(tgt, intent));
-  } else if (node.node_type === "crm_lookup") {
-    push(cfg.found_next, "Found");
-    push(cfg.not_found_next, "Not Found");
-    push(cfg.next_node_key, "Next");
-  } else {
-    push(cfg.next_node_key, "Next");
-  }
-  return links;
-};
+const getOutgoingLinks = node => flowPorts(node).filter(port => port.target).map(port => ({ target: String(port.target), label: port.label }));
 
 // n8n-style pre-flight validation: broken wires, dead ends, empty content and
 // steps that can never be reached from the entry node.
 const getFlowIssues = (list, entryKey) => {
   const issues = [];
   const nodeMap = {};
-  (list || []).forEach(n => { nodeMap[n.node_key] = n; });
+  if (!list?.length) return [{ severity: "error", nodeKey: null, text: "Add an entry step before publishing." }];
+  (list || []).forEach(n => {
+    if (!n.node_key?.trim()) issues.push({ severity: "error", nodeKey: n.node_key, text: "Every step needs a unique key." });
+    if (nodeMap[n.node_key]) issues.push({ severity: "error", nodeKey: n.node_key, text: `Duplicate step key: ${n.node_key}` });
+    nodeMap[n.node_key] = n;
+  });
 
   (list || []).forEach(node => {
     const cfg = node.config || {};
     const links = getOutgoingLinks(node);
+    if (["api_webhook", "send_media"].includes(node.node_type) && !String(cfg.url || "").trim()) {
+      issues.push({ severity: "error", nodeKey: node.node_key, text: `"${node.node_key}" needs a destination URL.` });
+    }
+    if ((node.node_type === "start" || node.node_type?.includes("trigger")) && links.length === 0) {
+      issues.push({ severity: "error", nodeKey: node.node_key, text: "Connect this entry step to the first conversation step." });
+    }
+    if (node.node_type === "condition" && (!cfg.true_next || !cfg.false_next)) {
+      issues.push({ severity: "error", nodeKey: node.node_key, text: "Connect both the yes and no routes of this condition." });
+    }
 
     links.forEach(l => {
       if (!nodeMap[l.target]) {
@@ -193,7 +174,7 @@ const getFlowIssues = (list, entryKey) => {
       ["send_message", "interactive_menu", "send_buttons", "send_list", "send_cta", "collect_input"].includes(node.node_type) &&
       !String(body).trim()
     ) {
-      issues.push({ severity: "warn", nodeKey: node.node_key, text: `"${node.node_key}" has no message text` });
+      issues.push({ severity: "error", nodeKey: node.node_key, text: `"${node.node_key}" has no message text` });
     }
 
     if (node.node_type === "send_cta" && !String(cfg.url || "").replace(/^https?:\/\/$/i, "").trim()) {
@@ -230,20 +211,78 @@ const getFlowIssues = (list, entryKey) => {
   return issues;
 };
 
+function FlowTestDialog({ request, flowName, setFlowName, phone, setPhone, sending, savingDraft, error, sent, hasUnsavedChanges = false, onClose, onSubmit, onSaveDraft }) {
+  if (!request) return null;
+  return (
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-950/60 p-3 sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="flow-test-title" className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl sm:p-6">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 id="flow-test-title" className="text-lg font-semibold text-[#202c52]">Test this flow</h2>
+            <p className="mt-1 text-sm text-slate-600">Send “{flowName || request.flowName}” to one WhatsApp number.</p>
+          </div>
+          <button type="button" onClick={onClose} className="min-h-10 min-w-10 rounded-md text-slate-500 hover:bg-slate-100" aria-label="Close test dialog"><X size={18} /></button>
+        </div>
+        <form onSubmit={onSubmit} className="space-y-4">
+          {!request.flowId && <label className="block text-sm font-medium text-slate-700">Flow name<input value={flowName} onChange={(event) => setFlowName(event.target.value)} maxLength={120} placeholder="Name this flow" className="mt-1.5 w-full rounded-md border border-slate-300 px-3 py-2.5 text-base outline-none focus:border-[#202c52] focus:ring-2 focus:ring-[#202c52]/15" /></label>}
+          <label className="block text-sm font-medium text-slate-700">
+            Phone number
+            <input autoFocus type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+91 98765 43210" className="mt-1.5 w-full rounded-md border border-slate-300 px-3 py-2.5 text-base outline-none focus:border-[#202c52] focus:ring-2 focus:ring-[#202c52]/15" />
+          </label>
+          <p className="text-xs text-slate-500">Include the country code. A 10-digit Indian number is sent with +91.</p>
+          {!request.flowId && <p className="text-sm text-amber-800" role="status">Save this flow as a draft before sending a live test.</p>}
+          {request.flowId && hasUnsavedChanges && <p className="text-sm text-amber-800" role="status">Save your draft first so the test uses the latest version.</p>}
+          {error && <p className="text-sm text-rose-700" role="alert">{error}</p>}
+          {sent && <p className="text-sm text-emerald-800" role="status">{sent}</p>}
+          <div className="flex flex-wrap justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="min-h-11 rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">Close</button>
+            {(!request.flowId || hasUnsavedChanges) && <button type="button" onClick={onSaveDraft} disabled={savingDraft || !flowName.trim()} className="min-h-11 rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">{savingDraft ? "Saving…" : "Save draft"}</button>}
+            <button type="submit" disabled={sending || !request.flowId || hasUnsavedChanges || !phone.trim()} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-[#202c52] px-4 text-sm font-semibold text-white hover:bg-[#2b385f] disabled:cursor-not-allowed disabled:opacity-50">
+              {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+              {sending ? "Sending…" : sent ? "Send again" : "Send test"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 export default function WhatsAppFlows() {
   const navigate = useNavigate();
   const location = useLocation();
   const { flowId } = useParams();
   const [searchParams] = useSearchParams();
-  const isBuildRoute = location.pathname.includes("/flows/build") || location.pathname.includes("/flows/builder");
+  const isStudioRoute = location.pathname.includes("/flows/build") || location.pathname.includes("/flows/builder") || location.pathname.endsWith("/flows/create");
 
   const [flows, setFlows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("flows"); // "flows" | "runs"
   const [searchQuery, setSearchQuery] = useState("");
+  const [testRequest, setTestRequest] = useState(null);
+  const [testPhone, setTestPhone] = useState("");
+  const [testSending, setTestSending] = useState(false);
+  const [testError, setTestError] = useState("");
+  const [testSent, setTestSent] = useState("");
+  const [saveNotice, setSaveNotice] = useState(null);
+  const [loadError, setLoadError] = useState("");
+  const [studioPanelRequest, setStudioPanelRequest] = useState(null);
+  const [studioLoadError, setStudioLoadError] = useState("");
+  const [studioLoading, setStudioLoading] = useState(false);
+  const studioLoadRequest = useRef(0);
+  const studioOpenRef = useRef(null);
+
+  useEffect(() => {
+    if (!testRequest) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape" && !testSending) setTestRequest(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [testRequest, testSending]);
 
   // Visual Studio / Editor State
-  const [showStudio, setShowStudio] = useState(isBuildRoute);
+  const [showStudio, setShowStudio] = useState(isStudioRoute);
   const [editingFlowId, setEditingFlowId] = useState(flowId || searchParams.get("id") || null);
   const [flowName, setFlowName] = useState("");
   const [flowDesc, setFlowDesc] = useState("");
@@ -254,7 +293,6 @@ export default function WhatsAppFlows() {
   const [selectedNodeKey, setSelectedNodeKey] = useState(null);
   // Draft buffer for the inspector's node-key rename (committed on blur / Enter)
   const [keyDraft, setKeyDraft] = useState(null); // { nodeKey, value }
-  const [activeInspectorTab, setActiveInspectorTab] = useState("config"); // "config" | "preview" | "audit"
   const [saving, setSaving] = useState(false);
 
   // Editing history (undo / redo) + unsaved-changes tracking — the canvas keeps
@@ -263,27 +301,19 @@ export default function WhatsAppFlows() {
   const undoStackRef = useRef([]);
   const redoStackRef = useRef([]);
   const nodesRef = useRef(nodes);
-  const dragSnapshotRef = useRef(null);
   const lastConfigSnapshotRef = useRef(0);
   // Latest handler bindings for the global keyboard listener.
   const shortcutsRef = useRef({});
   // Which toolbar dropdown is open: "templates" | "issues" | "more" | null
-  const [openMenu, setOpenMenu] = useState(null);
 
   // Canvas Viewport State (Pan & Zoom)
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const canvasRef = useRef(null);
 
   // Node Dragging State
-  const [draggingNodeKey, setDraggingNodeKey] = useState(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
   // Edge Connection Drawing State
-  const [connectingFrom, setConnectingFrom] = useState(null); // { nodeKey, portId, portType: 'button'|'true'|'false'|'next'|'intent', extraData }
-  const [connectingMousePos, setConnectingMousePos] = useState({ x: 0, y: 0 });
 
   // WhatsApp Smartphone Mockup Simulator State
   const [simDarkTheme, setSimDarkTheme] = useState(true);
@@ -304,13 +334,11 @@ export default function WhatsAppFlows() {
   const [simCurrentNode, setSimCurrentNode] = useState(null);
   const [simLogs, setSimLogs] = useState([]);
   const [simTyping, setSimTyping] = useState(false);
+  const [simError, setSimError] = useState("");
   const simRequestRef = useRef(false);
   const simGenerationRef = useRef(0);
   const [simInputText, setSimInputText] = useState("");
   const [simEnded, setSimEnded] = useState(false);
-  const [showPalette, setShowPalette] = useState(true);
-  const [showRightPanel, setShowRightPanel] = useState(false);
-  const [paletteFilter, setPaletteFilter] = useState("");
   const simChatBottomRef = useRef(null);
 
   // Keep a mirror of the canvas graph for the history stack (always the last
@@ -333,7 +361,7 @@ export default function WhatsAppFlows() {
   // Auto-scroll phone simulator chat bottom on new message or typing
   useEffect(() => {
     if (simChatBottomRef.current) {
-      simChatBottomRef.current.scrollIntoView({ behavior: "smooth" });
+      simChatBottomRef.current.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
     }
   }, [simMessages, simTyping]);
 
@@ -341,12 +369,9 @@ export default function WhatsAppFlows() {
   // No dependency array on purpose: it always re-binds to the latest render.
   useEffect(() => {
     shortcutsRef.current = {
-      connectingFrom,
+      active: showStudio,
       simListPopup,
-      openMenu,
-      cancelConnection: () => setConnectingFrom(null),
       closePopup: () => setSimListPopup(null),
-      closeMenus: () => setOpenMenu(null),
       undo,
       redo,
       deleteSelected,
@@ -368,16 +393,16 @@ export default function WhatsAppFlows() {
 
     const handleKeyDown = (e) => {
       const s = shortcutsRef.current;
+      if (!s.active) return;
       const mod = e.ctrlKey || e.metaKey;
 
       if (e.key === "Escape") {
-        if (s.connectingFrom) s.cancelConnection();
         if (s.simListPopup) s.closePopup();
-        if (s.openMenu) s.closeMenus();
         return;
       }
 
       if (mod && (e.key === "s" || e.key === "S")) { e.preventDefault(); s.saveDraft(); return; }
+      if (isTypingTarget(e.target)) return;
       if (mod && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) s.redo(); else s.undo(); return; }
       if (mod && (e.key === "y" || e.key === "Y")) { e.preventDefault(); s.redo(); return; }
       if (mod && (e.key === "d" || e.key === "D")) { e.preventDefault(); s.duplicateSelected(); return; }
@@ -438,7 +463,6 @@ export default function WhatsAppFlows() {
   const [showVersionsModal, setShowVersionsModal] = useState(false);
   const [flowVersions, setFlowVersions] = useState([]);
   const [versionChangelog, setVersionChangelog] = useState("");
-  const [publishingVersion, setPublishingVersion] = useState(false);
 
   // Analytics Modal State
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
@@ -449,23 +473,11 @@ export default function WhatsAppFlows() {
   // Runs Audit Tab State
   const [runsList, setRunsList] = useState([]);
   const [loadingRuns, setLoadingRuns] = useState(false);
+  const [runsError, setRunsError] = useState("");
 
   // Accordion open/close in palette
-  const [openCategories, setOpenCategories] = useState({
-    triggers: true,
-    message: true,
-    input: true,
-    logic: true,
-    action: true,
-    control: true
-  });
-
-  const toggleCategory = (catId) => {
-    setOpenCategories(prev => ({ ...prev, [catId]: !prev[catId] }));
-  };
-
-  // ── Fetch Flows List ────────────────────────────────────────────────────────
   const fetchFlows = useCallback(async () => {
+    setLoadError("");
     try {
       setLoading(true);
       const token = localStorage.getItem("token");
@@ -473,7 +485,7 @@ export default function WhatsAppFlows() {
       const res = await axios.get(`${API}/api/wa-flows`, { headers });
       setFlows(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
-      console.error("Error fetching flows:", err);
+      setLoadError(err.response?.data?.message || err.response?.data?.error || "Flows could not be loaded. Retry to reconnect.");
     } finally {
       setLoading(false);
     }
@@ -484,47 +496,51 @@ export default function WhatsAppFlows() {
   }, [fetchFlows]);
 
   // ── Fetch Audit Runs ────────────────────────────────────────────────────────
-  const fetchRuns = async () => {
+  const fetchRuns = useCallback(async () => {
+    setRunsError("");
     try {
       setLoadingRuns(true);
       const token = localStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      // Fetch latest runs across active flows
-      if (flows.length > 0) {
-        const res = await axios.get(`${API}/api/wa-flows/${flows[0].id}/runs`, { headers });
-        setRunsList(Array.isArray(res.data) ? res.data : []);
-      }
+      const results = await Promise.allSettled(flows.map(flow => axios.get(`${API}/api/wa-flows/${flow.id}/runs`, { headers })));
+      const runs = results.flatMap((result, index) => result.status === "fulfilled" && Array.isArray(result.value.data) ? result.value.data.map(run => ({ ...run, flow_name: flows[index].name, flow_id: flows[index].id })) : []);
+      setRunsList(runs.sort((a, b) => new Date(b.started_at) - new Date(a.started_at)));
+      if (results.some(result => result.status === "rejected")) setRunsError("Some flow histories could not be loaded. Retry to refresh the execution list.");
     } catch (err) {
       console.error("Error fetching runs:", err);
+      setRunsError("Execution history could not be loaded. Retry to reconnect.");
     } finally {
       setLoadingRuns(false);
     }
-  };
+  }, [flows]);
 
   useEffect(() => {
     if (activeTab === "runs") {
       fetchRuns();
     }
-  }, [activeTab]);
+  }, [activeTab, fetchRuns]);
 
   // ── Sync Route with Visual Studio State ─────────────────────────────────────
   useEffect(() => {
-    if (isBuildRoute) {
+    if (isStudioRoute) {
       const targetId = flowId || searchParams.get("id");
       if (targetId) {
-        openStudio({ id: targetId });
+        studioOpenRef.current({ id: targetId });
       } else {
-        openStudio(null);
+        studioOpenRef.current(null);
       }
     } else {
+      studioLoadRequest.current++;
+      setStudioLoading(false);
       setShowStudio(false);
     }
-  }, [location.pathname, flowId]);
+  }, [isStudioRoute, location.pathname, flowId, searchParams]);
 
   const handleCloseStudio = () => {
     if (dirty && !window.confirm("You have unsaved canvas changes. Leave the studio anyway?")) {
       return;
     }
+    studioLoadRequest.current++;
     setShowStudio(false);
     navigate("/whatsapp/flows");
   };
@@ -538,7 +554,7 @@ export default function WhatsAppFlows() {
       return;
     }
     const canvasEl = canvasRef.current;
-    const canvasWidth = canvasEl ? canvasEl.clientWidth : (window.innerWidth - (showPalette ? 260 : 0) - (showRightPanel ? 400 : 0));
+    const canvasWidth = canvasEl ? canvasEl.clientWidth : window.innerWidth;
     const canvasHeight = canvasEl ? canvasEl.clientHeight : (window.innerHeight - 56);
 
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -546,9 +562,9 @@ export default function WhatsAppFlows() {
       const x = Number(n.position_x) || 0;
       const y = Number(n.position_y) || 0;
       if (x < minX) minX = x;
-      if (x + 280 > maxX) maxX = x + 280;
+      if (x + 180 > maxX) maxX = x + 180;
       if (y < minY) minY = y;
-      if (y + 200 > maxY) maxY = y + 200;
+      if (y + Math.max(180, flowPorts(n).length * 24 + 100) > maxY) maxY = y + Math.max(180, flowPorts(n).length * 24 + 100);
     });
 
     const flowWidth = Math.max(300, maxX - minX);
@@ -565,27 +581,8 @@ export default function WhatsAppFlows() {
 
     setZoom(Number(computedZoom.toFixed(2)));
     setPan({ x: Math.round(newPanX), y: Math.round(newPanY) });
-  }, [nodes, showPalette, showRightPanel]);
+  }, [nodes]);
 
-  const togglePreview = () => {
-    if (showRightPanel && activeInspectorTab === "preview") {
-      setShowRightPanel(false);
-    } else {
-      setShowRightPanel(true);
-      setActiveInspectorTab("preview");
-    }
-  };
-
-  const toggleInspector = () => {
-    if (showRightPanel && activeInspectorTab === "config") {
-      setShowRightPanel(false);
-    } else {
-      setShowRightPanel(true);
-      setActiveInspectorTab("config");
-    }
-  };
-
-  // ── Canvas History (undo / redo) ───────────────────────────────────────────
   const recordHistory = useCallback((snapshot) => {
     undoStackRef.current.push(snapshot);
     if (undoStackRef.current.length > 60) undoStackRef.current.shift();
@@ -632,11 +629,11 @@ export default function WhatsAppFlows() {
   };
 
   const nudgeSelected = (dx, dy) => {
-    if (!selectedNodeKey || selectedNodeKey === "start") return;
+    if (!selectedNodeKey) return;
     snapshotNodesThrottled();
     setNodes(prev => prev.map(n => (
       n.node_key === selectedNodeKey
-        ? { ...n, position_x: Math.max(0, (Number(n.position_x) || 0) + dx), position_y: Math.max(0, (Number(n.position_y) || 0) + dy) }
+        ? { ...n, position_x: (Number(n.position_x) || 0) + dx, position_y: (Number(n.position_y) || 0) + dy }
         : n
     )));
   };
@@ -698,7 +695,14 @@ export default function WhatsAppFlows() {
 
   // ── Open Visual Studio for a Flow ───────────────────────────────────────────
   const openStudio = async (flow = null) => {
-    setShowRightPanel(false);
+    const request = ++studioLoadRequest.current;
+    setStudioLoading(Boolean(flow?.id));
+    setStudioLoadError("");
+    setDirty(false);
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    setSaveNotice(null);
+
     setSelectedNodeKey(null);
 
     if (flow && flow.id) {
@@ -718,499 +722,102 @@ export default function WhatsAppFlows() {
       try {
         const token = localStorage.getItem("token");
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const res = await axios.get(`${API}/api/wa-flows/${flow.id}`, { headers });
+        const res = await axios.get(`${API}/api/wa-flows/${flow.id}`, { headers, timeout: 15000 });
+        if (request !== studioLoadRequest.current) return;
+        const fullFlow = res.data;
+        setFlowName(fullFlow.name || flow.name || "");
+        setFlowDesc(fullFlow.description || "");
+        setFlowTriggerType(fullFlow.trigger_type || "manual");
+        let triggerConfig = fullFlow.trigger_config || {};
+        if (typeof triggerConfig === "string") { try { triggerConfig = JSON.parse(triggerConfig); } catch { triggerConfig = {}; } }
+        setFlowKeywords((triggerConfig.keywords || (triggerConfig.keyword ? [triggerConfig.keyword] : [])).join(", "));
+        setFlowEntryNode(fullFlow.entry_node_key || "start");
         const fetchedNodes = res.data?.nodes || [];
-        const loaded = fetchedNodes.length > 0 ? fetchedNodes : getDefaultStarterNodes();
+        const loaded = fetchedNodes.length > 0 ? fetchedNodes : [makeEntryNode()];
         setNodes(loaded);
         setTimeout(() => fitToScreen(loaded), 150);
       } catch (e) {
-        const fallback = getDefaultStarterNodes();
+        if (request !== studioLoadRequest.current) return;
+        setStudioLoadError("This flow could not be loaded. Retry before editing or saving so the existing conversation is preserved.");
+        const fallback = [makeEntryNode()];
         setNodes(fallback);
         setTimeout(() => fitToScreen(fallback), 150);
-      }
+      } finally { if (request === studioLoadRequest.current) setStudioLoading(false); }
     } else {
-      // Create new flow - Default to Food & Products interactive catalog bot
+      // Start with an honest entry node; templates are an explicit choice.
       setEditingFlowId(null);
-      setFlowName("Food & Products Flow Bot");
-      setFlowDesc("Interactive flow bot: Quick buttons -> Category List (View All Categories) -> Products -> Instant Orders & Bulk Quote");
+      setFlowName("");
+      setFlowDesc("");
       setFlowTriggerType("manual");
-      setFlowKeywords("menu");
+      setFlowKeywords("");
       setFlowEntryNode("start");
-      const defaultNodes = getFoodBotStarterNodes();
+      const defaultNodes = [makeEntryNode()];
       setNodes(defaultNodes);
-      setSelectedNodeKey("welcome_menu");
+      setSelectedNodeKey("start");
+
+
+      setDirty(false);
+      undoStackRef.current = [];
+      redoStackRef.current = [];
       setTimeout(() => fitToScreen(defaultNodes), 150);
     }
 
     setShowStudio(true);
-    resetSimulation();
+    resetSimulation(false);
   };
 
-  const triggerFlowForPhone = async (phone, explicitFlowId = null) => {
+  studioOpenRef.current = openStudio;
+
+  const openTestDialog = (targetFlowId = null, targetFlowName = flowName) => {
+    setTestRequest({ flowId: targetFlowId || editingFlowId, flowName: targetFlowName || "this flow" });
+    setTestPhone("");
+    setTestError("");
+    setTestSent("");
+  };
+
+  const triggerFlowForPhone = async (event) => {
+    event.preventDefault();
+    if (!testRequest?.flowId) {
+      setTestError("Save this flow as a draft before sending a live test.");
+      return;
+    }
+    if (dirty) {
+      setTestError("Save your draft before sending the test so it matches the latest canvas.");
+      return;
+    }
+    let cleanPhone = String(testPhone || "").replace(/\D/g, "");
+    if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
+    if (cleanPhone.length < 10 || cleanPhone.length > 15) {
+      setTestError("Enter a valid phone number with its country code.");
+      return;
+    }
+
+    setTestSending(true);
+    setTestError("");
+    setTestSent("");
     try {
-      const targetFlowId = explicitFlowId || editingFlowId;
-      if (!targetFlowId) {
-        alert("Please save your flow first before sending it to a phone number.");
-        return;
-      }
-      let cleanPhone = String(phone || "").replace(/\D/g, "");
-      if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
-      if (!cleanPhone || cleanPhone.length < 10) {
-        alert("Please enter a valid phone number with country code (e.g. 919876543210)");
-        return;
-      }
       const token = localStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const res = await axios.post(`${API}/api/wa-flows/send-menu`, {
         phone: cleanPhone,
-        flow_id: targetFlowId
+        flow_id: testRequest.flowId
       }, { headers });
-      alert(`✅ Flow Bot sent successfully!\n${res.data.message || `Sent to +${cleanPhone}`}`);
+      setTestSent(res.data.message || `Test message sent to +${cleanPhone}.`);
     } catch (err) {
-      alert(`❌ Error sending Flow Bot to WhatsApp: ${err.response?.data?.error || err.message}`);
+      setTestError(err.response?.data?.error || "The test message could not be sent. Check the WhatsApp account and try again.");
+    } finally {
+      setTestSending(false);
     }
   };
 
+  const saveDraftForTest = async () => {
+    setTestError("");
+    const savedFlowId = await handleSaveFlow(false);
+    if (!savedFlowId) return;
+    setTestRequest((current) => current ? { ...current, flowId: savedFlowId, flowName: flowName || "this flow" } : current);
+    setTestSent("Draft saved. Send a test to check the latest version.");
+  };
   // ── Food & Products Flow Bot Template (Catalog, "View All" List, Orders & CRM Leads) ──
-  const getFoodBotStarterNodes = () => [
-    {
-      node_key: "start",
-      node_type: "start",
-      config: { next_node_key: "welcome_menu" },
-      position_x: 520,
-      position_y: 40
-    },
-    {
-      node_key: "welcome_menu",
-      node_type: "send_buttons",
-      config: {
-        header_text: "Fresh Foods Trading 🍲",
-        text: "Welcome to Fresh Foods Trading! 🍲\nWe have all food items - Retail & Wholesale.\n\nWhat do you want?",
-        footer_text: "Tap an option or reply with number",
-        buttons: [
-          { id: "btn_menu", reply_id: "VIEW_MENU", title: "📦 View Full Menu", label: "📦 View Full Menu", next_node_key: "category_list", nextNodeId: "category_list" },
-          { id: "btn_price", reply_id: "GET_PRICE", title: "💰 Get Bulk Price", label: "💰 Get Bulk Price", next_node_key: "ask_bulk_details", nextNodeId: "ask_bulk_details" },
-          { id: "btn_sales", reply_id: "TALK_HUMAN", title: "👨💼 Talk to Sales", label: "👨💼 Talk to Sales", next_node_key: "sales_handoff", nextNodeId: "sales_handoff" }
-        ]
-      },
-      position_x: 520,
-      position_y: 180
-    },
-    {
-      node_key: "category_list",
-      node_type: "send_list",
-      config: {
-        text: "Select a category to see products 👇",
-        button_text: "View All Categories",
-        title: "Our Categories",
-        rows: [
-          { id: "CAT_DRYFRUITS", reply_id: "CAT_DRYFRUITS", title: "Dry Fruits & Nuts", description: "Premium quality 1kg packs", next_node_key: "dryfruits_products", nextNodeId: "dryfruits_products" },
-          { id: "CAT_PICKLE", reply_id: "CAT_PICKLE", title: "Pickles & Podi", description: "Homemade 500g glass jars", next_node_key: "pickles_products", nextNodeId: "pickles_products" },
-          { id: "CAT_RICE", reply_id: "CAT_RICE", title: "Rice & Grains", description: "Basmati, Millets & Ponni", next_node_key: "rice_products", nextNodeId: "rice_products" },
-          { id: "CAT_MASALA", reply_id: "CAT_MASALA", title: "Masala & Spices", description: "Fresh ground spice kit", next_node_key: "masala_products", nextNodeId: "masala_products" }
-        ]
-      },
-      position_x: 200,
-      position_y: 420
-    },
-    {
-      node_key: "dryfruits_products",
-      node_type: "send_buttons",
-      config: {
-        header_text: "🌰 Dry Fruits & Nuts",
-        text: "🌰 *Best Dry Fruits & Nuts:*\n\n1. Premium Almonds (Badam) - ₹720/kg\n2. Cashews (Kaju) W320 - ₹850/kg\n3. Walnut Kernels - ₹980/kg\n4. Golden Raisins - ₹320/kg\n\n100% fresh stock with airtight packaging.",
-        footer_text: "Click below to order or get bulk rate",
-        buttons: [
-          { id: "btn_ord_df", reply_id: "ORDER_NOW", title: "🛒 Order Now", label: "🛒 Order Now", next_node_key: "ask_order_address", nextNodeId: "ask_order_address" },
-          { id: "btn_prc_df", reply_id: "GET_PRICE", title: "💰 Bulk Price", label: "💰 Bulk Price", next_node_key: "ask_bulk_details", nextNodeId: "ask_bulk_details" },
-          { id: "btn_bck_df", reply_id: "BACK_MENU", title: "🔙 Back to Menu", label: "🔙 Back to Menu", next_node_key: "welcome_menu", nextNodeId: "welcome_menu" }
-        ]
-      },
-      position_x: 40,
-      position_y: 680
-    },
-    {
-      node_key: "pickles_products",
-      node_type: "send_buttons",
-      config: {
-        header_text: "🌶️ Pickles & Podi",
-        text: "🌶️ *Homemade Pickles & Podi:*\n\n1. Andhra Mango Avakaya (500g) - ₹180\n2. Lemon Pickle (500g) - ₹150\n3. Garlic Spicy Pickle (500g) - ₹210\n4. Traditional Idli/Dosa Podi (250g) - ₹120\n\nAuthentic grandma recipe with zero preservatives.",
-        footer_text: "Click below to order or return to menu",
-        buttons: [
-          { id: "btn_ord_pk", reply_id: "ORDER_NOW", title: "🛒 Order Now", label: "🛒 Order Now", next_node_key: "ask_order_address", nextNodeId: "ask_order_address" },
-          { id: "btn_prc_pk", reply_id: "GET_PRICE", title: "💰 Bulk Price", label: "💰 Bulk Price", next_node_key: "ask_bulk_details", nextNodeId: "ask_bulk_details" },
-          { id: "btn_bck_pk", reply_id: "BACK_MENU", title: "🔙 Back to Menu", label: "🔙 Back to Menu", next_node_key: "welcome_menu", nextNodeId: "welcome_menu" }
-        ]
-      },
-      position_x: 360,
-      position_y: 680
-    },
-    {
-      node_key: "rice_products",
-      node_type: "send_buttons",
-      config: {
-        header_text: "🌾 Rice & Grains",
-        text: "🌾 *Premium Rice & Grains:*\n\n1. Royal XXL Basmati Rice - ₹110/kg\n2. Sona Masoori Raw Rice - ₹58/kg\n3. Organic Foxtail Millet - ₹75/kg\n4. Unpolished Red/Brown Rice - ₹68/kg\n\nAvailable in retail 5kg/10kg and wholesale 25kg bags.",
-        buttons: [
-          { id: "btn_ord_rc", reply_id: "ORDER_NOW", title: "🛒 Order Now", label: "🛒 Order Now", next_node_key: "ask_order_address", nextNodeId: "ask_order_address" },
-          { id: "btn_prc_rc", reply_id: "GET_PRICE", title: "💰 Bulk Price", label: "💰 Bulk Price", next_node_key: "ask_bulk_details", nextNodeId: "ask_bulk_details" },
-          { id: "btn_bck_rc", reply_id: "BACK_MENU", title: "🔙 Back to Menu", label: "🔙 Back to Menu", next_node_key: "welcome_menu", nextNodeId: "welcome_menu" }
-        ]
-      },
-      position_x: 680,
-      position_y: 680
-    },
-    {
-      node_key: "masala_products",
-      node_type: "send_buttons",
-      config: {
-        header_text: "🌿 Masala & Spices",
-        text: "🌿 *Pure Ground Spices:*\n\n1. Guntur Red Chilli Powder (1kg) - ₹340\n2. Salem Turmeric Powder (1kg) - ₹280\n3. Malabar Black Pepper (500g) - ₹420\n4. Garam Masala Blend (500g) - ₹290\n\nCold-ground for maximum aroma and flavor.",
-        buttons: [
-          { id: "btn_ord_ms", reply_id: "ORDER_NOW", title: "🛒 Order Now", label: "🛒 Order Now", next_node_key: "ask_order_address", nextNodeId: "ask_order_address" },
-          { id: "btn_prc_ms", reply_id: "GET_PRICE", title: "💰 Bulk Price", label: "💰 Bulk Price", next_node_key: "ask_bulk_details", nextNodeId: "ask_bulk_details" },
-          { id: "btn_bck_ms", reply_id: "BACK_MENU", title: "🔙 Back to Menu", label: "🔙 Back to Menu", next_node_key: "welcome_menu", nextNodeId: "welcome_menu" }
-        ]
-      },
-      position_x: 1000,
-      position_y: 680
-    },
-    {
-      node_key: "ask_bulk_details",
-      node_type: "collect_input",
-      config: {
-        prompt_text: "Great! Please reply with:\n1. Product Name\n2. Quantity you need (e.g. 10kg, 50kg)\n3. Your City\n\nOur team will send wholesale discounted price in 2 mins.",
-        var_key: "bulk_enquiry",
-        validation_type: "none",
-        next_node_key: "save_bulk_lead"
-      },
-      position_x: 600,
-      position_y: 420
-    },
-    {
-      node_key: "save_bulk_lead",
-      node_type: "create_lead",
-      config: {
-        default_service: "Wholesale Food Enquiry",
-        notes: "Bulk Requirement: {{bulk_enquiry}}",
-        next_node_key: "confirm_bulk"
-      },
-      position_x: 600,
-      position_y: 580
-    },
-    {
-      node_key: "confirm_bulk",
-      node_type: "send_buttons",
-      config: {
-        header_text: "Quotation Requested ✅",
-        text: "Thank you! We received your bulk requirement:\n\n\"{{bulk_enquiry}}\"\n\nOur wholesale executive is preparing your best quote right now.",
-        buttons: [
-          { id: "btn_bm", reply_id: "BACK_MENU", title: "🏠 Main Menu", label: "🏠 Main Menu", next_node_key: "welcome_menu", nextNodeId: "welcome_menu" },
-          { id: "btn_th", reply_id: "TALK_HUMAN", title: "👨💼 Talk to Sales", label: "👨💼 Talk to Sales", next_node_key: "sales_handoff", nextNodeId: "sales_handoff" }
-        ]
-      },
-      position_x: 600,
-      position_y: 740
-    },
-    {
-      node_key: "ask_order_address",
-      node_type: "collect_input",
-      config: {
-        prompt_text: "Perfect! Please reply with your full delivery address and quantity.\nExample: 2kg Dry Fruits Mix, 1kg Pickle - Avinashi, Tiruppur",
-        var_key: "order_details",
-        validation_type: "none",
-        next_node_key: "save_order_lead"
-      },
-      position_x: 200,
-      position_y: 940
-    },
-    {
-      node_key: "save_order_lead",
-      node_type: "create_lead",
-      config: {
-        default_service: "Direct Food Order",
-        notes: "Customer Order: {{order_details}}",
-        next_node_key: "confirm_order"
-      },
-      position_x: 200,
-      position_y: 1100
-    },
-    {
-      node_key: "confirm_order",
-      node_type: "send_buttons",
-      config: {
-        header_text: "Order Received 🎉",
-        text: "Thank you for ordering! 📦\n\n*Delivery Details:*\n{{order_details}}\n\nOur team has registered your order and will message invoice & dispatch tracker in 10 mins.",
-        buttons: [
-          { id: "btn_mno", reply_id: "BACK_MENU", title: "🏠 Main Menu", label: "🏠 Main Menu", next_node_key: "welcome_menu", nextNodeId: "welcome_menu" },
-          { id: "btn_tso", reply_id: "TALK_HUMAN", title: "👨💼 Talk to Sales", label: "👨💼 Talk to Sales", next_node_key: "sales_handoff", nextNodeId: "sales_handoff" }
-        ]
-      },
-      position_x: 200,
-      position_y: 1260
-    },
-    {
-      node_key: "sales_handoff",
-      node_type: "handoff",
-      config: {
-        note: "Connecting you to sales team... 👨💼\nOur executive will call you in 10 mins. Or call us directly: +91 9876543210"
-      },
-      position_x: 980,
-      position_y: 420
-    }
-  ];
-
-  // ── Starter Nodes Template (Default Banking / Interactive Menu) ─────────────
-  const getDefaultStarterNodes = () => [
-    {
-      node_key: "start",
-      node_type: "start",
-      config: { next_node_key: "banking_menu" },
-      position_x: 260,
-      position_y: 40
-    },
-    {
-      node_key: "banking_menu",
-      node_type: "interactive_menu",
-      config: {
-        text: "Good Afternoon, {{customer.name}} 🍀🙂\n\nPlease type any bank related query or select from the options below",
-        sections: [
-          {
-            title: "Bank Services",
-            buttons: [
-              { id: "account_balance", label: "Account Balance", nextNodeId: "lookup_balance" },
-              { id: "instant_fd", label: "Instant FD", nextNodeId: "fd_calculator" },
-              { id: "credit_card_due", label: "Credit Card Bill Due", nextNodeId: "card_bill_flow" }
-            ]
-          },
-          {
-            title: "Explore more! ⭐",
-            buttons: [
-              { id: "credit_card_fd", label: "Credit Card on FD", nextNodeId: "card_fd_flow" },
-              { id: "apply_card", label: "Apply New Card", nextNodeId: "apply_card_flow" },
-              { id: "loan_offers", label: "Loan Offers", nextNodeId: "loan_flow" }
-            ]
-          },
-          {
-            title: "Looking for something else? 🔍",
-            buttons: [
-              { id: "live_agent", label: "Live Agent", nextNodeId: "agent_handoff" }
-            ]
-          }
-        ]
-      },
-      position_x: 260,
-      position_y: 180
-    },
-    {
-      node_key: "lookup_balance",
-      node_type: "crm_lookup",
-      config: {
-        lookup_type: "customer",
-        next_node_key: "balance_card"
-      },
-      position_x: 30,
-      position_y: 380
-    },
-    {
-      node_key: "balance_card",
-      node_type: "interactive_menu",
-      config: {
-        text: "💳 *Account Summary for {{customer.name}}:*\n\n• Available Balance: *₹45,280.00*\n• Account: *XXXX-XXXX-4812*\n• Last Updated: {{current.date}}\n\nNeed a detailed mini statement?",
-        sections: [
-          {
-            title: "Actions",
-            buttons: [
-              { id: "mini_stmt", label: "Mini Statement (PDF)", nextNodeId: "send_stmt_pdf" },
-              { id: "back_main", label: "🏠 Main Menu", nextNodeId: "banking_menu" }
-            ]
-          }
-        ]
-      },
-      position_x: 30,
-      position_y: 540
-    },
-    {
-      node_key: "send_stmt_pdf",
-      node_type: "send_message",
-      config: {
-        text: "📄 Your last 10 transactions statement has been generated: https://madhurabank.example.com/stmt_4812.pdf\n\nReply MENU to return to main options.",
-        next_node_key: "end"
-      },
-      position_x: 30,
-      position_y: 720
-    },
-    {
-      node_key: "fd_calculator",
-      node_type: "interactive_menu",
-      config: {
-        text: "💰 *Instant Fixed Deposit (FD)*\n\nEarn up to *7.85% p.a.* interest with zero paperwork!\n\nChoose your preferred tenure:",
-        sections: [
-          {
-            title: "Tenures",
-            buttons: [
-              { id: "fd_1yr", label: "1 Year @ 7.25%", nextNodeId: "book_fd_lead" },
-              { id: "fd_3yr", label: "3 Years @ 7.85%", nextNodeId: "book_fd_lead" },
-              { id: "back_main2", label: "🏠 Main Menu", nextNodeId: "banking_menu" }
-            ]
-          }
-        ]
-      },
-      position_x: 290,
-      position_y: 380
-    },
-    {
-      node_key: "book_fd_lead",
-      node_type: "create_lead",
-      config: {
-        default_service: "Instant FD Application",
-        notes: "Customer applied for Fixed Deposit via WhatsApp bot. Selected: {{selected.option}}",
-        next_node_key: "fd_success_msg"
-      },
-      position_x: 290,
-      position_y: 540
-    },
-    {
-      node_key: "fd_success_msg",
-      node_type: "send_message",
-      config: {
-        text: "✅ Congratulations! Your Instant FD request has been initiated. Our relationship manager will verify your details within 15 minutes.\n\nReference ID: #FD-{{current.date}}-8891",
-        next_node_key: "end"
-      },
-      position_x: 290,
-      position_y: 720
-    },
-    {
-      node_key: "card_bill_flow",
-      node_type: "interactive_menu",
-      config: {
-        text: "💳 *Credit Card Bill Status*\n\nCard: *Platinum Rewards (ending 9021)*\n• Total Due: *₹18,450.00*\n• Minimum Due: *₹1,200.00*\n• Due Date: *10th of this month*",
-        sections: [
-          {
-            title: "Payment Options",
-            buttons: [
-              { id: "pay_now", label: "Pay Total Due (UPI)", nextNodeId: "send_pay_link" },
-              { id: "back_main3", label: "🏠 Main Menu", nextNodeId: "banking_menu" }
-            ]
-          }
-        ]
-      },
-      position_x: 550,
-      position_y: 380
-    },
-    {
-      node_key: "send_pay_link",
-      node_type: "send_message",
-      config: {
-        text: "⚡ Instant UPI Payment Link: https://pay.madhurabank.example.com/bill/9021\n\nInstant confirmation will be sent upon payment receipt.",
-        next_node_key: "end"
-      },
-      position_x: 550,
-      position_y: 540
-    },
-    {
-      node_key: "card_fd_flow",
-      node_type: "send_message",
-      config: {
-        text: "🌟 *Credit Card Against FD*\nGet 90% credit limit against your fixed deposit with zero CIBIL checks and instant activation!\n\nLink to apply: https://cards.madhurabank.example.com/card-on-fd",
-        next_node_key: "end"
-      },
-      position_x: 810,
-      position_y: 380
-    },
-    {
-      node_key: "apply_card_flow",
-      node_type: "collect_input",
-      config: {
-        prompt_text: "Please enter your monthly take-home income (e.g. 50000):",
-        var_key: "income",
-        next_node_key: "check_card_eligibility"
-      },
-      position_x: 810,
-      position_y: 540
-    },
-    {
-      node_key: "check_card_eligibility",
-      node_type: "condition",
-      config: {
-        subject_key: "income",
-        operator: "greater_or_equal",
-        value: "25000",
-        true_next: "card_approved_msg",
-        false_next: "card_fd_flow"
-      },
-      position_x: 810,
-      position_y: 700
-    },
-    {
-      node_key: "card_approved_msg",
-      node_type: "send_message",
-      config: {
-        text: "🎉 You are pre-approved for our *Lifetime Free Titanium Card* with ₹1,50,000 credit limit!\n\nComplete your KYC in 2 mins: https://cards.madhurabank.example.com/kyc",
-        next_node_key: "end"
-      },
-      position_x: 810,
-      position_y: 840
-    },
-    {
-      node_key: "loan_flow",
-      node_type: "interactive_menu",
-      config: {
-        text: "🏡 *Instant Loan Offers for {{customer.name}}*\n\nSelect a loan type to check customized interest rates & eligibility:",
-        sections: [
-          {
-            title: "Loan Types",
-            buttons: [
-              { id: "home_loan", label: "Home Loan @ 8.40%", nextNodeId: "lead_loan" },
-              { id: "personal_loan", label: "Personal Loan @ 10.5%", nextNodeId: "lead_loan" },
-              { id: "car_loan", label: "Car Loan @ 8.75%", nextNodeId: "lead_loan" }
-            ]
-          }
-        ]
-      },
-      position_x: 1070,
-      position_y: 380
-    },
-    {
-      node_key: "lead_loan",
-      node_type: "create_lead",
-      config: {
-        default_service: "Loan Inquiry",
-        notes: "Customer inquired about loan offers via WhatsApp bot. Selected: {{selected.option}}",
-        next_node_key: "loan_ack_msg"
-      },
-      position_x: 1070,
-      position_y: 540
-    },
-    {
-      node_key: "loan_ack_msg",
-      node_type: "send_message",
-      config: {
-        text: "✅ Thank you! Our loan expert will call you within 30 minutes with customized sanction terms & EMI schedule.",
-        next_node_key: "end"
-      },
-      position_x: 1070,
-      position_y: 700
-    },
-    {
-      node_key: "agent_handoff",
-      node_type: "handoff",
-      config: {
-        note: "Customer requested live support specialist from interactive menu"
-      },
-      position_x: 1320,
-      position_y: 380
-    },
-    {
-      node_key: "end",
-      node_type: "end",
-      config: {},
-      position_x: 600,
-      position_y: 1000
-    }
-  ];
-
-  // ── Seed Prebuilt Flows ─────────────────────────────────────────────────────
   const handleSeedFlows = async () => {
     try {
       setLoading(true);
@@ -1228,10 +835,13 @@ export default function WhatsAppFlows() {
 
   // ── Save Current Flow to Backend ────────────────────────────────────────────
   const handleSaveFlow = async (isPublishing = false) => {
+    if (saving || studioLoading) return;
+    if (studioLoadError) { setSaveNotice({ type: "error", message: studioLoadError }); return; }
     if (!flowName.trim()) {
-      alert("Please enter a flow name");
+      setSaveNotice({ type: "error", message: "Name this flow before saving." });
       return;
     }
+    setSaveNotice(null);
 
     // Pre-flight gate before going live: broken wires / unconnected branches
     if (isPublishing) {
@@ -1240,13 +850,16 @@ export default function WhatsAppFlows() {
         : (nodes.find(n => n.node_type === "start" || n.node_type?.includes("trigger"))?.node_key || nodes[0]?.node_key || null);
       const blocking = getFlowIssues(nodes, entryKey).filter(i => i.severity === "error");
       if (blocking.length > 0) {
-        const list = blocking.slice(0, 6).map(i => `• ${i.text}`).join("\n");
-        const more = blocking.length > 6 ? `\n…and ${blocking.length - 6} more` : "";
-        const proceed = window.confirm(`⚠️ ${blocking.length} blocking issue(s) found:\n\n${list}${more}\n\nPublish anyway?`);
-        if (!proceed) {
-          setOpenMenu("issues");
-          return;
-        }
+        setSaveNotice({ type: "error", message: "Resolve the blocking issues before publishing. Your draft can still be saved." });
+
+        setStudioPanelRequest({ panel: "checks", at: Date.now() });
+        return;
+      }
+      if (flowTriggerType === "keyword" && !flowKeywords.split(",").some(keyword => keyword.trim())) {
+        setSaveNotice({ type: "error", message: "Add at least one trigger keyword before publishing." });
+
+        setStudioPanelRequest({ panel: "settings", at: Date.now() });
+        return;
       }
     }
 
@@ -1261,9 +874,9 @@ export default function WhatsAppFlows() {
         : (nodes.find(n => n.node_type === "start" || n.node_type?.includes("trigger"))?.node_key || nodes[0]?.node_key || "start");
 
       const payload = {
-        name: flowName,
+        name: flowName.trim(),
         description: flowDesc,
-        status: isPublishing ? "active" : "draft",
+        status: "draft",
         trigger_type: flowTriggerType,
         trigger_config: { keywords: keywordsArr },
         entry_node_key: actualEntryKey,
@@ -1287,14 +900,16 @@ export default function WhatsAppFlows() {
 
       if (isPublishing && flowId) {
         await axios.post(`${API}/api/wa-flows/${flowId}/versions/publish`, { changelog: versionChangelog || "Published via Visual Studio" }, { headers });
+        await axios.patch(`${API}/api/wa-flows/${flowId}/status`, { status: "active" }, { headers });
         setVersionChangelog("");
       }
 
       await fetchFlows();
       setDirty(false);
+      setSaveNotice({ type: "success", message: isPublishing ? "Flow published." : "Draft saved." });
       return flowId;
     } catch (err) {
-      alert("Error saving flow: " + (err.response?.data?.error || err.message));
+      setSaveNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || err.message || "The flow could not be saved." });
     } finally {
       setSaving(false);
     }
@@ -1322,6 +937,13 @@ export default function WhatsAppFlows() {
     try {
       const token = localStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      if (newStatus === "active") {
+        const { data } = await axios.get(`${API}/api/wa-flows/${flow.id}`, { headers });
+        if (getFlowIssues(data.nodes || [], data.entry_node_key).some(issue => issue.severity === "error")) {
+          setLoadError(`Open "${flow.name}" and resolve its validation issues before activating it.`);
+          return;
+        }
+      }
       await axios.patch(`${API}/api/wa-flows/${flow.id}/status`, { status: newStatus }, { headers });
       setFlows(prev => prev.map(f => f.id === flow.id ? { ...f, status: newStatus } : f));
     } catch (err) {
@@ -1383,195 +1005,12 @@ export default function WhatsAppFlows() {
   };
 
   // ── Canvas Dragging & Node Manipulation ─────────────────────────────────────
-  const handleCanvasMouseDown = (e) => {
-    if (connectingFrom) {
-      // Clicking on empty canvas cancels the active port connection mode
-      setConnectingFrom(null);
-      return;
-    }
-    if (e.target === canvasRef.current || e.target.tagName === "svg" || e.target.classList?.contains("canvas-grid")) {
-      setIsPanning(true);
-      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-    }
-  };
-
-  const handleCanvasMouseMove = (e) => {
-    if (isPanning) {
-      setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
-    } else if (draggingNodeKey) {
-      // First actual move of a drag commits one undo step for the whole drag
-      if (dragSnapshotRef.current) {
-        recordHistory(dragSnapshotRef.current);
-        dragSnapshotRef.current = null;
-      }
-      const newX = (e.clientX - pan.x - dragOffset.x) / zoom;
-      const newY = (e.clientY - pan.y - dragOffset.y) / zoom;
-      setNodes(prev => prev.map(n => n.node_key === draggingNodeKey ? { ...n, position_x: Math.max(0, newX), position_y: Math.max(0, newY) } : n));
-    } else if (connectingFrom) {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (rect) {
-        setConnectingMousePos({
-          x: (e.clientX - rect.left - pan.x) / zoom,
-          y: (e.clientY - rect.top - pan.y) / zoom
-        });
-      }
-    }
-  };
-
-  const handleCanvasMouseUp = () => {
-    setIsPanning(false);
-    setDraggingNodeKey(null);
-    dragSnapshotRef.current = null; // click without movement keeps history untouched
-    // Keep connectingFrom active so user can click-to-connect by clicking the destination node
-  };
-
-  const handleNodeMouseDown = (nodeKey, e) => {
-    e.stopPropagation();
-    if (connectingFrom && connectingFrom.nodeKey !== nodeKey) {
-      // Connect to this node on click
-      completeConnection(nodeKey, e);
-      return;
-    }
-    setSelectedNodeKey(nodeKey);
-    setDraggingNodeKey(nodeKey);
-    dragSnapshotRef.current = cloneNodes(nodes); // pending pre-drag snapshot
-    const node = nodes.find(n => n.node_key === nodeKey);
-    if (node) {
-      setDragOffset({
-        x: (e.clientX - pan.x) - (node.position_x * zoom),
-        y: (e.clientY - pan.y) - (node.position_y * zoom)
-      });
-    }
-  };
-
-  // ── Port Connection Logic ───────────────────────────────────────────────────
-  const startConnecting = (nodeKey, portId, portType, extra = {}, e) => {
-    if (e?.stopPropagation) e.stopPropagation();
-    const rect = canvasRef.current?.getBoundingClientRect();
-    const clientX = e?.clientX ?? (e?.touches && e.touches[0]?.clientX) ?? 0;
-    const clientY = e?.clientY ?? (e?.touches && e.touches[0]?.clientY) ?? 0;
-    const startX = rect ? (clientX - rect.left - pan.x) / zoom : 0;
-    const startY = rect ? (clientY - rect.top - pan.y) / zoom : 0;
-
-    setConnectingFrom({ nodeKey, portId, portType, x: startX, y: startY, ...extra });
-    setConnectingMousePos({ x: startX, y: startY });
-  };
-
-  const completeConnection = (targetNodeKey, e) => {
-    if (e?.stopPropagation) e.stopPropagation();
-    if (!connectingFrom || connectingFrom.nodeKey === targetNodeKey) {
-      setConnectingFrom(null);
-      return;
-    }
-
-    const { nodeKey: srcKey, portType, sectionIdx, buttonIdx, intentKey } = connectingFrom;
-
-    snapshotNodes();
-    setNodes(prev => prev.map(n => {
-      if (n.node_key !== srcKey) return n;
-      const cfg = { ...(n.config || {}) };
-
-      if (portType === "button" && n.node_type === "interactive_menu") {
-        const secs = [...(cfg.sections || [])];
-        if (sectionIdx !== undefined && secs[sectionIdx] && secs[sectionIdx].buttons && secs[sectionIdx].buttons[buttonIdx]) {
-          secs[sectionIdx].buttons[buttonIdx] = {
-            ...secs[sectionIdx].buttons[buttonIdx],
-            nextNodeId: targetNodeKey,
-            next_node_key: targetNodeKey
-          };
-          cfg.sections = secs;
-        } else if (cfg.buttons && cfg.buttons[buttonIdx]) {
-          const btns = [...cfg.buttons];
-          btns[buttonIdx] = {
-            ...btns[buttonIdx],
-            nextNodeId: targetNodeKey,
-            next_node_key: targetNodeKey
-          };
-          cfg.buttons = btns;
-        }
-      } else if (portType === "button" && (n.node_type === "send_buttons" || n.node_type === "send_list")) {
-        const isList = n.node_type === "send_list";
-        const btns = [...(isList ? (cfg.rows || cfg.buttons || []) : (cfg.buttons || cfg.rows || []))];
-        if (btns[buttonIdx]) {
-          btns[buttonIdx] = {
-            ...btns[buttonIdx],
-            next_node_key: targetNodeKey,
-            nextNodeId: targetNodeKey
-          };
-          cfg.buttons = btns;
-          cfg.rows = btns;
-        }
-      } else if (portType === "true") {
-        cfg.true_next = targetNodeKey;
-      } else if (portType === "false") {
-        cfg.false_next = targetNodeKey;
-      } else if (portType === "intent") {
-        const branches = { ...(cfg.branches || {}) };
-        branches[intentKey || "intent"] = targetNodeKey;
-        cfg.branches = branches;
-      } else if (portType === "found") {
-        cfg.found_next = targetNodeKey;
-      } else if (portType === "not_found") {
-        cfg.not_found_next = targetNodeKey;
-      } else {
-        cfg.next_node_key = targetNodeKey;
-      }
-
-      return { ...n, config: cfg };
-    }));
-
-    setConnectingFrom(null);
-  };
-
-  // Disconnect / detach wire link directly from canvas
-  const disconnectWire = (wire) => {
-    if (!wire || !wire.srcKey) return;
-    snapshotNodes();
-    setNodes(prev => prev.map(n => {
-      if (n.node_key !== wire.srcKey) return n;
-      const cfg = JSON.parse(JSON.stringify(n.config || {}));
-
-      if (wire.portType === "button" && n.node_type === "interactive_menu") {
-        if (wire.sectionIdx !== undefined && cfg.sections?.[wire.sectionIdx]?.buttons?.[wire.buttonIdx]) {
-          cfg.sections[wire.sectionIdx].buttons[wire.buttonIdx].nextNodeId = "";
-          cfg.sections[wire.sectionIdx].buttons[wire.buttonIdx].next_node_key = "";
-        } else if (cfg.buttons?.[wire.buttonIdx]) {
-          cfg.buttons[wire.buttonIdx].nextNodeId = "";
-          cfg.buttons[wire.buttonIdx].next_node_key = "";
-        }
-      } else if (wire.portType === "button" && (n.node_type === "send_buttons" || n.node_type === "send_list")) {
-        const isList = n.node_type === "send_list";
-        const arr = isList ? (cfg.rows || cfg.buttons || []) : (cfg.buttons || cfg.rows || []);
-        if (arr[wire.buttonIdx]) {
-          arr[wire.buttonIdx].next_node_key = "";
-          arr[wire.buttonIdx].nextNodeId = "";
-          if (isList) { cfg.rows = arr; cfg.buttons = arr; }
-          else { cfg.buttons = arr; cfg.rows = arr; }
-        }
-      } else if (wire.portType === "true") {
-        cfg.true_next = "";
-      } else if (wire.portType === "false") {
-        cfg.false_next = "";
-      } else if (wire.portType === "intent") {
-        if (cfg.branches) delete cfg.branches[wire.intentKey];
-      } else if (wire.portType === "found") {
-        cfg.found_next = "";
-      } else if (wire.portType === "not_found") {
-        cfg.not_found_next = "";
-      } else {
-        cfg.next_node_key = "";
-      }
-
-      return { ...n, config: cfg };
-    }));
-  };
-
-  // ── Add Node to Canvas ──────────────────────────────────────────────────────
-  const addNodeFromPalette = (item) => {
+  const addNodeFromPalette = (item, placement = null, connection = null) => {
     const baseKey = item.type.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase();
     let uniqueKey = baseKey;
     let counter = 1;
-    while (nodes.some(n => n.node_key === uniqueKey)) {
+    const existingKeys = new Set(nodes.map(node => node.node_key));
+    while (existingKeys.has(uniqueKey)) {
       counter++;
       uniqueKey = `${baseKey}_${counter}`;
     }
@@ -1638,7 +1077,7 @@ export default function WhatsAppFlows() {
     } else if (item.type === "create_lead") {
       newConfig = { default_service: "General Inquiry", notes: "Captured via bot", next_node_key: "" };
     } else if (item.type === "api_webhook") {
-      newConfig = { method: "GET", url: "https://api.example.com/check", next_node_key: "" };
+      newConfig = { method: "GET", url: "", next_node_key: "" };
     } else if (item.type === "handoff") {
       newConfig = { note: "Connecting you to our support specialist..." };
     } else if (item.type === "delay") {
@@ -1652,36 +1091,31 @@ export default function WhatsAppFlows() {
       node_key: uniqueKey,
       node_type: item.type === "collect_number" || item.type === "collect_email" || item.type === "collect_date" ? "collect_input" : item.type,
       config: newConfig,
-      position_x: Math.max(50, canvasCenterX + (Math.random() * 40 - 20)),
-      position_y: Math.max(50, canvasCenterY + (Math.random() * 40 - 20))
+      position_x: Math.round(placement?.x ?? canvasCenterX),
+      position_y: Math.round(placement?.y ?? canvasCenterY)
     };
 
+    while (nodes.some(node => Math.abs((Number(node.position_x) || 0) - newNode.position_x) < 170 && Math.abs((Number(node.position_y) || 0) - newNode.position_y) < 160)) newNode.position_y += 180;
     snapshotNodes();
-    setNodes(prev => [...prev, newNode]);
+    setNodes(prev => [...prev.map(node => connection && node.node_key === connection.source ? setFlowPort(node, connection.port, uniqueKey) : node), newNode]);
     setSelectedNodeKey(uniqueKey);
   };
 
   const deleteNode = (nodeKey) => {
-    if (nodeKey === "start") {
+    if (nodeKey === "start" || nodeKey === flowEntryNode) {
       alert("The start entry node cannot be deleted.");
       return;
     }
     snapshotNodes();
-    setNodes(prev => prev.filter(n => n.node_key !== nodeKey));
+    setNodes(prev => removeFlowNodes(prev, new Set([nodeKey])));
     if (selectedNodeKey === nodeKey) setSelectedNodeKey(null);
   };
 
-  const duplicateNode = (node) => {
-    const newKey = `${node.node_key}_copy_${Math.floor(Math.random() * 1000)}`;
-    const copy = {
-      ...node,
-      node_key: newKey,
-      position_x: (node.position_x || 0) + 40,
-      position_y: (node.position_y || 0) + 40
-    };
+  const duplicateNode = node => {
+    const [copy] = duplicateFlowNodes(nodes, [node]);
     snapshotNodes();
-    setNodes(prev => [...prev, copy]);
-    setSelectedNodeKey(newKey);
+    setNodes(previous => [...previous, copy]);
+    setSelectedNodeKey(copy.node_key);
   };
 
   // ── Rename a step: rewrite the key AND every reference pointing at it ─────
@@ -1728,7 +1162,7 @@ export default function WhatsAppFlows() {
   };
 
   // ── Interactive In-Phone Simulator Engine ───────────────────────────────────
-  const resetSimulation = () => {
+  const resetSimulation = (run = true) => {
     simGenerationRef.current++;
     simRequestRef.current = false;
     setSimMessages([]);
@@ -1736,8 +1170,9 @@ export default function WhatsAppFlows() {
     setSimEnded(false);
     setSimCurrentNode(null);
     setSimTyping(false);
+    setSimError("");
     // Auto-execute from start
-    executeSimStep("", "", true);
+    if (run) executeSimStep("", "", true);
   };
 
   const executeSimStep = async (userInput = "", displayInput = userInput, restart = false) => {
@@ -1745,6 +1180,7 @@ export default function WhatsAppFlows() {
     simRequestRef.current = true;
     const generation = simGenerationRef.current;
     setSimTyping(true);
+    setSimError("");
 
     const activeFlowDraft = {
       name: flowName,
@@ -1798,6 +1234,7 @@ export default function WhatsAppFlows() {
     } catch (err) {
       if (generation !== simGenerationRef.current) return;
       console.error("Simulation error:", err);
+      setSimError(err.response?.data?.error || err.response?.data?.message || "The simulation could not run. Check your connection and restart the preview.");
       setSimTyping(false);
       simRequestRef.current = false;
     }
@@ -1814,715 +1251,6 @@ export default function WhatsAppFlows() {
 
   const flowIssues = useMemo(() => getFlowIssues(nodes, entryNodeKey), [nodes, entryNodeKey]);
 
-  const issuesByNode = useMemo(() => {
-    const map = {};
-    flowIssues.forEach(issue => {
-      if (!issue.nodeKey) return;
-      (map[issue.nodeKey] = map[issue.nodeKey] || []).push(issue);
-    });
-    return map;
-  }, [flowIssues]);
-
-  const errorCount = flowIssues.filter(i => i.severity === "error").length;
-
-  // Jump the viewport to the step a validation issue points at
-  const focusIssue = (issue) => {
-    if (!issue?.nodeKey) return;
-    const node = nodes.find(n => n.node_key === issue.nodeKey);
-    setSelectedNodeKey(issue.nodeKey);
-    setOpenMenu(null);
-    if (node && canvasRef.current) {
-      const w = canvasRef.current.clientWidth;
-      const h = canvasRef.current.clientHeight;
-      setPan({
-        x: Math.round(w / 2 - ((Number(node.position_x) || 0) + 135) * zoom),
-        y: Math.round(h / 2 - ((Number(node.position_y) || 0) + 95) * zoom),
-      });
-    }
-  };
-
-  // ── Calculate SVG Connections between Nodes ─────────────────────────────────
-  const getWirePaths = () => {
-    const wires = [];
-    const nodeMap = {};
-    nodes.forEach(n => { nodeMap[n.node_key] = n; });
-
-    nodes.forEach(src => {
-      const srcX = src.position_x || 0;
-      const srcY = src.position_y || 0;
-      const cfg = src.config || {};
-
-      const addWire = (targetKey, portLabel, portColor = "#10B981", offsetY = 60, extra = {}) => {
-        if (!targetKey || !nodeMap[targetKey]) return;
-        const tgt = nodeMap[targetKey];
-        const tgtX = tgt.position_x || 0;
-        const tgtY = tgt.position_y || 0;
-
-        const startX = srcX + 270; // right side of source card (270px width)
-        const startY = srcY + offsetY;
-        const endX = tgtX; // left side of target card
-        const endY = tgtY + 45;
-
-        // Bezier control points for smooth routing
-        const dx = Math.abs(endX - startX) * 0.55;
-        const pathD = `M ${startX} ${startY} C ${startX + Math.max(50, dx)} ${startY}, ${endX - Math.max(50, dx)} ${endY}, ${endX} ${endY}`;
-
-        wires.push({
-          id: `${src.node_key}->${targetKey}-${portLabel}-${offsetY}`,
-          srcKey: src.node_key,
-          targetKey,
-          pathD,
-          color: portColor,
-          label: portLabel,
-          startX, startY, endX, endY,
-          ...extra
-        });
-      };
-
-      if (src.node_type === "interactive_menu") {
-        let btnOffset = 85;
-        if (Array.isArray(cfg.sections) && cfg.sections.length > 0) {
-          cfg.sections.forEach((sec, sIdx) => {
-            btnOffset += 24; // section title space
-            (sec.buttons || []).forEach((b, bIdx) => {
-              const target = b.nextNodeId || b.next_node_key;
-              if (target) addWire(target, b.label || b.title || "Option", "#10B981", btnOffset, { portType: "button", sectionIdx: sIdx, buttonIdx: bIdx });
-              btnOffset += 34;
-            });
-          });
-        } else if (Array.isArray(cfg.buttons)) {
-          cfg.buttons.forEach((b, bIdx) => {
-            const target = b.nextNodeId || b.next_node_key;
-            if (target) addWire(target, b.label || b.title || "Option", "#10B981", btnOffset, { portType: "button", buttonIdx: bIdx });
-            btnOffset += 34;
-          });
-        }
-      } else if (src.node_type === "send_buttons") {
-        let btnOffset = 85;
-        (cfg.buttons || []).forEach((b, bIdx) => {
-          const target = b.next_node_key || b.nextNodeId;
-          if (target) addWire(target, b.title || b.label || "Option", "#0D9488", btnOffset, { portType: "button", buttonIdx: bIdx });
-          btnOffset += 34;
-        });
-      } else if (src.node_type === "send_list") {
-        let btnOffset = 110;
-        (cfg.rows || cfg.buttons || []).forEach((b, rIdx) => {
-          const target = b.next_node_key || b.nextNodeId;
-          if (target) addWire(target, b.title || b.label || "Option", "#06B6D4", btnOffset, { portType: "button", buttonIdx: rIdx, rowIdx: rIdx });
-          btnOffset += 38;
-        });
-      } else if (src.node_type === "condition") {
-        if (cfg.true_next) addWire(cfg.true_next, "YES (True)", "#10B981", 90, { portType: "true" });
-        if (cfg.false_next) addWire(cfg.false_next, "NO (False)", "#F59E0B", 130, { portType: "false" });
-      } else if (src.node_type === "ai_intent") {
-        let branchOffset = 75;
-        const branchObj = cfg.branches || { sales: "", support: "", pricing: "", fallback: "" };
-        Object.entries(branchObj).forEach(([intent, tgt]) => {
-          if (tgt) addWire(tgt, intent, "#A855F7", branchOffset, { portType: "intent", intentKey: intent });
-          branchOffset += 28;
-        });
-      } else if (src.node_type === "crm_lookup") {
-        if (cfg.found_next) addWire(cfg.found_next, "Found", "#10B981", 80, { portType: "found" });
-        if (cfg.not_found_next) addWire(cfg.not_found_next, "Not Found", "#EF4444", 110, { portType: "not_found" });
-        if (cfg.next_node_key) addWire(cfg.next_node_key, "Next", "#3B82F6", 80, { portType: "next" });
-      } else if (src.config?.next_node_key) {
-        addWire(src.config.next_node_key, "Next", "#3B82F6", 75, { portType: "next" });
-      }
-    });
-
-    return wires;
-  };
-
-  // ── Render Node Card in Canvas ──────────────────────────────────────────────
-  const renderCanvasNode = (node) => {
-    const isSelected = selectedNodeKey === node.node_key;
-    const isEntry = flowEntryNode === node.node_key || node.node_key === "start";
-    const isConnectingTarget = connectingFrom && connectingFrom.nodeKey !== node.node_key;
-    const isConnectingSource = connectingFrom && connectingFrom.nodeKey === node.node_key;
-
-    // Palette metadata icon and color
-    let typeMeta = { icon: "⚡", label: node.node_type, color: "bg-slate-50 border-slate-300 text-slate-800" };
-    PALETTE_CATEGORIES.forEach(cat => {
-      const found = cat.items.find(i => i.type === node.node_type);
-      if (found) typeMeta = found;
-    });
-
-    return (
-      <div
-        key={node.node_key}
-        onPointerDown={(e) => handleNodeMouseDown(node.node_key, e)}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (connectingFrom && connectingFrom.nodeKey !== node.node_key) {
-            completeConnection(node.node_key, e);
-          } else {
-            setSelectedNodeKey(node.node_key);
-            setShowRightPanel(true);
-            setActiveInspectorTab("config");
-          }
-        }}
-        onPointerUp={(e) => {
-          if (connectingFrom && connectingFrom.nodeKey !== node.node_key) {
-            completeConnection(node.node_key, e);
-          }
-        }}
-        style={{
-          transform: `translate(${node.position_x}px, ${node.position_y}px)`,
-          width: "270px"
-        }}
-        className={`absolute rounded-2xl bg-white shadow-lg border-2 transition-all select-none cursor-move z-10 ${
-          isConnectingTarget
-            ? "border-emerald-500 ring-4 ring-emerald-400/80 shadow-2xl cursor-pointer hover:scale-[1.02]"
-            : isConnectingSource
-              ? "border-blue-500 ring-4 ring-blue-400/70 shadow-xl"
-              : isSelected
-                ? "border-emerald-500 ring-4 ring-emerald-500/20 shadow-2xl"
-                : "border-slate-200 hover:border-slate-300 hover:shadow-md"
-        }`}
-      >
-        {/* Click to Connect Top Banner Cue */}
-        {isConnectingTarget && (
-          <div className="bg-emerald-600 text-white text-[9px] font-bold text-center py-0.5 rounded-t-xl animate-pulse flex items-center justify-center gap-1">
-            <span>✦ Click to Connect Step Here</span>
-          </div>
-        )}
-
-        {/* Input Port Anchor (Left) */}
-        {node.node_key !== "start" && (
-          <div
-            onClick={(e) => completeConnection(node.node_key, e)}
-            onPointerUp={(e) => completeConnection(node.node_key, e)}
-            className={`absolute -left-3.5 top-10 w-7 h-7 rounded-full bg-white border-2 flex items-center justify-center shadow-md transition-all z-20 cursor-pointer touch-none ${
-              isConnectingTarget
-                ? "border-emerald-500 bg-emerald-100 scale-125 ring-4 ring-emerald-400/50"
-                : "border-slate-300 hover:border-emerald-500 hover:scale-125"
-            }`}
-            title="Drop or click here to connect"
-          >
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
-          </div>
-        )}
-
-        {/* Node Header */}
-        <div className={`px-3.5 py-2.5 border-b border-slate-100 bg-slate-50/90 flex items-center justify-between ${
-          isConnectingTarget ? "" : "rounded-t-2xl"
-        }`}>
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-base">{typeMeta.icon || "⚡"}</span>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-slate-800 truncate">{node.node_key}</span>
-                {isEntry && (
-                  <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 font-extrabold text-[9px] rounded-full uppercase">
-                    Entry
-                  </span>
-                )}
-                {(issuesByNode[node.node_key] || []).length > 0 && (() => {
-                  const nodeIssues = issuesByNode[node.node_key];
-                  const hasError = nodeIssues.some(i => i.severity === "error");
-                  return (
-                    <span
-                      className={`px-1.5 py-0.2 rounded-full font-extrabold text-[9px] inline-flex items-center gap-0.5 ${
-                        hasError ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"
-                      }`}
-                      title={nodeIssues.map(i => i.text).join("\n")}
-                    >
-                      <AlertCircle size={9} />
-                      {nodeIssues.length}
-                    </span>
-                  );
-                })()}
-              </div>
-              <p className="text-[10px] text-slate-400 truncate">{typeMeta.label}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1">
-            <button
-              onClick={(e) => { e.stopPropagation(); duplicateNode(node); }}
-              className="p-1 text-slate-400 hover:text-slate-600 rounded"
-              title="Duplicate"
-            >
-              <Copy size={12} />
-            </button>
-            {node.node_key !== "start" && (
-              <button
-                onClick={(e) => { e.stopPropagation(); deleteNode(node.node_key); }}
-                className="p-1 text-slate-400 hover:text-rose-600 rounded"
-                title="Delete"
-              >
-                <Trash2 size={12} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Node Body Content Preview */}
-        <div className="p-3 text-xs space-y-2">
-          {/* Triggers (start, keyword_trigger, all_inbound_trigger, first_inbound_trigger) */}
-          {(node.node_type === "start" || node.node_type?.includes("trigger")) && (
-            <div className="space-y-1.5">
-              <div className="p-2 bg-amber-50/80 border border-amber-200 rounded-lg text-[11px]">
-                <div className="font-bold text-amber-900 flex items-center gap-1">
-                  <span>🚀</span>
-                  <span>{node.node_type === "start" ? "Entry Kickoff Point" : (node.config?.trigger_label || "Inbound Trigger")}</span>
-                </div>
-                {node.config?.keywords && (
-                  <p className="text-[10px] text-amber-700 mt-1 font-mono line-clamp-1">
-                    Keywords: {Array.isArray(node.config.keywords) ? node.config.keywords.join(", ") : node.config.keywords}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center justify-between pt-1 text-[11px] text-slate-600 font-semibold">
-                <span>Start Flow ➔</span>
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
-                  className="w-5 h-5 rounded-full bg-amber-500 hover:bg-amber-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shadow-sm shrink-0"
-                  title="Drag or click to connect next step"
-                >
-                  <ChevronRight size={12} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Interactive Menu multi-section display */}
-          {node.node_type === "interactive_menu" && (
-            <div className="space-y-2">
-              <p className="text-slate-600 text-[11px] line-clamp-2 italic bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                "{node.config?.text || "Choose an option:"}"
-              </p>
-
-              {Array.isArray(node.config?.sections) ? (
-                node.config.sections.map((sec, sIdx) => (
-                  <div key={sIdx} className="space-y-1">
-                    {sec.title && (
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">
-                        {sec.title}
-                      </span>
-                    )}
-                    <div className="space-y-1">
-                      {(sec.buttons || []).map((b, bIdx) => (
-                        <div
-                          key={bIdx}
-                          className="flex items-center justify-between px-2 py-1.5 bg-emerald-50/70 border border-emerald-200 text-emerald-900 rounded-lg text-[11px] font-semibold group"
-                        >
-                          <span className="truncate">{b.label || b.title || `Option ${bIdx + 1}`}</span>
-                          <div
-                            onPointerDown={(e) => startConnecting(node.node_key, b.id || `btn_${bIdx}`, "button", { sectionIdx: sIdx, buttonIdx: bIdx }, e)}
-                            className="w-4 h-4 rounded-full bg-emerald-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition-transform shrink-0"
-                            title="Drag or click to connect target node"
-                          >
-                            <ChevronRight size={10} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="space-y-1">
-                  {(node.config?.buttons || []).map((b, bIdx) => (
-                    <div
-                      key={bIdx}
-                      className="flex items-center justify-between px-2 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg text-[11px] font-semibold"
-                    >
-                      <span className="truncate">{b.label || b.title || `Option ${bIdx + 1}`}</span>
-                      <div
-                        onPointerDown={(e) => startConnecting(node.node_key, b.id || `btn_${bIdx}`, "button", { buttonIdx: bIdx }, e)}
-                        className="w-4 h-4 rounded-full bg-emerald-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 shrink-0"
-                        title="Drag or click to connect target node"
-                      >
-                        <ChevronRight size={10} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Quick Reply Buttons Preview */}
-          {node.node_type === "send_buttons" && (
-            <div className="space-y-1.5">
-              {node.config?.header_text && (
-                <div className="text-[10px] font-bold text-teal-700 uppercase tracking-wide truncate">
-                  {node.config.header_text}
-                </div>
-              )}
-              <p className="text-slate-600 text-[11px] line-clamp-2 italic bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                "{node.config?.text || "Please choose:"}"
-              </p>
-              <div className="space-y-1">
-                {(node.config?.buttons || []).map((b, bIdx) => (
-                  <div
-                    key={bIdx}
-                    className="flex items-center justify-between px-2 py-1.5 bg-teal-50 border border-teal-200 text-teal-900 rounded-lg text-[11px] font-semibold shadow-xs"
-                  >
-                    <span className="truncate">{b.title || b.label || `Option ${bIdx + 1}`}</span>
-                    <div
-                      onPointerDown={(e) => startConnecting(node.node_key, b.reply_id || b.id || `btn_${bIdx}`, "button", { buttonIdx: bIdx }, e)}
-                      className="w-4 h-4 rounded-full bg-teal-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
-                      title="Drag or click to connect target node"
-                    >
-                      <ChevronRight size={10} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* WhatsApp List Menu ("View All") Preview */}
-          {node.node_type === "send_list" && (
-            <div className="space-y-1.5">
-              <p className="text-slate-600 text-[11px] line-clamp-2 italic bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                "{node.config?.text || node.config?.body || "Select an item:"}"
-              </p>
-              <div className="px-2 py-1 bg-cyan-100/80 border border-cyan-300 text-cyan-950 rounded-lg text-[10px] font-bold flex items-center gap-1.5">
-                <ListOrdered size={12} className="text-cyan-700 shrink-0" />
-                <span className="truncate">Button: "{node.config?.button_text || "View All Categories"}"</span>
-              </div>
-              <div className="space-y-1">
-                {(node.config?.rows || node.config?.buttons || []).map((r, rIdx) => (
-                  <div
-                    key={rIdx}
-                    className="flex items-center justify-between px-2 py-1.5 bg-cyan-50 border border-cyan-200 text-cyan-950 rounded-lg text-[11px] font-semibold shadow-xs"
-                  >
-                    <div className="truncate pr-1.5">
-                      <span className="block truncate">{r.title || `Item ${rIdx + 1}`}</span>
-                      {r.description && <span className="block text-[9px] text-cyan-700 font-normal truncate">{r.description}</span>}
-                    </div>
-                    <div
-                      onPointerDown={(e) => startConnecting(node.node_key, r.id || r.reply_id || `row_${rIdx}`, "button", { buttonIdx: rIdx }, e)}
-                      className="w-4 h-4 rounded-full bg-cyan-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
-                      title="Drag or click to connect target node"
-                    >
-                      <ChevronRight size={10} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Text Message Preview */}
-          {node.node_type === "send_message" && (
-            <div className="space-y-1.5">
-              <p className="text-slate-700 text-xs line-clamp-3 bg-blue-50/50 p-2 rounded-lg border border-blue-100 font-mono">
-                {node.config?.text || "Text content"}
-              </p>
-              <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
-                <span>Next Step</span>
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
-                  className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125"
-                  title="Connect next step"
-                >
-                  <ChevronRight size={10} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Media / PDF Catalog Preview */}
-          {node.node_type === "send_media" && (
-            <div className="space-y-1.5">
-              <div className="p-1.5 bg-indigo-50 border border-indigo-200 text-indigo-900 rounded text-[11px] flex items-center gap-1.5">
-                <FileText size={12} className="text-indigo-600 shrink-0" />
-                <span className="font-semibold uppercase">{node.config?.media_type || "image"}</span>
-                <span className="text-[10px] text-slate-500 truncate">{node.config?.media_url ? "URL configured" : "No URL"}</span>
-              </div>
-              {node.config?.caption && (
-                <p className="text-[10px] text-slate-600 line-clamp-2 italic bg-slate-50 p-1.5 rounded border border-slate-100">
-                  "{node.config.caption}"
-                </p>
-              )}
-              <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
-                <span>Next Step</span>
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
-                  className="w-4 h-4 rounded-full bg-indigo-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
-                  title="Connect next step"
-                >
-                  <ChevronRight size={10} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* WhatsApp Approved Template Preview */}
-          {node.node_type === "send_template" && (
-            <div className="space-y-1.5">
-              <div className="p-1.5 bg-lime-50 border border-lime-200 text-lime-900 rounded text-[11px] font-semibold truncate">
-                🧾 HSM: {node.config?.template_name || "welcome_hsm"}
-              </div>
-              <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
-                <span>Next Step</span>
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
-                  className="w-4 h-4 rounded-full bg-lime-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
-                  title="Connect next step"
-                >
-                  <ChevronRight size={10} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Condition Preview */}
-          {node.node_type === "condition" && (
-            <div className="space-y-2">
-              <div className="p-2 bg-amber-50 rounded-lg border border-amber-200 text-[11px] font-mono text-amber-900">
-                if ({node.config?.subject_key || "input"} {node.config?.operator || "=="} "{node.config?.value || ""}")
-              </div>
-              <div className="grid grid-cols-2 gap-1.5">
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "true", "true", {}, e)}
-                  className="px-2 py-1 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px] flex items-center justify-between cursor-crosshair hover:bg-emerald-200"
-                  title="Connect YES outcome"
-                >
-                  <span>YES (True)</span>
-                  <ChevronRight size={12} />
-                </div>
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "false", "false", {}, e)}
-                  className="px-2 py-1 bg-amber-100 text-amber-800 rounded font-bold text-[10px] flex items-center justify-between cursor-crosshair hover:bg-amber-200"
-                  title="Connect NO outcome"
-                >
-                  <span>NO (False)</span>
-                  <ChevronRight size={12} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* AI Intent Router Preview */}
-          {node.node_type === "ai_intent" && (
-            <div className="space-y-1.5">
-              <div className="p-1.5 bg-fuchsia-50 border border-fuchsia-200 text-fuchsia-900 rounded text-[11px] font-semibold flex items-center gap-1.5">
-                <Sparkles size={12} className="text-fuchsia-600" />
-                <span>AI Intent Branches</span>
-              </div>
-              <div className="space-y-1">
-                {Object.keys(node.config?.branches || { sales: "", support: "", pricing: "", fallback: "" }).map((intent, iIdx) => (
-                  <div
-                    key={iIdx}
-                    className="flex items-center justify-between px-2 py-1 bg-fuchsia-50/70 border border-fuchsia-200 text-fuchsia-950 rounded text-[10px] font-bold"
-                  >
-                    <span className="truncate uppercase">{intent}</span>
-                    <div
-                      onPointerDown={(e) => startConnecting(node.node_key, `intent_${intent}`, "intent", { intentKey: intent }, e)}
-                      className="w-3.5 h-3.5 rounded-full bg-fuchsia-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
-                      title={`Connect branch: ${intent}`}
-                    >
-                      <ChevronRight size={9} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* AI Smart Dynamic Response */}
-          {node.node_type === "ai_generate" && (
-            <div className="space-y-1.5">
-              <div className="p-2 bg-fuchsia-50 border border-fuchsia-200 text-fuchsia-900 rounded-lg text-[11px]">
-                <div className="font-bold flex items-center gap-1.5">
-                  <Cpu size={12} className="text-fuchsia-600" />
-                  <span>AI Smart Dynamic Response</span>
-                </div>
-                <p className="text-[10px] text-fuchsia-700 italic line-clamp-2 mt-0.5">
-                  "{node.config?.prompt || "Answer customer queries naturally"}"
-                </p>
-              </div>
-              <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
-                <span>Next Step</span>
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
-                  className="w-4 h-4 rounded-full bg-fuchsia-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
-                  title="Connect next step"
-                >
-                  <ChevronRight size={10} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* CRM Lookup Preview */}
-          {node.node_type === "crm_lookup" && (
-            <div className="space-y-1.5">
-              <div className="p-1.5 bg-sky-50 text-sky-900 border border-sky-200 rounded text-[11px] flex items-center gap-1.5">
-                <Database size={12} />
-                <span>Fetch: <b>{node.config?.lookup_type || "customer"}</b></span>
-              </div>
-              <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
-                <span>Continue</span>
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
-                  className="w-4 h-4 rounded-full bg-sky-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125"
-                  title="Connect next step"
-                >
-                  <ChevronRight size={10} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Collect Input Preview */}
-          {node.node_type === "collect_input" && (
-            <div className="space-y-1.5">
-              <p className="text-slate-600 text-[11px] italic bg-purple-50 p-1.5 rounded border border-purple-100">
-                "{node.config?.prompt_text || "Enter value:"}"
-              </p>
-              <div className="flex items-center justify-between text-[11px] text-purple-700">
-                <span>Save to: <code>vars.{node.config?.var_key || "input"}</code></span>
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
-                  className="w-4 h-4 rounded-full bg-purple-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125"
-                  title="Connect next step"
-                >
-                  <ChevronRight size={10} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Create CRM Lead Preview */}
-          {node.node_type === "create_lead" && (
-            <div className="space-y-1.5">
-              <div className="p-2 bg-blue-50 border border-blue-200 text-blue-900 rounded-lg text-[11px]">
-                <div className="font-bold flex items-center gap-1.5">
-                  <Database size={12} className="text-blue-600" />
-                  <span>Create CRM Lead</span>
-                </div>
-                <div className="text-[10px] text-blue-700 mt-1">
-                  Status: <span className="font-bold">{node.config?.status || "hot"}</span> • Source: {node.config?.source || "WhatsApp Bot"}
-                </div>
-              </div>
-              <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
-                <span>Next Step</span>
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
-                  className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
-                  title="Connect next step"
-                >
-                  <ChevronRight size={10} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Pacing Typing Delay */}
-          {node.node_type === "delay" && (
-            <div className="space-y-1.5">
-              <div className="p-2 bg-orange-50 border border-orange-200 text-orange-900 rounded-lg text-[11px] flex items-center gap-1.5">
-                <Clock size={12} className="text-orange-600" />
-                <span>Typing Delay: <b>{node.config?.delay_seconds || 2}s</b></span>
-              </div>
-              <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
-                <span>Next Step</span>
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
-                  className="w-4 h-4 rounded-full bg-orange-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
-                  title="Connect next step"
-                >
-                  <ChevronRight size={10} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* API Webhook */}
-          {node.node_type === "api_webhook" && (
-            <div className="space-y-1.5">
-              <div className="p-2 bg-violet-50 border border-violet-200 text-violet-900 rounded-lg text-[11px]">
-                <div className="font-bold flex items-center gap-1.5">
-                  <Globe size={12} className="text-violet-600" />
-                  <span>{node.config?.method || "POST"} Webhook</span>
-                </div>
-                <p className="text-[10px] text-violet-700 truncate font-mono mt-0.5">
-                  {node.config?.url || "https://api.example.com/hook"}
-                </p>
-              </div>
-              <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
-                <span>Next Step</span>
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
-                  className="w-4 h-4 rounded-full bg-violet-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
-                  title="Connect next step"
-                >
-                  <ChevronRight size={10} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Set Variable */}
-          {node.node_type === "set_variable" && (
-            <div className="space-y-1.5">
-              <div className="p-2 bg-slate-100 border border-slate-200 text-slate-800 rounded-lg text-[11px]">
-                <div className="font-bold flex items-center gap-1.5">
-                  <Settings2 size={12} className="text-slate-600" />
-                  <span>Set: <code>{node.config?.var_key || "custom_var"}</code></span>
-                </div>
-                <p className="text-[10px] text-slate-500 truncate mt-0.5 font-mono">
-                  = "{node.config?.var_value || ""}"
-                </p>
-              </div>
-              <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
-                <span>Next Step</span>
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
-                  className="w-4 h-4 rounded-full bg-slate-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
-                  title="Connect next step"
-                >
-                  <ChevronRight size={10} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Live Agent Handoff Preview */}
-          {node.node_type === "handoff" && (
-            <div className="p-2 bg-rose-50 border border-rose-200 text-rose-900 rounded-lg text-[11px] space-y-1">
-              <div className="flex items-center gap-1 font-bold">
-                <UserCheck size={12} />
-                <span>Transfers to Live Agent</span>
-              </div>
-              <p className="text-[10px] text-rose-700">Pauses automation & notifies CRM chat team.</p>
-            </div>
-          )}
-
-          {/* End Node Preview */}
-          {node.node_type === "end" && (
-            <div className="p-2 bg-slate-100 text-slate-700 rounded-lg text-center font-bold text-[11px]">
-              🛑 End of Conversation
-            </div>
-          )}
-
-          {/* Generic fallback for any other node with next_node_key */}
-          {!["interactive_menu", "send_buttons", "send_list", "send_message", "send_media", "send_template", "send_cta", "condition", "ai_intent", "ai_generate", "crm_lookup", "collect_input", "create_lead", "delay", "api_webhook", "set_variable", "handoff", "end", "start"].includes(node.node_type) && !node.node_type?.includes("trigger") && (
-            <div className="space-y-1.5">
-              <p className="text-slate-500 text-[10px] italic">Custom node configuration</p>
-              <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
-                <span>Next Step</span>
-                <div
-                  onPointerDown={(e) => startConnecting(node.node_key, "next", "next", {}, e)}
-                  className="w-4 h-4 rounded-full bg-slate-600 flex items-center justify-center text-white cursor-crosshair hover:scale-125 transition shrink-0"
-                  title="Connect next step"
-                >
-                  <ChevronRight size={10} />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  // ── Render Node Configuration Inspector (Right Panel) ───────────────────────
   const renderNodeInspector = () => {
     if (!selectedNode) {
       return (
@@ -3829,32 +2557,6 @@ export default function WhatsAppFlows() {
           <div ref={simChatBottomRef} />
         </div>
 
-        {/* Quick Test Chips Bar */}
-        <div className={`px-2 py-1.5 flex items-center gap-1.5 overflow-x-auto shrink-0 border-t ${
-          simDarkTheme ? "bg-[#1f2c34] border-[#2a3942]" : "bg-slate-100 border-slate-200"
-        }`}>
-          {["🍲 View All", "1", "2", "3", "📦 Order", "👤 Agent", "🔄 Restart"].map((chip, cIdx) => (
-            <button
-              key={cIdx}
-              type="button"
-              onClick={() => {
-                if (chip === "🔄 Restart") resetSimulation();
-                else if (chip === "🍲 View All") executeSimStep("View All Categories");
-                else if (chip === "📦 Order") executeSimStep("Place Order");
-                else if (chip === "👤 Agent") executeSimStep("Human Support");
-                else executeSimStep(chip);
-              }}
-              className={`px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap transition-colors shrink-0 shadow-xs ${
-                simDarkTheme
-                  ? "bg-[#2a3942] hover:bg-[#00a884] text-emerald-400 hover:text-white"
-                  : "bg-white hover:bg-emerald-600 text-emerald-800 hover:text-white border border-emerald-200"
-              }`}
-            >
-              {chip}
-            </button>
-          ))}
-        </div>
-
         {/* WhatsApp Bottom Chat Input Bar */}
         <form
           onSubmit={(e) => {
@@ -3938,848 +2640,29 @@ export default function WhatsAppFlows() {
 
   // ── Render Fullscreen Studio Workspace (Portal directly into document.body) ─
   if (showStudio) {
-    const wires = getWirePaths();
-
-    const filteredPaletteCategories = PALETTE_CATEGORIES.map(cat => ({
-      ...cat,
-      items: cat.items.filter(item =>
-        paletteFilter ? (item.label.toLowerCase().includes(paletteFilter.toLowerCase()) || item.desc.toLowerCase().includes(paletteFilter.toLowerCase())) : true
-      )
-    })).filter(cat => cat.items.length > 0);
-
     const studioContent = (
-      <div
-        id="madhura-visual-flow-studio"
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          // Never 100vw/100vh: both include the scrollbar gutter and the
-          // mobile URL bar, which pushes a horizontal/vertical scrollbar
-          // onto an overlay that is meant to be chrome-free.
-          width: "100%",
-          maxWidth: "100%",
-          height: "100dvh",
-          zIndex: 99999,
-          margin: 0,
-          padding: 0
-        }}
-        className="bg-slate-900 text-slate-100 flex flex-col font-sans select-none overflow-hidden"
-      >
-        {/* Top Studio Action Bar — responsive by design: the left group flexes
-            down to the smallest viewport (never overflows) and secondary actions
-            fold into the ⋯ menu instead of scrolling out of reach. */}
-        <div className="h-14 w-full min-w-0 bg-slate-950 border-b border-slate-800 px-2 sm:px-4 flex items-center justify-between shrink-0 z-30 relative gap-1.5 sm:gap-2">
-          {/* Left: Exit + Title + History + Validation + Blocks */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink min-w-0 flex-1">
-            <button
-              onClick={handleCloseStudio}
-              className="px-2 sm:px-2.5 py-1.5 text-slate-300 hover:text-white rounded-xl hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-semibold shrink-0"
-              title="Close Studio & Return to Flows"
-            >
-              <ChevronLeft size={16} />
-              <span className="hidden sm:inline">Exit</span>
-            </button>
-
-            <div className="flex items-center gap-2 border-l border-slate-800 pl-1.5 sm:pl-2.5 min-w-0 flex-1">
-              <div className="hidden sm:flex w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 items-center justify-center font-bold shrink-0">
-                <GitFork size={16} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <input
-                  type="text"
-                  value={flowName}
-                  onChange={(e) => { setFlowName(e.target.value); setDirty(true); }}
-                  placeholder="Flow Name..."
-                  className="bg-transparent text-xs sm:text-sm font-bold text-white outline-none hover:bg-slate-800/60 px-1.5 py-0.5 rounded focus:ring-1 focus:ring-emerald-500 w-full min-w-0 max-w-[96px] sm:max-w-[170px] lg:max-w-xs"
-                />
-                <div className="hidden md:flex items-center gap-1.5 text-[10px] text-slate-400 px-1.5">
-                  <span>Trigger:</span>
-                  <select
-                    value={flowTriggerType || "manual"}
-                    onChange={(e) => setFlowTriggerType(e.target.value)}
-                    className="bg-slate-800 text-emerald-400 font-bold rounded px-1.5 py-0.5 text-[10px] border border-slate-700 outline-none cursor-pointer"
-                  >
-                    <option value="manual">Manual / Given Number Only</option>
-                    <option value="keyword">Keyword Command Only</option>
-                  </select>
-                  <span>•</span>
-                  <span>{nodes.length} Nodes</span>
-                </div>
-              </div>
-            </div>
-
-            {/* History: undo / redo / tidy-up */}
-            <div className="hidden sm:flex items-center gap-0.5 shrink-0">
-              <button
-                type="button"
-                onClick={undo}
-                disabled={!undoStackRef.current.length}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition disabled:opacity-30 disabled:hover:bg-transparent"
-                title="Undo (Ctrl+Z)"
-              >
-                <Undo2 size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={redo}
-                disabled={!redoStackRef.current.length}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition disabled:opacity-30 disabled:hover:bg-transparent"
-                title="Redo (Ctrl+Shift+Z)"
-              >
-                <Redo2 size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={autoLayout}
-                className="hidden lg:flex px-2 py-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition items-center gap-1"
-                title="Auto-arrange every step (tidy up)"
-              >
-                <Wand2 size={13} />
-                <span>Tidy</span>
-              </button>
-            </div>
-
-            {/* Pre-flight validation */}
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setOpenMenu(m => (m === "issues" ? null : "issues"))}
-                className={`px-2 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
-                  flowIssues.length === 0
-                    ? "bg-emerald-950/50 text-emerald-300 border-emerald-800/70"
-                    : errorCount > 0
-                      ? "bg-rose-950/60 text-rose-300 border-rose-800/70"
-                      : "bg-amber-950/60 text-amber-300 border-amber-800/70"
-                }`}
-                title="Run a pre-flight check on this workflow (broken wires, dead ends, unreachable steps)"
-              >
-                <AlertCircle size={13} />
-                <span className="hidden sm:inline">
-                  {flowIssues.length === 0 ? "Valid" : `${flowIssues.length} Issue${flowIssues.length > 1 ? "s" : ""}`}
-                </span>
-              </button>
-
-              {openMenu === "issues" && (
-                <div className="absolute left-0 sm:left-auto sm:right-0 mt-1.5 w-[19rem] max-w-[92vw] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 animate-in fade-in duration-100">
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800">
-                    <span className="text-[11px] font-extrabold text-white uppercase tracking-wider">Pre-flight Check</span>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        flowIssues.length === 0
-                          ? "bg-emerald-500/15 text-emerald-300"
-                          : errorCount > 0
-                            ? "bg-rose-500/15 text-rose-300"
-                            : "bg-amber-500/15 text-amber-300"
-                      }`}
-                    >
-                      {flowIssues.length === 0 ? "All good" : `${errorCount} blocking · ${flowIssues.length - errorCount} warnings`}
-                    </span>
-                  </div>
-                  <div className="max-h-72 overflow-y-auto wa-custom-scrollbar p-1.5 space-y-1">
-                    {flowIssues.length === 0 ? (
-                      <p className="text-[11px] text-emerald-300 px-2 py-3 leading-relaxed">
-                        ✓ Every step is wired up and reachable from the entry node — safe to publish.
-                      </p>
-                    ) : (
-                      flowIssues.map((issue, idx) => (
-                        <button
-                          key={`${issue.nodeKey}-${idx}`}
-                          type="button"
-                          onClick={() => focusIssue(issue)}
-                          className="w-full text-left p-2 rounded-xl hover:bg-slate-800 flex items-start gap-2 transition"
-                          title="Jump to this step"
-                        >
-                          <AlertCircle
-                            size={13}
-                            className={`shrink-0 mt-0.5 ${issue.severity === "error" ? "text-rose-400" : "text-amber-400"}`}
-                          />
-                          <div className="min-w-0">
-                            <div className="text-[11px] text-slate-200 leading-snug">{issue.text}</div>
-                            {issue.nodeKey && (
-                              <div className="text-[10px] font-mono text-slate-500 truncate">{issue.nodeKey}</div>
-                            )}
-                          </div>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={() => setShowPalette(p => !p)}
-              className={`hidden md:flex px-2.5 py-1.5 rounded-xl text-xs font-bold border transition items-center gap-1.5 shrink-0 ${
-                showPalette
-                  ? "bg-slate-800 text-white border-slate-700"
-                  : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
-              }`}
-              title="Toggle Component Palette"
-            >
-              <Grid size={13} className={showPalette ? "text-emerald-400" : ""} />
-              <span className="hidden lg:inline">Blocks</span>
-            </button>
-          </div>
-
-          {/* Center: Canvas View Controls Toolbar */}
-          <div className="hidden lg:flex items-center gap-1 bg-slate-900 border border-slate-800 p-1 rounded-xl shrink-0">
-            <button
-              onClick={() => setZoom(z => Math.max(0.4, Number((z - 0.1).toFixed(2))))}
-              className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition"
-              title="Zoom Out"
-            >
-              <ZoomOut size={14} />
-            </button>
-            <span className="text-[11px] font-mono font-bold px-1.5 text-slate-300 min-w-[42px] text-center">
-              {Math.round(zoom * 100)}%
-            </span>
-            <button
-              onClick={() => setZoom(z => Math.min(1.8, Number((z + 0.1).toFixed(2))))}
-              className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition"
-              title="Zoom In"
-            >
-              <ZoomIn size={14} />
-            </button>
-            <div className="h-3.5 w-px bg-slate-800 mx-0.5" />
-            <button
-              onClick={() => fitToScreen()}
-              className="px-2 py-1 text-[10px] font-bold text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 rounded flex items-center gap-1 transition"
-              title="Auto-Fit All Flow Nodes to Screen"
-            >
-              <Maximize2 size={11} />
-              <span>Fit Screen</span>
-            </button>
-            <button
-              onClick={() => { setZoom(1); setPan({ x: 80, y: 80 }); }}
-              className="px-2 py-1 text-[10px] font-bold text-slate-400 hover:text-white rounded hover:bg-slate-800 transition"
-              title="Reset View"
-            >
-              Reset
-            </button>
-          </div>
-
-          {/* Right: Actions (Templates, Simulator, Inspector, Save, Publish) */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Quick Template Switcher — click-driven so it also works on touch */}
-            <div className={`relative ${openMenu === "templates" ? "block" : "hidden lg:block"}`}>
-              <button
-                type="button"
-                onClick={() => setOpenMenu(m => (m === "templates" ? null : "templates"))}
-                className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1.5 transition"
-              >
-                <Sparkles size={13} className="text-amber-400" />
-                <span className="hidden sm:inline">Templates</span>
-                <ChevronDown size={11} className={`transition-transform ${openMenu === "templates" ? "rotate-180" : ""}`} />
-              </button>
-              <div className="absolute right-0 mt-1.5 w-64 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in duration-100">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpenMenu(null);
-                    setFlowName("Food & Products Flow Bot");
-                    setFlowDesc("Interactive flow bot: Buttons -> View All Categories -> Products -> Orders & Inquiries");
-                    setFlowTriggerType("manual");
-                    setFlowKeywords("menu");
-                    const starter = getFoodBotStarterNodes();
-                    snapshotNodes();
-                    setNodes(starter);
-                    setSelectedNodeKey("welcome_menu");
-                    resetSimulation();
-                    setTimeout(() => fitToScreen(starter), 150);
-                  }}
-                  className="w-full text-left p-2.5 rounded-xl hover:bg-emerald-500/20 text-xs font-semibold text-white flex items-start gap-2.5 transition"
-                >
-                  <span className="text-lg">🍲</span>
-                  <div>
-                    <div className="font-bold text-emerald-400">Food &amp; Products Flow</div>
-                    <div className="text-[10px] text-slate-400">Buttons &rarr; View All Categories &rarr; Products &rarr; Order</div>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpenMenu(null);
-                    setFlowName("Interactive Banking & Account Services Bot");
-                    setFlowDesc("Multi-section interactive banking menu");
-                    setFlowTriggerType("manual");
-                    setFlowKeywords("menu, banking");
-                    const starter = getDefaultStarterNodes();
-                    snapshotNodes();
-                    setNodes(starter);
-                    setSelectedNodeKey("banking_menu");
-                    resetSimulation();
-                    setTimeout(() => fitToScreen(starter), 150);
-                  }}
-                  className="w-full text-left p-2.5 rounded-xl hover:bg-slate-800 text-xs font-semibold text-white flex items-start gap-2.5 transition mt-1"
-                >
-                  <span className="text-lg">🏦</span>
-                  <div>
-                    <div className="font-bold text-slate-200">Banking &amp; Finance Bot</div>
-                    <div className="text-[10px] text-slate-400">Multi-section balance &amp; loan menu</div>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {/* Test on real WhatsApp Phone */}
-            <button
-              onClick={() => {
-                const phone = prompt("Enter customer phone number to test-send WhatsApp menu (e.g. 919876543210):");
-                if (phone) triggerFlowForPhone(phone);
-              }}
-              className="hidden md:flex px-2.5 py-1.5 rounded-xl text-xs font-bold bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/60 items-center gap-1.5 transition"
-              title="Send flow menu directly to WhatsApp phone"
-            >
-              <Send size={13} />
-              <span className="hidden md:inline">Test Phone</span>
-            </button>
-
-            {/* WhatsApp Phone Simulator Toggle */}
-            <button
-              onClick={togglePreview}
-              className={`hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold border transition items-center gap-1.5 ${
-                showRightPanel && activeInspectorTab === "preview"
-                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm ring-1 ring-emerald-500/30"
-                  : "bg-slate-800 text-slate-300 border-slate-700 hover:text-white"
-              }`}
-              title="Toggle WhatsApp Phone Simulator"
-            >
-              <Smartphone size={14} className={showRightPanel && activeInspectorTab === "preview" ? "text-emerald-400 animate-pulse" : "text-slate-400"} />
-              <span className="hidden sm:inline">WhatsApp Preview</span>
-            </button>
-
-            {/* Node Inspector Toggle */}
-            <button
-              onClick={toggleInspector}
-              className={`hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold border transition items-center gap-1.5 ${
-                showRightPanel && activeInspectorTab === "config"
-                  ? "bg-slate-700 text-white border-slate-600 shadow-sm"
-                  : "bg-slate-800 text-slate-300 border-slate-700 hover:text-white"
-              }`}
-              title="Toggle Node Inspector"
-            >
-              <Sliders size={13} />
-              <span className="hidden sm:inline">Inspector</span>
-            </button>
-
-            {editingFlowId && (
-              <button
-                onClick={() => openVersions(editingFlowId)}
-                className="hidden lg:flex px-2.5 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 items-center gap-1.5 transition"
-                title="Version History"
-              >
-                <Layers size={13} />
-                <span className="hidden lg:inline">Versions</span>
-              </button>
-            )}
-
-            {/* Unsaved-changes indicator */}
-            <span
-              className={`hidden md:flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border shrink-0 transition-colors ${
-                dirty
-                  ? "bg-amber-500/15 text-amber-300 border-amber-600/50"
-                  : "bg-slate-800 text-slate-400 border-slate-700"
-              }`}
-              title={dirty ? "Unsaved canvas changes — Ctrl+S to save" : "All changes saved"}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${dirty ? "bg-amber-400 animate-pulse" : "bg-emerald-400"}`} />
-              {dirty ? "Unsaved" : "Saved"}
-            </span>
-
-            <button
-              onClick={() => handleSaveFlow(false)}
-              disabled={saving}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1.5 transition"
-            >
-              {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-              <span className="hidden sm:inline">Save Draft</span>
-            </button>
-
-            <button
-              onClick={() => handleSaveFlow(true)}
-              disabled={saving}
-              className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 transition hover:scale-105"
-            >
-              <Play size={13} />
-              <span className="hidden sm:inline">Publish Live</span>
-              <span className="sm:hidden">Publish</span>
-            </button>
-
-            {/* Overflow menu: everything hidden at this width, one tap away */}
-            <div className="relative lg:hidden">
-              <button
-                type="button"
-                onClick={() => setOpenMenu(m => (m === "more" ? null : "more"))}
-                className="px-2 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1 transition"
-                title="More actions"
-                aria-label="More actions"
-              >
-                <MoreHorizontal size={15} />
-              </button>
-
-              {openMenu === "more" && (
-                <div className="absolute right-0 top-full mt-1.5 w-60 max-w-[86vw] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 p-1.5 animate-in fade-in duration-100">
-                  <div className="flex items-center gap-1 px-1 pb-1.5 mb-1 border-b border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => { setOpenMenu(null); undo(); }}
-                      disabled={!undoStackRef.current.length}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-bold text-slate-300 hover:bg-slate-800 transition disabled:opacity-30"
-                    >
-                      <Undo2 size={13} /> Undo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setOpenMenu(null); redo(); }}
-                      disabled={!redoStackRef.current.length}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-bold text-slate-300 hover:bg-slate-800 transition disabled:opacity-30"
-                    >
-                      <Redo2 size={13} /> Redo
-                    </button>
-                  </div>
-
-                  {[
-                    { icon: <Sparkles size={13} className="text-amber-400" />, label: "Quick Templates", action: () => setOpenMenu("templates") },
-                    { icon: <Grid size={13} className="text-slate-400" />, label: showPalette ? "Hide Blocks" : "Blocks Palette", action: () => { setShowPalette(p => !p); setOpenMenu(null); } },
-                    { icon: <Smartphone size={13} className="text-slate-400" />, label: "WhatsApp Preview", action: () => { togglePreview(); setOpenMenu(null); } },
-                    { icon: <Sliders size={13} className="text-slate-400" />, label: "Node Inspector", action: () => { toggleInspector(); setOpenMenu(null); } },
-                    { icon: <Send size={13} className="text-cyan-400" />, label: "Test on Phone", action: () => {
-                      setOpenMenu(null);
-                      const phone = prompt("Enter customer phone number to test-send WhatsApp menu (e.g. 919876543210):");
-                      if (phone) triggerFlowForPhone(phone);
-                    } },
-                    ...(editingFlowId ? [{ icon: <Layers size={13} className="text-slate-400" />, label: "Version History", action: () => { setOpenMenu(null); openVersions(editingFlowId); } }] : []),
-                    { icon: <Wand2 size={13} className="text-slate-400" />, label: "Tidy Layout", action: () => { setOpenMenu(null); autoLayout(); } },
-                    { icon: <Maximize2 size={13} className="text-slate-400" />, label: "Fit to Screen", action: () => { setOpenMenu(null); fitToScreen(); } },
-                    { icon: <RotateCcw size={13} className="text-slate-400" />, label: "Reset View", action: () => { setOpenMenu(null); setZoom(1); setPan({ x: 80, y: 80 }); } },
-                  ].map(item => (
-                    <button
-                      key={item.label}
-                      type="button"
-                      onClick={item.action}
-                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[11px] font-semibold text-slate-200 hover:bg-slate-800 transition text-left"
-                    >
-                      {item.icon}
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Backdrop: click-away close for toolbar dropdowns (sits under the
-            toolbar itself, so the open menu stays clickable) */}
-        {openMenu && (
-          <button
-            type="button"
-            aria-label="Close menu"
-            onClick={() => setOpenMenu(null)}
-            className="fixed inset-0 z-20 cursor-default"
-          />
-        )}
-
-        {/* Studio Workspace Layout */}
-        <div className="flex-1 flex w-full min-w-0 min-h-0 relative overflow-hidden">
-          {/* Mobile scrim: closes the palette/inspector drawers on tap */}
-          {showPalette && (
-            <button
-              type="button"
-              aria-label="Close component palette"
-              onClick={() => setShowPalette(false)}
-              className="lg:hidden absolute inset-0 z-10 bg-slate-950/70 backdrop-blur-[2px]"
-            />
-          )}
-
-          {/* Left Component Palette Sidebar (Collapsible) */}
-          {showPalette && (
-            <div className="absolute lg:static inset-y-0 left-0 z-20 w-[min(18rem,86vw)] lg:w-72 max-w-full bg-slate-950 border-r border-slate-800 flex flex-col h-full min-h-0 shrink-0 select-none shadow-2xl lg:shadow-none transition-all duration-150">
-              <div className="p-3 border-b border-slate-800 flex items-center justify-between gap-2 shrink-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[11px] font-extrabold text-slate-300 uppercase tracking-wider truncate">
-                    Component Palette
-                  </span>
-                  <span className="text-[9px] px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-md font-bold shrink-0">
-                    Click to add
-                  </span>
-                </div>
-                <button
-                  onClick={() => setShowPalette(false)}
-                  className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
-                  title="Collapse Palette"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-              </div>
-
-              {/* Palette Search Input */}
-              <div className="p-2 border-b border-slate-800/80">
-                <div className="relative">
-                  <Search size={12} className="absolute left-2.5 top-2.5 text-slate-500" />
-                  <input
-                    type="text"
-                    value={paletteFilter}
-                    onChange={(e) => setPaletteFilter(e.target.value)}
-                    placeholder="Search blocks..."
-                    className="w-full pl-7 pr-2 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 outline-none focus:border-emerald-500"
-                  />
-                  {paletteFilter && (
-                    <button
-                      onClick={() => setPaletteFilter("")}
-                      className="absolute right-2 top-2 text-slate-500 hover:text-white text-xs"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2 wa-custom-scrollbar">
-                {filteredPaletteCategories.map(cat => (
-                  <div key={cat.id} className="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-900/40">
-                    <button
-                      type="button"
-                      onClick={() => toggleCategory(cat.id)}
-                      className="w-full px-3 py-2 flex items-center justify-between text-xs font-bold text-slate-300 hover:bg-slate-800/60 transition"
-                    >
-                      <span className="flex items-center gap-2">
-                        <cat.icon size={13} className={cat.color} />
-                        {cat.name}
-                      </span>
-                      {openCategories[cat.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    </button>
-
-                    {(openCategories[cat.id] || paletteFilter) && (
-                      <div className="p-1.5 grid grid-cols-1 gap-1 border-t border-slate-800/60 bg-slate-950/60">
-                        {cat.items.map((item, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => addNodeFromPalette(item)}
-                            className="w-full text-left p-2 rounded-lg hover:bg-slate-800/80 border border-transparent hover:border-slate-700 transition flex items-center gap-2.5 group"
-                          >
-                            <span className="text-base group-hover:scale-110 transition-transform">{item.icon}</span>
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs font-semibold text-slate-200 truncate">{item.label}</div>
-                              <div className="text-[10px] text-slate-500 truncate">{item.desc}</div>
-                            </div>
-                            <Plus size={12} className="text-slate-500 group-hover:text-emerald-400 opacity-0 group-hover:opacity-100 transition" />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ── 2D Canvas Graph Area ───────────────────────────────── */}
-          <div
-            ref={canvasRef}
-            onPointerDown={handleCanvasMouseDown}
-            onPointerMove={handleCanvasMouseMove}
-            onPointerUp={handleCanvasMouseUp}
-            onPointerCancel={handleCanvasMouseUp}
-            onPointerLeave={handleCanvasMouseUp}
-            className="flex-1 min-w-0 h-full bg-[#090d16] relative overflow-hidden cursor-crosshair canvas-grid touch-none select-none"
-            style={{
-              backgroundImage: "radial-gradient(#1e293b 1.5px, transparent 1.5px)",
-              backgroundSize: `${24 * zoom}px ${24 * zoom}px`
-            }}
-          >
-            {/* Floating Re-open Palette Button when Palette is collapsed */}
-            {!showPalette && (
-              <button
-                onClick={() => setShowPalette(true)}
-                className="absolute top-4 left-4 z-20 px-3 py-2 bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-white text-xs font-bold rounded-xl shadow-xl flex items-center gap-2 backdrop-blur transition hover:scale-105"
-                title="Open Component Palette"
-              >
-                <Plus size={14} className="text-emerald-400" />
-                <span>Add Blocks</span>
-              </button>
-            )}
-
-            {/* SVG Connector Wires Layer */}
-            <svg
-              className="absolute inset-0 w-full h-full pointer-events-none z-0"
-              style={{
-                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                transformOrigin: "0 0"
-              }}
-            >
-              <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#10B981" />
-                </marker>
-                <marker id="arrow-active" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#3B82F6" />
-                </marker>
-              </defs>
-
-              {/* Render Existing Edges */}
-              {wires.map(w => {
-                const midX = (w.startX + w.endX) / 2;
-                const midY = (w.startY + w.endY) / 2;
-                return (
-                  <g key={w.id} className="group pointer-events-auto">
-                    {/* Wider hit path for easy hover */}
-                    <path
-                      d={w.pathD}
-                      fill="none"
-                      stroke="transparent"
-                      strokeWidth={14}
-                      className="cursor-pointer"
-                    />
-                    <path
-                      d={w.pathD}
-                      fill="none"
-                      stroke={w.color}
-                      strokeWidth={2.5}
-                      markerEnd="url(#arrow)"
-                      className="transition-all group-hover:stroke-emerald-400 group-hover:stroke-[3.5]"
-                    />
-                    {/* Wire Label & Delete Click Pill */}
-                    <g
-                      transform={`translate(${midX}, ${midY})`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        disconnectWire(w);
-                      }}
-                      className="cursor-pointer group/pill"
-                    >
-                      <rect
-                        x={-34}
-                        y={-10}
-                        width={68}
-                        height={20}
-                        rx={10}
-                        fill="#0f172a"
-                        stroke={w.color}
-                        strokeWidth={1.5}
-                        className="transition-colors group-hover/pill:fill-rose-950 group-hover/pill:stroke-rose-500 shadow-md"
-                      />
-                      <text
-                        x={-4}
-                        y={3}
-                        fill="#e2e8f0"
-                        fontSize="9"
-                        fontWeight="bold"
-                        textAnchor="middle"
-                        className="group-hover/pill:fill-rose-200 select-none pointer-events-none"
-                      >
-                        {w.label.slice(0, 8)}
-                      </text>
-                      <text
-                        x={22}
-                        y={3.5}
-                        fill="#94a3b8"
-                        fontSize="10"
-                        fontWeight="bold"
-                        textAnchor="middle"
-                        className="group-hover/pill:fill-rose-400 select-none pointer-events-none"
-                      >
-                        ✕
-                      </text>
-                    </g>
-                  </g>
-                );
-              })}
-
-              {/* Render Dynamic Connecting Wire (Smooth Bezier curve) */}
-              {connectingFrom && (
-                <g>
-                  <path
-                    d={`M ${connectingFrom.x || 0} ${connectingFrom.y || 0} C ${(connectingFrom.x || 0) + Math.max(50, Math.abs(connectingMousePos.x - (connectingFrom.x || 0)) * 0.55)} ${connectingFrom.y || 0}, ${connectingMousePos.x - Math.max(50, Math.abs(connectingMousePos.x - (connectingFrom.x || 0)) * 0.55)} ${connectingMousePos.y}, ${connectingMousePos.x} ${connectingMousePos.y}`}
-                    fill="none"
-                    stroke="#10B981"
-                    strokeWidth={3}
-                    strokeDasharray="6,4"
-                    markerEnd="url(#arrow-active)"
-                    className="animate-pulse"
-                  />
-                  <circle
-                    cx={connectingMousePos.x}
-                    cy={connectingMousePos.y}
-                    r={5}
-                    fill="#10B981"
-                  />
-                </g>
-              )}
-            </svg>
-
-            {/* Nodes Render Container */}
-            <div
-              style={{
-                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                transformOrigin: "0 0"
-              }}
-              className="absolute inset-0 pointer-events-none"
-            >
-              <div className="pointer-events-auto">
-                {nodes.map(node => renderCanvasNode(node))}
-              </div>
-            </div>
-
-            {/* Floating Bottom Center Canvas Quick Toolbar */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 sm:gap-2 bg-slate-900/90 border border-slate-800/80 backdrop-blur-md px-2.5 sm:px-3.5 py-2 rounded-2xl shadow-2xl text-xs text-slate-300 select-none">
-              <button
-                onClick={undo}
-                disabled={!undoStackRef.current.length}
-                className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition disabled:opacity-30 disabled:hover:bg-transparent"
-                title="Undo (Ctrl+Z)"
-              >
-                <Undo2 size={13} />
-              </button>
-              <button
-                onClick={redo}
-                disabled={!redoStackRef.current.length}
-                className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition disabled:opacity-30 disabled:hover:bg-transparent"
-                title="Redo (Ctrl+Shift+Z)"
-              >
-                <Redo2 size={13} />
-              </button>
-              <button
-                onClick={autoLayout}
-                className="hidden sm:flex px-2 py-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition items-center gap-1"
-                title="Auto-arrange every step (tidy up)"
-              >
-                <Wand2 size={13} />
-                <span className="hidden md:inline">Tidy</span>
-              </button>
-              <div className="h-3 w-px bg-slate-700" />
-              <button
-                onClick={() => fitToScreen()}
-                className="px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 font-bold rounded-lg transition flex items-center gap-1.5"
-                title="Fit all flow nodes to screen view"
-              >
-                <Maximize2 size={13} />
-                <span>Fit View</span>
-              </button>
-              <div className="h-3 w-px bg-slate-700" />
-              <button
-                onClick={() => setZoom(z => Math.max(0.4, Number((z - 0.1).toFixed(2))))}
-                className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition"
-                title="Zoom Out"
-              >
-                <ZoomOut size={13} />
-              </button>
-              <span className="font-mono text-[11px] font-bold text-slate-200 min-w-[36px] text-center">
-                {Math.round(zoom * 100)}%
-              </span>
-              <button
-                onClick={() => setZoom(z => Math.min(1.8, Number((z + 0.1).toFixed(2))))}
-                className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition"
-                title="Zoom In"
-              >
-                <ZoomIn size={13} />
-              </button>
-              <div className="h-3 w-px bg-slate-700" />
-              <span className="text-[10px] text-slate-400 hidden sm:inline">
-                Drag canvas to pan • Click node to edit • Drag dots to wire
-              </span>
-            </div>
-          </div>
-
-          {/* Right Node Inspector / WhatsApp Simulator Panel (Dockable &Collapsible) */}
-          {showRightPanel && (
-            <div className="absolute xl:static inset-y-0 right-0 z-30 w-full sm:w-[26rem] sm:max-w-full xl:w-[420px] max-w-full h-full min-h-0 bg-slate-950 border-l border-slate-800 flex flex-col shrink-0 select-none shadow-2xl animate-in slide-in-from-right duration-150">
-              {/* Inspector Top Tabs + Close ✕ */}
-              <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/80 p-1.5">
-                <div className="flex items-center gap-1 flex-1">
-                  <button
-                    onClick={() => setActiveInspectorTab("config")}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
-                      activeInspectorTab === "config" ? "bg-slate-800 text-white shadow" : "text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    <Sliders size={13} />
-                    <span>Inspector</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveInspectorTab("preview")}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
-                      activeInspectorTab === "preview" ? "bg-emerald-600/30 text-emerald-300 shadow" : "text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    <Smartphone size={13} />
-                    <span>Preview</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveInspectorTab("audit")}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
-                      activeInspectorTab === "audit" ? "bg-slate-800 text-white shadow" : "text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    <Terminal size={13} />
-                    <span>Logs ({simLogs.length})</span>
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => setShowRightPanel(false)}
-                  className="ml-2 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition shrink-0"
-                  title="Close Inspector / Simulator Panel"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              {/* Tab Contents */}
-              <div className="flex-1 overflow-y-auto min-h-0 bg-white text-slate-900 w-full min-w-0 wa-custom-scrollbar">
-                {activeInspectorTab === "config" && renderNodeInspector()}
-
-                {activeInspectorTab === "preview" && (
-                  <div className="p-3 sm:p-4 flex items-center justify-center bg-slate-900 min-h-full">
-                    {renderWhatsAppPhoneSimulator()}
-                  </div>
-                )}
-
-                {activeInspectorTab === "audit" && (
-                  <div className="p-4 space-y-4 bg-slate-900 text-slate-100 min-h-full font-mono text-xs">
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                      <span className="font-bold text-emerald-400">⚡ Execution State</span>
-                      <button onClick={resetSimulation} className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1">
-                        <RotateCcw size={10} /> Reset
-                      </button>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="text-[11px] text-slate-400">Current Node: <b className="text-white">{simCurrentNode || "start"}</b></div>
-                      <div className="text-[11px] text-slate-400">Status: <b className={simEnded ? "text-rose-400" : "text-emerald-400"}>{simEnded ? "Completed" : "Waiting for reply"}</b></div>
-                    </div>
-
-                    {/* Variables Snapshot */}
-                    <div className="space-y-1">
-                      <span className="text-[11px] font-bold text-slate-300">Variables Snapshot:</span>
-                      <pre className="p-2 bg-slate-950 rounded-lg text-[10px] text-emerald-300 overflow-x-auto max-h-40">
-                        {JSON.stringify(simVars, null, 2)}
-                      </pre>
-                    </div>
-
-                    {/* Execution Event Log */}
-                    <div className="space-y-1">
-                      <span className="text-[11px] font-bold text-slate-300">Event Trace:</span>
-                      <div className="space-y-1 max-h-48 overflow-y-auto">
-                        {simLogs.map((log, idx) => (
-                          <div key={idx} className="p-1.5 bg-slate-950/80 rounded text-[10px] text-slate-300 border-l-2 border-emerald-500">
-                            {log}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── FLOW VERSIONS MODAL ────────────────────────────────────── */}
+      <div id="madhura-visual-flow-studio" className="flow-studio-shell" style={{ position: "fixed", inset: 0, width: "100%", height: "100dvh", zIndex: 99999 }}>
+        <WAFlowEditor
+          nodes={nodes} categories={PALETTE_CATEGORIES} selectedKey={selectedNodeKey}
+          onSelect={setSelectedNodeKey} onInspect={setSelectedNodeKey}
+          onChange={(next, typing = false) => { if (typing) snapshotNodesThrottled(); else snapshotNodes(); setNodes(next); setDirty(true); }}
+          onTransientChange={setNodes} onCommit={recordHistory} onAdd={addNodeFromPalette}
+          canvasRef={canvasRef} zoom={zoom} pan={pan} setZoom={setZoom} setPan={setPan}
+          onFit={fitToScreen} onLayout={autoLayout} onUndo={undo} onRedo={redo}
+          canUndo={undoStackRef.current.length > 0} canRedo={redoStackRef.current.length > 0}
+          name={flowName} setName={value => { setFlowName(value); setDirty(true); }} dirty={dirty} saving={saving} loading={studioLoading}
+          onSave={() => handleSaveFlow(false)} onPublish={() => handleSaveFlow(true)} onExit={handleCloseStudio}
+          issues={flowIssues} entry={entryNodeKey} panelRequest={studioPanelRequest}
+          settings={<WAFlowOutline view="settings" nodes={nodes} issues={flowIssues} selectedKey={selectedNodeKey} name={flowName} description={flowDesc} trigger={flowTriggerType} keywords={flowKeywords} entry={entryNodeKey} onSelect={key => setSelectedNodeKey(key)} onChange={(key, value) => { ({ name: setFlowName, description: setFlowDesc, trigger: setFlowTriggerType, keywords: setFlowKeywords, entry: setFlowEntryNode })[key](value); setDirty(true); }} />}
+          inspector={<div className="flow-studio-inspector-config">{renderNodeInspector()}</div>}
+          onStartPreview={() => resetSimulation()}
+          preview={<div>{simError && <p role="alert" className="wa-form-error mb-3">{simError}</p>}{renderWhatsAppPhoneSimulator()}</div>}
+          logs={<div className="space-y-3 text-xs">{simLogs.length ? simLogs.map((log, index) => <pre key={index} className="whitespace-pre-wrap break-words p-3 bg-slate-50 rounded border">{typeof log === "string" ? log : JSON.stringify(log, null, 2)}</pre>) : <p className="p-4 text-slate-500">No simulation events yet. Open Preview and send a message to trace the conversation.</p>}</div>}
+          notice={saveNotice} onDismissNotice={() => setSaveNotice(null)} loadError={studioLoadError} onRetry={() => openStudio({ id: editingFlowId })}
+          onTest={() => openTestDialog()} flowId={editingFlowId} onVersions={() => openVersions(editingFlowId)}
+          metadata={{ description: flowDesc, trigger_type: flowTriggerType, trigger_config: { keywords: flowKeywords.split(",").map(value => value.trim()).filter(Boolean) } }}
+          onImportMetadata={value => { setFlowName(value.name || "Imported flow"); setFlowDesc(value.description || ""); setFlowTriggerType(["manual", "keyword", "all_inbound", "first_inbound"].includes(value.trigger_type) ? value.trigger_type : "manual"); setFlowKeywords((value.trigger_config?.keywords || []).join(", ")); setFlowEntryNode(value.entry_node_key || value.nodes[0].node_key); setDirty(true); }}
+        />
         {showVersionsModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowVersionsModal(false)}>
             <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-4 sm:p-6 space-y-4 shadow-2xl text-slate-100 max-h-[92dvh] overflow-y-auto wa-custom-scrollbar" onClick={e => e.stopPropagation()}>
@@ -4844,6 +2727,21 @@ export default function WhatsAppFlows() {
             </div>
           </div>
         )}
+        <FlowTestDialog
+          request={testRequest}
+          flowName={flowName}
+          setFlowName={(value) => { setFlowName(value); setDirty(true); }}
+          phone={testPhone}
+          setPhone={setTestPhone}
+          sending={testSending}
+          savingDraft={saving}
+          error={testError}
+          sent={testSent}
+          hasUnsavedChanges={Boolean(editingFlowId && dirty)}
+          onClose={() => setTestRequest(null)}
+          onSubmit={triggerFlowForPhone}
+          onSaveDraft={saveDraftForTest}
+        />
       </div>
     );
 
@@ -4857,41 +2755,27 @@ export default function WhatsAppFlows() {
   );
 
   return (
-    <div className="hl-page bg-slate-50 font-sans">      <WAStorageAndSenders />
+    <div className="hl-page wa-flow-list">
+      <WAWorkspaceGuide section="flows" />
+      <WAStorageAndSenders />
 
-      <div className="max-w-7xl mx-auto w-full min-w-0 px-3 sm:px-4 lg:px-6 py-5 sm:py-8 space-y-6">
-        {/* Header Hero Banner */}
-        <div className="bg-gradient-to-r from-[#0b141a] via-[#111b21] to-[#005c4b] rounded-3xl p-5 sm:p-6 lg:p-8 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-5 lg:gap-6">
-          <div className="space-y-2 max-w-2xl relative z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/20 text-emerald-300 text-xs font-extrabold rounded-full border border-emerald-500/30">
-              <Sparkles size={14} /> WhatsApp Visual Conversational Platform
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Interactive Bot Flows &amp; State Engine
-            </h1>
-            <p className="text-xs sm:text-sm text-emerald-100/80 leading-relaxed">
-              Design multi-section interactive WhatsApp menus with structured buttons, dynamic CRM lookups, API webhooks, condition branches, and real-time smartphone simulators.
-            </p>
+      <div className="w-full min-w-0 space-y-4">
+        <header className="hl-commandbar flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="hl-title">Conversation flows</h1>
+            <p className="hl-subtitle">Build, validate, and monitor WhatsApp conversations.</p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-3 relative z-10">
-            <button
-              onClick={handleSeedFlows}
-              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-2xl backdrop-blur-sm border border-white/10 flex items-center gap-2 transition"
-            >
-              <Database size={15} />
-              <span>Load Starter Templates</span>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button onClick={handleSeedFlows} className="hl-btn-secondary">
+              <Database size={15} /> Load templates
             </button>
-            <button
-              onClick={() => openStudio(null)}
-              className="px-5 py-2.5 bg-[#25D366] hover:bg-[#20bd5a] text-slate-900 text-xs font-extrabold rounded-2xl shadow-lg shadow-emerald-500/30 flex items-center gap-2 transition hover:scale-105"
-            >
-              <Plus size={16} />
-              <span>Create Visual Flow</span>
+            <button onClick={() => navigate("/whatsapp/flows/create")} className="hl-btn-primary">
+              <Plus size={16} /> Create flow
             </button>
           </div>
-        </div>
+        </header>
 
+        {loadError && <div role="alert" className="wa-flow-load-error"><AlertCircle size={17} /><span>{loadError}</span><button type="button" className="hl-btn-secondary" disabled={loading} onClick={fetchFlows}>Retry</button></div>}
         {/* View Tabs & Search Toolbar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-1 sm:gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-full sm:w-auto overflow-x-auto wa-no-scrollbar">
@@ -4945,7 +2829,7 @@ export default function WhatsAppFlows() {
                 <div>
                   <h3 className="text-base font-bold text-slate-900">No Chatbot Flows Configured</h3>
                   <p className="text-xs text-slate-500 mt-1">
-                    Create a new flow or load our preconfigured Banking &amp; Financial bot templates to get started.
+                    Create a flow or load a starter template to open it in the visual builder.
                   </p>
                 </div>
                 <div className="flex justify-center gap-2 pt-2">
@@ -4956,7 +2840,7 @@ export default function WhatsAppFlows() {
                     Load Templates
                   </button>
                   <button
-                    onClick={() => openStudio(null)}
+                    onClick={() => navigate("/whatsapp/flows/create")}
                     className="px-4 py-2 bg-[#25D366] text-slate-900 rounded-xl text-xs font-bold hover:bg-[#20bd5a]"
                   >
                     Create Flow
@@ -4992,7 +2876,7 @@ export default function WhatsAppFlows() {
                             {flow.name}
                           </h3>
                           <p className="text-xs text-slate-500 line-clamp-2 mt-1">
-                            {flow.description || "Interactive conversational flow with state machine and CRM lookups."}
+                            {flow.description || "No description added for this flow."}
                           </p>
                         </div>
                       </div>
@@ -5009,8 +2893,7 @@ export default function WhatsAppFlows() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              const phone = prompt(`Enter customer phone number to send "${flow.name}" to (e.g. 919876543210):`);
-                              if (phone) triggerFlowForPhone(phone, flow.id);
+                              openTestDialog(flow.id, flow.name);
                             }}
                             className="p-2 text-cyan-600 hover:text-cyan-800 hover:bg-cyan-50 rounded-xl transition"
                             title="Send Flow Bot to Phone Number"
@@ -5054,8 +2937,9 @@ export default function WhatsAppFlows() {
         {activeTab === "runs" && (
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-2">
-              <h3 className="text-sm font-bold text-slate-900 min-w-0">Recent Conversational Session Executions</h3>
-              <button onClick={fetchRuns} className="p-2 text-slate-400 hover:text-slate-700 rounded-lg shrink-0">
+              <h3 className="text-sm font-bold text-slate-900 min-w-0">Recent flow executions</h3>
+              {runsError && <p role="alert" className="text-xs text-red-700">{runsError}</p>}
+              <button onClick={fetchRuns} disabled={loadingRuns} aria-label="Refresh execution history" className="p-2 text-slate-400 hover:text-slate-700 rounded-lg shrink-0">
                 <RefreshCw size={14} />
               </button>
             </div>
@@ -5079,7 +2963,7 @@ export default function WhatsAppFlows() {
                     </tr>
                   ) : runsList.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-slate-400">No active execution runs recorded yet.</td>
+                      <td colSpan={6} className="p-8 text-center text-slate-400">{runsError || "No executions yet. Publish a flow and start a conversation to see its history."}</td>
                     </tr>
                   ) : (
                     runsList.map(run => {
@@ -5087,8 +2971,8 @@ export default function WhatsAppFlows() {
                       try { parsedVars = typeof run.vars === "string" ? JSON.parse(run.vars) : (run.vars || {}); } catch (_) {}
 
                       return (
-                        <tr key={run.id} className="hover:bg-slate-50">
-                          <td className="p-3 font-bold text-slate-900">{run.contact_name || "Valued Customer"}</td>
+                        <tr key={`${run.flow_id}-${run.id}`} className="hover:bg-slate-50">
+                          <td className="p-3 font-bold text-slate-900">{run.contact_name || "Unnamed contact"}<small className="block text-slate-500 font-normal">{run.flow_name}</small></td>
                           <td className="p-3 font-mono text-slate-600">+{run.phone}</td>
                           <td className="p-3 font-mono text-emerald-700 font-bold">{run.current_node_key || "start"}</td>
                           <td className="p-3">
@@ -5181,6 +3065,21 @@ export default function WhatsAppFlows() {
             </div>
           </div>
         )}
+        <FlowTestDialog
+          request={testRequest}
+          flowName={flowName}
+          setFlowName={(value) => { setFlowName(value); setDirty(true); }}
+          phone={testPhone}
+          setPhone={setTestPhone}
+          sending={testSending}
+          savingDraft={saving}
+          error={testError}
+          sent={testSent}
+          hasUnsavedChanges={false}
+          onClose={() => setTestRequest(null)}
+          onSubmit={triggerFlowForPhone}
+          onSaveDraft={saveDraftForTest}
+        />
       </div>
     </div>
   );
