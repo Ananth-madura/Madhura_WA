@@ -855,7 +855,7 @@ export default function WAEmployees() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">First Name *</label>
                     <div className="relative">
@@ -867,7 +867,7 @@ export default function WAEmployees() {
                         required
                         value={formData.first_name}
                         onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                        className="hl-input w-full pl-9 pr-3 py-2 text-sm"
+                        className="hl-input w-full pl-9 pr-3 h-10 text-sm"
                         placeholder="e.g. Ananya"
                       />
                     </div>
@@ -882,7 +882,7 @@ export default function WAEmployees() {
                         type="text"
                         value={formData.last_name}
                         onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                        className="hl-input w-full pl-9 pr-3 py-2 text-sm"
+                        className="hl-input w-full pl-9 pr-3 h-10 text-sm"
                         placeholder="e.g. Sharma"
                       />
                     </div>
@@ -900,16 +900,16 @@ export default function WAEmployees() {
                       required
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="hl-input w-full pl-9 pr-3 py-2 text-sm"
+                      className="hl-input w-full pl-9 pr-3 h-10 text-sm"
                       placeholder="employee@company.com"
                     />
                   </div>
-                  <span className="text-[11px] text-gray-500 block mt-1">
+                  <span className="text-[11px] text-gray-500 block mt-1.5 ml-1">
                     Employee will verify this email along with their workspace Access Code upon first login.
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Job Title</label>
                     <div className="relative">
@@ -920,7 +920,7 @@ export default function WAEmployees() {
                         type="text"
                         value={formData.job_title}
                         onChange={(e) => setFormData({ ...formData, job_title: e.target.value })}
-                        className="hl-input w-full pl-9 pr-3 py-2 text-sm"
+                        className="hl-input w-full pl-9 pr-3 h-10 text-sm"
                         placeholder="e.g. Sales Specialist"
                       />
                     </div>
@@ -930,7 +930,7 @@ export default function WAEmployees() {
                     <select
                       value={formData.role}
                       onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                      className="hl-input w-full py-2 text-sm font-medium"
+                      className="hl-input w-full h-10 text-sm font-medium"
                     >
                       <option value="employee">Employee</option>
                       <option value="agent">Support Agent</option>
@@ -947,7 +947,7 @@ export default function WAEmployees() {
                   <select
                     value={formData.branch_id || (branches?.[0]?.id) || 1}
                     onChange={(e) => setFormData({ ...formData, branch_id: Number(e.target.value) })}
-                    className="hl-input w-full py-2 text-sm font-medium"
+                    className="hl-input w-full h-10 text-sm font-medium"
                   >
                     {branches && branches.length > 0 ? (
                       branches.map((b) => (
@@ -959,7 +959,7 @@ export default function WAEmployees() {
                       <option value="1">Head Office (Main) (HQ-01)</option>
                     )}
                   </select>
-                  <span className="text-[11px] text-gray-500 block mt-1">
+                  <span className="text-[11px] text-gray-500 block mt-1.5 ml-1">
                     Staff member will be scoped to handle conversations and campaigns for this branch.
                   </span>
                 </div>
@@ -1124,7 +1124,7 @@ export default function WAEmployees() {
                       type="text"
                       value={editEmployee.job_title || ""}
                       onChange={(e) => setEditEmployee({ ...editEmployee, job_title: e.target.value })}
-                      className="hl-input w-full pl-9 pr-3 py-2 text-sm"
+                      className="hl-input w-full pl-9 pr-3 h-10 text-sm"
                     />
                   </div>
                 </div>
@@ -1134,7 +1134,7 @@ export default function WAEmployees() {
                   <select
                     value={editEmployee.status || "active"}
                     onChange={(e) => setEditEmployee({ ...editEmployee, status: e.target.value })}
-                    className="hl-input w-full py-2 text-sm font-medium"
+                    className="hl-input w-full h-10 text-sm font-medium"
                   >
                     <option value="active">Active (Operational)</option>
                     <option value="pending">Pending Activation (Awaiting Code Login)</option>
@@ -1148,7 +1148,7 @@ export default function WAEmployees() {
                   <select
                     value={editEmployee.branch_id || ""}
                     onChange={(e) => setEditEmployee({ ...editEmployee, branch_id: e.target.value ? Number(e.target.value) : null })}
-                    className="hl-input w-full py-2 text-sm font-medium"
+                    className="hl-input w-full h-10 text-sm font-medium"
                   >
                     <option value="">🏢 Head Office / Default</option>
                     {branches && branches.map((b) => (
@@ -1157,7 +1157,7 @@ export default function WAEmployees() {
                       </option>
                     ))}
                   </select>
-                  <span className="text-[11px] text-gray-500 block mt-1">
+                  <span className="text-[11px] text-gray-500 block mt-1.5 ml-1">
                     Reassigning updates the operational branch and customer chat scope for this employee.
                   </span>
                 </div>
