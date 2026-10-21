@@ -1003,6 +1003,9 @@ class SQLiteDatabaseAdapter {
         phone_number_id TEXT NOT NULL,
         access_token TEXT NOT NULL,
         waba_id TEXT DEFAULT NULL,
+        app_secret TEXT DEFAULT NULL,
+        verify_token TEXT DEFAULT 'crm_verify_123',
+        business_account_id TEXT DEFAULT NULL,
         is_enabled INTEGER DEFAULT 1,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP

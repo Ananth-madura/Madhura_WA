@@ -7,6 +7,41 @@ const waAiReply = require("../services/waAiReply");
 // Opt-out keywords (case-insensitive)
 const OPT_OUT_KEYWORDS = ["stop", "unsubscribe", "opt out", "optout", "cancel", "quit", "end", "remove me", "no more"];
 
+/**
+ * Meta's subscription handshake (`GET /wa/webhook?hub.mode=subscribe`) carries
+ * only the token the operator typed into the App Dashboard - no phone_number_id
+ * - so a token can only be checked against the set of tokens this deployment
+ * has configured. Each source is tried independently and a source that fails
+ * (a table this deployment has never created, say) is skipped rather than
+ * aborting the handshake: one broken lookup used to make every non-env token
+ * answer 503.
+ *
+ * The message POST is the authenticated path - it resolves the sender by
+ * phone_number_id and verifies the signature against THAT account's own
+ * app_secret (services/waWebhookAuth.js). Completing this handshake only makes
+ * Meta echo the challenge back; it cannot inject a message.
+ */
+const verifyTokenSources = [
+  {
+    label: "env",
+    // The env-configured sender belongs to tenant 1, the same rule
+    // resolveSenderCredentials enforces.
+    match: (token) => Boolean(process.env.WA_VERIFY_TOKEN) && token === process.env.WA_VERIFY_TOKEN,
+  },
+  {
+    label: "user_wa_configs",
+    sql: "SELECT 1 FROM user_wa_configs WHERE verify_token = ? AND is_enabled = 1 LIMIT 1",
+  },
+  {
+    label: "wa_accounts",
+    sql: "SELECT 1 FROM wa_accounts WHERE verify_token = ? AND is_active = 1 LIMIT 1",
+  },
+  {
+    label: "wa_senders",
+    sql: "SELECT 1 FROM wa_senders WHERE verify_token = ? LIMIT 1",
+  },
+];
+
 router.get("/", async (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -14,16 +49,32 @@ router.get("/", async (req, res) => {
 
   // If Meta Cloud API verification request
   if (mode || token || challenge) {
-    let result = mode === "subscribe" && process.env.WA_VERIFY_TOKEN && token === process.env.WA_VERIFY_TOKEN ? challenge : null;
-    if (!result && mode === "subscribe" && token) {
-      try {
-        const [owners] = await db.promise().query("SELECT user_id FROM user_wa_configs WHERE verify_token = ? AND is_enabled = 1 LIMIT 1", [token]);
-        if (owners.length) result = challenge;
-      } catch (_) { return res.sendStatus(503); }
+    if (mode !== "subscribe" || !token) {
+      return res.status(403).send("Forbidden: Invalid verification request");
     }
-    if (result) {
-      return res.status(200).send(result);
+
+    let matched = false;
+    let lookupFailed = false;
+    for (const source of verifyTokenSources) {
+      if (source.match) {
+        if (source.match(token)) matched = true;
+      } else {
+        try {
+          const [rows] = await db.promise().query(source.sql, [token]);
+          if (rows && rows.length) matched = true;
+        } catch (err) {
+          lookupFailed = true;
+          console.warn(`[WA Webhook] verify-token source '${source.label}' unavailable: ${err.message}`);
+        }
+      }
+      if (matched) break;
     }
+
+    if (matched) return res.status(200).send(challenge);
+    // Only surface a 503 when a lookup itself broke: a DB outage must not be
+    // reported as "wrong token" (that would send operators hunting for a
+    // credentials problem they do not have).
+    if (lookupFailed) return res.sendStatus(503);
     return res.status(403).send("Forbidden: Invalid verification token");
   }
 
@@ -36,17 +87,93 @@ router.get("/", async (req, res) => {
   });
 });
 
-// Resolve the account before allowing any webhook side effects.
+/**
+ * Resolve the sender behind a phone_number_id: which session owns its inbound
+ * traffic, and which app_secret Meta signed it with.
+ *
+ * The app_secret is per WhatsApp Business App, so a sender that has its own
+ * stored secret must never be verified against the process-wide one - that is
+ * how one organization's credential ends up deciding whether another
+ * organization's events are trusted. Env is the last resort and only for the
+ * env-configured sender (tenant 1, the rule resolveSenderCredentials follows);
+ * falling back to it for a sender that has a real-but-different secret would
+ * simply reject every one of that sender's events, so the fallback is logged
+ * rather than silent.
+ *
+ * Returns null for an unknown sender, a disabled config, or a secret that
+ * cannot be read - all fail closed.
+ */
 async function resolveWebhookAccount(phoneId) {
-  const [owners] = await db.promise().query("SELECT * FROM user_wa_configs WHERE phone_number_id = ? LIMIT 1", [phoneId]);
-  if (owners.length) {
-    if (!owners[0].is_enabled) return null;
-    return { sessionKey: String(owners[0].user_id), appSecret: require("../backendutil/cryptoHelper").decrypt(owners[0].app_secret || process.env.WA_APP_SECRET || ""), client: wa.withAccount(owners[0]) };
+  const decrypt = require("../backendutil/cryptoHelper").decrypt;
+
+  // A stored secret that cannot be read must not be swapped for the env one:
+  // that would trust a different Meta app's key. Log and reject instead.
+  const appSecretFor = (stored, label) => {
+    const raw = stored || process.env.WA_APP_SECRET || "";
+    if (!raw) {
+      console.warn(`[WA Webhook] No app_secret for ${label} (phone_number_id=${phoneId}) and WA_APP_SECRET is unset - events for this sender cannot be verified`);
+      return "";
+    }
+    try {
+      const secret = decrypt(raw);
+      if (!stored) {
+        console.warn(`[WA Webhook] ${label} has no stored app_secret - falling back to WA_APP_SECRET (single-app deployment). Store this account's own secret to scope verification per sender.`);
+      }
+      return secret;
+    } catch (err) {
+      console.warn(`[WA Webhook] Could not read app_secret for ${label}: ${err.message}`);
+      return null; // fail closed
+    }
+  };
+
+  try {
+    const [owners] = await db.promise().query("SELECT * FROM user_wa_configs WHERE phone_number_id = ? LIMIT 1", [phoneId]);
+    if (owners.length) {
+      if (!owners[0].is_enabled) return null;
+      const appSecret = appSecretFor(owners[0].app_secret, "user_wa_configs id=" + owners[0].id);
+      if (appSecret === null) return null;
+      return { sessionKey: String(owners[0].user_id), appSecret, client: wa.withAccount(owners[0]) };
+    }
+
+    const [accounts] = await db.promise().query("SELECT * FROM wa_accounts WHERE phone_number_id = ? AND is_active = 1 AND created_by IS NOT NULL LIMIT 1", [phoneId]);
+    if (accounts.length) {
+      const appSecret = appSecretFor(accounts[0].app_secret, "wa_accounts id=" + accounts[0].id);
+      if (appSecret === null) return null;
+      return { sessionKey: String(accounts[0].created_by), appSecret, client: wa.withAccount(accounts[0]) };
+    }
+
+    // Senders created through the Meta partner flow land in wa_senders, which
+    // carries its own secret but no creating user. Inbound traffic for one
+    // belongs to its organization, so the owning organization's first user is
+    // the session it is attributed to.
+    const [senders] = await db.promise().query(
+      "SELECT s.*, (SELECT u.id FROM users u WHERE u.tenant_id = s.tenant_id ORDER BY u.id ASC LIMIT 1) AS owner_user_id FROM wa_senders s WHERE s.phone_number_id = ? LIMIT 1",
+      [phoneId]
+    );
+    if (senders.length) {
+      const appSecret = appSecretFor(senders[0].app_secret, "wa_senders id=" + senders[0].id);
+      if (appSecret === null) return null;
+      if (!senders[0].owner_user_id) {
+        console.warn(`[WA Webhook] wa_senders id=${senders[0].id} (tenant ${senders[0].tenant_id}) has no user to own its inbound traffic`);
+        return null;
+      }
+      return { sessionKey: String(senders[0].owner_user_id), tenantId: Number(senders[0].tenant_id) || null, appSecret, client: wa.withAccount(senders[0]) };
+    }
+
+    if (phoneId === process.env.WA_PHONE_NUMBER_ID) {
+      return {
+        sessionKey: String(require("../services/whatsappService").defaultKey),
+        tenantId: Number(process.env.WA_SYSTEM_TENANT_ID) || 1,
+        appSecret: process.env.WA_APP_SECRET || "",
+      };
+    }
+    return null;
+  } catch (err) {
+    // A lookup failure must not be reported as a valid sender - otherwise a
+    // transient DB error would let an unverified body through.
+    console.warn(`[WA Webhook] Could not resolve sender ${phoneId}: ${err.message}`);
+    return null;
   }
-  const [accounts] = await db.promise().query("SELECT * FROM wa_accounts WHERE phone_number_id = ? AND is_active = 1 AND created_by IS NOT NULL LIMIT 1", [phoneId]);
-  if (accounts.length) return { sessionKey: String(accounts[0].created_by), appSecret: require("../backendutil/cryptoHelper").decrypt(accounts[0].app_secret || process.env.WA_APP_SECRET || ""), client: wa.withAccount(accounts[0]) };
-  if (phoneId === process.env.WA_PHONE_NUMBER_ID) return { sessionKey: String(require("../services/whatsappService").defaultKey), appSecret: process.env.WA_APP_SECRET || "" };
-  return null;
 }
 
 router.post("/", async (req, res) => {
@@ -112,7 +239,7 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
   const phone = msg.from;
   account = account || await resolveWebhookAccount(metadata?.phone_number_id);
   if (!account) throw new Error("Webhook sender has no configured owner");
-  const sessionKey = account.sessionKey;
+  const sessionKey = account?.sessionKey;
   const wa = account.client || await require("../services/waConfigHelper").cloudClientForUser(sessionKey);
   const msgId = msg.id;
   const timestamp = msg.timestamp ? new Date(parseInt(msg.timestamp) * 1000) : new Date();
@@ -260,6 +387,7 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
   // the same person each get their own contact instead of one NULL row that
   // every scoped query has to make a special case for.
   const contactTenantId = await require("../services/waContactTenancy").tenantForContactWrite({
+    tenantId: account?.tenantId,
     sessionKey,
   });
   await db.promise().query(

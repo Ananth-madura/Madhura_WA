@@ -21,7 +21,7 @@ const db = require("../config/database");
  * Backfills and rebuilds are idempotent, but replaying them on every start
  * costs hundreds of statements and a table rebuild on large installations.
  */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const MIGRATION_NAME = "enterprise_multi_tenant_multi_branch";
 
 async function alreadyMigrated() {
@@ -452,6 +452,15 @@ async function migrate() {
   // sent it rather than one process-wide app secret.
   await ensureColumn("wa_senders", "app_secret", "app_secret TEXT DEFAULT NULL");
   await ensureColumn("wa_senders", "verify_token", "verify_token VARCHAR(255) DEFAULT NULL");
+
+  // 13b. user_wa_configs is created with these two columns by the MySQL schema
+  // (services/waDatabase.js) but NOT by the SQLite one (config/sqliteDatabase.js),
+  // so on the default engine the webhook's `WHERE verify_token = ?` lookup threw
+  // and the GET handler answered 503 to every non-env token, while
+  // resolveWebhookAccount read `app_secret` as undefined and verified against
+  // the process-wide secret instead of this account's own.
+  await ensureColumn("user_wa_configs", "app_secret", "app_secret TEXT DEFAULT NULL");
+  await ensureColumn("user_wa_configs", "verify_token", "verify_token VARCHAR(255) DEFAULT 'crm_verify_123'");
 
   // 10. Meta Onboarding Sessions (Short-lived state & nonce)
   await runSafe(
