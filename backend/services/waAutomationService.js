@@ -1116,12 +1116,22 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
       [activeSessionKey, cleanPhone, (rule.media_type && rule.media_url) ? "media" : "text", actualMessageText, msgId]
     ).catch(() => {});
 
-    // Also auto-add/update wa_contacts table if not present
+    // Also auto-add/update wa_contacts table if not present. Attributed to the
+    // automation's organization (rule.tenant_id) with the session owner as the
+    // fallback, so an automation never writes a contact into another tenant.
     await db.promise().query(
-      `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, last_contacted)
-       VALUES (?, ?, '91', 'Automation Trigger', 1, ?, NOW(), NOW())
+      `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, last_contacted)
+       VALUES (?, ?, ?, '91', 'Automation Trigger', 1, ?, NOW(), NOW())
        ON DUPLICATE KEY UPDATE name=VALUES(name), last_message_text=VALUES(last_message_text), last_message_at=NOW(), last_contacted=NOW()`,
-      [contactName || "Customer", cleanPhone.slice(-10), actualMessageText]
+      [
+        await require("./waContactTenancy").tenantForContactWrite({
+          tenantId: rule.tenant_id,
+          sessionKey: activeSessionKey,
+        }),
+        contactName || "Customer",
+        cleanPhone.slice(-10),
+        actualMessageText,
+      ]
     ).catch(() => {});
 
     // Emit socket event for real-time live chat updates
@@ -1157,11 +1167,17 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
     // ── STEP 1.5: Auto Contact Group Enrollment (if configured) ─────────────
     if (rule.group_id && execution.phase !== 2) {
       try {
+        // Scoped to the automation's organization, so an enrollment can only
+        // touch a group that organization owns.
+        const enrollTenantId = await require("./waContactTenancy").tenantForContactWrite({
+          tenantId: rule.tenant_id,
+          sessionKey: activeSessionKey,
+        });
         await db.promise().query(
-          `INSERT INTO wa_group_contacts (group_id, name, phone, country_code, notes)
-           VALUES (?, ?, ?, '91', 'Added via Automation')
+          `INSERT INTO wa_group_contacts (group_id, name, phone, country_code, notes, tenant_id)
+           VALUES (?, ?, ?, '91', 'Added via Automation', ?)
            ON DUPLICATE KEY UPDATE name=VALUES(name)`,
-          [rule.group_id, contactName || "Customer", cleanPhone.slice(-10)]
+          [rule.group_id, contactName || "Customer", cleanPhone.slice(-10), enrollTenantId]
         );
         console.log(`👥 [WA Automation] Contact ${cleanPhone} enrolled into Group ${rule.group_id}`);
       } catch (grpErr) {

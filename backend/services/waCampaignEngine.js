@@ -145,8 +145,8 @@ async function handleInboundOptOut(phone, messageText, tenantId = 1) {
         [cleanPhone, matched, tenantId || 1, matched]
       );
       await db.promise().query(
-        `UPDATE wa_contacts SET is_unsubscribed = 1 WHERE phone = ? OR phone LIKE ?`,
-        [cleanPhone, `%${cleanPhone.slice(-10)}`]
+        `UPDATE wa_contacts SET is_unsubscribed = 1 WHERE tenant_id = ? AND (phone = ? OR phone LIKE ?)`,
+        [tenantId || 1, cleanPhone, `%${cleanPhone.slice(-10)}`]
       );
       console.log(`🚫 [Anti-Ban Guard] Phone +${cleanPhone} automatically opted-out via keyword '${matched}'`);
       return true;
@@ -269,8 +269,8 @@ if (!claim.affectedRows) {
     // Update last_contacted in wa_contacts
     await require("./waDeliveryReceipts").flushDeliveryReceipt(waMessageId).catch(() => {});
     await db.promise().query(
-      `UPDATE wa_contacts SET last_contacted=NOW() WHERE phone=? OR phone LIKE ?`,
-      [phone, `%${phone.slice(-10)}`]
+      `UPDATE wa_contacts SET last_contacted=NOW() WHERE tenant_id = ? AND (phone=? OR phone LIKE ?)`,
+      [tenantId || 1, phone, `%${phone.slice(-10)}`]
     ).catch(() => {});
 
     // Live Socket.IO event for real-time UI updates
@@ -594,7 +594,7 @@ async function addSingleMessage(data, delayMs = 0, sessionKey) {
 
 async function getQueueStats(tenantId = null) {
   try {
-    const whereTenant = tenantId ? " AND (tenant_id = ? OR tenant_id IS NULL)" : "";
+    const whereTenant = tenantId ? " AND tenant_id = ?" : "";
     const params = tenantId ? [tenantId] : [];
 
     const [[queued]] = await db.promise().query(`SELECT COUNT(*) as cnt FROM wa_campaign_messages WHERE status='queued'${whereTenant}`, params);

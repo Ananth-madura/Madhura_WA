@@ -21,7 +21,7 @@ const db = require("../config/database");
  * Backfills and rebuilds are idempotent, but replaying them on every start
  * costs hundreds of statements and a table rebuild on large installations.
  */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const MIGRATION_NAME = "enterprise_multi_tenant_multi_branch";
 
 async function alreadyMigrated() {
@@ -614,10 +614,43 @@ async function migrate() {
     { table: "wa_internal_notes", col: "branch_id", def: "branch_id INT DEFAULT NULL" },
     { table: "wa_contacts", col: "tenant_id", def: "tenant_id INT NOT NULL DEFAULT 1" },
     { table: "wa_opt_outs", col: "tenant_id", def: "tenant_id INT NOT NULL DEFAULT 1" },
+    // Campaign audience tables. wa_contact_groups was scoped but its members
+    // were not, and wa_sender_pools was scoped to nothing at all - both list
+    // endpoints query tenant_id and threw `no such column` at runtime.
+    { table: "wa_group_contacts", col: "tenant_id", def: "tenant_id INT DEFAULT NULL" },
+    { table: "wa_sender_pools", col: "tenant_id", def: "tenant_id INT NOT NULL DEFAULT 1" },
   ];
 
   for (const item of scopeTables) {
     await ensureColumn(item.table, item.col, item.def);
+  }
+
+  // 14a. Backfill the two columns added above. A group's members inherit the
+  // group's organization (left NULL here only if the parent group is itself
+  // unowned, which the campaign queries treat as an error rather than as
+  // "visible to everyone"). Sender pools have no parent to inherit from, so
+  // legacy pools belong to the system organization - the same rule the
+  // env-configured sender follows.
+  if (db.isSqlite) {
+    await runSafe(
+      `UPDATE wa_group_contacts SET tenant_id = (
+         SELECT g.tenant_id FROM wa_contact_groups g WHERE g.id = wa_group_contacts.group_id
+       ) WHERE tenant_id IS NULL`,
+      "Backfill wa_group_contacts.tenant_id from the parent group"
+    );
+    await runSafe(
+      "UPDATE wa_sender_pools SET tenant_id = 1 WHERE tenant_id IS NULL OR tenant_id = 0",
+      "Backfill wa_sender_pools.tenant_id to the system organization"
+    );
+  } else {
+    await runSafe(
+      "UPDATE wa_group_contacts gc JOIN wa_contact_groups g ON g.id = gc.group_id SET gc.tenant_id = g.tenant_id WHERE gc.tenant_id IS NULL",
+      "Backfill wa_group_contacts.tenant_id from the parent group"
+    );
+    await runSafe(
+      "UPDATE wa_sender_pools SET tenant_id = 1 WHERE tenant_id IS NULL OR tenant_id = 0",
+      "Backfill wa_sender_pools.tenant_id to the system organization"
+    );
   }
 
   // 14b. Phone uniqueness must be per organization, not global. See

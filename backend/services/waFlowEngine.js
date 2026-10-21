@@ -160,14 +160,19 @@ class WaFlowEngine {
       await db.promise().query("UPDATE wa_message_logs SET interactive_payload = ?, message_type = ? WHERE wa_message_id = ? AND session_key = ?", [JSON.stringify(interactivePayload), type, msgId, activeSessionKey]).catch(() => {});
     }
 
-    // 2. Update wa_contacts last_message
+    // 2. Update wa_contacts last_message. The row belongs to the organization
+    // that owns this session, so two organizations chatting with the same
+    // person each keep their own contact record.
+    const contactTenantId = await require("./waContactTenancy").tenantForContactWrite({
+      sessionKey: activeSessionKey,
+    });
     await db.promise().query(
-      `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
-       VALUES (?, ?, '91', 'WhatsApp Chat', 1, ?, NOW(), 0)
+      `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
+       VALUES (?, ?, ?, '91', 'WhatsApp Chat', 1, ?, NOW(), 0)
        ON DUPLICATE KEY UPDATE
          last_message_text = VALUES(last_message_text),
          last_message_at = NOW()`,
-      ["Customer", cleanPhone, text]
+      [contactTenantId, "Customer", cleanPhone, text]
     ).catch(() => {});
 
     // 3. Emit real-time Socket event (< 1ms) to update CRM Live Chat
@@ -465,7 +470,7 @@ class WaFlowEngine {
       // A human owns this conversation now — mute the whole bot, on the same
       // window a manual agent reply uses, so the bot cannot re-engage before
       // anyone has actually picked the chat up.
-      await require("./waBotGate").pauseBot(cleanPhone, undefined, "customer asked for an agent");
+      await require("./waBotGate").pauseBot(cleanPhone, undefined, "customer asked for an agent", activeSessionKey);
       try {
         const app = require("../server");
         const io = app.get && app.get("io");
@@ -1143,9 +1148,12 @@ class WaFlowEngine {
 
         case "set_tag": {
           if (config.tag) {
+            // Scoped to this flow's organization - a phone-number match alone
+            // would tag the same contact record for every tenant that has it.
+            const tagTenantId = await require("./waContactTenancy").tenantForContactWrite({ sessionKey });
             await db.promise().query(
-              "UPDATE wa_contacts SET tags = JSON_ARRAY_APPEND(COALESCE(tags, '[]'), '$', ?) WHERE phone LIKE ?",
-              [config.tag, `%${cleanPhone.slice(-10)}`]
+              "UPDATE wa_contacts SET tags = JSON_ARRAY_APPEND(COALESCE(tags, '[]'), '$', ?) WHERE tenant_id = ? AND phone LIKE ?",
+              [config.tag, tagTenantId, `%${cleanPhone.slice(-10)}`]
             ).catch(() => {});
           }
           nodeKey = config.next_node_key;
@@ -1154,11 +1162,12 @@ class WaFlowEngine {
 
         case "add_to_group": {
           if (config.group_id) {
+            const groupTenantId = await require("./waContactTenancy").tenantForContactWrite({ sessionKey });
             await db.promise().query(
-              `INSERT INTO wa_group_contacts (group_id, name, phone, country_code, notes)
-               VALUES (?, ?, ?, '91', 'Added via Chatbot Flow')
+              `INSERT INTO wa_group_contacts (group_id, name, phone, country_code, notes, tenant_id)
+               VALUES (?, ?, ?, '91', 'Added via Chatbot Flow', ?)
                ON DUPLICATE KEY UPDATE name=VALUES(name)`,
-              [config.group_id, vars.name || vars.customer_name || "Customer", cleanPhone.slice(-10)]
+              [config.group_id, vars.name || vars.customer_name || "Customer", cleanPhone.slice(-10), groupTenantId]
             ).catch(() => {});
           }
           nodeKey = config.next_node_key;
@@ -1169,6 +1178,7 @@ class WaFlowEngine {
           const waLeadCapture = require("./waLeadCapture");
           await waLeadCapture.captureLeadFromWhatsApp({
             phone: cleanPhone,
+            sessionKey,
             name: vars.name || vars.customer_name,
             company: vars.company || vars.company_name,
             email: vars.email,
@@ -1258,7 +1268,7 @@ class WaFlowEngine {
           );
           // Same window as a manual agent reply: the handoff must outlast the
           // bot, or the customer's next message simply restarts it.
-          await require("./waBotGate").pauseBot(cleanPhone, undefined, "flow handoff node");
+          await require("./waBotGate").pauseBot(cleanPhone, undefined, "flow handoff node", sessionKey);
 
           // Emit live handoff alert to Live Chat agents
           try {
@@ -1963,7 +1973,7 @@ class WaFlowEngine {
   async completeRun(runId, reason) {
     try {
       const [runs] = await db.promise().query(
-        "SELECT r.*, f.name as flow_name FROM wa_flow_runs r LEFT JOIN wa_flows f ON r.flow_id = f.id WHERE r.id = ?",
+        "SELECT r.*, f.name as flow_name, f.tenant_id as flow_tenant_id FROM wa_flow_runs r LEFT JOIN wa_flows f ON r.flow_id = f.id WHERE r.id = ?",
         [runId]
       );
       if (runs && runs[0]) {
@@ -1974,6 +1984,10 @@ class WaFlowEngine {
           const waLeadCapture = require("./waLeadCapture");
           await waLeadCapture.captureLeadFromWhatsApp({
             phone: run.phone,
+            // The flow's owner, not whoever happens to be running the process:
+            // wa_flow_runs carries no tenancy of its own.
+            tenantId: run.flow_tenant_id,
+            sessionKey: vars._session_key,
             name: vars.name || vars.customer_name,
             company: vars.company || vars.company_name,
             email: vars.email,

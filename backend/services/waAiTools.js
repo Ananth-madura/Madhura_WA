@@ -71,6 +71,8 @@ async function createLead(phone, params = {}) {
   try {
     const result = await waLeadCapture.captureLeadFromWhatsApp({
       phone,
+      sessionKey: params.sessionKey || null,
+      tenantId: params.tenantId || null,
       name: params.name || null,
       service: params.service || null,
       city: params.city || null,
@@ -94,6 +96,8 @@ async function scheduleCallback(phone, params = {}) {
   try {
     await waLeadCapture.captureLeadFromWhatsApp({
       phone,
+      sessionKey: params.sessionKey || null,
+      tenantId: params.tenantId || null,
       notes: `[Callback Requested]: ${params.preferred_time || "As soon as possible"} - ${params.notes || "General callback"}`,
       sourceDetail: "WhatsApp AI Callback Request",
     });
@@ -150,10 +154,16 @@ async function requestHumanSupport(phone, params = {}) {
   const message = `WhatsApp AI handoff: Customer +91${last10} requested to speak with a human agent. Reason: ${reason}`;
 
   try {
-    // Pause AI for 180 minutes on this contact
+    // Pause AI for 180 minutes on this contact - only the contact the calling
+    // organization owns. A phone match on its own would silence the same
+    // person for every other tenant on this platform.
+    const handoffTenantId = await require("./waContactTenancy").tenantForContactWrite({
+      sessionKey: params.sessionKey || null,
+      tenantId: params.tenantId || null,
+    });
     await queryAsync(
-      "UPDATE wa_contacts SET ai_paused_until = DATE_ADD(NOW(), INTERVAL 180 MINUTE), ai_autoreply_disabled = 1 WHERE phone LIKE ?",
-      [`%${last10}`]
+      "UPDATE wa_contacts SET ai_paused_until = DATE_ADD(NOW(), INTERVAL 180 MINUTE), ai_autoreply_disabled = 1 WHERE tenant_id = ? AND phone LIKE ?",
+      [handoffTenantId, `%${last10}`]
     ).catch(() => {});
 
     const result = await queryAsync(

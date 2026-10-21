@@ -375,7 +375,12 @@ ${require("./waAiTools").TOOLS_DESCRIPTION}`;
       if (!action) return raw;
 
       console.log(`⚡ [WA AI Reply] Executing tool: ${action.action} for ${phone}`);
-      const toolResult = await require("./waAiTools").runTool(action.action, phone, action.params);
+      // The tools write contacts; carry this conversation's session so those
+      // rows land in the organization that owns the chat.
+      const toolResult = await require("./waAiTools").runTool(action.action, phone, {
+        ...(action.params || {}),
+        sessionKey,
+      });
       
       messages.push({ role: "assistant", content: raw });
       messages.push({
@@ -384,7 +389,7 @@ ${require("./waAiTools").TOOLS_DESCRIPTION}`;
       });
     }
 
-    await require("./waAiTools").runTool("request_human_support", phone, { reason: "Conversation max tool loops reached" }).catch(() => {});
+    await require("./waAiTools").runTool("request_human_support", phone, { reason: "Conversation max tool loops reached", sessionKey }).catch(() => {});
     return "Thank you for reaching out! Our specialist will connect with you shortly.";
   } catch (err) {
     console.error("[WA AI Reply] Generation failed:", err.response?.data || err.message);
@@ -440,12 +445,12 @@ async function maybeAutoReply(phone, incomingText, contactName, sessionKey) {
 
     if (wantsHuman) {
       console.log(`🙋 [WA AI Reply] Human handoff keyword matched for ${cleanPhone}: "${incomingText}"`);
-      await require("./waAiTools").runTool("request_human_support", cleanPhone, { reason: `Keyword match: "${incomingText}"` });
+      await require("./waAiTools").runTool("request_human_support", cleanPhone, { reason: `Keyword match: "${incomingText}"`, sessionKey });
       
       const handoffCooldown = settings.handoff_cooldown_min || 180;
       await queryAsync(
-        "UPDATE wa_contacts SET ai_paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE), ai_autoreply_disabled = 1 WHERE phone LIKE ?",
-        [handoffCooldown, `%${last10}`]
+        "UPDATE wa_contacts SET ai_paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE), ai_autoreply_disabled = 1 WHERE tenant_id = ? AND phone LIKE ?",
+        [handoffCooldown, await require("./waContactTenancy").tenantForContactWrite({ sessionKey }), `%${last10}`]
       ).catch(() => {});
 
       const handoffReply = "I have notified our support executive to take over this chat. A team member will reply to you here shortly! 🙏";
@@ -480,8 +485,8 @@ async function maybeAutoReply(phone, incomingText, contactName, sessionKey) {
       const cleanedReply = reply.replace(/\[\[HANDOFF\]\]/g, "").trim() || "I have notified our team to connect with you directly. An agent will reply shortly!";
       const handoffCooldown = settings.handoff_cooldown_min || 180;
       await queryAsync(
-        "UPDATE wa_contacts SET ai_paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE), ai_autoreply_disabled = 1 WHERE phone LIKE ?",
-        [handoffCooldown, `%${last10}`]
+        "UPDATE wa_contacts SET ai_paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE), ai_autoreply_disabled = 1 WHERE tenant_id = ? AND phone LIKE ?",
+        [handoffCooldown, await require("./waContactTenancy").tenantForContactWrite({ sessionKey }), `%${last10}`]
       ).catch(() => {});
 
       const waLoadBalancer = require("./waLoadBalancer");
@@ -498,8 +503,8 @@ async function maybeAutoReply(phone, incomingText, contactName, sessionKey) {
     const formattedText = mdToWa.toWhatsApp(textToSend);
 
     await queryAsync(
-      "UPDATE wa_contacts SET ai_reply_count = COALESCE(ai_reply_count, 0) + 1, last_message_text = ?, last_message_at = NOW() WHERE phone LIKE ?",
-      [formattedText, `%${last10}`]
+      "UPDATE wa_contacts SET ai_reply_count = COALESCE(ai_reply_count, 0) + 1, last_message_text = ?, last_message_at = NOW() WHERE tenant_id = ? AND phone LIKE ?",
+      [formattedText, await require("./waContactTenancy").tenantForContactWrite({ sessionKey }), `%${last10}`]
     ).catch(() => {});
 
     await waLoadBalancer.sendTextMessage(cleanPhone, formattedText, sessionKey);

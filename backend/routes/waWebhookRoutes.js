@@ -254,15 +254,22 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
     })();
   }
 
-  // Update contact last message in CRM
+  // Update contact last message in CRM. The row carries the organization the
+  // sender belongs to: `sessionKey` is the owner resolved from this
+  // phone_number_id in resolveWebhookAccount, so two organizations messaging
+  // the same person each get their own contact instead of one NULL row that
+  // every scoped query has to make a special case for.
+  const contactTenantId = await require("../services/waContactTenancy").tenantForContactWrite({
+    sessionKey,
+  });
   await db.promise().query(
-    `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
-     VALUES (?, ?, '91', 'WhatsApp Cloud API', 1, ?, NOW(), 1)
+    `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
+     VALUES (?, ?, ?, '91', 'WhatsApp Cloud API', 1, ?, NOW(), 1)
      ON DUPLICATE KEY UPDATE
        name = COALESCE(VALUES(name), name),
        last_message_text = VALUES(last_message_text),
        last_message_at = NOW()`,
-    [contactProfileName || `+${phone}`, phone.slice(-10), messageText]
+    [contactTenantId, contactProfileName || `+${phone}`, phone.slice(-10), messageText]
   ).catch(() => {});
 
   // ── 🔗 AUTO-CAPTURE: Create CRM lead for first-time inbound WhatsApp Cloud API contacts ──
@@ -270,6 +277,7 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
     const waLeadCapture = require("../services/waLeadCapture");
     waLeadCapture.captureLeadFromWhatsApp({
       phone: phone,
+      sessionKey,
       name: contactProfileName || undefined,
       notes: (messageText || "").slice(0, 500) || "Customer messaged via WhatsApp Cloud API",
       sourceDetail: "WhatsApp Cloud API Inbound",
@@ -287,22 +295,24 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
 
   if (matchedKeyword) {
     try {
-      // Insert into opt-outs table
+      // Insert into opt-outs table, scoped to the organization the sender
+      // belongs to: opting out of one business must not silence the same
+      // person for a different business sharing this platform.
       await db.promise().query(
-        `INSERT IGNORE INTO wa_opt_outs (phone, reason, opt_out_keyword) VALUES (?, 'user_request', ?)`,
-        [phone, matchedKeyword]
+        `INSERT IGNORE INTO wa_opt_outs (tenant_id, phone, reason, opt_out_keyword) VALUES (?, ?, 'user_request', ?)`,
+        [contactTenantId, phone, matchedKeyword]
       );
 
       // Mark contact as unsubscribed in wa_contacts
       await db.promise().query(
-        `UPDATE wa_contacts SET is_unsubscribed=1, opt_in_status=0, updated_at=NOW() WHERE phone LIKE ?`,
-        [`%${phone.slice(-10)}`]
+        `UPDATE wa_contacts SET is_unsubscribed=1, opt_in_status=0, updated_at=NOW() WHERE tenant_id = ? AND phone LIKE ?`,
+        [contactTenantId, `%${phone.slice(-10)}`]
       );
 
       // Mark pending campaign messages as opted_out
       await db.promise().query(
-        `UPDATE wa_campaign_messages SET status='opted_out', opt_out=1, error='User opted out' WHERE phone=? AND status='queued'`,
-        [phone]
+        `UPDATE wa_campaign_messages SET status='opted_out', opt_out=1, error='User opted out' WHERE tenant_id = ? AND phone=? AND status='queued'`,
+        [contactTenantId, phone]
       );
 
       await db.promise().query(

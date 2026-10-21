@@ -675,7 +675,7 @@ async function getBranchMembers(tenantId, branchId) {
                     tm.mobile, tm.job_title, tm.emp_role, tm.access_code, tm.whatsapp_access_level, tm.emp_id
              FROM users u
              LEFT JOIN teammember tm ON (tm.user_id = u.id OR (u.email IS NOT NULL AND tm.emp_email = u.email))
-             WHERE (u.tenant_id = ? OR u.tenant_id IS NULL)
+             WHERE u.tenant_id = ?
              ORDER BY u.first_name ASC`,
             [tid]
           );

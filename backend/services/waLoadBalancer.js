@@ -236,7 +236,7 @@ class WALoadBalancer {
       // Load additional accounts configured in wa_accounts for this tenant
       try {
         const [rows] = await db.promise().query(
-          "SELECT * FROM wa_accounts WHERE is_active = 1 AND connection_type = 'cloud_api' AND (tenant_id = ? OR tenant_id IS NULL) ORDER BY id ASC",
+          "SELECT * FROM wa_accounts WHERE is_active = 1 AND connection_type = 'cloud_api' AND tenant_id = ? ORDER BY id ASC",
           [tenantId || 1]
         );
         rows.forEach((acc) => {

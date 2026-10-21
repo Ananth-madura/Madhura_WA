@@ -33,6 +33,8 @@ function clean10DigitPhone(phone) {
  * @param {string} [leadData.notes] - Inquiry details / conversation summary
  * @param {string} [leadData.sourceDetail] - Sub-source (e.g. 'WhatsApp Flow: Booking', 'WhatsApp AI Lead', 'WhatsApp Inbound')
  * @param {string|number} [leadData.assignedTo] - Assigned staff ID or name
+ * @param {string|number} [leadData.sessionKey] - Session/user the capture is attributed to, so the contact lands in the right organization
+ * @param {number} [leadData.tenantId] - Explicit organization, when the caller already resolved one
  */
 async function captureLeadFromWhatsApp(leadData = {}) {
   const {
@@ -45,6 +47,8 @@ async function captureLeadFromWhatsApp(leadData = {}) {
     notes,
     sourceDetail = "WhatsApp Inbound",
     assignedTo = null,
+    sessionKey = null,
+    tenantId = null,
   } = leadData;
 
   const last10 = clean10DigitPhone(phone);
@@ -59,6 +63,10 @@ async function captureLeadFromWhatsApp(leadData = {}) {
   const companyName = (company || "").trim() || null;
   const emailAddr = (email || "").trim() || null;
   const noteText = notes ? `[WhatsApp Inquiry]: ${notes}` : `Lead captured via WhatsApp (${sourceDetail})`;
+  const contactTenantId = await require("./waContactTenancy").tenantForContactWrite({
+    tenantId,
+    sessionKey,
+  });
 
   try {
     // 1. Check if lead already exists in telecalls
@@ -125,17 +133,17 @@ async function captureLeadFromWhatsApp(leadData = {}) {
       console.log(`🎉 [WA LeadCapture] Created NEW CRM lead ID ${leadId} for ${customerName} (+91${last10}) (Source: WhatsApp)`);
     }
 
-    // 2. Sync to wa_contacts
+    // 2. Sync to wa_contacts, under the organization that captured the lead
     await queryAsync(
-      `INSERT INTO wa_contacts (name, phone, country_code, source, crm_ref_type, crm_ref_id, opt_in_status, last_contacted)
-       VALUES (?, ?, '91', 'WhatsApp', 'telecalls', ?, 1, NOW())
+      `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, crm_ref_type, crm_ref_id, opt_in_status, last_contacted)
+       VALUES (?, ?, ?, '91', 'WhatsApp', 'telecalls', ?, 1, NOW())
        ON DUPLICATE KEY UPDATE 
          name = COALESCE(NULLIF(VALUES(name), 'WhatsApp Lead'), name),
          source = 'WhatsApp',
          crm_ref_type = 'telecalls',
          crm_ref_id = VALUES(crm_ref_id),
          last_contacted = NOW()`,
-      [customerName, last10, leadId]
+      [contactTenantId, customerName, last10, leadId]
     ).catch(() => {});
 
     // 3. Emit real-time notification to CRM Dashboard & Staff

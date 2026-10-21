@@ -121,13 +121,16 @@ async function botMayReply(phone, label, opts = {}) {
  * @param {number} [minutes]
  * @param {string} [reason] for the log line only
  */
-async function pauseBot(phone, minutes = DEFAULT_TAKEOVER_MIN, reason = "agent_takeover") {
+async function pauseBot(phone, minutes = DEFAULT_TAKEOVER_MIN, reason = "agent_takeover", sessionKey = null) {
   const p10 = last10(phone);
   if (!p10) return false;
   try {
+    // Scoped to the calling organization: a phone match on its own would mute
+    // the same person for every other tenant on this platform.
+    const tenantId = await require("./waContactTenancy").tenantForContactWrite({ sessionKey });
     const [res] = await db.promise().query(
-      "UPDATE wa_contacts SET ai_paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE) WHERE phone LIKE ?",
-      [minutes, `%${p10}`]
+      "UPDATE wa_contacts SET ai_paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE) WHERE tenant_id = ? AND phone LIKE ?",
+      [minutes, tenantId, `%${p10}`]
     );
     if (res.affectedRows) {
       console.log(`🤝 [WA BotGate] Bot paused ${minutes}min for +${p10} (${reason})`);
@@ -140,13 +143,14 @@ async function pauseBot(phone, minutes = DEFAULT_TAKEOVER_MIN, reason = "agent_t
 }
 
 /** Hand the conversation back to the bot (operator resolved the ticket). */
-async function resumeBot(phone) {
+async function resumeBot(phone, sessionKey = null) {
   const p10 = last10(phone);
   if (!p10) return false;
   try {
+    const tenantId = await require("./waContactTenancy").tenantForContactWrite({ sessionKey });
     await db.promise().query(
-      "UPDATE wa_contacts SET ai_paused_until = NULL WHERE phone LIKE ?",
-      [`%${p10}`]
+      "UPDATE wa_contacts SET ai_paused_until = NULL WHERE tenant_id = ? AND phone LIKE ?",
+      [tenantId, `%${p10}`]
     );
     console.log(`🤖 [WA BotGate] Bot resumed for +${p10}`);
     return true;

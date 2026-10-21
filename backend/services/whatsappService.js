@@ -1110,13 +1110,17 @@ class WhatsAppService {
             // Update contact last message in CRM for non-group chats ONLY if valid phone number
             if (!isGroup && phoneToStore && phoneToStore.length >= 10 && phoneToStore.length <= 13) {
               const countryCode = phoneToStore.length > 10 ? phoneToStore.slice(0, phoneToStore.length - 10) : "91";
+              const contactTenantId = await require("./waContactTenancy").tenantForContactWrite({
+                sessionKey: this.key,
+              });
               await db.promise().query(
-                `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
-                 VALUES (?, ?, ?, 'WhatsApp Chat', 1, ?, NOW(), ?)
+                `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
+                 VALUES (?, ?, ?, ?, 'WhatsApp Chat', 1, ?, NOW(), ?)
                  ON DUPLICATE KEY UPDATE
                    last_message_text = VALUES(last_message_text),
                    last_message_at = NOW()`,
                 [
+                  contactTenantId,
                   msg.fromMe ? "Me" : (msg._data?.notifyName || formatPhoneDisplay(phoneToStore)),
                   phoneToStore,
                   countryCode,
@@ -1140,6 +1144,7 @@ class WhatsAppService {
               const contactName = msg._data?.notifyName || msg.notifyName || null;
               waLeadCapture.captureLeadFromWhatsApp({
                 phone: cleanPhone,
+                sessionKey: this.key,
                 name: contactName || undefined,
                 notes: (liveMsg.body || "").slice(0, 500) || "Customer messaged via WhatsApp",
                 sourceDetail: "WhatsApp Inbound",
@@ -1156,17 +1161,24 @@ class WhatsAppService {
             if (isOptOut) {
               try {
                 const db = require("../config/database");
+                // Opt-out is per organization: one business's STOP must not
+                // silence the same person for another business on this
+                // platform, and the campaign rows it suppresses are the ones
+                // this organization queued.
+                const optOutTenantId = await require("./waContactTenancy").tenantForContactWrite({
+                  sessionKey: this.key,
+                });
                 await db.promise().query(
-                  "INSERT IGNORE INTO wa_opt_outs (phone, reason, opt_out_keyword) VALUES (?, 'user_request', ?)",
-                  [cleanPhone, bodyTrimmed]
+                  "INSERT IGNORE INTO wa_opt_outs (tenant_id, phone, reason, opt_out_keyword) VALUES (?, ?, 'user_request', ?)",
+                  [optOutTenantId, cleanPhone, bodyTrimmed]
                 );
                 await db.promise().query(
-                  "UPDATE wa_contacts SET is_unsubscribed=1, opt_in_status=0, updated_at=NOW() WHERE phone LIKE ?",
-                  [`%${cleanPhone.slice(-10)}`]
+                  "UPDATE wa_contacts SET is_unsubscribed=1, opt_in_status=0, updated_at=NOW() WHERE tenant_id = ? AND phone LIKE ?",
+                  [optOutTenantId, `%${cleanPhone.slice(-10)}`]
                 );
                 await db.promise().query(
-                  "UPDATE wa_campaign_messages SET status='opted_out', opt_out=1, error='User opted out' WHERE phone=? AND status='queued'",
-                  [cleanPhone]
+                  "UPDATE wa_campaign_messages SET status='opted_out', opt_out=1, error='User opted out' WHERE tenant_id = ? AND phone=? AND status='queued'",
+                  [optOutTenantId, cleanPhone]
                 );
                 // Send polite unsubscribe confirmation
                 await this.sendMessage(chatId, "✅ You have been successfully unsubscribed. You will no longer receive promotional messages from us. Reply START anytime to re-subscribe.");
@@ -1530,13 +1542,16 @@ class WhatsAppService {
                VALUES (?, ?, 'outbound', 'text', ?, ?, ?, 'sent', NOW())`,
               [this.key, cleanPhone, message, msgId, quotedId]
             );
+            const contactTenantId = await require("./waContactTenancy").tenantForContactWrite({
+              sessionKey: this.key,
+            });
             await db.promise().query(
-              `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
-               VALUES (?, ?, '91', 'WhatsApp Chat', 1, ?, NOW(), 0)
+              `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
+               VALUES (?, ?, ?, ?, 'WhatsApp Chat', 1, ?, NOW(), 0)
                ON DUPLICATE KEY UPDATE
                  last_message_text = VALUES(last_message_text),
                  last_message_at = NOW()`,
-              ["Me", cleanPhone, message]
+              [contactTenantId, "Me", cleanPhone, message]
             ).catch(() => {});
           } catch (e) {}
         });
@@ -2086,19 +2101,25 @@ class WhatsAppService {
         // 1d. Auto-persist scanned session chats into wa_contacts
         process.nextTick(async () => {
           try {
+            // One lookup for the whole scan: every chat this session sees
+            // belongs to the organization that owns the session.
+            const contactTenantId = await require("./waContactTenancy").tenantForContactWrite({
+              sessionKey: this.key,
+            });
             for (const chat of chatMap.values()) {
               if (chat.isGroup || !chat.phoneNumber) continue;
               const cleanDigits = chat.phoneNumber.replace(/\D/g, "");
               if (cleanDigits.length < 10 || cleanDigits.length > 13) continue;
               const countryCode = cleanDigits.length > 10 ? cleanDigits.slice(0, cleanDigits.length - 10) : "91";
               await db.promise().query(
-                `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
-                 VALUES (?, ?, ?, 'WhatsApp Account', 1, ?, FROM_UNIXTIME(?), ?)
+                `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
+                 VALUES (?, ?, ?, ?, 'WhatsApp Account', 1, ?, FROM_UNIXTIME(?), ?)
                  ON DUPLICATE KEY UPDATE
                    name = IF(name IS NULL OR name = '' OR name LIKE '+%', VALUES(name), name),
                    last_message_text = COALESCE(VALUES(last_message_text), last_message_text),
                    last_message_at = COALESCE(VALUES(last_message_at), last_message_at)`,
                 [
+                  contactTenantId,
                   chat.name || `+${cleanDigits}`,
                   cleanDigits,
                   countryCode,
@@ -2230,9 +2251,12 @@ class WhatsAppService {
         ).catch(() => null);
 
         if (picUrl) {
+          const picTenantId = await require("./waContactTenancy").tenantForContactWrite({
+            sessionKey: this.key,
+          });
           await db.promise().query(
-            "UPDATE wa_contacts SET profile_pic_url = ? WHERE phone LIKE ?",
-            [picUrl, `%${cleanPhone}`]
+            "UPDATE wa_contacts SET profile_pic_url = ? WHERE tenant_id = ? AND phone LIKE ?",
+            [picUrl, picTenantId, `%${cleanPhone}`]
           ).catch(() => {});
           return picUrl;
         }
@@ -2403,16 +2427,20 @@ class WhatsAppService {
         }).catch(() => {});
       }
 
-      // 2. Clear unread in database
+      // 2. Clear unread in database. Scoped to this session's organization -
+      // the LIKE match alone would mark another tenant's chat as read.
+      const seenTenantId = await require("./waContactTenancy").tenantForContactWrite({
+        sessionKey: this.key,
+      });
       const db = require("../config/database");
       await db.promise().query(
-        "UPDATE wa_contacts SET unread_count = 0 WHERE phone LIKE ? OR phone LIKE ?",
-        [`%${cleanPhone}`, `%${digitsOnly}`]
+        "UPDATE wa_contacts SET unread_count = 0 WHERE tenant_id = ? AND (phone LIKE ? OR phone LIKE ?)",
+        [seenTenantId, `%${cleanPhone}`, `%${digitsOnly}`]
       ).catch(() => {});
 
       await db.promise().query(
-        "UPDATE wa_message_logs SET is_read = 1 WHERE (phone LIKE ? OR phone LIKE ?) AND direction = 'inbound'",
-        [`%${cleanPhone}`, `%${digitsOnly}`]
+        "UPDATE wa_message_logs SET is_read = 1 WHERE tenant_id = ? AND (phone LIKE ? OR phone LIKE ?) AND direction = 'inbound'",
+        [seenTenantId, `%${cleanPhone}`, `%${digitsOnly}`]
       ).catch(() => {});
 
       // 3. Emit real-time read event to UI
@@ -3116,6 +3144,11 @@ class WhatsAppService {
       const db = require("../config/database");
       let inserted = 0;
       let updated = 0;
+      // Resolved once for the whole sync: these contacts come from this
+      // session's address book, so they all belong to one organization.
+      const contactTenantId = await require("./waContactTenancy").tenantForContactWrite({
+        sessionKey: this.key,
+      });
 
       for (const c of rawContacts) {
         if (c.isUser === false || c.isGroup) continue;
@@ -3139,12 +3172,12 @@ class WhatsAppService {
 
         try {
           const [res] = await db.promise().query(
-            `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status)
-             VALUES (?, ?, ?, 'WhatsApp Account', 1)
+            `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, opt_in_status)
+             VALUES (?, ?, ?, ?, 'WhatsApp Account', 1)
              ON DUPLICATE KEY UPDATE
                name = IF(name IS NULL OR name = '' OR name LIKE '+%', VALUES(name), name),
                updated_at = NOW()`,
-            [name, cleanPhone, countryCode]
+            [contactTenantId, name, cleanPhone, countryCode]
           );
           if (res.affectedRows === 1) inserted++;
           else if (res.affectedRows === 2) updated++;

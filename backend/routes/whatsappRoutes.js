@@ -75,13 +75,17 @@ async function recordCloudSend(req, chatId, phone, messageId, body, type = "text
      VALUES (?, ?, 'outbound', ?, ?, ?, 'sent', NOW())`,
     [sessionKey, phone, type, body, messageId]
   ).catch((err) => console.warn("[Cloud Send] History recording failed:", err.message));
+  const contactTenantId = await require("../services/waContactTenancy").tenantForContactWrite({
+    req,
+    sessionKey,
+  });
   await db.promise().query(
-    `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
-     VALUES ('Customer', ?, '91', 'WhatsApp Chat', 1, ?, NOW(), 0)
+    `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
+     VALUES (?, 'Customer', ?, '91', 'WhatsApp Chat', 1, ?, NOW(), 0)
      ON DUPLICATE KEY UPDATE last_message_text = VALUES(last_message_text), last_message_at = NOW()`,
-    [phone.slice(-10), body]
+    [contactTenantId, phone.slice(-10), body]
   ).catch(() => {});
-  await require("../services/waBotGate").pauseBot(chatId, undefined, "manual cloud reply").catch(() => {});
+  await require("../services/waBotGate").pauseBot(chatId, undefined, "manual cloud reply", sessionKey).catch(() => {});
   const io = req.app?.get("io");
   if (io) io.to(`user:${sessionKey}`).emit("wa_message_sent", {
     chatId, phone, sessionKey,
@@ -411,15 +415,18 @@ router.post("/chat/:chatId/read", async (req, res) => {
     // 1. Mark on active session (WhatsApp Web / Baileys)
     await s(req).sendSeen(rawChatId).catch(() => {});
 
-    // 2. Mark in database tables
+    // 2. Mark in database tables. Scoped to the caller's organization: the
+    // phone LIKE match alone would clear another tenant's unread counter and
+    // read receipts for the same number.
+    const markTenantId = await require("../services/waContactTenancy").tenantForContactWrite({ req });
     await db.promise().query(
-      "UPDATE wa_contacts SET unread_count = 0 WHERE phone LIKE ? OR phone LIKE ?",
-      [`%${clean10}`, `%${digitsOnly}`]
+      "UPDATE wa_contacts SET unread_count = 0 WHERE tenant_id = ? AND (phone LIKE ? OR phone LIKE ?)",
+      [markTenantId, `%${clean10}`, `%${digitsOnly}`]
     ).catch(() => {});
 
     await db.promise().query(
-      "UPDATE wa_message_logs SET is_read = 1 WHERE (phone LIKE ? OR phone LIKE ?) AND direction = 'inbound'",
-      [`%${clean10}`, `%${digitsOnly}`]
+      "UPDATE wa_message_logs SET is_read = 1 WHERE tenant_id = ? AND (phone LIKE ? OR phone LIKE ?) AND direction = 'inbound'",
+      [markTenantId, `%${clean10}`, `%${digitsOnly}`]
     ).catch(() => {});
 
     // 3. Emit real-time socket event
@@ -490,9 +497,10 @@ router.post("/contact/:phone/profile-pic", async (req, res) => {
     const cleanPhone = req.params.phone.replace(/\D/g, "").slice(-10);
     if (!cleanPhone) return res.status(400).json({ error: "Invalid phone number" });
 
+    const picTenantId = await require("../services/waContactTenancy").tenantForContactWrite({ req });
     await db.promise().query(
-      "UPDATE wa_contacts SET profile_pic_url = ?, avatar_url = ? WHERE phone LIKE ?",
-      [profile_pic_url, profile_pic_url, `%${cleanPhone}`]
+      "UPDATE wa_contacts SET profile_pic_url = ?, avatar_url = ? WHERE tenant_id = ? AND phone LIKE ?",
+      [profile_pic_url, profile_pic_url, picTenantId, `%${cleanPhone}`]
     );
     res.json({ success: true, phone: cleanPhone, profilePicUrl: profile_pic_url });
   } catch (err) {
@@ -565,11 +573,15 @@ router.patch("/chat/:phone/ai", async (req, res) => {
   try {
     const last10 = req.params.phone.replace(/\D/g, "").slice(-10);
     const enabled = req.body.enabled ? 1 : 0;
+    // Scoped to the caller's organization: without it this upsert matched on
+    // phone alone, so one tenant's per-chat AI switch flipped another
+    // tenant's contact.
+    const contactTenantId = await require("../services/waContactTenancy").tenantForContactWrite({ req });
     await db.promise().query(
-      `INSERT INTO wa_contacts (name, phone, country_code, source, opt_in_status, ai_enabled)
-       VALUES ('Customer', ?, '91', 'Chat', 1, ?)
+      `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, opt_in_status, ai_enabled)
+       VALUES (?, 'Customer', ?, '91', 'Chat', 1, ?)
        ON DUPLICATE KEY UPDATE ai_enabled = VALUES(ai_enabled), ai_paused_until = NULL`,
-      [last10, enabled]
+      [contactTenantId, last10, enabled]
     );
     res.json({ success: true, aiEnabled: !!enabled });
   } catch (err) {
@@ -628,7 +640,7 @@ router.post("/send-interactive", messageSendLimiter, async (req, res) => {
     }
     const id = await require("../services/waFlowEngine").recordAndEmitBotMessage(phone, historyText, "interactive", { ...payload, native: !!result.native }, sessionKey, chatId,
       { id: interactive.deliveryMessageId(result), status: "sent" });
-    await require("../services/waBotGate").pauseBot(chatId, undefined, "manual menu reply").catch(() => {});
+    await require("../services/waBotGate").pauseBot(chatId, undefined, "manual menu reply", req.user?.id).catch(() => {});
     return res.json({ success: true, id, native: !!result.native, interactive: payload });
   } catch (err) {
     return res.status(err.deliveryUnknown ? 504 : 502).json({ error: err.message, deliveryUnknown: !!err.deliveryUnknown });
@@ -654,7 +666,7 @@ router.post("/send", messageSendLimiter, async (req, res) => {
           replyToMessageId,
           idempotencyKey: idempotencyKey || null,
         });
-        await require("../services/waBotGate").pauseBot(chatId, undefined, "manual reply").catch(() => {});
+        await require("../services/waBotGate").pauseBot(chatId, undefined, "manual reply", req.user?.id).catch(() => {});
         return res.json(result);
       } catch (sendErr) {
         if (sendErr?.deliveryUnknown) {
@@ -837,10 +849,13 @@ router.post("/add-to-crm-client", async (req, res) => {
           [existing[0].id]
         );
       }
-      // Link wa_contacts to this client
+      // Link wa_contacts to this client. Scoped to the caller's organization -
+      // the phone LIKE match alone would relink every tenant's contact for
+      // that number to one CRM client.
+      const linkTenantId = await require("../services/waContactTenancy").tenantForContactWrite({ req });
       await db.promise().query(
-        `UPDATE wa_contacts SET crm_ref_type = 'clients', crm_ref_id = ? WHERE phone LIKE ?`,
-        [existing[0].id, `%${clean10}`]
+        `UPDATE wa_contacts SET crm_ref_type = 'clients', crm_ref_id = ? WHERE tenant_id = ? AND phone LIKE ?`,
+        [existing[0].id, linkTenantId, `%${clean10}`]
       ).catch(() => {});
 
       return res.json({
@@ -870,16 +885,17 @@ router.post("/add-to-crm-client", async (req, res) => {
     const newClientId = result.insertId;
 
     // 3. Link wa_contacts to the new client
+    const contactTenantId = await require("../services/waContactTenancy").tenantForContactWrite({ req });
     await db.promise().query(
-      `INSERT INTO wa_contacts (name, phone, country_code, source, crm_ref_type, crm_ref_id, opt_in_status, last_contacted)
-       VALUES (?, ?, '91', 'WhatsApp', 'clients', ?, 1, NOW())
+      `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, crm_ref_type, crm_ref_id, opt_in_status, last_contacted)
+       VALUES (?, ?, ?, '91', 'WhatsApp', 'clients', ?, 1, NOW())
        ON DUPLICATE KEY UPDATE
          name = COALESCE(NULLIF(VALUES(name), 'WhatsApp Contact'), name),
          source = 'WhatsApp',
          crm_ref_type = 'clients',
          crm_ref_id = VALUES(crm_ref_id),
          last_contacted = NOW()`,
-      [customerName, clean10, newClientId]
+      [contactTenantId, customerName, clean10, newClientId]
     ).catch(() => {});
 
     // 4. Send admin notification
@@ -934,15 +950,16 @@ router.post("/assign-agent", async (req, res) => {
     if (!phone) return res.status(400).json({ error: "phone is required" });
 
     const clean10 = phone.replace(/\D/g, "").slice(-10);
+    const assignTenantId = await require("../services/waContactTenancy").tenantForContactWrite({ req });
     await db.promise().query(
-      "UPDATE wa_contacts SET assigned_agent_id = ? WHERE phone LIKE ?",
-      [agentId || null, `%${clean10}`]
+      "UPDATE wa_contacts SET assigned_agent_id = ? WHERE tenant_id = ? AND phone LIKE ?",
+      [agentId || null, assignTenantId, `%${clean10}`]
     );
 
     // Handing a chat to a human pauses the bot; unassigning gives it back.
     const waBotGate = require("../services/waBotGate");
-    if (agentId) await waBotGate.pauseBot(clean10, 24 * 60, "assigned to agent").catch(() => {});
-    else await waBotGate.resumeBot(clean10).catch(() => {});
+    if (agentId) await waBotGate.pauseBot(clean10, 24 * 60, "assigned to agent", req.user?.id).catch(() => {});
+    else await waBotGate.resumeBot(clean10, req.user?.id).catch(() => {});
 
     res.json({ success: true, agentId: agentId || null });
   } catch (err) {
@@ -1016,7 +1033,7 @@ router.post("/send-media-upload", messageSendLimiter, privateAttachmentUpload.si
       result = { success: true, id };
       await recordCloudSend(req, chatId, String(chatId).replace(/\D/g, ""), id, req.file.originalname, type, { hasMedia: true, filename: req.file.originalname, mimetype: req.file.mimetype }).catch(() => {});
     }
-    await require("../services/waBotGate").pauseBot(chatId, undefined, "manual attachment reply").catch(() => {});
+    await require("../services/waBotGate").pauseBot(chatId, undefined, "manual attachment reply", req.user?.id).catch(() => {});
     res.json({ success: true, id: result.id, filename: req.file.originalname, mimetype: req.file.mimetype });
   } catch (error) { res.status(error.deliveryUnknown ? 504 : 502).json({ error: error.message, deliveryUnknown: !!error.deliveryUnknown }); }
 });
@@ -1048,7 +1065,7 @@ router.post("/send-media", messageSendLimiter, async (req, res) => {
           filename || "",
           { idempotencyKey: idempotencyKey || null }
         );
-        await require("../services/waBotGate").pauseBot(chatId, undefined, "manual media reply").catch(() => {});
+        await require("../services/waBotGate").pauseBot(chatId, undefined, "manual media reply", req.user?.id).catch(() => {});
         return res.json(result);
       } catch (mediaErr) {
         if (mediaErr?.deliveryUnknown) {
@@ -1096,7 +1113,7 @@ router.post("/send-location", messageSendLimiter, async (req, res) => {
         const result = await session.sendLocationMessage(chatId, lat, lng, name || "", {
           idempotencyKey: idempotencyKey || null,
         });
-        await require("../services/waBotGate").pauseBot(chatId, undefined, "manual location reply").catch(() => {});
+        await require("../services/waBotGate").pauseBot(chatId, undefined, "manual location reply", req.user?.id).catch(() => {});
         return res.json(result);
       } catch (locErr) {
         if (locErr?.deliveryUnknown) {
@@ -1180,14 +1197,15 @@ router.post("/chat/:chatId/assign", async (req, res) => {
   try {
     const { agentId, agentName } = req.body;
     const phone = req.params.chatId.replace(/\D/g, "");
+    const inboxTenantId = await require("../services/waContactTenancy").tenantForContactWrite({ req });
     await db.promise().query(
-      "UPDATE wa_contacts SET assigned_agent_id = ?, assigned_agent_name = ? WHERE phone = ?",
-      [agentId || null, agentName || null, phone]
+      "UPDATE wa_contacts SET assigned_agent_id = ?, assigned_agent_name = ? WHERE tenant_id = ? AND phone = ?",
+      [agentId || null, agentName || null, inboxTenantId, phone]
     );
 
     const waBotGate = require("../services/waBotGate");
-    if (agentId) await waBotGate.pauseBot(phone, 24 * 60, "assigned to agent").catch(() => {});
-    else await waBotGate.resumeBot(phone).catch(() => {});
+    if (agentId) await waBotGate.pauseBot(phone, 24 * 60, "assigned to agent", req.user?.id).catch(() => {});
+    else await waBotGate.resumeBot(phone, req.user?.id).catch(() => {});
 
     res.json({ success: true, message: `Chat assigned to ${agentName || "unassigned"}` });
   } catch (err) {
@@ -1200,16 +1218,17 @@ router.post("/chat/:chatId/ticket-status", async (req, res) => {
   try {
     const { status } = req.body;
     const phone = req.params.chatId.replace(/\D/g, "");
+    const ticketTenantId = await require("../services/waContactTenancy").tenantForContactWrite({ req });
     await db.promise().query(
-      "UPDATE wa_contacts SET ticket_status = ? WHERE phone = ?",
-      [status || "open", phone]
+      "UPDATE wa_contacts SET ticket_status = ? WHERE tenant_id = ? AND phone = ?",
+      [status || "open", ticketTenantId, phone]
     );
 
     // Resolving the ticket hands the conversation back to the bot; marking it
     // spam keeps the bot out of it for good.
     const waBotGate = require("../services/waBotGate");
-    if (status === "resolved") await waBotGate.resumeBot(phone).catch(() => {});
-    else if (status === "spam") await waBotGate.pauseBot(phone, 365 * 24 * 60, "marked spam").catch(() => {});
+    if (status === "resolved") await waBotGate.resumeBot(phone, req.user?.id).catch(() => {});
+    else if (status === "spam") await waBotGate.pauseBot(phone, 365 * 24 * 60, "marked spam", req.user?.id).catch(() => {});
 
     res.json({ success: true, status });
   } catch (err) {

@@ -369,8 +369,14 @@ router.post("/lead", async (req, res) => {
     const { phone, name, email, company, service, city, notes, sourceDetail, assignedTo } = req.body || {};
     if (!phone) return res.status(400).json({ success: false, error: "Phone number is required" });
 
+    // This route has its own scope, so resolve the principal the same way the
+    // send routes do before handing it to the lead capture.
+    const sessionKey =
+      req.headers["x-session-key"] || req.query?.sessionKey || req.body?.sessionKey || req.user?.id || mgr.defaultKey;
+
     const result = await waLeadCapture.captureLeadFromWhatsApp({
       phone,
+      sessionKey,
       name,
       email,
       company,

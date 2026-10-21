@@ -296,10 +296,10 @@ async function getTenantUsage(tenantId = 1) {
     const msgRows = await queryAsync(
       db.isSqlite
         ? `SELECT COUNT(*) as count FROM wa_message_logs 
-           WHERE (tenant_id = ? OR tenant_id IS NULL) 
+           WHERE tenant_id = ? 
              AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')`
         : `SELECT COUNT(*) as count FROM wa_message_logs 
-           WHERE (tenant_id = ? OR tenant_id IS NULL) 
+           WHERE tenant_id = ? 
              AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')`,
       [tenant.id]
     );

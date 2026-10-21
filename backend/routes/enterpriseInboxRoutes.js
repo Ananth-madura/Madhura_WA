@@ -268,7 +268,7 @@ router.post(
           if (!conv) {
             // Find or create contact, then create conversation record
             let [ct] = await q(
-              "SELECT id FROM wa_contacts WHERE (phone LIKE ? OR phone = ?) AND (tenant_id = ? OR tenant_id IS NULL) LIMIT 1",
+              "SELECT id FROM wa_contacts WHERE (phone LIKE ? OR phone = ?) AND tenant_id = ? LIMIT 1",
               [`%${phone10}`, phone10, tid]
             );
             if (!ct) {

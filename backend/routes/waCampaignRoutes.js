@@ -92,7 +92,7 @@ router.get("/sender-pools", auth, async (req, res) => {
               SUM(m.sent_today) as total_sent_today
        FROM wa_sender_pools p
        LEFT JOIN wa_sender_pool_members m ON p.id = m.pool_id
-       WHERE p.tenant_id = ? OR p.tenant_id IS NULL
+       WHERE p.tenant_id = ?
        GROUP BY p.id ORDER BY p.id DESC`,
       [tenantId]
     );
@@ -257,7 +257,7 @@ router.post("/", async (req, res) => {
 
     let totalContacts = 0;
     if (group_id) {
-      const [rows] = await db.promise().query("SELECT COUNT(*) as count FROM wa_group_contacts WHERE group_id = ? AND (tenant_id = ? OR tenant_id IS NULL)", [group_id, tenantId]);
+      const [rows] = await db.promise().query("SELECT COUNT(*) as count FROM wa_group_contacts WHERE group_id = ? AND tenant_id = ?", [group_id, tenantId]);
       totalContacts = rows[0]?.count || 0;
     }
 
@@ -369,7 +369,7 @@ router.put("/:id", async (req, res) => {
     );
 
     if (group_id) {
-      const [rows] = await db.promise().query("SELECT COUNT(*) as count FROM wa_group_contacts WHERE group_id = ?", [group_id]);
+      const [rows] = await db.promise().query("SELECT COUNT(*) as count FROM wa_group_contacts WHERE group_id = ? AND tenant_id = ?", [group_id, req.tenantId]);
       await db.promise().query("UPDATE wa_campaigns SET total_contacts = ? WHERE id = ? AND tenant_id = ?", [rows[0].count, req.params.id, req.tenantId]);
     }
 
@@ -420,7 +420,7 @@ router.post("/:id/start", campaignLaunchLimiter, async (req, res) => {
     // Get contacts from group
     let contacts = [];
     if (campaign.group_id) {
-      const [rows] = await db.promise().query("SELECT * FROM wa_group_contacts WHERE group_id = ?", [campaign.group_id]);
+      const [rows] = await db.promise().query("SELECT * FROM wa_group_contacts WHERE group_id = ? AND tenant_id = ?", [campaign.group_id, req.tenantId]);
       contacts = rows;
     }
     if (!contacts.length) return res.status(400).json({ error: "No contacts in selected group" });
@@ -493,13 +493,15 @@ router.post("/:id/start", campaignLaunchLimiter, async (req, res) => {
     const blastError = checkBlastSize(freshContacts.length, req.body?.confirm_count);
     if (blastError) return res.status(400).json({ error: blastError });
 
-    // Insert queued messages
+    // Insert queued messages. Each queued row carries the campaign's
+    // organization: an unscoped queue row is invisible to the scoped status
+    // updates the engine issues later, so the send would look like a no-op.
     const messageList = freshContacts.map(c => {
       const phone = (c.country_code || "91") + c.phone.replace(/^0+/, "");
       return [
         campaign.id, phone, c.name, campaign.message_text, templateName,
         templateComponents.length ? JSON.stringify(templateComponents) : null,
-        campaign.media_type || null, campaign.media_url || null, "queued"
+        campaign.media_type || null, campaign.media_url || null, "queued", req.tenantId
       ];
     });
 
@@ -510,7 +512,7 @@ router.post("/:id/start", campaignLaunchLimiter, async (req, res) => {
     );
 
     await db.promise().query(
-      `INSERT IGNORE INTO wa_campaign_messages (campaign_id, phone, contact_name, message_text, template_name, template_components, media_type, media_url, status) VALUES ?`,
+      `INSERT IGNORE INTO wa_campaign_messages (campaign_id, phone, contact_name, message_text, template_name, template_components, media_type, media_url, status, tenant_id) VALUES ?`,
       [messageList]
     );
 
@@ -688,39 +690,40 @@ router.post("/create-direct", auth, campaignLaunchLimiter, async (req, res) => {
     if (!userConfigLoaded) resetToEnvConfig();
 
     const [grpRes] = await db.promise().query(
-      "INSERT INTO wa_contact_groups (name, description, created_by) VALUES (?,?,?)",
-      [name + " (Group)", `Direct campaign group for ${contacts.length} contacts`, req.user?.id || null]
+      "INSERT INTO wa_contact_groups (name, description, tenant_id, created_by) VALUES (?,?,?,?)",
+      [name + " (Group)", `Direct campaign group for ${contacts.length} contacts`, req.tenantId, req.user?.id || null]
     );
     const groupId = grpRes.insertId;
 
     const values = contacts.map(c => [
       groupId, c.name || null,
       c.phone.replace(/[^0-9]/g, "").slice(-10),
-      c.country_code || "91", c.source || null
+      c.country_code || "91", c.source || null,
+      req.tenantId
     ]);
     await db.promise().query(
-      "INSERT IGNORE INTO wa_group_contacts (group_id, name, phone, country_code, notes) VALUES ?",
+      "INSERT IGNORE INTO wa_group_contacts (group_id, name, phone, country_code, notes, tenant_id) VALUES ?",
       [values]
     );
 
     const [campRes] = await db.promise().query(
       `INSERT INTO wa_campaigns (name, description, type, message_text, group_id, status, total_contacts,
-        random_delay_min, random_delay_max, retry_failed, duplicate_filter, created_by, session_key)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        random_delay_min, random_delay_max, retry_failed, duplicate_filter, tenant_id, created_by, session_key)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [name, `Bulk direct campaign for ${contacts.length} contacts`, "text", message_text,
         groupId, "running", contacts.length,
-        delay_seconds, delay_seconds + 3, 1, 1, req.user?.id || null, String(req.user?.id || "")]
+        delay_seconds, delay_seconds + 3, 1, 1, req.tenantId, req.user?.id || null, String(req.user?.id || "")]
     );
     const campaignId = campRes.insertId;
 
-    const [groupContacts] = await db.promise().query("SELECT * FROM wa_group_contacts WHERE group_id=?", [groupId]);
+    const [groupContacts] = await db.promise().query("SELECT * FROM wa_group_contacts WHERE group_id=? AND tenant_id=?", [groupId, req.tenantId]);
     const messageList = groupContacts.map(c => [
       campaignId, (c.country_code || "91") + c.phone.replace(/^0+/, ""),
-      c.name, message_text, null, null, "queued"
+      c.name, message_text, null, null, "queued", req.tenantId
     ]);
 
     await db.promise().query(
-      "INSERT INTO wa_campaign_messages (campaign_id, phone, contact_name, message_text, template_name, template_components, status) VALUES ?",
+      "INSERT INTO wa_campaign_messages (campaign_id, phone, contact_name, message_text, template_name, template_components, status, tenant_id) VALUES ?",
       [messageList]
     );
 
@@ -835,18 +838,7 @@ router.post("/create-wizard", auth, campaignLaunchLimiter, async (req, res) => {
     await db.promise().query(
       "INSERT IGNORE INTO wa_group_contacts (group_id, name, phone, country_code, notes, tenant_id) VALUES ?",
       [groupValues]
-    ).catch(async () => {
-      // Fallback if tenant_id column doesn't exist on wa_group_contacts
-      const legacyGroupValues = contacts.map(c => [
-        groupId, c.name || null,
-        String(c.phone).replace(/[^0-9]/g, "").slice(-10),
-        c.country_code || "91", c.source || null
-      ]);
-      await db.promise().query(
-        "INSERT IGNORE INTO wa_group_contacts (group_id, name, phone, country_code, notes) VALUES ?",
-        [legacyGroupValues]
-      );
-    });
+    );
 
     const campaignType = templateName ? "template" : (media_url ? "media" : "text");
     const [campRes] = await db.promise().query(
@@ -867,7 +859,7 @@ router.post("/create-wizard", auth, campaignLaunchLimiter, async (req, res) => {
     );
     const campaignId = campRes.insertId;
 
-    const [groupContacts] = await db.promise().query("SELECT * FROM wa_group_contacts WHERE group_id=?", [groupId]);
+    const [groupContacts] = await db.promise().query("SELECT * FROM wa_group_contacts WHERE group_id=? AND tenant_id=?", [groupId, req.tenantId]);
     const messageList = groupContacts.map(c => [
       campaignId, (c.country_code || "91") + c.phone.replace(/^0+/, ""),
       c.name, message_text || null, templateName, templateComponents.length ? JSON.stringify(templateComponents) : null,
@@ -882,23 +874,7 @@ router.post("/create-wizard", auth, campaignLaunchLimiter, async (req, res) => {
          location_lat, location_lng, location_name, location_address, status, pool_id, tenant_id)
        VALUES ?`,
       [messageList]
-    ).catch(async () => {
-      // Fallback without pool_id & tenant_id columns
-      const legacyMessageList = groupContacts.map(c => [
-        campaignId, (c.country_code || "91") + c.phone.replace(/^0+/, ""),
-        c.name, message_text || null, templateName, templateComponents.length ? JSON.stringify(templateComponents) : null,
-        media_type || null, media_url || null,
-        location?.lat ?? null, location?.lng ?? null, location?.name || null, location?.address || null,
-        "queued"
-      ]);
-      await db.promise().query(
-        `INSERT INTO wa_campaign_messages
-          (campaign_id, phone, contact_name, message_text, template_name, template_components, media_type, media_url,
-           location_lat, location_lng, location_name, location_address, status)
-         VALUES ?`,
-        [legacyMessageList]
-      );
-    });
+    );
 
     await db.promise().query("UPDATE wa_campaigns SET started_at=NOW() WHERE id=?", [campaignId]);
 
