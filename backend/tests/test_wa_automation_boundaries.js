@@ -66,14 +66,18 @@ async function runTests() {
   const testCampaignId = campRes.insertId;
 
   const [msgRes] = await db.promise().query(
-    `INSERT INTO wa_campaign_messages (campaign_id, phone, status, sent_at, reply_received)
-     VALUES (?, ?, 'sent', DATE_SUB(NOW(), INTERVAL 1 HOUR), 0)`,
+    `INSERT INTO wa_campaign_messages (campaign_id, phone, status, sent_at, reply_received, tenant_id)
+     VALUES (?, ?, 'sent', DATE_SUB(NOW(), INTERVAL 1 HOUR), 0, 1)`,
     [testCampaignId, testPhone]
   );
   const testMsgId = msgRes.insertId;
 
-  // Check campaign reply attribution
-  const campaignReplyCheck = await waCampaignEngine.checkAndRecordCampaignReply(testPhone, "What is the price?");
+  // Check campaign reply attribution (replies are only attributed inside the
+  // organization the sender belongs to - a bare call with no tenant is refused)
+  const noTenant = await waCampaignEngine.checkAndRecordCampaignReply(testPhone, "What is the price?");
+  assert(noTenant.isCampaignReply === false, "Reply with no resolvable organization is never attributed");
+
+  const campaignReplyCheck = await waCampaignEngine.checkAndRecordCampaignReply(testPhone, "What is the price?", 1);
   assert(campaignReplyCheck.isCampaignReply === true, "Inbound recognized as reply to recent bulk campaign");
   assert(campaignReplyCheck.campaignId === testCampaignId, "Correct campaign ID attributed");
 

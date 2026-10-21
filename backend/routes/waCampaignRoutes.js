@@ -520,13 +520,13 @@ router.post("/:id/start", campaignLaunchLimiter, async (req, res) => {
     // was set at creation time, so user B starting user A's campaign sent it
     // from A's number.
     await db.promise().query(
-      "UPDATE wa_campaigns SET status='running', started_at=NOW(), total_contacts=?, sent_count=0, failed_count=0, delivered_count=0, read_count=0, session_key=? WHERE id=?",
-      [freshContacts.length, String(req.user?.id || ""), campaign.id]
+      "UPDATE wa_campaigns SET status='running', started_at=NOW(), total_contacts=?, sent_count=0, failed_count=0, delivered_count=0, read_count=0, session_key=? WHERE id=? AND tenant_id=?",
+      [freshContacts.length, String(req.user?.id || ""), campaign.id, req.tenantId]
     );
 
     // Launch the safe campaign engine (non-blocking)
     const { startCampaignEngine } = require("../services/waCampaignEngine");
-    startCampaignEngine(campaign.id);
+    startCampaignEngine(campaign.id, req.tenantId);
 
     const [updated] = await db.promise().query("SELECT * FROM wa_campaigns WHERE id = ?", [campaign.id]);
     res.json({
@@ -543,7 +543,13 @@ router.post("/:id/start", campaignLaunchLimiter, async (req, res) => {
 // ── Pause campaign ────────────────────────────────────────────────────────────
 router.post("/:id/pause", auth, async (req, res) => {
   try {
-    await db.promise().query("UPDATE wa_campaigns SET status='paused' WHERE id=?", [req.params.id]);
+    const [result] = await db.promise().query(
+      "UPDATE wa_campaigns SET status='paused' WHERE id=? AND tenant_id=?",
+      [req.params.id, req.tenantId]
+    );
+    // A campaign in another organization is not ours to pause - answer the
+    // same 404 the read route gives, rather than 200 for a row we never touched.
+    if (!result.affectedRows) return res.status(404).json({ error: "Campaign not found" });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -553,9 +559,13 @@ router.post("/:id/pause", auth, async (req, res) => {
 // ── Resume campaign ───────────────────────────────────────────────────────────
 router.post("/:id/resume", auth, async (req, res) => {
   try {
-    await db.promise().query("UPDATE wa_campaigns SET status='running' WHERE id=?", [req.params.id]);
+    const [result] = await db.promise().query(
+      "UPDATE wa_campaigns SET status='running' WHERE id=? AND tenant_id=?",
+      [req.params.id, req.tenantId]
+    );
+    if (!result.affectedRows) return res.status(404).json({ error: "Campaign not found" });
     const { startCampaignEngine } = require("../services/waCampaignEngine");
-    startCampaignEngine(req.params.id);
+    startCampaignEngine(req.params.id, req.tenantId);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -565,10 +575,11 @@ router.post("/:id/resume", auth, async (req, res) => {
 // ── Stop/cancel campaign ──────────────────────────────────────────────────────
 router.post("/:id/stop", auth, async (req, res) => {
   try {
-    await db.promise().query(
-      "UPDATE wa_campaigns SET status='cancelled', completed_at=NOW() WHERE id=?",
-      [req.params.id]
+    const [result] = await db.promise().query(
+      "UPDATE wa_campaigns SET status='cancelled', completed_at=NOW() WHERE id=? AND tenant_id=?",
+      [req.params.id, req.tenantId]
     );
+    if (!result.affectedRows) return res.status(404).json({ error: "Campaign not found" });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -578,10 +589,11 @@ router.post("/:id/stop", auth, async (req, res) => {
 // ── Mark complete ─────────────────────────────────────────────────────────────
 router.post("/:id/complete", auth, async (req, res) => {
   try {
-    await db.promise().query(
-      "UPDATE wa_campaigns SET status='completed', completed_at=NOW() WHERE id=?",
-      [req.params.id]
+    const [result] = await db.promise().query(
+      "UPDATE wa_campaigns SET status='completed', completed_at=NOW() WHERE id=? AND tenant_id=?",
+      [req.params.id, req.tenantId]
     );
+    if (!result.affectedRows) return res.status(404).json({ error: "Campaign not found" });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -592,17 +604,25 @@ router.post("/:id/complete", auth, async (req, res) => {
 router.post("/:id/retry-failed", auth, async (req, res) => {
   try {
     const campaignId = req.params.id;
+    // Own the campaign before touching its queue: without this, any tenant
+    // could re-queue another tenant's failed rows and start the engine on them.
+    const [owned] = await db.promise().query(
+      "SELECT id FROM wa_campaigns WHERE id=? AND tenant_id=?",
+      [campaignId, req.tenantId]
+    );
+    if (!owned.length) return res.status(404).json({ error: "Campaign not found" });
+
     const [result] = await db.promise().query(
-      "UPDATE wa_campaign_messages SET status='queued', attempts=0, error=NULL, next_retry_at=NULL WHERE campaign_id=? AND status='failed' AND (error IS NULL OR error NOT LIKE '[DELIVERY_UNKNOWN]%')",
-      [campaignId]
+      "UPDATE wa_campaign_messages SET status='queued', attempts=0, error=NULL, next_retry_at=NULL WHERE campaign_id=? AND tenant_id=? AND status='failed' AND (error IS NULL OR error NOT LIKE '[DELIVERY_UNKNOWN]%')",
+      [campaignId, req.tenantId]
     );
     if (result.affectedRows > 0) {
       await db.promise().query(
-        "UPDATE wa_campaigns SET status='running', completed_at=NULL WHERE id=?",
-        [campaignId]
+        "UPDATE wa_campaigns SET status='running', completed_at=NULL WHERE id=? AND tenant_id=?",
+        [campaignId, req.tenantId]
       );
       const { startCampaignEngine } = require("../services/waCampaignEngine");
-      startCampaignEngine(campaignId);
+      startCampaignEngine(campaignId, req.tenantId);
     }
     res.json({ success: true, retriedCount: result.affectedRows });
   } catch (err) {
@@ -613,7 +633,10 @@ router.post("/:id/retry-failed", auth, async (req, res) => {
 // ── Clone / Duplicate campaign ────────────────────────────────────────────────
 router.post("/:id/clone", auth, async (req, res) => {
   try {
-    const [rows] = await db.promise().query("SELECT * FROM wa_campaigns WHERE id=?", [req.params.id]);
+    const [rows] = await db.promise().query(
+      "SELECT * FROM wa_campaigns WHERE id=? AND tenant_id=?",
+      [req.params.id, req.tenantId]
+    );
     if (!rows.length) return res.status(404).json({ error: "Campaign not found" });
     const orig = rows[0];
 
@@ -622,15 +645,19 @@ router.post("/:id/clone", auth, async (req, res) => {
         name, description, type, template_id, message_text, media_type, media_url, group_id, status,
         total_contacts, daily_limit, start_time, end_time, timezone, random_delay_min, random_delay_max,
         pause_every, pause_duration_min, pause_duration_max, retry_failed, max_retries, retry_delay_min,
-        retry_delay_max, exclude_prev_recipients, duplicate_filter, created_by, session_key
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        retry_delay_max, exclude_prev_recipients, duplicate_filter, created_by, session_key, tenant_id, branch_id
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         orig.name + " (Copy)", orig.description, orig.type, orig.template_id, orig.message_text,
         orig.media_type, orig.media_url, orig.group_id, "draft", orig.total_contacts,
         orig.daily_limit, orig.start_time, orig.end_time, orig.timezone, orig.random_delay_min,
         orig.random_delay_max, orig.pause_every, orig.pause_duration_min, orig.pause_duration_max,
         orig.retry_failed, orig.max_retries, orig.retry_delay_min, orig.retry_delay_max,
-        orig.exclude_prev_recipients, orig.duplicate_filter, req.user?.id || null, String(req.user?.id || "")
+        orig.exclude_prev_recipients, orig.duplicate_filter, req.user?.id || null, String(req.user?.id || ""),
+        // The clone is created inside the caller's own organization and branch,
+        // never carried across: a clone that inherited the source's tenant would
+        // be written by one organization while being readable only by another.
+        req.tenantId, orig.branch_id || null
       ]
     );
 
@@ -648,8 +675,17 @@ router.get("/:id/queue", auth, async (req, res) => {
     const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
 
-    let where = "campaign_id=?";
-    const params = [req.params.id];
+    // The campaign is the authorization boundary: own it first, and its queue
+    // becomes readable. Paging wa_campaign_messages by campaign_id alone would
+    // hand any tenant another tenant's message bodies and phone numbers.
+    const [owned] = await db.promise().query(
+      "SELECT id FROM wa_campaigns WHERE id=? AND tenant_id=?",
+      [req.params.id, req.tenantId]
+    );
+    if (!owned.length) return res.status(404).json({ error: "Campaign not found" });
+
+    let where = "campaign_id=? AND tenant_id=?";
+    const params = [req.params.id, req.tenantId];
     if (status) { where += " AND status=?"; params.push(status); }
 
     const [rows] = await db.promise().query(
@@ -727,10 +763,10 @@ router.post("/create-direct", auth, campaignLaunchLimiter, async (req, res) => {
       [messageList]
     );
 
-    await db.promise().query("UPDATE wa_campaigns SET started_at=NOW() WHERE id=?", [campaignId]);
+    await db.promise().query("UPDATE wa_campaigns SET started_at=NOW() WHERE id=? AND tenant_id=?", [campaignId, req.tenantId]);
 
     const { startCampaignEngine } = require("../services/waCampaignEngine");
-    startCampaignEngine(campaignId);
+    startCampaignEngine(campaignId, req.tenantId);
 
     res.status(201).json({ success: true, campaignId, totalContacts: contacts.length, delaySeconds: delay_seconds });
   } catch (err) {
@@ -876,10 +912,10 @@ router.post("/create-wizard", auth, campaignLaunchLimiter, async (req, res) => {
       [messageList]
     );
 
-    await db.promise().query("UPDATE wa_campaigns SET started_at=NOW() WHERE id=?", [campaignId]);
+    await db.promise().query("UPDATE wa_campaigns SET started_at=NOW() WHERE id=? AND tenant_id=?", [campaignId, req.tenantId]);
 
     const { startCampaignEngine } = require("../services/waCampaignEngine");
-    startCampaignEngine(campaignId);
+    startCampaignEngine(campaignId, req.tenantId);
 
     res.status(201).json({ success: true, campaignId, totalContacts: contacts.length, delayMin: delay_min, delayMax: delay_max, poolId: pool_id });
   } catch (err) {

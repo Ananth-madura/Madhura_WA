@@ -564,12 +564,39 @@ async function runCampaign(campaignId) {
 
 const runningCampaigns = new Set();
 
-async function startCampaignEngine(campaignId) {
+async function startCampaignEngine(campaignId, tenantId = null) {
   const key = String(campaignId);
   if (runningCampaigns.has(key)) {
     console.log(`ℹ️ Campaign ${campaignId}: already running — skipping duplicate invocation`);
-    return;
+    return false;
   }
+
+  // The engine's whole loop is driven by whatever row `campaignId` points at,
+  // so the caller must not be able to aim it at another organization's
+  // campaign. Routes that already resolved the campaign within their own
+  // tenant pass that tenant here; a mismatch (or an unknown campaign) stops
+  // the run before it starts rather than pausing, resuming or re-queueing
+  // someone else's sends.
+  if (tenantId !== null && tenantId !== undefined) {
+    try {
+      const [[owned]] = await db.promise().query(
+        "SELECT tenant_id FROM wa_campaigns WHERE id = ?",
+        [campaignId]
+      );
+      const expected = Number(tenantId);
+      const actual = owned ? Number(owned.tenant_id) : NaN;
+      if (!owned || !Number.isFinite(actual) || actual !== expected) {
+        console.warn(
+          `🚫 [WA Campaign] Refusing to start campaign ${campaignId}: it belongs to organization ${owned ? actual : "unknown"}, caller is ${expected}`
+        );
+        return false;
+      }
+    } catch (err) {
+      console.warn(`🚫 [WA Campaign] Could not verify ownership of campaign ${campaignId}: ${err.message}`);
+      return false;
+    }
+  }
+
   runningCampaigns.add(key);
 
   runCampaign(campaignId)
@@ -578,6 +605,7 @@ async function startCampaignEngine(campaignId) {
       db.promise().query("UPDATE wa_campaigns SET status='failed' WHERE id=? AND status='running'", [campaignId]).catch(() => {});
     })
     .finally(() => runningCampaigns.delete(key));
+  return true;
 }
 
 async function addBulkMessages(campaignId, messages, delayMs = 0) {
@@ -592,10 +620,20 @@ async function addSingleMessage(data, delayMs = 0, sessionKey) {
   return sendOneCampaignMessage(data, sessionKey);
 }
 
-async function getQueueStats(tenantId = null) {
+/**
+ * Queue depth per organization. `tenantId` is required: called without one
+ * this used to return every organization's queued/sent/failed rows, so the
+ * first tenant's dashboard showed the volume of all of them.
+ */
+async function getQueueStats(tenantId) {
+  const tenant = Number(tenantId);
+  if (!Number.isFinite(tenant) || tenant <= 0) {
+    console.warn("[WA Campaign] getQueueStats called without an organization - refusing to report another tenant's queue depth");
+    return { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, mode: "enterprise-db-engine", scoped: false };
+  }
   try {
-    const whereTenant = tenantId ? " AND tenant_id = ?" : "";
-    const params = tenantId ? [tenantId] : [];
+    const params = [tenant];
+    const whereTenant = " AND tenant_id = ?";
 
     const [[queued]] = await db.promise().query(`SELECT COUNT(*) as cnt FROM wa_campaign_messages WHERE status='queued'${whereTenant}`, params);
     const [[sending]] = await db.promise().query(`SELECT COUNT(*) as cnt FROM wa_campaign_messages WHERE status='sending'${whereTenant}`, params);
@@ -616,11 +654,20 @@ async function startWorker() {
  * Automatically attributes reply metrics and provides a safeguard flag so general
  * welcome auto-replies are NEVER accidentally sent to campaign respondents.
  */
-async function checkAndRecordCampaignReply(phone, messageText = "") {
+async function checkAndRecordCampaignReply(phone, messageText = "", tenantId = null) {
   if (!phone) return { isCampaignReply: false };
   const clean = String(phone).replace(/\D/g, "");
   const last10 = clean.slice(-10);
   if (last10.length < 10) return { isCampaignReply: false };
+  // Attribution must be bound to an organization. Without it, the newest
+  // campaign row for that number anywhere in the system wins - so a contact of
+  // organization B replying could increment organization A's reply_count and,
+  // worse, launch A's linked flow in B's inbox. No tenant, no attribution.
+  const tenant = Number(tenantId);
+  if (!Number.isFinite(tenant) || tenant <= 0) {
+    console.warn(`[WA Campaign] Reply from ${clean} was not attributed: no organization was resolvable for the sender`);
+    return { isCampaignReply: false };
+  }
 
   try {
     const [rows] = await db.promise().query(
@@ -628,10 +675,11 @@ async function checkAndRecordCampaignReply(phone, messageText = "") {
        FROM wa_campaign_messages cm
        LEFT JOIN wa_campaigns c ON cm.campaign_id = c.id
        WHERE (cm.phone = ? OR cm.phone LIKE ?)
+         AND cm.tenant_id = ?
          AND cm.status IN ('sent', 'delivered', 'read')
          AND cm.sent_at >= NOW() - INTERVAL 48 HOUR
        ORDER BY cm.id DESC LIMIT 1`,
-      [clean, `%${last10}`]
+      [clean, `%${last10}`, tenant]
     );
 
     if (rows && rows.length > 0) {

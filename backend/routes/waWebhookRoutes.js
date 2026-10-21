@@ -414,7 +414,11 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
 
   // ── 3. Check if contact is replying to a bulk campaign (Campaign Isolation) ──
   const waCampaignEngine = require("../services/waCampaignEngine");
-  const campaignReply = await waCampaignEngine.checkAndRecordCampaignReply(phone, messageText).catch(() => ({ isCampaignReply: false }));
+  // Scoped to this message's organization: without it the newest campaign row
+  // for that number anywhere in the system wins, so a reply from one tenant's
+  // contact could count toward another tenant's campaign and launch its flow.
+  const campaignReplyTenantId = contactTenantId ?? account?.tenantId ?? null;
+  const campaignReply = await waCampaignEngine.checkAndRecordCampaignReply(phone, messageText, campaignReplyTenantId).catch(() => ({ isCampaignReply: false }));
   const isCampaignReply = Boolean(campaignReply?.isCampaignReply);
 
   // ── Opt-out detection ─────────────────────────────────────────────────────

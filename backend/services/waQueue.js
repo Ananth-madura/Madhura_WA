@@ -96,6 +96,13 @@ async function startWorker() {
 
 async function processSingleMessage(campaignId, contactId, phone, message, templateName, templateComponents, sessionKey = 1, poolId = null, routingStrategy = "round_robin", tenantId = 1) {
   const waLoadBalancer = require("./waLoadBalancer");
+  // Every write below is keyed by a row id that arrived inside a job payload.
+  // The payload is ours, not the caller's, but a replayed or mis-routed job
+  // would otherwise still be able to mark another organization's row sent/failed,
+  // so the organization it claims is part of the match - if it does not agree
+  // with the row, nothing is written.
+  const tenant = Number(tenantId);
+  const scoped = Number.isFinite(tenant) && tenant > 0;
   try {
     let result;
     if (templateName) {
@@ -108,28 +115,28 @@ async function processSingleMessage(campaignId, contactId, phone, message, templ
     const senderPhone = result?.senderPhone || null;
 
     await db.promise().query(
-      `UPDATE wa_campaign_messages SET status = 'sent', wa_message_id = ?, sender_phone = ?, pool_id = ?, sent_at = NOW() WHERE id = ?`,
-      [msgId, senderPhone, poolId || null, contactId]
+      `UPDATE wa_campaign_messages SET status = 'sent', wa_message_id = ?, sender_phone = ?, pool_id = ?, sent_at = NOW() WHERE id = ?${scoped ? " AND tenant_id = ?" : ""}`,
+      scoped ? [msgId, senderPhone, poolId || null, contactId, tenant] : [msgId, senderPhone, poolId || null, contactId]
     );
     await db.promise().query(
-      `UPDATE wa_message_logs SET status = 'sent', wa_message_id = ?, sender_phone = ?, metadata = ? WHERE campaign_message_id = ?`,
-      [msgId, senderPhone, JSON.stringify(result || {}), contactId]
+      `UPDATE wa_message_logs SET status = 'sent', wa_message_id = ?, sender_phone = ?, metadata = ? WHERE campaign_message_id = ?${scoped ? " AND tenant_id = ?" : ""}`,
+      scoped ? [msgId, senderPhone, JSON.stringify(result || {}), contactId, tenant] : [msgId, senderPhone, JSON.stringify(result || {}), contactId]
     );
   } catch (err) {
     const errorMsg = err.response?.data?.error?.message || err.message;
     await db.promise().query(
-      `UPDATE wa_campaign_messages SET status = 'failed', error = ?, sent_at = NOW() WHERE id = ?`,
-      [errorMsg, contactId]
+      `UPDATE wa_campaign_messages SET status = 'failed', error = ?, sent_at = NOW() WHERE id = ?${scoped ? " AND tenant_id = ?" : ""}`,
+      scoped ? [errorMsg, contactId, tenant] : [errorMsg, contactId]
     );
     await db.promise().query(
-      `UPDATE wa_message_logs SET status = 'failed', error = ? WHERE campaign_message_id = ?`,
-      [errorMsg, contactId]
+      `UPDATE wa_message_logs SET status = 'failed', error = ? WHERE campaign_message_id = ?${scoped ? " AND tenant_id = ?" : ""}`,
+      scoped ? [errorMsg, contactId, tenant] : [errorMsg, contactId]
     );
   }
 
   await db.promise().query(
-    `UPDATE wa_campaigns SET sent_count = (SELECT COUNT(*) FROM wa_campaign_messages WHERE campaign_id = ? AND status = 'sent'), failed_count = (SELECT COUNT(*) FROM wa_campaign_messages WHERE campaign_id = ? AND status = 'failed') WHERE id = ?`,
-    [campaignId, campaignId, campaignId]
+    `UPDATE wa_campaigns SET sent_count = (SELECT COUNT(*) FROM wa_campaign_messages WHERE campaign_id = ? AND status = 'sent'), failed_count = (SELECT COUNT(*) FROM wa_campaign_messages WHERE campaign_id = ? AND status = 'failed') WHERE id = ?${scoped ? " AND tenant_id = ?" : ""}`,
+    scoped ? [campaignId, campaignId, campaignId, tenant] : [campaignId, campaignId, campaignId]
   );
 }
 

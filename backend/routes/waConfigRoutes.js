@@ -380,7 +380,12 @@ router.get("/business-profile", async (req, res) => {
 router.get("/queue-stats", async (req, res) => {
   let wa = req.waCloud;
   try {
-    const stats = await getQueueStats();
+    // Scoped to the caller's organization: this route has no tenant middleware
+    // (it is an operator config surface), so the tenant is resolved from the
+    // authenticated principal rather than a header the client controls.
+    const { tenantForSessionKey } = require("../services/waContactTenancy");
+    const tenantId = await tenantForSessionKey(req.user?.id).catch(() => null);
+    const stats = await getQueueStats(tenantId);
     res.json(stats);
   } catch (err) {
     res.json({ error: "Queue not available", detail: err.message });

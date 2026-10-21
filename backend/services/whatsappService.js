@@ -1198,8 +1198,12 @@ class WhatsAppService {
             if (billHandled) return;
 
             // 3. Check if contact is replying to a bulk campaign (Campaign Isolation)
+            // Scoped to the organization that owns this session, otherwise a reply
+            // is attributed to whichever tenant's campaign contacted that number
+            // most recently.
             const waCampaignEngine = require("./waCampaignEngine");
-            const campaignReply = await waCampaignEngine.checkAndRecordCampaignReply(cleanPhone, msg.body).catch(() => ({ isCampaignReply: false }));
+            const replyTenantId = await require("./waContactTenancy").tenantForSessionKey(this.key).catch(() => null);
+            const campaignReply = await waCampaignEngine.checkAndRecordCampaignReply(cleanPhone, msg.body, replyTenantId).catch(() => ({ isCampaignReply: false }));
             const isCampaignReply = Boolean(campaignReply?.isCampaignReply);
             if (isCampaignReply) {
               this.emitWaEvent("wa_campaign_reply", chatId, cleanPhone, {
