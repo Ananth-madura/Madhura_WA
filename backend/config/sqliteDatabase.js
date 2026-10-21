@@ -256,7 +256,39 @@ class SQLiteDatabaseAdapter {
 
     this.isReady = true;
     console.log(`✨ [SQLite Engine] Active at "${this.dbPath}" ${this.r2Enabled ? "(Backed by Cloudflare R2)" : "(Local persistence)"}`);
+
+    // The enterprise migration used to run only when someone executed the
+    // migration file by hand, so a freshly provisioned database never got
+    // organizations, branches, plans, senders or the per-organization phone
+    // uniqueness - the suites that depend on those tables passed only because
+    // a developer's local database.sqlite had already been migrated by hand.
+    // It belongs in the bootstrap, and it must finish before the first request
+    // so nothing reads a table mid-rebuild.
+    await this.runEnterpriseMigration();
     return this;
+  }
+
+  /**
+   * Run the canonical enterprise schema migration. Kept non-fatal on purpose:
+   * a deployment that cannot migrate should still serve what the current
+   * schema supports rather than refuse to boot.
+   */
+  async runEnterpriseMigration() {
+    if (
+      ["1", "true", "yes", "on"].includes(
+        String(process.env.WA_SKIP_ENTERPRISE_MIGRATION || "").toLowerCase()
+      )
+    ) {
+      return;
+    }
+    try {
+      await require("../migrations/enterprise_multi_tenant_multi_branch").migrate();
+    } catch (err) {
+      console.error(
+        "[SQLite Engine] Enterprise migration failed (continuing on the current schema):",
+        err.message
+      );
+    }
   }
 
   checkpoint() {
@@ -789,7 +821,7 @@ class SQLiteDatabaseAdapter {
       )`,
       `CREATE TABLE IF NOT EXISTS wa_contacts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        phone TEXT NOT NULL UNIQUE,
+        phone TEXT NOT NULL,
         name TEXT DEFAULT NULL,
         country_code TEXT DEFAULT '91',
         email TEXT DEFAULT NULL,
@@ -803,12 +835,15 @@ class SQLiteDatabaseAdapter {
         profile_pic_url TEXT DEFAULT NULL,
         avatar_url TEXT DEFAULT NULL,
         created_by INTEGER DEFAULT NULL,
+        tenant_id INTEGER NOT NULL DEFAULT 1,
+        branch_id INTEGER DEFAULT NULL,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )`,
       `CREATE TABLE IF NOT EXISTS wa_opt_outs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        phone TEXT NOT NULL UNIQUE,
+        phone TEXT NOT NULL,
+        tenant_id INTEGER NOT NULL DEFAULT 1,
         reason TEXT DEFAULT 'user_request',
         opted_out_at TEXT DEFAULT CURRENT_TIMESTAMP
       )`,
@@ -1303,6 +1338,101 @@ class SQLiteDatabaseAdapter {
   }
 
   /**
+   * Give a MySQL-style `ON DUPLICATE KEY UPDATE` statement the conflict target
+   * SQLite requires.
+   *
+   * MySQL infers the conflict column from whichever unique index the row
+   * collided with, so application code legitimately writes the clause with no
+   * target. SQLite syntax requires `ON CONFLICT(<cols>) DO UPDATE`, so the
+   * translation above produced invalid SQL and every upsert routed through
+   * `db.query` threw "near DO: syntax error". Most call sites wrap those
+   * writes in `.catch(() => {})`, so on the SQLite/R2 engine contacts and
+   * message rows were silently never written - the failure was invisible.
+   *
+   * The target is read from the table's own unique indexes (never guessed from
+   * the statement), and only indexes whose columns are all part of the INSERT
+   * column list can apply. When no target can be determined the statement is
+   * returned untouched, so the error stays loud instead of updating the wrong
+   * row.
+   */
+  resolveConflictTarget(sql) {
+    if (!/\bON\s+CONFLICT\s+DO\s+UPDATE\b/i.test(sql)) return sql;
+
+    // PRAGMA lookups per upsert would dominate the cost of a small write, and
+    // a table's unique indexes are a schema-level fact that does not change
+    // while the process runs. Resolve once per distinct statement text.
+    if (!this._conflictTargetCache) this._conflictTargetCache = new Map();
+    if (this._conflictTargetCache.has(sql)) return this._conflictTargetCache.get(sql);
+
+    const resolved = this.computeConflictTarget(sql);
+    this._conflictTargetCache.set(sql, resolved);
+    return resolved;
+  }
+
+  computeConflictTarget(sql) {
+    if (!/\bON\s+CONFLICT\s+DO\s+UPDATE\b/i.test(sql)) return sql;
+
+    const insertMatch = sql.match(
+      /\bINSERT\s+(?:OR\s+[A-Z]+\s+)?INTO\s+[`"']?([a-zA-Z0-9_]+)[`"']?\s*\(([^)]*)\)\s*VALUES\b/i
+    );
+    if (!insertMatch) return sql;
+
+    const table = insertMatch[1];
+    const insertCols = insertMatch[2]
+      .split(",")
+      .map((c) => c.trim().replace(/[`"'\[\]]/g, "").toLowerCase())
+      .filter(Boolean);
+    if (!insertCols.length) return sql;
+
+    let uniqueIndexes = [];
+    try {
+      uniqueIndexes = this.sqlite
+        .prepare(`PRAGMA index_list("${table}")`)
+        .all()
+        .filter((idx) => idx.unique && !idx.partial);
+    } catch (_) {
+      return sql;
+    }
+
+    let best = null;
+    let smallest = null;
+    for (const idx of uniqueIndexes) {
+      let cols;
+      try {
+        cols = this.sqlite
+          .prepare(`PRAGMA index_info("${idx.name}")`)
+          .all()
+          .sort((a, b) => a.seqno - b.seqno)
+          .map((c) => c.name);
+      } catch (_) {
+        continue;
+      }
+      if (!cols.length) continue;
+      const idxCols = cols.map((c) => c.toLowerCase());
+      if (!smallest || idxCols.length < smallest.length) smallest = idxCols;
+      // Every indexed column must be supplied by this INSERT; otherwise the
+      // target cannot be the constraint the statement means to upsert on.
+      if (!idxCols.every((c) => insertCols.includes(c))) continue;
+      if (!best || idxCols.length < best.length) best = idxCols;
+    }
+
+    // Legacy writers omit the scoping column (e.g. tenant_id) entirely, so no
+    // index is a strict subset. Falling back to the smallest unique index still
+    // gives SQLite a legal target: an omitted column takes its schema default,
+    // which is what the row would have been inserted with anyway. Without this
+    // the statement keeps the targetless form and fails outright - which is
+    // what happened to every upsert that predates the multi-tenant schema.
+    if (!best && smallest) best = smallest;
+
+    if (!best) return sql;
+    const target = best.map((c) => `"${c}"`).join(", ");
+    return sql.replace(
+      /\bON\s+CONFLICT\s+DO\s+UPDATE\s+SET\b/i,
+      `ON CONFLICT(${target}) DO UPDATE SET`
+    );
+  }
+
+  /**
    * Core query execution compatible with MySQL2
    */
   executeSql(sql, values = []) {
@@ -1373,10 +1503,13 @@ class SQLiteDatabaseAdapter {
           throw ddlErr;
         }
       }
+      // DDL changes which unique indexes exist, so cached conflict targets
+      // (and cached upsert statements) can no longer be trusted.
+      this._conflictTargetCache = new Map();
       return [ { affectedRows: 0 }, [] ];
     }
 
-    const stmt = this.sqlite.prepare(translated);
+    const stmt = this.sqlite.prepare(this.resolveConflictTarget(translated));
 
     // Normalize params
     const params = Array.isArray(values) ? values : values !== undefined ? [values] : [];

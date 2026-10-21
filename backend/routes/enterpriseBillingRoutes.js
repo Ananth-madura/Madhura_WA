@@ -85,23 +85,50 @@ router.post(
     try {
       const { planId, paymentId, orderId, signature } = req.body;
 
-      // In production, verify HMAC if webhook secret is set
-      const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET;
+      const isProduction = process.env.NODE_ENV === "production";
+      const webhookSecret =
+        process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET;
+
+      if (isProduction) {
+        // Production upgrades must come from a gateway-verified event. A
+        // client-supplied payment id is attacker-controlled and previously
+        // minted `pay_mock_*` ids, i.e. free plan upgrades by editing a form.
+        if (!paymentId || !orderId || !signature) {
+          return res.status(400).json({
+            success: false,
+            code: "PAYMENT_VERIFICATION_REQUIRED",
+            message: "Plan changes require a verified gateway payment",
+          });
+        }
+        if (!webhookSecret) {
+          return res.status(503).json({
+            success: false,
+            code: "GATEWAY_NOT_CONFIGURED",
+            message: "Payment verification is not configured",
+          });
+        }
+      }
+
       if (webhookSecret && signature && paymentId && orderId) {
         const expectedSig = crypto
           .createHmac("sha256", webhookSecret)
           .update(`${orderId}|${paymentId}`)
           .digest("hex");
-        if (expectedSig !== signature) {
+        const a = Buffer.from(String(signature));
+        const b = Buffer.from(expectedSig);
+        if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
           return res.status(400).json({ success: false, message: "Invalid payment signature" });
         }
+      } else if (isProduction) {
+        return res.status(400).json({ success: false, message: "Invalid payment signature" });
       }
 
       const result = await billingService.processVerifiedPayment({
         tenantId: req.tenantId,
         planId,
-        paymentId: paymentId || `pay_mock_${Date.now()}`,
-        orderId: orderId || `order_mock_${Date.now()}`,
+        paymentId: paymentId || `dev_${req.tenantId}_${planId}`,
+        orderId: orderId || null,
+        source: isProduction ? "gateway" : "development",
       });
 
       res.json({
@@ -125,11 +152,31 @@ router.post("/webhook", async (req, res) => {
   const signature = req.headers["x-razorpay-signature"];
 
   if (secret && signature) {
-    const bodyStr = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-    const expected = crypto.createHmac("sha256", secret).update(bodyStr).digest("hex");
-    if (expected !== signature) {
+    // Razorpay signs the exact bytes it sent. Re-serializing req.body can
+    // reorder keys or change whitespace and will never match, so verify the
+    // captured raw body whenever express.json captured it.
+    const raw = Buffer.isBuffer(req.rawBody)
+      ? req.rawBody
+      : Buffer.from(
+          typeof req.body === "string" ? req.body : JSON.stringify(req.body || {}),
+          "utf8"
+        );
+    const expected = crypto
+      .createHmac("sha256", secret)
+      .update(raw)
+      .digest("hex");
+    const received = Buffer.from(String(signature));
+    const expectedBuf = Buffer.from(expected);
+    const ok =
+      received.length === expectedBuf.length &&
+      crypto.timingSafeEqual(received, expectedBuf);
+    if (!ok) {
       return res.status(400).json({ error: "Invalid signature" });
     }
+  } else if (process.env.NODE_ENV === "production" && !secret) {
+    // A live deployment must not accept unauthenticated entitlement writes.
+    console.error("[Razorpay Webhook] RAZORPAY_WEBHOOK_SECRET is not configured - rejecting");
+    return res.status(503).json({ error: "Webhook secret not configured" });
   }
 
   const event = req.body?.event;

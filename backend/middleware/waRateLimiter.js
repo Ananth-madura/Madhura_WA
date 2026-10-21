@@ -6,6 +6,7 @@
  */
 
 const crypto = require("crypto");
+const { resolveTenantId } = require("./tenantMiddleware");
 
 // Sliding window in-memory rate tracker
 // Key: `${tenantId}:${identifier}:${category}` -> [timestamps]
@@ -53,7 +54,10 @@ function getClientIdentifier(req) {
  */
 function createRateLimiter({ windowMs = 60000, maxRequests = 120, category = "default" } = {}) {
   return (req, res, next) => {
-    const tenantId = req.user?.tenant_id || 1;
+    // Scope the bucket by organization, but never pretend the caller is
+    // tenant 1: an unscoped identity gets its own (0) bucket rather than
+    // sharing the primary organization's allowance.
+    const tenantId = resolveTenantId(req);
     const identifier = getClientIdentifier(req);
     const key = `${tenantId}:${identifier}:${category}`;
     const now = Date.now();

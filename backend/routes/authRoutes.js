@@ -11,6 +11,7 @@ const { createRateLimiter, loginLimiter, otpLimiter } = require("../middleware/w
 const { getNotificationIO } = require("../sockets/notifications");
 const tenantPlanService = require("../services/tenantPlanService");
 const organizationService = require("../services/organizationService");
+const { resolveTenantId } = require("../middleware/tenantMiddleware");
 
 const queryAsync = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -21,6 +22,29 @@ const queryAsync = (sql, params = []) =>
   });
 
 const router = express.Router();
+
+/**
+ * JWT signing secret accessor.
+ *
+ * `middleware/authMiddleware.js` already refuses to verify when JWT_SECRET is
+ * unset, so signing with a source-code fallback would only ever mint tokens
+ * that cannot be verified - while quietly putting a guessable secret in the
+ * signing path. Refuse loudly instead.
+ *
+ * Returns null (and has already responded 503) when unconfigured.
+ */
+function requireJwtSecret(res) {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    res.status(503).json({
+      success: false,
+      code: "JWT_SECRET_REQUIRED",
+      message: "Authentication is not configured",
+    });
+    return null;
+  }
+  return secret;
+}
 
 const fieldLabels = {
   first_name: "Name",
@@ -299,9 +323,34 @@ router.post("/admin-login", (req, res) => {
   );
 });
 
-// Demo previews never grant access to customer data or live senders.
+/*
+ * Demo previews never grant access to customer data or live senders.
+ *
+ * This is a development convenience (one-click demo workspace), not a product
+ * feature. In production it is disabled outright unless an operator
+ * deliberately re-enables it: it signs a real 14-day JWT with no password, no
+ * MFA and no rate limiter, so leaving it reachable on a live deployment is a
+ * public admin-login backdoor. PRODUCTION_READINESS.md records that the public
+ * demo admin login must be removed - this is the enforcement point, kept
+ * reachable in dev so local onboarding still works.
+ */
 router.post("/demo-login", async (req, res) => {
-  const secret = process.env.JWT_SECRET || "wa_crm_jwt_default_secret_dev_access_2026";
+  const demoLoginDisabled =
+    process.env.NODE_ENV === "production" &&
+    !["1", "true", "yes", "on"].includes(
+      String(process.env.ALLOW_DEMO_LOGIN || "").toLowerCase()
+    );
+  if (demoLoginDisabled) {
+    return res.status(403).json({
+      success: false,
+      code: "DEMO_LOGIN_DISABLED",
+      message: "Demo access is disabled in production",
+    });
+  }
+
+  const secret = requireJwtSecret(res);
+  if (!secret) return;
+
   const requestedRole = req.body?.role === "employee" ? "employee" : "admin";
   const demoEmail = requestedRole === "employee" ? "staff@madhuratech.com" : "admin@madhuratech.com";
   const demoName = requestedRole === "employee" ? "Demo Staff" : "Demo Admin";
@@ -310,8 +359,11 @@ router.post("/demo-login", async (req, res) => {
     `SELECT id, first_name, email, role, status, tenant_id FROM users WHERE email=? OR role='admin' ORDER BY id ASC LIMIT 1`,
     [demoEmail],
     async (err, rows) => {
+      if (err) {
+        return res.status(500).json({ success: false, message: "Demo account lookup failed" });
+      }
       const user = (rows && rows.length) ? rows[0] : { id: 1, first_name: demoName, email: demoEmail, role: requestedRole, status: "active", tenant_id: 1 };
-      const tid = user.tenant_id || 1;
+      const tid = Number(user.tenant_id) || 1;
 
       let orgs = await organizationService.getUserOrganizations(user.id).catch(() => []);
       const activeOrg = (orgs && orgs.find(o => o.id === tid)) || (orgs && orgs[0]) || { id: tid, name: "Madhura Primary Organization", plan: "growth" };
@@ -433,7 +485,8 @@ router.post("/login", loginLimiter, (req, res) => {
           }
         }
 
-        const secret = process.env.JWT_SECRET || "wa_crm_jwt_default_secret_dev_access_2026";
+        const secret = requireJwtSecret(res);
+        if (!secret) return;
         const token = jwt.sign(
           {
             id: user.id,
@@ -631,7 +684,8 @@ router.post("/self-signup", async (req, res) => {
                 is_head_office: 1,
               };
 
-              const secret = process.env.JWT_SECRET || "wa_crm_jwt_default_secret_dev_access_2026";
+              const secret = requireJwtSecret(res);
+              if (!secret) return;
               const token = jwt.sign(
                 {
                   id: newUserId,
@@ -787,7 +841,8 @@ function generateEmployeeAccessCode() {
 // 1. GET /api/auth/employees — Admin only. Strictly scoped to current tenant.
 router.get("/employees", verifyToken, isAdmin, async (req, res) => {
   try {
-    const tenantId = req.user?.tenant_id || 1;
+    const tenantId = resolveTenantId(req);
+    if (!tenantId) return res.status(403).json({ message: "Organization context required", code: "TENANT_REQUIRED" });
     const requestedBranch = req.query?.branchId || req.query?.branch_id || req.headers["x-branch-id"];
 
     // Strict employee isolation: employees can NEVER list or view other employees
@@ -877,7 +932,8 @@ router.get("/employees", verifyToken, isAdmin, async (req, res) => {
 // 2. POST /api/auth/employees — Admin creates employee & generates Access Code
 router.post("/employees", verifyToken, isAdmin, async (req, res) => {
   try {
-    const tenantId = req.user?.tenant_id || 1;
+    const tenantId = resolveTenantId(req);
+    if (!tenantId) return res.status(403).json({ message: "Organization context required", code: "TENANT_REQUIRED" });
     const { first_name, last_name, email, role, whatsapp_access_level, mobile, job_title } = req.body || {};
 
     const cleanFirst = (first_name || "").trim();
@@ -971,7 +1027,8 @@ router.post("/employees", verifyToken, isAdmin, async (req, res) => {
 
 // 3. POST /api/auth/employees/:id/regenerate-code — Admin regenerates a fresh access code
 router.post("/employees/:id/regenerate-code", verifyToken, isAdmin, (req, res) => {
-  const tenantId = req.user?.tenant_id || 1;
+  const tenantId = resolveTenantId(req);
+  if (!tenantId) return res.status(403).json({ message: "Organization context required", code: "TENANT_REQUIRED" });
   const targetId = parseInt(req.params.id, 10);
 
   if (!targetId) return res.status(400).json({ message: "Invalid employee ID" });
@@ -1000,7 +1057,8 @@ router.post("/employees/:id/regenerate-code", verifyToken, isAdmin, (req, res) =
 
 // 4. PUT /api/auth/employees/:id — Admin updates role, status, name, access level
 router.put("/employees/:id", verifyToken, isAdmin, (req, res) => {
-  const tenantId = req.user?.tenant_id || 1;
+  const tenantId = resolveTenantId(req);
+  if (!tenantId) return res.status(403).json({ message: "Organization context required", code: "TENANT_REQUIRED" });
   const targetId = parseInt(req.params.id, 10);
   const { first_name, last_name, whatsapp_access_level, role, status, job_title } = req.body || {};
 
@@ -1079,7 +1137,8 @@ router.put("/employees/:id", verifyToken, isAdmin, (req, res) => {
 
 // 5. DELETE /api/auth/employees/:id — Admin deletes employee (cannot delete self)
 router.delete("/employees/:id", verifyToken, isAdmin, (req, res) => {
-  const tenantId = req.user?.tenant_id || 1;
+  const tenantId = resolveTenantId(req);
+  if (!tenantId) return res.status(403).json({ message: "Organization context required", code: "TENANT_REQUIRED" });
   const targetId = parseInt(req.params.id, 10);
 
   if (!targetId) return res.status(400).json({ message: "Invalid employee ID" });
@@ -1233,7 +1292,8 @@ router.post("/join-with-access-code", async (req, res) => {
             const orgs = await organizationService.getUserOrganizations(user.id).catch(() => []);
             const activeOrg = (orgs && orgs.find((o) => o.id === tid)) || { id: tid, name: user.tenant_name || "Workspace", plan: user.plan || "starter" };
 
-            const secret = process.env.JWT_SECRET || "wa_crm_jwt_default_secret_dev_access_2026";
+            const secret = requireJwtSecret(res);
+            if (!secret) return;
             const token = jwt.sign(
               {
                 id: user.id,

@@ -263,7 +263,7 @@ async function resolveSenderCredentials(tenantId, senderId = null, branchId = nu
   // 1. Direct sender ID requested
   if (senderId) {
     const rows = await q(
-      `SELECT s.*, wc.encrypted_token 
+      `SELECT s.*, wc.encrypted_token, wc.waba_id
        FROM wa_senders s
        LEFT JOIN waba_connections wc ON s.waba_connection_id = wc.id
        WHERE s.id = ? AND s.tenant_id = ? AND s.status = 'connected' LIMIT 1`,
@@ -275,7 +275,7 @@ async function resolveSenderCredentials(tenantId, senderId = null, branchId = nu
   // 2. Branch assigned sender requested
   if (!sender && branchId) {
     const rows = await q(
-      `SELECT s.*, wc.encrypted_token 
+      `SELECT s.*, wc.encrypted_token, wc.waba_id
        FROM sender_branch_assignments sba
        JOIN wa_senders s ON sba.sender_id = s.id
        LEFT JOIN waba_connections wc ON s.waba_connection_id = wc.id
@@ -289,7 +289,7 @@ async function resolveSenderCredentials(tenantId, senderId = null, branchId = nu
   // 3. Fallback: Organization's primary shared sender
   if (!sender && tid) {
     const rows = await q(
-      `SELECT s.*, wc.encrypted_token 
+      `SELECT s.*, wc.encrypted_token, wc.waba_id
        FROM wa_senders s
        LEFT JOIN waba_connections wc ON s.waba_connection_id = wc.id
        WHERE s.tenant_id = ? AND s.status = 'connected'
@@ -302,26 +302,51 @@ async function resolveSenderCredentials(tenantId, senderId = null, branchId = nu
   if (sender) {
     return {
       phone_number_id: sender.phone_number_id,
-      access_token: sender.encrypted_token || process.env.WA_ACCESS_TOKEN || "",
+      access_token: sender.encrypted_token || "",
       display_phone: sender.display_phone,
       verified_name: sender.verified_name,
       quality: sender.quality,
+      waba_id: sender.waba_id || "",
+      app_secret: sender.app_secret || "",
+      verify_token: sender.verify_token || "",
       sender_id: sender.id,
       tenant_id: sender.tenant_id,
-      isConfigured: Boolean(sender.phone_number_id && (sender.encrypted_token || process.env.WA_ACCESS_TOKEN)),
+      isConfigured: Boolean(sender.phone_number_id && sender.encrypted_token),
     };
   }
 
-  // 4. Default process env config (if matches or tenant 1)
+  // 4. Development fallback: the process-wide env sender belongs to tenant 1
+  //    only. Returning it for every other tenant would hand tenant N the
+  //    credentials - and therefore the identity - of the primary organization,
+  //    so any tenant without a registered sender must fail instead.
+  if (Number(tid) === 1 || !tid) {
+    return {
+      phone_number_id: process.env.WA_PHONE_NUMBER_ID || "",
+      access_token: process.env.WA_ACCESS_TOKEN || "",
+      display_phone: process.env.WA_DISPLAY_PHONE_NUMBER || "",
+      verified_name: process.env.WA_VERIFIED_NAME || "",
+      quality: "GREEN",
+      waba_id: process.env.WA_WABA_ID || "",
+      app_secret: process.env.WA_APP_SECRET || "",
+      verify_token: process.env.WA_VERIFY_TOKEN || "",
+      sender_id: null,
+      tenant_id: Number(tid) || 1,
+      isConfigured: Boolean(process.env.WA_PHONE_NUMBER_ID && process.env.WA_ACCESS_TOKEN),
+    };
+  }
+
   return {
-    phone_number_id: process.env.WA_PHONE_NUMBER_ID || "",
-    access_token: process.env.WA_ACCESS_TOKEN || "",
-    display_phone: process.env.WA_DISPLAY_PHONE_NUMBER || "",
-    verified_name: process.env.WA_VERIFIED_NAME || "",
-    quality: "GREEN",
+    phone_number_id: "",
+    access_token: "",
+    display_phone: "",
+    verified_name: "",
+    quality: null,
+    waba_id: "",
+    app_secret: "",
+    verify_token: "",
     sender_id: null,
-    tenant_id: tid || 1,
-    isConfigured: Boolean(process.env.WA_PHONE_NUMBER_ID && process.env.WA_ACCESS_TOKEN),
+    tenant_id: tid,
+    isConfigured: false,
   };
 }
 

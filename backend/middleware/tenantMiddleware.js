@@ -16,6 +16,30 @@ const q = (sql, params = []) =>
   });
 
 /**
+ * Best-effort organization id for a request, WITHOUT guessing.
+ *
+ * Legacy routes wrote `req.user?.tenant_id || 1`, which silently served tenant
+ * 1's data to any authenticated caller whose token carried no organization -
+ * the exact cross-tenant read the enterprise migration exists to remove.
+ *
+ * Returns 0 when tenancy is genuinely unknown, so callers can fail closed with
+ * 403 instead of quietly reading the primary organization.
+ *
+ * The external CRM connector authenticates with a shared API key rather than a
+ * JWT and is deliberately platform-scoped; it resolves through
+ * WA_API_KEY_TENANT_ID (default 1) so its scope is an explicit deployment
+ * decision rather than an accident.
+ */
+function resolveTenantId(req) {
+  if (req?.user?.isApiKey) {
+    const scoped = Number(process.env.WA_API_KEY_TENANT_ID || 1);
+    return scoped > 0 ? scoped : 0;
+  }
+  const tid = Number(req?.user?.tenant_id);
+  return tid > 0 ? tid : 0;
+}
+
+/**
  * Enforces strict fail-closed tenant context.
  * Resolves tenant from request header, JWT payload, or query parameter.
  * Verifies that the authenticated user holds an active membership in that tenant.
@@ -284,4 +308,5 @@ module.exports = {
   requireTenantContext,
   requireBranchScope,
   requirePermission,
+  resolveTenantId,
 };

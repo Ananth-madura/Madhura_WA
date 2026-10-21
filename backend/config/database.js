@@ -1213,6 +1213,36 @@ const ready = new Promise((resolve, reject) => {
 attemptConnect();
 });
 
-db.ready = ready;
+/**
+ * Bring the enterprise schema (organizations, branches, senders, plans and
+ * per-organization phone uniqueness) up to date.
+ *
+ * The migration file used to run only when someone executed it by hand, so a
+ * freshly provisioned deployment never got any of it - a developer's local
+ * database.sqlite was already migrated, which is why nothing looked wrong.
+ * It is non-fatal by design: a deployment that cannot migrate still serves
+ * what the current schema supports, and the next boot retries.
+ */
+async function runEnterpriseMigration() {
+  if (
+    ["1", "true", "yes", "on"].includes(
+      String(process.env.WA_SKIP_ENTERPRISE_MIGRATION || "").toLowerCase()
+    )
+  ) {
+    return;
+  }
+  try {
+    await require("../migrations/enterprise_multi_tenant_multi_branch").migrate();
+  } catch (err) {
+    console.error("[database] Enterprise migration failed (continuing on the current schema):", err.message);
+  }
+}
+
+// SQLite runs it inside its own initializer, where every db.query already
+// waits; the MySQL path runs it here so the base schema is in place first.
+db.ready = ready.then((handle) => {
+  if (handle && handle.isSqlite) return handle;
+  return runEnterpriseMigration().then(() => handle);
+});
 
 module.exports = db;

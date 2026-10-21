@@ -1379,7 +1379,7 @@ class WhatsAppService {
   }
 
   async sendMessage(chatId, message, options = {}) {
-    const waCloud = await require("./waConfigHelper").cloudClientForUser(this.key);
+    const waCloud = await require("./waConfigHelper").safeCloudClientForUser(this.key);
     if (!chatId) throw new Error("chatId is required");
 
     let cleanPhone = String(chatId).replace(/\D/g, "");
@@ -1632,7 +1632,7 @@ class WhatsAppService {
   }
 
   async getUnifiedStatus() {
-    const waCloud = await require("./waConfigHelper").cloudClientForUser(this.key);
+    const waCloud = await require("./waConfigHelper").safeCloudClientForUser(this.key);
     const cloudConfigured = waCloud.isConfigured();
     const status = await this.getStatus();
     const webConnected = status.connected;
@@ -1663,7 +1663,7 @@ class WhatsAppService {
   }
 
   async sendTestMessage(targetPhone, text = "Hello! This is a test message from Madhura Tech WhatsApp Engine.", enginePreference = null) {
-    const waCloud = await require("./waConfigHelper").cloudClientForUser(this.key);
+    const waCloud = await require("./waConfigHelper").safeCloudClientForUser(this.key);
     const formattedPhone = targetPhone.replace(/\D/g, "");
     if (!formattedPhone) throw new Error("Valid phone number required");
 
@@ -2700,7 +2700,7 @@ class WhatsAppService {
 
     // 3. Fallback to Meta Cloud API if web session not connected
     if (!this.ready || !this.client) {
-      const waCloud = await require("./waConfigHelper").cloudClientForUser(this.key);
+      const waCloud = await require("./waConfigHelper").safeCloudClientForUser(this.key);
       if (waCloud.isConfigured()) {
         try {
           let metadata = {};
@@ -2768,7 +2768,7 @@ class WhatsAppService {
   }
 
   async _sendMediaMessage(chatId, mediaUrl, mediaType = "document", caption = "", filename = "") {
-    const waCloud = await require("./waConfigHelper").cloudClientForUser(this.key);
+    const waCloud = await require("./waConfigHelper").safeCloudClientForUser(this.key);
     if (!chatId) throw new Error("chatId is required");
 
     let cleanPhone = String(chatId).replace(/\D/g, "");

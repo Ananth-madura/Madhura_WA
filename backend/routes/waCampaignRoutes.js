@@ -84,7 +84,8 @@ router.post("/test-spintax", auth, async (req, res) => {
 // ── Multi-Tenant Sender Pools ────────────────────────────────────────────────
 router.get("/sender-pools", auth, async (req, res) => {
   try {
-    const tenantId = req.user?.tenant_id || 1;
+    const tenantId = req.tenantId; // set by requireTenantContext (membership-verified, never the raw JWT claim)
+    if (!tenantId) return res.status(403).json({ error: "Organization context required", code: "TENANT_REQUIRED" });
     const [pools] = await db.promise().query(
       `SELECT p.*, COUNT(m.id) as total_members,
               SUM(IF(m.is_active = 1, 1, 0)) as active_members,
@@ -103,7 +104,8 @@ router.get("/sender-pools", auth, async (req, res) => {
 
 router.post("/sender-pools", auth, async (req, res) => {
   try {
-    const tenantId = req.user?.tenant_id || 1;
+    const tenantId = req.tenantId; // set by requireTenantContext (membership-verified, never the raw JWT claim)
+    if (!tenantId) return res.status(403).json({ error: "Organization context required", code: "TENANT_REQUIRED" });
     const { pool_name, routing_strategy = "round_robin", description = null } = req.body;
     if (!pool_name) return res.status(400).json({ error: "pool_name is required" });
 
@@ -135,7 +137,8 @@ router.get("/sender-pools/:id", auth, async (req, res) => {
 
 router.post("/sender-pools/:id/members", auth, async (req, res) => {
   try {
-    const tenantId = req.user?.tenant_id || 1;
+    const tenantId = req.tenantId; // set by requireTenantContext (membership-verified, never the raw JWT claim)
+    if (!tenantId) return res.status(403).json({ error: "Organization context required", code: "TENANT_REQUIRED" });
     const { phone_number, sender_type = "web_session", account_id = null, session_key = null, weight = 1, daily_limit = 1000, hourly_limit = 150 } = req.body;
     if (!phone_number) return res.status(400).json({ error: "phone_number is required" });
 
@@ -168,7 +171,8 @@ router.delete("/sender-pools/:id/members/:memberId", auth, async (req, res) => {
 // ── Anti-Ban & Warmup Settings ───────────────────────────────────────────────
 router.get("/anti-ban/settings", auth, async (req, res) => {
   try {
-    const tenantId = req.user?.tenant_id || 1;
+    const tenantId = req.tenantId; // set by requireTenantContext (membership-verified, never the raw JWT claim)
+    if (!tenantId) return res.status(403).json({ error: "Organization context required", code: "TENANT_REQUIRED" });
     const userId = req.user?.id || 1;
     const [rows] = await db.promise().query(
       "SELECT * FROM wa_anti_ban_settings WHERE (tenant_id = ? AND user_id = ?) OR id = 1 LIMIT 1",
@@ -192,7 +196,8 @@ router.get("/anti-ban/settings", auth, async (req, res) => {
 
 router.post("/anti-ban/settings", auth, async (req, res) => {
   try {
-    const tenantId = req.user?.tenant_id || 1;
+    const tenantId = req.tenantId; // set by requireTenantContext (membership-verified, never the raw JWT claim)
+    if (!tenantId) return res.status(403).json({ error: "Organization context required", code: "TENANT_REQUIRED" });
     const userId = req.user?.id || 1;
     const {
       warmup_enabled = 1, min_delay_sec = 8, max_delay_sec = 20,
@@ -764,7 +769,8 @@ router.post("/upload-media", auth, upload.single("file"), async (req, res) => {
 // ── Wizard broadcast: contacts + message (text/template/media) + optional location ─
 router.post("/create-wizard", auth, campaignLaunchLimiter, async (req, res) => {
   try {
-    const tenantId = req.user?.tenant_id || 1;
+    const tenantId = req.tenantId; // set by requireTenantContext (membership-verified, never the raw JWT claim)
+    if (!tenantId) return res.status(403).json({ error: "Organization context required", code: "TENANT_REQUIRED" });
     const {
       name,
       contacts,

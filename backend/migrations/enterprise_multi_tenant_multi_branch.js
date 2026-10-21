@@ -15,6 +15,35 @@
 
 const db = require("../config/database");
 
+/**
+ * Bump this whenever the migration body changes, so an already-migrated
+ * deployment skips the whole run instead of replaying it on every boot.
+ * Backfills and rebuilds are idempotent, but replaying them on every start
+ * costs hundreds of statements and a table rebuild on large installations.
+ */
+const SCHEMA_VERSION = 2;
+const MIGRATION_NAME = "enterprise_multi_tenant_multi_branch";
+
+async function alreadyMigrated() {
+  try {
+    await q(
+      `CREATE TABLE IF NOT EXISTS schema_migrations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name VARCHAR(191) NOT NULL,
+        version INT NOT NULL DEFAULT 1,
+        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+    const rows = await q(
+      "SELECT version FROM schema_migrations WHERE name = ? ORDER BY version DESC LIMIT 1",
+      [MIGRATION_NAME]
+    );
+    return rows && rows.length ? Number(rows[0].version) : 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
 const q = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.query(sql, params, (err, rows) => {
@@ -66,7 +95,112 @@ async function ensureColumn(table, column, definition) {
   }
 }
 
+/**
+ * Scope contact & opt-out phone uniqueness to the organization.
+ *
+ * `wa_contacts.phone` and `wa_opt_outs.phone` were declared globally UNIQUE,
+ * which in a multi-tenant platform means the first organization to touch a
+ * number owns it forever: the next organization's inbound message for that
+ * person silently fails to create a contact, and an opt-out taken by one
+ * business suppresses a different business. Uniqueness belongs to
+ * (tenant_id, phone).
+ *
+ * SQLite cannot drop a UNIQUE constraint from a column definition, so the
+ * table is rebuilt - the one destructive step in this migration, so it is
+ * guarded twice: rows are only ever copied (newest row per (tenant, phone)
+ * wins), and the rebuild aborts with the original table untouched unless the
+ * copy reconciles against a COUNT DISTINCT.
+ */
+async function scopePhoneUniquenessToTenant(table) {
+  const info = await q(`PRAGMA table_info("${table}")`);
+  if (!info || !info.length) return;
+  const cols = info.map((c) => c.name);
+  if (!cols.includes("phone") || !cols.includes("tenant_id")) return;
+
+  const indexes = (await q(`PRAGMA index_list("${table}")`)) || [];
+  const uniqueColumnSets = [];
+  for (const idx of indexes.filter((i) => i.unique && !i.partial)) {
+    const idxCols = (await q(`PRAGMA index_info("${idx.name}")`)).map((c) => c.name);
+    uniqueColumnSets.push(idxCols);
+  }
+  const alreadyScoped = uniqueColumnSets.some(
+    (set) =>
+      set.length === 2 &&
+      set.map((c) => c.toLowerCase()).every((c) => ["tenant_id", "phone"].includes(c))
+  );
+  if (alreadyScoped) {
+    console.log(`✅ [Migration] ${table} phone uniqueness already organization-scoped`);
+    return;
+  }
+
+  // Backfill before the copy: SQLite treats NULLs as distinct in a unique
+  // index, so an unscoped row would dodge the constraint entirely.
+  await q(`UPDATE "${table}" SET tenant_id = 1 WHERE tenant_id IS NULL OR tenant_id = 0`);
+
+  const [distinct] = await q(
+    `SELECT COUNT(*) as count FROM (SELECT 1 FROM "${table}" GROUP BY tenant_id, phone)`
+  );
+
+  const definitions = info
+    .filter((c) => c.name !== "id")
+    .map((c) => {
+      const type = c.type || "TEXT";
+      const notNull = c.pk || c.name === "phone" || c.name === "tenant_id" ? " NOT NULL" : "";
+      const dflt =
+        c.dflt_value !== null && c.dflt_value !== undefined ? ` DEFAULT ${c.dflt_value}` : "";
+      return `"${c.name}" ${type}${notNull}${dflt}`;
+    });
+
+  const migTable = `${table}_tenant_scope_mig`;
+  await q(`DROP TABLE IF EXISTS "${migTable}"`);
+  await q(
+    `CREATE TABLE "${migTable}" (
+      "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+      ${definitions.join(",\n      ")}
+    )`
+  );
+
+  const colList = cols.map((c) => `"${c}"`).join(", ");
+  await q(
+    `INSERT INTO "${migTable}" (${colList})
+     SELECT ${colList} FROM "${table}"
+     WHERE id IN (SELECT MAX(id) FROM "${table}" GROUP BY tenant_id, phone)`
+  );
+
+  const [copied] = await q(`SELECT COUNT(*) as count FROM "${migTable}"`);
+  if (Number(copied?.count) !== Number(distinct?.count)) {
+    await q(`DROP TABLE IF EXISTS "${migTable}"`);
+    console.warn(
+      `⚠️ [Migration] ${table} organization-scoped rebuild ABORTED: copied ${copied?.count} of ${distinct?.count} distinct rows - keeping the original table`
+    );
+    return;
+  }
+
+  await q("PRAGMA foreign_keys = OFF");
+  try {
+    await q(`DROP TABLE "${table}"`);
+    await q(`ALTER TABLE "${migTable}" RENAME TO "${table}"`);
+  } finally {
+    await q("PRAGMA foreign_keys = ON");
+  }
+
+  await q(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "uq_${table}_tenant_phone" ON "${table}" (tenant_id, phone)`
+  );
+  console.log(
+    `✅ [Migration] ${table} phone uniqueness scoped to organization (${copied?.count} rows preserved)`
+  );
+}
+
 async function migrate() {
+  const appliedVersion = await alreadyMigrated();
+  if (appliedVersion >= SCHEMA_VERSION) {
+    console.log(
+      `ℹ️ [Migration] ${MIGRATION_NAME} already at version ${appliedVersion} - skipping (bump SCHEMA_VERSION to re-run)`
+    );
+    return;
+  }
+
   console.log("🚀 Starting Enterprise Multi-Tenant & Multi-Branch Migration...");
 
   // 1. Quarantined Records Ledger (Safety first)
@@ -290,6 +424,8 @@ async function migrate() {
       messaging_tier VARCHAR(50) DEFAULT 'TIER_250',
       is_shared TINYINT(1) DEFAULT 1,
       status VARCHAR(50) DEFAULT 'connected',
+      app_secret TEXT DEFAULT NULL,
+      verify_token VARCHAR(255) DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       UNIQUE (phone_number_id)
@@ -310,6 +446,12 @@ async function migrate() {
     )`,
     "Create sender_branch_assignments table"
   );
+
+  // Per-sender webhook secrets: every sender must be verifiable on its own,
+  // so an incoming webhook is checked against the account that actually
+  // sent it rather than one process-wide app secret.
+  await ensureColumn("wa_senders", "app_secret", "app_secret TEXT DEFAULT NULL");
+  await ensureColumn("wa_senders", "verify_token", "verify_token VARCHAR(255) DEFAULT NULL");
 
   // 10. Meta Onboarding Sessions (Short-lived state & nonce)
   await runSafe(
@@ -470,10 +612,30 @@ async function migrate() {
     { table: "wa_accounts", col: "branch_id", def: "branch_id INT DEFAULT NULL" },
     { table: "wa_internal_notes", col: "tenant_id", def: "tenant_id INT DEFAULT 1" },
     { table: "wa_internal_notes", col: "branch_id", def: "branch_id INT DEFAULT NULL" },
+    { table: "wa_contacts", col: "tenant_id", def: "tenant_id INT NOT NULL DEFAULT 1" },
+    { table: "wa_opt_outs", col: "tenant_id", def: "tenant_id INT NOT NULL DEFAULT 1" },
   ];
 
   for (const item of scopeTables) {
     await ensureColumn(item.table, item.col, item.def);
+  }
+
+  // 14b. Phone uniqueness must be per organization, not global. See
+  // scopePhoneUniquenessToTenant for why this is a rebuild and not an index.
+  if (db.isSqlite) {
+    await scopePhoneUniquenessToTenant("wa_contacts");
+    await scopePhoneUniquenessToTenant("wa_opt_outs");
+  } else {
+    // MySQL can swap the index in place; uq_phone / uq_optout_phone are the
+    // names the legacy schema used.
+    await runSafe(
+      "ALTER TABLE `wa_contacts` DROP INDEX `uq_phone`, ADD UNIQUE KEY `uq_tenant_phone` (tenant_id, phone)",
+      "Scope wa_contacts phone uniqueness to organization"
+    );
+    await runSafe(
+      "ALTER TABLE `wa_opt_outs` DROP INDEX `uq_optout_phone`, ADD UNIQUE KEY `uq_tenant_optout_phone` (tenant_id, phone)",
+      "Scope wa_opt_outs phone uniqueness to organization"
+    );
   }
 
   // 15. Seed Permissions Catalog
@@ -747,6 +909,14 @@ async function migrate() {
     `INSERT OR IGNORE INTO wallet_accounts (tenant_id, currency, credit_type, balance, reserved_balance)
      VALUES (1, 'INR', 'software_actions', 5000, 0)`,
     "Ensure Tenant 1 Software actions wallet"
+  );
+
+  // Record the applied version last: a run that threw part way through leaves
+  // no marker, so the next boot replays it and the schema converges anyway.
+  await q(
+    `INSERT INTO schema_migrations (name, version)
+     SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE name = ? AND version = ?)`,
+    [MIGRATION_NAME, SCHEMA_VERSION, MIGRATION_NAME, SCHEMA_VERSION]
   );
 
   console.log("🎉 Enterprise Multi-Tenant & Multi-Branch Migration Completed Successfully!");

@@ -54,7 +54,7 @@ class WALoadBalancer {
     // Regression suites may inspect a real CRM database, but must never send to its customers.
     if (process.env.NODE_ENV === "test" && process.env.WA_DISABLE_OUTBOUND === "1") return [];
     const engines = [];
-    const waCloud = await require("./waConfigHelper").cloudClientForUser(sessionKey);
+    const waCloud = await require("./waConfigHelper").safeCloudClientForUser(sessionKey);
     const waService = require("./whatsappService");
 
     // 1. If poolId is provided, fetch active pool members from database

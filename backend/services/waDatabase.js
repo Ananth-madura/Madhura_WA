@@ -70,19 +70,24 @@ async function ensureWATables() {
       crm_ref_id INT DEFAULT NULL,
       notes TEXT DEFAULT NULL,
       created_by INT DEFAULT NULL,
+      tenant_id INT NOT NULL DEFAULT 1,
+      branch_id INT DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uq_phone (phone)
+      UNIQUE KEY uq_tenant_phone (tenant_id, phone)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
-    // Track opt-outs (when user replies STOP / UNSUBSCRIBE)
+    // Track opt-outs (when user replies STOP / UNSUBSCRIBE).
+    // Scoped per organization: an opt-out taken with one business must not
+    // silently suppress a different business's messages to the same number.
     `CREATE TABLE IF NOT EXISTS wa_opt_outs (
       id INT AUTO_INCREMENT PRIMARY KEY,
       phone VARCHAR(20) NOT NULL,
+      tenant_id INT NOT NULL DEFAULT 1,
       reason VARCHAR(100) DEFAULT 'user_request',
       opt_out_keyword VARCHAR(50) DEFAULT NULL,
       opted_out_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY uq_optout_phone (phone)
+      UNIQUE KEY uq_tenant_optout_phone (tenant_id, phone)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
     // Multiple WhatsApp Business account configurations

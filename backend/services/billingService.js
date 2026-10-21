@@ -37,7 +37,7 @@ async function getTenantBillingSummary(tenantId) {
   // 1. Fetch tenant & plan details
   const [tenant] = await q(
     `SELECT t.id, t.name, t.plan, t.plan_status, t.max_branches, t.max_seats, t.max_senders, t.max_monthly_messages,
-            p.name as plan_name, p.badge as plan_badge, p.price_inr, p.features_json
+            p.name as plan_name, p.badge as plan_badge, p.price_inr, p.max_contacts, p.features_json
      FROM tenants t
      LEFT JOIN plans p ON t.plan = p.id
      WHERE t.id = ? LIMIT 1`,
@@ -57,10 +57,18 @@ async function getTenantBillingSummary(tenantId) {
   const [members] = await q("SELECT COUNT(*) as count FROM organization_memberships WHERE tenant_id = ? AND membership_status = 'active'", [tid]);
   const [senders] = await q("SELECT COUNT(*) as count FROM wa_senders WHERE tenant_id = ? AND status = 'connected'", [tid]);
   const [contacts] = await q("SELECT COUNT(*) as count FROM wa_contacts WHERE tenant_id = ?", [tid]);
-  const [messagesThisMonth] = await q(
-    "SELECT COUNT(*) as count FROM wa_message_logs WHERE tenant_id = ?",
-    [tid]
-  );
+
+  // Usage is per billing period, not lifetime: the plan quota is
+  // `max_monthly_messages`, so counting every row the tenant has ever sent
+  // would show every long-lived tenant as permanently over quota.
+  const periodStart = `${new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1))
+    .toISOString()
+    .slice(0, 19)
+    .replace("T", " ")}`;
+  const messagesThisMonth = await q(
+    "SELECT COUNT(*) as count FROM wa_message_logs WHERE tenant_id = ? AND created_at >= ?",
+    [tid, periodStart]
+  ).catch(() => null);
 
   // 4. Wallet Accounts
   const wallets = await q("SELECT * FROM wallet_accounts WHERE tenant_id = ?", [tid]);
@@ -86,7 +94,7 @@ async function getTenantBillingSummary(tenantId) {
       branches: { used: Number(branches?.count || 0), max: tenant.max_branches },
       seats: { used: Number(members?.count || 0), max: tenant.max_seats },
       senders: { used: Number(senders?.count || 0), max: tenant.max_senders },
-      contacts: { used: Number(contacts?.count || 0), max: 50000 },
+      contacts: { used: Number(contacts?.count || 0), max: Number(tenant.max_contacts || 50000) },
       monthly_messages: { used: Number(messagesThisMonth?.count || 0), max: tenant.max_monthly_messages },
     },
     wallets: wallets.reduce((acc, w) => {
@@ -142,14 +150,20 @@ async function createCheckoutSession(tenantId, userId, { planId, interval = "mon
  * Validates HMAC signature, checks idempotency, transitions subscription,
  * updates tenant entitlements in an atomic transaction.
  */
-async function processVerifiedPayment({ tenantId, planId, paymentId, signature, orderId }) {
+async function processVerifiedPayment({ tenantId, planId, paymentId, orderId, source = "gateway" }) {
   const tid = Number(tenantId);
   const cleanPlanId = String(planId || "").toLowerCase();
 
   const [plan] = await q("SELECT * FROM plans WHERE id = ? LIMIT 1", [cleanPlanId]);
   if (!plan) throw new Error("Plan does not exist");
 
-  const eventKey = `pay_${paymentId || orderId || Date.now()}`;
+  // The gateway payment id is the idempotency key. Falling back to Date.now()
+  // meant a replayed (or duplicated) webhook created a *new* event every time,
+  // so entitlements and wallet credits could be granted repeatedly.
+  const eventKey = paymentId ? `pay_${paymentId}` : orderId ? `order_${orderId}` : null;
+  if (!eventKey) {
+    throw new Error("A gateway payment reference is required to reconcile a subscription");
+  }
 
   // 1. Idempotency Check via usage_events / ledger
   const existingEvent = await q("SELECT id FROM usage_events WHERE meter_key = 'subscription_payment' AND external_event_id = ? LIMIT 1", [eventKey]);
@@ -158,11 +172,20 @@ async function processVerifiedPayment({ tenantId, planId, paymentId, signature, 
   }
 
   // 2. Log usage / payment event
-  await q(
-    `INSERT INTO usage_events (tenant_id, meter_key, quantity, external_event_id)
-     VALUES (?, 'subscription_payment', ?, ?)`,
-    [tid, plan.price_inr, eventKey]
-  );
+  try {
+    await q(
+      `INSERT INTO usage_events (tenant_id, meter_key, quantity, external_event_id)
+       VALUES (?, 'subscription_payment', ?, ?)`,
+      [tid, plan.price_inr, eventKey]
+    );
+  } catch (err) {
+    // Unique constraint is the race-free idempotency guarantee: a concurrent
+    // webhook that lost the race must not continue to the credit steps.
+    if (/duplicate|unique/i.test(err.message || "")) {
+      return { success: true, message: "Payment already reconciled" };
+    }
+    throw err;
+  }
 
   // 3. Upsert Subscription
   const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days ahead
