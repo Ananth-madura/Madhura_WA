@@ -106,11 +106,24 @@ async function getTenantBillingSummary(tenantId) {
 
 /**
  * Initiates checkout for plan upgrade or subscription.
- * Returns gateway checkout payload.
+ *
+ * The order is created HERE, server-side, and recorded in `billing_orders`
+ * with the plan, the amount and the organization already fixed. Checkout's
+ * signature only ever covers `order_id|payment_id`, so anything the browser
+ * claims about *what it paid for* has to be re-read from this row at confirm
+ * time rather than trusted from the request body.
+ *
+ * With live credentials this is a real Razorpay order (the gateway, not the
+ * client, decides the amount). Without them - local/dev - a deterministic
+ * `order_dev_...` id is recorded instead so the confirm path still has a row
+ * to validate against; it is never acceptable in production.
+ *
+ * @returns {{success, provider, live, keyId, orderId, receipt, amount, currency, planId, planName, prefill, notes}}
  */
 async function createCheckoutSession(tenantId, userId, { planId, interval = "month" }) {
   const tid = Number(tenantId);
   const cleanPlanId = String(planId || "").toLowerCase();
+  const isProduction = process.env.NODE_ENV === "production";
 
   const [plan] = await q("SELECT * FROM plans WHERE id = ? AND is_active = 1 LIMIT 1", [cleanPlanId]);
   if (!plan) throw new Error("Selected plan does not exist");
@@ -120,39 +133,122 @@ async function createCheckoutSession(tenantId, userId, { planId, interval = "mon
 
   const [user] = await q("SELECT email, first_name FROM users WHERE id = ? LIMIT 1", [userId]);
 
-  // Razorpay Order / Subscription creation
-  const keyId = process.env.RAZORPAY_KEY_ID || "rzp_test_mock_key_2026";
-  const amountMinorUnits = plan.price_inr * 100; // in paise
+  const razorpay = require("./razorpayClient");
+  const amountMinor = Math.round(Number(plan.price_inr) * 100); // paise
   const receiptId = `sub_${tid}_${Date.now()}`;
+
+  const notes = { tenant_id: String(tid), plan_id: plan.id, interval: String(interval || "month") };
+
+  let live = false;
+  let providerOrderId = null;
+  let source = "gateway";
+
+  if (amountMinor <= 0) {
+    // A zero-price plan (the free tier, or a downgrade) has nothing for the
+    // gateway to charge, so no order is created with Razorpay. The row still
+    // exists so the confirm path validates organization and plan the same way -
+    // it just can never carry a paid plan, because it can only ever be created
+    // for a plan whose catalog price is zero.
+    providerOrderId = `order_free_${tid}_${Date.now()}`;
+    source = "self_serve";
+  } else if (razorpay.isConfigured()) {
+    const order = await razorpay.createOrder({ amountMinor, currency: "INR", receipt: receiptId, notes });
+    providerOrderId = order.id;
+    live = true;
+  } else if (isProduction) {
+    // Never let a live deployment issue an order the gateway has never heard
+    // of: it would confirm without any way to verify it.
+    const err = new Error("Payment gateway is not configured");
+    err.code = "GATEWAY_NOT_CONFIGURED";
+    throw err;
+  } else {
+    providerOrderId = `order_dev_${tid}_${Date.now()}`;
+    source = "development";
+  }
+
+  const insert = await q(
+    `INSERT INTO billing_orders
+       (tenant_id, user_id, plan_id, interval, amount_minor, currency, provider,
+        provider_order_id, receipt, status, source)
+     VALUES (?, ?, ?, ?, ?, 'INR', 'razorpay', ?, ?, 'created', ?)`,
+    [tid, userId || null, plan.id, String(interval || "month"), amountMinor, providerOrderId, receiptId, source]
+  );
+  const billingOrderId = insert && insert.insertId;
 
   return {
     success: true,
     provider: "razorpay",
-    keyId,
-    amount: amountMinorUnits,
+    live,
+    billingOrderId,
+    keyId: razorpay.keyId() || process.env.RAZORPAY_KEY_ID || "rzp_test_mock_key_2026",
+    // Both names: the gateway calls it order_id, and the existing frontend
+    // sends `receipt` as its orderId, so neither side has to guess.
+    orderId: providerOrderId,
+    order_id: providerOrderId,
+    receipt: receiptId,
+    amount: amountMinor,
     currency: "INR",
     planId: plan.id,
     planName: plan.name,
-    receipt: receiptId,
     prefill: {
       name: user ? user.first_name : tenant.name,
       email: user ? user.email : "",
     },
-    notes: {
-      tenant_id: tid,
-      plan_id: plan.id,
-    },
+    notes,
   };
 }
 
 /**
- * Reconciles Razorpay Webhook or verified client confirmation:
- * Validates HMAC signature, checks idempotency, transitions subscription,
- * updates tenant entitlements in an atomic transaction.
+ * Look up the checkout record the browser says it paid for.
+ *
+ * The row - not the request - decides which organization, which plan and which
+ * amount a payment was allowed to unlock. Returns null when there is no such
+ * record, when it belongs to another organization, or when the plan named in
+ * the request is not the plan that was ordered.
  */
-async function processVerifiedPayment({ tenantId, planId, paymentId, orderId, source = "gateway" }) {
+async function findBillingOrder({ tenantId, orderId, receipt, planId }) {
+  const wanted = [orderId, receipt].filter(Boolean).map(String);
+  if (!wanted.length) return null;
+
+  const placeholders = wanted.map(() => "?").join(",");
+  const rows = await q(
+    `SELECT * FROM billing_orders
+     WHERE provider_order_id IN (${placeholders}) OR receipt IN (${placeholders})
+     ORDER BY id DESC LIMIT 1`,
+    [...wanted, ...wanted]
+  );
+  const order = rows && rows[0];
+  if (!order) return null;
+
+  // Organization and plan are constraints only when the caller supplied them:
+  // the webhook resolves the row first (to learn the organization) and the
+  // confirm path names the plan separately, so both can still read the record
+  // back - but neither can read back one that contradicts what it already knows.
   const tid = Number(tenantId);
-  const cleanPlanId = String(planId || "").toLowerCase();
+  if (Number.isFinite(tid) && tid > 0 && Number(order.tenant_id) !== tid) return null;
+  if (planId && String(order.plan_id).toLowerCase() !== String(planId).toLowerCase()) return null;
+  return order;
+}
+
+/**
+ * Reconcile a payment that has been verified against the gateway.
+ *
+ * @param {object} args
+ * @param {number} args.tenantId
+ * @param {string} args.planId    plan the payment was FOR - normally read back
+ *                                from the billing_orders row, never from a
+ *                                request body the client controls
+ * @param {string} args.paymentId gateway payment id (the idempotency key)
+ * @param {string} [args.orderId]
+ * @param {string} [args.source]  'gateway' | 'development'
+ * @param {object} [args.billingOrder] the row this payment belongs to
+ */
+async function processVerifiedPayment({ tenantId, planId, paymentId, orderId, source = "gateway", billingOrder = null }) {
+  const tid = Number(tenantId);
+
+  // When we know the ordered plan, it wins over whatever the caller passed:
+  // a signature that only binds `order_id|payment_id` cannot prove the plan.
+  const cleanPlanId = String((billingOrder && billingOrder.plan_id) || planId || "").toLowerCase();
 
   const [plan] = await q("SELECT * FROM plans WHERE id = ? LIMIT 1", [cleanPlanId]);
   if (!plan) throw new Error("Plan does not exist");
@@ -188,7 +284,13 @@ async function processVerifiedPayment({ tenantId, planId, paymentId, orderId, so
   }
 
   // 3. Upsert Subscription
-  const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days ahead
+  // Serialized the same way `periodStart` is above: the SQLite engine binds
+  // primitives, so handing it a Date object throws and the subscription row
+  // was never written (the plan still changed, leaving the two out of step).
+  const periodEnd = `${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 19)
+    .replace("T", " ")}`;
   await q(
     `INSERT INTO subscriptions (tenant_id, plan_id, provider, provider_sub_id, status, current_period_end)
      VALUES (?, ?, 'razorpay', ?, 'active', ?)`,
@@ -220,12 +322,108 @@ async function processVerifiedPayment({ tenantId, planId, paymentId, orderId, so
   const aiCreditGrant = cleanPlanId === "growth" ? 500 : cleanPlanId === "business" ? 2500 : cleanPlanId === "enterprise" ? 10000 : 100;
   await grantWalletCredits(tid, "ai_credits", aiCreditGrant, `Plan upgrade to ${plan.name}`, eventKey);
 
+  // 6. Close out the checkout record, so a second confirmation for the same
+  //    order cannot walk the same entitlement path a second time.
+  if (billingOrder && billingOrder.id) {
+    await q(
+      `UPDATE billing_orders SET status = 'paid', payment_id = ?, paid_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND status = 'created'`,
+      [paymentId || null, billingOrder.id]
+    ).catch(() => {});
+  }
+
   return {
     success: true,
     plan: cleanPlanId,
     status: "active",
     expires_at: periodEnd,
   };
+}
+
+/**
+ * Confirm a checkout from the browser's Razorpay Checkout success response.
+ *
+ * Order first, signature second, plan third:
+ *   1. the billing_orders row decides the organization and the plan (the
+ *      signature cannot - it only covers `order_id|payment_id`),
+ *   2. the signature proves Razorpay actually issued that payment for that
+ *      order, using the key secret (never the webhook secret, which signs a
+ *      different thing),
+ *   3. only then are entitlements written.
+ *
+ * Non-production deployments without credentials still confirm - but only for
+ * an order this server created, for this same organization, at the price that
+ * order recorded. Production never takes that path.
+ */
+async function confirmCheckoutPayment({ tenantId, userId, planId, paymentId, orderId, signature }) {
+  const isProduction = process.env.NODE_ENV === "production";
+  const razorpay = require("./razorpayClient");
+  const tid = Number(tenantId);
+
+  const billingOrder = await findBillingOrder({ tenantId: tid, orderId, receipt: orderId, planId: null });
+  if (!billingOrder) {
+    const err = new Error("No checkout session found for this payment");
+    err.code = "ORDER_NOT_FOUND";
+    err.status = 404;
+    throw err;
+  }
+
+  // The order already names its plan; a request naming a different one is
+  // either stale or an attempt to buy one plan and activate another.
+  if (planId && String(billingOrder.plan_id).toLowerCase() !== String(planId).toLowerCase()) {
+    const err = new Error("The requested plan does not match the plan that was ordered");
+    err.code = "PLAN_MISMATCH";
+    err.status = 409;
+    throw err;
+  }
+
+  if (billingOrder.status === "paid") {
+    return { success: true, message: "Payment already reconciled", plan: billingOrder.plan_id, idempotent: true };
+  }
+
+  let source = "gateway";
+
+  if (Number(billingOrder.amount_minor) <= 0 || billingOrder.source === "self_serve") {
+    // Zero-price order: there is no gateway payment behind it, so there is no
+    // signature to verify and none is accepted. Only a row this server created
+    // for a catalog plan priced at zero can reach here, and the plan credited
+    // is read from that row.
+    source = "self_serve";
+    if (!paymentId) paymentId = `free_${tid}_${billingOrder.plan_id}_${billingOrder.id}`;
+  } else if (razorpay.isConfigured()) {
+    if (!paymentId || !signature) {
+      const err = new Error("Plan changes require a verified gateway payment");
+      err.code = "PAYMENT_VERIFICATION_REQUIRED";
+      err.status = 400;
+      throw err;
+    }
+    if (!razorpay.verifyCheckoutSignature({ orderId: billingOrder.provider_order_id, paymentId, signature })) {
+      const err = new Error("Invalid payment signature");
+      err.code = "INVALID_SIGNATURE";
+      err.status = 400;
+      throw err;
+    }
+  } else if (isProduction) {
+    const err = new Error("Payment verification is not configured");
+    err.code = "GATEWAY_NOT_CONFIGURED";
+    err.status = 503;
+    throw err;
+  } else {
+    // Development: no gateway credentials, so there is no signature to check.
+    // Still bounded by the stored order - organization, plan and amount are the
+    // ones this server recorded - and only ever recorded as `development`.
+    source = "development";
+    if (!paymentId) paymentId = `dev_${tid}_${billingOrder.plan_id}_${billingOrder.id}`;
+  }
+
+  return processVerifiedPayment({
+    tenantId: tid,
+    planId: billingOrder.plan_id,
+    paymentId,
+    orderId: billingOrder.provider_order_id,
+    source,
+    billingOrder,
+  });
 }
 
 /**
@@ -297,6 +495,8 @@ module.exports = {
   getPlanCatalog: getPlans,
   getTenantBillingSummary,
   createCheckoutSession,
+  confirmCheckoutPayment,
+  findBillingOrder,
   processVerifiedPayment,
   grantWalletCredits,
   evaluateEntitlement,

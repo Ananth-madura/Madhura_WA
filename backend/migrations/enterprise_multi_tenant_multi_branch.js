@@ -21,7 +21,7 @@ const db = require("../config/database");
  * Backfills and rebuilds are idempotent, but replaying them on every start
  * costs hundreds of statements and a table rebuild on large installations.
  */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const MIGRATION_NAME = "enterprise_multi_tenant_multi_branch";
 
 async function alreadyMigrated() {
@@ -599,6 +599,49 @@ async function migrate() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
     "Create wallet_entries table"
+  );
+
+  // 13a. Billing orders - the server's own record of a checkout attempt.
+  //
+  // The Checkout signature HMAC covers only `order_id|payment_id`, so the plan,
+  // the amount and the organization a payment unlocks were all taken from the
+  // request body: paying for the cheapest plan and naming the dearest one in
+  // the confirm call upgraded the subscription. Fixing those three here, at
+  // order-creation time, makes the stored row - not the browser - the source of
+  // truth for what a payment was allowed to buy, and lets the webhook and the
+  // client-side confirm path converge on the same answer.
+  await runSafe(
+    `CREATE TABLE IF NOT EXISTS billing_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INT NOT NULL,
+      user_id INT DEFAULT NULL,
+      plan_id VARCHAR(50) NOT NULL,
+      interval VARCHAR(20) DEFAULT 'month',
+      amount_minor INT NOT NULL,
+      currency VARCHAR(10) DEFAULT 'INR',
+      provider VARCHAR(50) DEFAULT 'razorpay',
+      provider_order_id VARCHAR(191) DEFAULT NULL,
+      receipt VARCHAR(191) NOT NULL,
+      status VARCHAR(20) DEFAULT 'created',
+      payment_id VARCHAR(191) DEFAULT NULL,
+      signature TEXT DEFAULT NULL,
+      source VARCHAR(30) DEFAULT 'gateway',
+      paid_at TIMESTAMP NULL DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    "Create billing_orders table"
+  );
+
+  // A provider order id is unique: the same gateway order must never be able
+  // to be recorded twice under two different plans or organizations.
+  await runSafe(
+    "CREATE UNIQUE INDEX IF NOT EXISTS uniq_billing_orders_provider_order ON billing_orders (provider_order_id)",
+    "Index billing_orders.provider_order_id"
+  );
+  await runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_billing_orders_tenant ON billing_orders (tenant_id, status)",
+    "Index billing_orders.tenant_id"
   );
 
   // 14. Add tenant_id & branch_id scoping to business tables
