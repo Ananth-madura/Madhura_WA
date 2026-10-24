@@ -73,22 +73,19 @@ export default function LandingHeader({ onBookDemo }) {
             href={LIVE_APP_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="group relative inline-flex items-center gap-1.5 overflow-hidden rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 sm:px-4.5 sm:py-2.5 text-xs sm:text-sm font-bold text-white shadow-[0_4px_14px_rgba(16,185,129,0.35)] transition-all duration-200 hover:from-emerald-600 hover:to-teal-700 hover:shadow-[0_6px_20px_rgba(16,185,129,0.45)] hover:scale-[1.02] active:scale-[0.98]"
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-semibold text-slate-700 shadow-sm transition hover:border-azure-500 hover:bg-slate-50 hover:text-azure-600 active:scale-[0.98]"
           >
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-200 opacity-75"></span>
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
-            </span>
             <span>Try Now</span>
-            <ArrowRight size={13} className="transition-transform duration-200 group-hover:translate-x-0.5" />
+            <ArrowRight size={14} />
           </a>
 
           <button
             type="button"
             onClick={handleBookDemo}
-            className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-white px-4 py-2 sm:px-4.5 sm:py-2.5 text-xs sm:text-sm font-semibold text-slate-700 shadow-sm transition hover:border-azure-400 hover:bg-slate-50 hover:text-azure-600 active:scale-[0.98]"
+            className="inline-flex items-center gap-1.5 rounded-full bg-azure-600 px-4 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-bold text-white shadow-[0_8px_20px_rgba(37,99,235,0.28)] transition hover:bg-azure-700 active:scale-[0.98]"
           >
             <span>Book a Demo</span>
+            <ArrowRight size={14} />
           </button>
 
           <button
@@ -128,13 +125,9 @@ export default function LandingHeader({ onBookDemo }) {
                 href={LIVE_APP_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 py-2.5 text-center text-sm font-bold text-white shadow-md transition hover:from-emerald-600 hover:to-teal-700"
+                className="inline-flex items-center justify-center gap-1.5 rounded-full border border-slate-300 bg-white py-2.5 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-azure-500 hover:text-azure-600"
               >
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-200 opacity-75"></span>
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
-                </span>
-                <span>Try Now · Live App</span>
+                <span>Try Now</span>
                 <ArrowRight size={14} />
               </a>
               <button
@@ -143,9 +136,10 @@ export default function LandingHeader({ onBookDemo }) {
                   setMobileNavOpen(false);
                   handleBookDemo();
                 }}
-                className="rounded-full border border-slate-300 py-2.5 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex items-center justify-center gap-1.5 rounded-full bg-azure-600 py-2.5 text-center text-sm font-bold text-white shadow-md transition hover:bg-azure-700"
               >
-                Book a Demo
+                <span>Book a Demo</span>
+                <ArrowRight size={14} />
               </button>
               <a
                 href={appUrl("/login")}
