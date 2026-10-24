@@ -29,7 +29,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { appUrl } from "../config/site";
+import { appUrl, LIVE_APP_URL } from "../config/site";
 import BrandLogo from "../components/BrandLogo";
 import LandingFooter from "../components/LandingFooter";
 import LandingHeader from "../components/LandingHeader";
@@ -1265,24 +1265,29 @@ export default function Landing() {
               </p>
 
               <div className="flex flex-wrap items-center gap-3 pt-1">
+                <a
+                  href={LIVE_APP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-7 py-3.5 text-sm font-bold text-white shadow-[0_14px_32px_rgba(16,185,129,0.38)] transition-all hover:from-emerald-600 hover:to-teal-700 hover:shadow-[0_18px_38px_rgba(16,185,129,0.48)] hover:scale-[1.03] active:scale-95 sm:text-base"
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"></span>
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
+                  </span>
+                  <span>Try Now · Live App</span>
+                  <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
+                </a>
+
                 <button
                   type="button"
                   onClick={() => {
                     playAppSound("click");
                     setShowDemoModal(true);
                   }}
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-azure-600 px-7 py-3.5 text-sm font-bold text-white shadow-[0_14px_32px_rgba(37,99,235,0.4)] transition hover:bg-azure-700 hover:scale-[1.03] active:scale-95 sm:text-base"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-white/20 bg-white/[0.04] px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/[0.1] active:scale-95 sm:text-base"
                 >
                   <span>Book a Demo</span>
-                  <ArrowRight size={16} />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleInstantDemoLogin}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-white/20 bg-white/[0.04] px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/[0.1] sm:text-base"
-                >
-                  <span>Explore Product</span>
                   <ArrowRight size={15} />
                 </button>
               </div>

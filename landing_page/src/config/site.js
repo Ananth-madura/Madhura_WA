@@ -20,6 +20,9 @@ export const APP_URL = stripTrailingSlash(
 
 export const API_URL = stripTrailingSlash(import.meta.env.VITE_API_URL || "");
 
+/** Canonical live workspace web app URL */
+export const LIVE_APP_URL = "https://live.wa.madhuratech.in";
+
 /** Absolute URL inside the workspace app: appUrl("/login") → http://host/login */
 export const appUrl = (path = "/") =>
   `${APP_URL}${path.startsWith("/") ? path : `/${path}`}`;

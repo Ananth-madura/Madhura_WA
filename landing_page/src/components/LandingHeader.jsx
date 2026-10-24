@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowRight, Menu, X } from "lucide-react";
-import { appUrl } from "../config/site";
+import { ArrowRight, ExternalLink, Menu, Sparkles, X } from "lucide-react";
+import { appUrl, LIVE_APP_URL } from "../config/site";
 import BrandLogo from "./BrandLogo";
 import { LANDING_NAV } from "../pages/marketing/siteNav";
 
@@ -68,15 +68,29 @@ export default function LandingHeader({ onBookDemo }) {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <a
+            href={LIVE_APP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group relative inline-flex items-center gap-1.5 overflow-hidden rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 sm:px-4.5 sm:py-2.5 text-xs sm:text-sm font-bold text-white shadow-[0_4px_14px_rgba(16,185,129,0.35)] transition-all duration-200 hover:from-emerald-600 hover:to-teal-700 hover:shadow-[0_6px_20px_rgba(16,185,129,0.45)] hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-200 opacity-75"></span>
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
+            </span>
+            <span>Try Now</span>
+            <ArrowRight size={13} className="transition-transform duration-200 group-hover:translate-x-0.5" />
+          </a>
+
           <button
             type="button"
             onClick={handleBookDemo}
-            className="inline-flex items-center gap-1.5 rounded-full bg-azure-600 px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(37,99,235,0.28)] transition hover:bg-azure-700 active:scale-[0.98]"
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-white px-4 py-2 sm:px-4.5 sm:py-2.5 text-xs sm:text-sm font-semibold text-slate-700 shadow-sm transition hover:border-azure-400 hover:bg-slate-50 hover:text-azure-600 active:scale-[0.98]"
           >
             <span>Book a Demo</span>
-            <ArrowRight size={14} />
           </button>
+
           <button
             type="button"
             onClick={() => setMobileNavOpen((v) => !v)}
@@ -111,8 +125,31 @@ export default function LandingHeader({ onBookDemo }) {
             </ul>
             <div className="flex flex-col gap-2 border-t border-slate-200 pt-4">
               <a
+                href={LIVE_APP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 py-2.5 text-center text-sm font-bold text-white shadow-md transition hover:from-emerald-600 hover:to-teal-700"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-200 opacity-75"></span>
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
+                </span>
+                <span>Try Now · Live App</span>
+                <ArrowRight size={14} />
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  handleBookDemo();
+                }}
+                className="rounded-full border border-slate-300 py-2.5 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Book a Demo
+              </button>
+              <a
                 href={appUrl("/login")}
-                className="rounded-full border border-slate-300 py-2.5 text-center text-sm font-semibold text-slate-700"
+                className="rounded-full border border-slate-200 py-2 text-center text-xs font-medium text-slate-500 hover:text-slate-800"
               >
                 Sign in
               </a>
