@@ -3,15 +3,19 @@ import { Link } from "react-router-dom";
 import {
   ArrowRight,
   BarChart3,
+  Building2,
   Check,
   CheckCircle2,
   ExternalLink,
   FileText,
   Inbox,
+  Lock,
+  Mail,
   Menu,
   MessageCircle,
   MessageSquare,
   Paperclip,
+  Phone,
   PhoneCall,
   Play,
   Plus,
@@ -20,11 +24,13 @@ import {
   RotateCw,
   Search,
   Send,
+  ShieldCheck,
   Smartphone,
   Sliders,
   Sparkles,
   Terminal,
   TrendingUp,
+  User,
   Users,
   X,
   Zap,
@@ -800,16 +806,20 @@ export default function Landing() {
 
   // 3. Demo Modal state
   const [showDemoModal, setShowDemoModal] = useState(false);
-  const [demoForm, setDemoForm] = useState({ name: "", email: "", phone: "", company: "", teamSize: "1-10" });
+  const [demoForm, setDemoForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    company: "",
+    teamSize: "11-50",
+    useCase: "multi-branch",
+  });
   const [demoSubmitted, setDemoSubmitted] = useState(false);
 
-  /* The authenticated workspace ships as the `frontend` project on its own
-     origin, so demo hand-offs hand the browser over instead of writing a
-     session token this origin cannot use. The login screen opens on its demo
-     tab (?tab=demo) with one click from there. */
+  /* Direct access to live cloud workspace */
   const handleInstantDemoLogin = () => {
     playAppSound("click");
-    window.location.href = appUrl("/login?tab=demo");
+    window.location.href = LIVE_APP_URL || appUrl("/login?tab=demo");
   };
 
   const handleDemoSubmit = (e) => {
@@ -817,8 +827,8 @@ export default function Landing() {
     playAppSound("received");
     setDemoSubmitted(true);
     setTimeout(() => {
-      window.location.href = appUrl("/login?tab=demo");
-    }, 1800);
+      window.location.href = LIVE_APP_URL || appUrl("/login?tab=demo");
+    }, 2400);
   };
 
   // Section 4 Phone action feedback
@@ -2297,137 +2307,325 @@ export default function Landing() {
       {/* ─────────────────────────────────────────────────────────────────────
           MODAL: BOOK A DEMO
           ───────────────────────────────────────────────────────────────────── */}
+      {/* ─────────────────────────────────────────────────────────────────────
+          MODAL: ENTERPRISE 1-ON-1 DEMO INTAKE
+          ───────────────────────────────────────────────────────────────────── */}
       {showDemoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#0a1330] p-6 text-white shadow-2xl sm:p-8">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-3 sm:p-5 backdrop-blur-md animate-fade-in overflow-y-auto"
+        >
+          {/* Backdrop Click Dismiss */}
+          <div
+            className="fixed inset-0 -z-10"
+            onClick={() => {
+              setShowDemoModal(false);
+              setDemoSubmitted(false);
+            }}
+          />
+
+          <div className="relative my-auto w-full max-w-4xl max-h-[92vh] overflow-hidden rounded-3xl border border-azure-500/25 bg-[#070e26] text-white shadow-[0_25px_80px_-15px_rgba(2,6,23,0.95)] flex flex-col">
+            {/* Top gradient highlight strip */}
+            <div className="h-1 w-full bg-gradient-to-r from-azure-500 via-[#f5a623] to-emerald-400 shrink-0" />
+
+            {/* Close Button */}
             <button
               type="button"
               onClick={() => {
                 setShowDemoModal(false);
                 setDemoSubmitted(false);
               }}
-              aria-label="Close"
-              className="absolute right-5 top-5 rounded-lg p-1 text-slate-400 transition hover:bg-white/10 hover:text-white"
+              aria-label="Close modal"
+              className="absolute right-4 top-4 z-20 rounded-full border border-white/10 bg-white/5 p-2 text-slate-400 backdrop-blur-sm transition hover:bg-white/15 hover:text-white"
             >
               <X size={18} />
             </button>
 
             {demoSubmitted ? (
-              <div className="space-y-3 py-8 text-center">
-                <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
-                  <CheckCircle2 size={32} />
+              <div className="flex flex-col items-center justify-center p-8 sm:p-14 text-center my-auto">
+                <div className="relative mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400 ring-8 ring-emerald-500/10">
+                  <CheckCircle2 size={44} className="animate-scale-in" />
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-4 w-4 rounded-full bg-emerald-500" />
+                  </span>
                 </div>
-                <h3 className="text-xl font-bold text-white">Demo Request Confirmed!</h3>
-                <p className="mx-auto max-w-sm text-xs text-slate-300">
-                  Thank you, {demoForm.name || "Customer"}. We have received your request. Redirecting you to the
-                  live interactive demo workspace right now...
+
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1 text-xs font-semibold text-emerald-300 mb-3">
+                  <ShieldCheck size={14} />
+                  <span>Enterprise Request Confirmed</span>
+                </div>
+
+                <h3 className="text-2xl sm:text-3xl font-black text-white">
+                  Demo Consultation Scheduled!
+                </h3>
+                <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-300">
+                  Thank you, <strong className="text-white">{demoForm.name || "Customer"}</strong>. Our enterprise solution architect has received your inquiry for <strong className="text-white">{demoForm.company || "your business"}</strong>.
                 </p>
-                <div className="pt-2">
-                  <RotateCw size={18} className="mx-auto animate-spin text-azure-400" />
+
+                <div className="mt-6 flex flex-col sm:flex-row items-center gap-3 w-full max-w-sm">
+                  <a
+                    href={LIVE_APP_URL}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-3.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(16,185,129,0.35)] transition hover:from-emerald-600 hover:to-teal-700"
+                  >
+                    <span>Launch Live Workspace Now</span>
+                    <ArrowRight size={16} />
+                  </a>
+                </div>
+
+                <div className="mt-6 flex items-center gap-2 text-xs text-slate-400">
+                  <RotateCw size={14} className="animate-spin text-azure-400" />
+                  <span>Auto-redirecting to live workspace in a moment...</span>
                 </div>
               </div>
             ) : (
-              <div>
-                <div className="mb-6">
-                  <span className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-azure-500/15 px-2.5 py-1 text-[11px] font-semibold text-azure-300">
-                    <Sparkles size={12} className="text-amber-400" />
-                    <span>Personalized Walkthrough</span>
-                  </span>
-                  <h3 className="text-2xl font-bold text-white">Book a 1-on-1 Demo</h3>
-                  <p className="mt-1 text-xs text-slate-400">
-                    See how Madhura automates customer messaging, multi-branch operations, and campaigns for your
-                    industry.
-                  </p>
+              <div className="grid grid-cols-1 md:grid-cols-12 overflow-y-auto">
+                {/* ── Left Column: Enterprise Value Proposition & Credentials ── */}
+                <div className="md:col-span-5 bg-gradient-to-b from-[#091538] to-[#060c22] p-6 lg:p-8 flex flex-col justify-between border-b md:border-b-0 md:border-r border-white/10">
+                  <div className="space-y-6">
+                    <div>
+                      <BrandLogo variant="on-dark" className="h-8 lg:h-9" />
+                      <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-300">
+                        <span className="relative flex h-2 w-2">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                        </span>
+                        <span>Official Cloud API Tier</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-xl lg:text-2xl font-black text-white leading-tight">
+                        Tailored Architecture for WhatsApp Operations
+                      </h3>
+                      <p className="mt-2 text-xs leading-relaxed text-slate-300">
+                        Experience how regional brands and multi-branch organizations streamline customer messaging with enterprise governance.
+                      </p>
+                    </div>
+
+                    <div className="space-y-3.5 pt-2">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-azure-500/15 text-azure-400 border border-azure-500/25">
+                          <ShieldCheck size={16} />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-white">Multi-Branch Team Routing</div>
+                          <div className="text-[11px] text-slate-400">1 shared number partitioned across branch teams with auto-assignment.</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                          <Lock size={15} />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-white">Audit Trails &amp; Retention</div>
+                          <div className="text-[11px] text-slate-400">Role-based controls, ephemeral message caching &amp; compliance exports.</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/25">
+                          <Zap size={15} />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-white">Direct Meta Cloud API</div>
+                          <div className="text-[11px] text-slate-400">Direct webhook delivery, campaign rate-limiting &amp; 99.95% uptime SLA.</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 pt-6 border-t border-white/10 space-y-3">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
+                      <span>SOC2 Compliant</span>
+                      <span>·</span>
+                      <span>GDPR Ready</span>
+                      <span>·</span>
+                      <span>ISO 27001</span>
+                    </div>
+
+                    <a
+                      href={LIVE_APP_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs text-slate-200 transition hover:bg-white/[0.08] hover:border-azure-500/40"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Sparkles size={14} className="text-[#f5a623]" />
+                        <span>Skip form? Try Live Workspace</span>
+                      </span>
+                      <ArrowRight size={13} className="text-slate-400 transition-transform group-hover:translate-x-1 group-hover:text-white" />
+                    </a>
+                  </div>
                 </div>
 
-                <form onSubmit={handleDemoSubmit} className="space-y-4 text-xs">
-                  <div>
-                    <label className="mb-1 block font-semibold text-slate-300">Full Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={demoForm.name}
-                      onChange={(e) => setDemoForm({ ...demoForm, name: e.target.value })}
-                      placeholder="e.g. Vikramaditya Sharma"
-                      className="w-full rounded-xl border border-white/15 bg-white/[0.06] px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-azure-500 focus:outline-none"
-                    />
+                {/* ── Right Column: Enterprise Intake Form ── */}
+                <div className="md:col-span-7 p-6 lg:p-8 bg-[#070e26]">
+                  <div className="mb-5">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-azure-400">
+                      Guided 1-on-1 Consultation
+                    </span>
+                    <h4 className="text-xl font-black text-white mt-0.5">
+                      Schedule Enterprise Demo
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Our solution engineering team will demonstrate specific workflows for your team size.
+                    </p>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block font-semibold text-slate-300">Work Email *</label>
-                      <input
-                        type="email"
-                        required
-                        value={demoForm.email}
-                        onChange={(e) => setDemoForm({ ...demoForm, email: e.target.value })}
-                        placeholder="name@company.com"
-                        className="w-full rounded-xl border border-white/15 bg-white/[0.06] px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-azure-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block font-semibold text-slate-300">WhatsApp Number *</label>
-                      <input
-                        type="tel"
-                        required
-                        value={demoForm.phone}
-                        onChange={(e) => setDemoForm({ ...demoForm, phone: e.target.value })}
-                        placeholder="+91 98765 43210"
-                        className="w-full rounded-xl border border-white/15 bg-white/[0.06] px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-azure-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
+                  <form onSubmit={handleDemoSubmit} className="space-y-3.5 text-xs">
+                    {/* Name & Work Email */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block font-semibold text-slate-300">
+                          Full Name <span className="text-rose-400">*</span>
+                        </label>
+                        <div className="relative">
+                          <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                          <input
+                            type="text"
+                            required
+                            value={demoForm.name}
+                            onChange={(e) => setDemoForm({ ...demoForm, name: e.target.value })}
+                            placeholder="e.g. Vikramaditya Sharma"
+                            className="w-full rounded-xl border border-white/15 bg-white/[0.05] py-2.5 pl-9 pr-3 text-white placeholder-slate-500 focus:border-azure-500 focus:bg-white/[0.08] focus:outline-none transition"
+                          />
+                        </div>
+                      </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block font-semibold text-slate-300">Company Name</label>
-                      <input
-                        type="text"
-                        value={demoForm.company}
-                        onChange={(e) => setDemoForm({ ...demoForm, company: e.target.value })}
-                        placeholder="e.g. Acme Enterprises"
-                        className="w-full rounded-xl border border-white/15 bg-white/[0.06] px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-azure-500 focus:outline-none"
-                      />
+                      <div>
+                        <label className="mb-1 block font-semibold text-slate-300">
+                          Work Email <span className="text-rose-400">*</span>
+                        </label>
+                        <div className="relative">
+                          <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                          <input
+                            type="email"
+                            required
+                            value={demoForm.email}
+                            onChange={(e) => setDemoForm({ ...demoForm, email: e.target.value })}
+                            placeholder="name@company.com"
+                            className="w-full rounded-xl border border-white/15 bg-white/[0.05] py-2.5 pl-9 pr-3 text-white placeholder-slate-500 focus:border-azure-500 focus:bg-white/[0.08] focus:outline-none transition"
+                          />
+                        </div>
+                      </div>
                     </div>
+
+                    {/* WhatsApp Phone & Company */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block font-semibold text-slate-300">
+                          WhatsApp Business Phone <span className="text-rose-400">*</span>
+                        </label>
+                        <div className="relative">
+                          <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                          <input
+                            type="tel"
+                            required
+                            value={demoForm.phone}
+                            onChange={(e) => setDemoForm({ ...demoForm, phone: e.target.value })}
+                            placeholder="+91 98765 43210"
+                            className="w-full rounded-xl border border-white/15 bg-white/[0.05] py-2.5 pl-9 pr-3 text-white placeholder-slate-500 focus:border-azure-500 focus:bg-white/[0.08] focus:outline-none transition"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block font-semibold text-slate-300">
+                          Company / Organization <span className="text-rose-400">*</span>
+                        </label>
+                        <div className="relative">
+                          <Building2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                          <input
+                            type="text"
+                            required
+                            value={demoForm.company}
+                            onChange={(e) => setDemoForm({ ...demoForm, company: e.target.value })}
+                            placeholder="e.g. Acme Enterprises"
+                            className="w-full rounded-xl border border-white/15 bg-white/[0.05] py-2.5 pl-9 pr-3 text-white placeholder-slate-500 focus:border-azure-500 focus:bg-white/[0.08] focus:outline-none transition"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Team Size Segmented Control */}
                     <div>
-                      <label className="mb-1 block font-semibold text-slate-300">Team Size</label>
-                      <select
-                        value={demoForm.teamSize}
-                        onChange={(e) => setDemoForm({ ...demoForm, teamSize: e.target.value })}
-                        className="w-full rounded-xl border border-white/15 bg-white/[0.06] px-3.5 py-2.5 text-white focus:border-azure-500 focus:outline-none"
+                      <label className="mb-1.5 block font-semibold text-slate-300">
+                        Team Size &amp; Operational Scale
+                      </label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[
+                          { id: "1-10", label: "1 - 10" },
+                          { id: "11-50", label: "11 - 50" },
+                          { id: "51-200", label: "51 - 200" },
+                          { id: "200+", label: "200+ Org" },
+                        ].map((size) => (
+                          <button
+                            key={size.id}
+                            type="button"
+                            onClick={() => setDemoForm({ ...demoForm, teamSize: size.id })}
+                            className={`rounded-lg py-2 text-center text-xs font-semibold transition border ${
+                              demoForm.teamSize === size.id
+                                ? "bg-azure-600 text-white border-azure-400 shadow-md"
+                                : "bg-white/[0.04] text-slate-400 border-white/10 hover:bg-white/[0.08] hover:text-white"
+                            }`}
+                          >
+                            {size.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Primary Interest / Use Case Pills */}
+                    <div>
+                      <label className="mb-1.5 block font-semibold text-slate-300">
+                        Primary Implementation Focus
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "multi-branch", label: "🏢 Multi-Branch Shared Inbox" },
+                          { id: "campaigns", label: "📢 Broadcast Campaigns" },
+                          { id: "automation", label: "🤖 Chatbots & Workflows" },
+                          { id: "api-sync", label: "🔗 CRM / ERP Webhook Sync" },
+                        ].map((useCase) => (
+                          <button
+                            key={useCase.id}
+                            type="button"
+                            onClick={() => setDemoForm({ ...demoForm, useCase: useCase.id })}
+                            className={`rounded-xl px-3 py-2 text-left text-[11px] font-semibold transition border flex items-center justify-between ${
+                              demoForm.useCase === useCase.id
+                                ? "bg-azure-500/20 text-azure-300 border-azure-400/50"
+                                : "bg-white/[0.03] text-slate-400 border-white/10 hover:bg-white/[0.06] hover:text-slate-200"
+                            }`}
+                          >
+                            <span>{useCase.label}</span>
+                            {demoForm.useCase === useCase.id && (
+                              <Check size={13} className="text-azure-400" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Submit Actions */}
+                    <div className="pt-2 space-y-2.5">
+                      <button
+                        type="submit"
+                        className="group w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-azure-600 to-azure-700 py-3.5 text-sm font-bold text-white shadow-[0_10px_25px_rgba(37,99,235,0.4)] transition hover:from-azure-500 hover:to-azure-600 hover:scale-[1.01] active:scale-[0.99]"
                       >
-                        <option value="1-10">1-10 team members</option>
-                        <option value="11-50">11-50 team members</option>
-                        <option value="51-200">51-200 team members</option>
-                        <option value="200+">200+ Enterprise</option>
-                      </select>
+                        <span>Schedule 1-on-1 Architecture Demo</span>
+                        <ArrowRight size={15} className="transition-transform group-hover:translate-x-1" />
+                      </button>
+
+                      <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
+                        <Lock size={12} className="text-slate-400" />
+                        <span>Confidential Enterprise Review · NDA Protected · No obligation</span>
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="flex flex-col gap-2.5 pt-2">
-                    <button
-                      type="submit"
-                      className="w-full rounded-xl bg-azure-600 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-azure-700"
-                    >
-                      Confirm Demo Booking
-                    </button>
-
-                    <div className="relative flex items-center py-1">
-                      <div className="flex-grow border-t border-white/10" />
-                      <span className="mx-3 text-[10px] uppercase tracking-widest text-slate-500">or</span>
-                      <div className="flex-grow border-t border-white/10" />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleInstantDemoLogin}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.06] py-2.5 text-xs font-semibold text-white transition hover:bg-white/[0.12]"
-                    >
-                      <Sparkles size={13} className="text-amber-400" />
-                      <span>Launch Instant Demo Workspace (No waiting)</span>
-                    </button>
-                  </div>
-                </form>
+                  </form>
+                </div>
               </div>
             )}
           </div>
