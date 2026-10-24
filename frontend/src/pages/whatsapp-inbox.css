@@ -26,11 +26,22 @@
 .wa-storage-popover .hl-card { font-size: 12px; line-height: 1.7; }
 
 .wa-inbox-sidebar { width: 100%; }
-.wa-conversations-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 20px 16px 8px; flex-shrink: 0; }
-.wa-conversations-heading h2 { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; letter-spacing: -.025em; }
+.wa-conversations-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 20px 16px 8px; flex-shrink: 0; }
+/* The heading shares its row with the Enquiries button, so the title is the
+   only flexible item: it keeps one line and ellipsises rather than stacking
+   into three rows on a narrow sidebar. */
+.wa-conversations-heading > div:first-child { flex: 1 1 auto; min-width: 0; }
+.wa-conversations-heading h2 { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; letter-spacing: -.025em; white-space: nowrap; min-width: 0; }
+.wa-conversations-heading h2 span { flex-shrink: 0; }
 .wa-conversations-heading h2 span { color: var(--color-ink-2); background: var(--color-paper); padding: 2px 6px; border-radius: 5px; font-size: 11px; font-weight: 500; }
 .wa-conversations-heading p { margin-top: 4px; font-size: 11px; color: var(--color-ink-2); }
 .wa-conversations-heading .hl-btn-primary { min-height: 36px; width: 36px; padding: 8px; border-radius: 8px; }
+/* Compact "Enquiries" entry point in the conversations heading. Sized to the
+   104x24 box the heading row reserves, so it never pushes the icon buttons. */
+.wa-enquiries-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px; border: 1px solid var(--color-rule); border-radius: 7px; background: var(--color-paper); color: var(--color-ink); font-size: 11px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; cursor: pointer; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1), border-color 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+.wa-enquiries-btn:hover { background: var(--color-paper-2); border-color: var(--color-ink-2); }
+.wa-enquiries-btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.wa-enquiries-btn em { font-style: normal; font-size: 10px; font-weight: 650; color: var(--color-ink-2); background: var(--color-paper-2); border-radius: 5px; padding: 1px 4px; }
 .wa-inbox-search { padding: 12px 16px; gap: 6px; border: 0; }
 .wa-inbox-search .hl-input { min-height: 38px; background: var(--color-paper); border-color: transparent; border-radius: 8px; font-size: 12px; }
 .wa-inbox-search input.hl-input { height: 38px; padding: 8px 28px 8px 34px; }
@@ -59,6 +70,66 @@
 .wa-contact-name > span { font-size: 11px; color: var(--color-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wa-header-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .wa-header-action, .wa-conversation-menu > summary, .wa-chat-back { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; min-width: 36px; border-radius: 6px; padding: 8px; color: var(--color-ink-2); font-size: 12px; }
+.wa-enquiries-menu { position: relative; }
+.wa-enquiries-button { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 10px; border: 1px solid #8892a2; border-radius: 6px; background: var(--color-paper-2); color: var(--color-ink); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.wa-enquiries-button:hover { background: var(--color-paper); }
+.wa-enquiries-count { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; background: var(--color-ink); color: var(--color-paper-2); font-size: 10px; font-weight: 700; }
+.wa-enquiries-panel { position: absolute; z-index: 46; top: calc(100% + 8px); right: 0; display: flex; flex-direction: column; width: min(420px, calc(100vw - 24px)); max-height: calc(100vh - 110px); padding: 10px; border: 1px solid var(--color-rule); border-radius: 10px; background: var(--color-paper-2); box-shadow: 0 8px 32px #050e2f1a; }
+.wa-enquiries-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 2px 2px 8px; }
+.wa-enquiries-panel-head strong { display: block; font-size: 12px; font-weight: 700; }
+.wa-enquiries-panel-head p { margin-top: 2px; font-size: 10px; color: var(--color-ink-2); }
+.wa-enquiries-panel-head > button { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; min-height: 30px; border-radius: 6px; color: var(--color-ink-2); }
+.wa-enquiries-panel-head > button:hover { background: var(--color-paper); color: var(--color-ink); }
+.wa-enquiries-tabs { display: flex; gap: 4px; margin-bottom: 8px; padding: 0 2px 8px; border-bottom: 1px solid var(--color-rule); }
+.wa-enquiries-tabs button { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 4px 6px; border: 1px solid transparent; border-radius: 6px; font-size: 10px; font-weight: 600; color: var(--color-ink-2); background: transparent; }
+.wa-enquiries-tabs button:hover { background: var(--color-paper); color: var(--color-ink); }
+.wa-enquiries-tabs button.is-active { border-color: #e8cb79; background: var(--color-accent-soft); color: var(--color-ink); }
+.wa-enquiries-tabs button > span { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--color-paper); font-size: 9px; font-weight: 700; }
+.wa-enquiries-tabs button.is-active > span { background: var(--color-paper-2); }
+.wa-enquiries-error, .wa-enquiries-notice { margin: 0 2px 8px; padding: 6px 8px; border-radius: 6px; font-size: 10px; line-height: 1.5; }
+.wa-enquiries-error { background: #fdecec; color: #a11b1b; }
+.wa-enquiries-notice { background: #e7f6ec; color: #17603a; }
+.wa-enquiries-list { flex: 1 1 auto; max-height: 320px; min-height: 0; overflow-y: auto; padding-right: 2px; }
+.wa-enquiries-state { display: flex; align-items: center; gap: 6px; padding: 16px 6px; font-size: 11px; color: var(--color-ink-2); }
+.wa-enquiry-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; padding: 9px 10px; border: 1px solid var(--color-rule); border-radius: 8px; background: var(--color-paper); }
+.wa-enquiry-row.is-new { border-left: 3px solid #a5b4fc; }
+.wa-enquiry-row.is-lead { border-left: 3px solid var(--color-focus); }
+.wa-enquiry-row.is-client { border-left: 3px solid #86efac; background: #f4fbf6; }
+.wa-enquiry-step-label { width: 100%; margin-top: 2px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-ink-2); }
+.wa-enquiry-qualify { display: flex; gap: 3px; width: 100%; }
+.wa-enquiry-qualify button { flex: 1; min-height: 30px; border: 1px solid var(--color-rule); border-radius: 5px; font-size: 10px; font-weight: 700; text-transform: capitalize; }
+.wa-enquiry-qualify button:hover:not(:disabled) { filter: brightness(.97); }
+.wa-enquiry-qualify button.is-cold { border-color: #93c5fd; background: #dbeafe; color: #1e3a8a; }
+.wa-enquiry-qualify button.is-warm { border-color: #fdba74; background: #ffedd5; color: #9a3412; }
+.wa-enquiry-qualify button.is-hot { border-color: #fca5a5; background: #fee2e2; color: #991b1b; }
+.wa-enquiry-qualify button:disabled { opacity: .6; cursor: wait; }
+.wa-enquiry-client-note { display: flex; align-items: center; gap: 5px; width: 100%; font-size: 10px; font-weight: 600; color: #17603a; }
+.wa-enquiry-lead-note { width: 100%; font-size: 9px; font-weight: 600; letter-spacing: .02em; color: var(--color-ink-2); }
+.wa-enquiry-link-lead { align-self: flex-start; padding: 3px 8px; border: 1px dashed var(--color-rule); border-radius: 5px; font-size: 9px; font-weight: 700; color: var(--color-ink-2); background: transparent; }
+.wa-enquiry-link-lead:hover:not(:disabled) { border-color: var(--color-focus); color: var(--color-ink); }
+.wa-enquiry-link-lead:disabled { opacity: .6; cursor: wait; }
+.wa-enquiry-main { display: flex; flex-direction: column; flex: 1 1 140px; min-width: 0; }
+.wa-enquiry-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
+.wa-enquiry-main span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--color-ink-2); }
+.wa-enquiry-temperature { padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.wa-enquiry-temperature.is-cold { background: #dbeafe; color: #1e3a8a; }
+.wa-enquiry-temperature.is-warm { background: #ffedd5; color: #9a3412; }
+.wa-enquiry-temperature.is-hot { background: #fee2e2; color: #991b1b; }
+.wa-enquiry-temperature.is-new { background: var(--color-paper-2); color: var(--color-ink-2); }
+.wa-enquiry-temperature.is-client { background: #dcfce7; color: #166534; }
+.wa-enquiry-temps { display: flex; gap: 3px; width: 100%; }
+.wa-enquiry-temps button { flex: 1; min-height: 28px; border: 1px solid var(--color-rule); border-radius: 5px; background: var(--color-paper-2); color: var(--color-ink-2); font-size: 10px; font-weight: 600; text-transform: capitalize; }
+.wa-enquiry-temps button:hover { border-color: #8892a2; color: var(--color-ink); }
+.wa-enquiry-temps button.is-active.is-cold { border-color: #93c5fd; background: #dbeafe; color: #1e3a8a; }
+.wa-enquiry-temps button.is-active.is-warm { border-color: #fdba74; background: #ffedd5; color: #9a3412; }
+.wa-enquiry-temps button.is-active.is-hot { border-color: #fca5a5; background: #fee2e2; color: #991b1b; }
+.wa-enquiry-convert { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 32px; margin-top: 2px; border-radius: 6px; background: var(--color-ink); color: var(--color-paper-2); font-size: 11px; font-weight: 600; }
+.wa-enquiry-convert:hover:not(:disabled) { opacity: .88; }
+.wa-enquiry-convert:disabled { opacity: .65; cursor: wait; }
+.wa-enquiries-panel-foot { padding-top: 8px; margin-top: 6px; border-top: 1px solid var(--color-rule); }
+.wa-enquiries-panel-foot button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 34px; border: 1px dashed #8892a2; border-radius: 6px; color: var(--color-ink); font-size: 11px; font-weight: 600; }
+.wa-enquiries-panel-foot button:hover:not(:disabled) { background: var(--color-paper); }
+.wa-enquiries-panel-foot button:disabled { opacity: .55; cursor: not-allowed; }
 .wa-header-action:hover, .wa-header-action.is-active, .wa-conversation-menu > summary:hover { background: var(--color-paper); color: var(--color-ink); }
 .wa-note-count { padding: 0 5px; font-size: 10px; background: var(--color-paper); border-radius: 4px; }
 .wa-conversation-menu { position: relative; }
@@ -125,6 +196,8 @@
   .wa-header-tickets .wa-ticket-field > span { display: none; }
   .wa-header-tickets .wa-ticket-field select { min-width: 56px; max-width: 92px; }
   .wa-header-action > span:not(.wa-note-count) { display: none; }
+  .wa-enquiries-label { display: none; }
+  .wa-enquiries-button { min-width: 36px; justify-content: center; }
 }
 @media (max-width: 767px) {
   .wa-storage-details > summary { font-size: 10px; gap: 5px; }
@@ -137,6 +210,7 @@
   .wa-header-actions { gap: 0; }
   .wa-conversation-header .wa-header-actions { gap: 4px; }
   .wa-header-tickets { gap: 4px; overflow: hidden; }
+  .wa-header-tickets:has(.wa-enquiries-menu[open]) { overflow: visible; }
   .wa-header-tickets .wa-assignee-field > svg { display: none; }
   .wa-header-tickets .wa-ticket-field select { min-width: 48px; max-width: 84px; height: 36px; min-height: 36px; padding: 4px 14px 4px 6px; font-size: 10px; }
   .wa-conversation-branch { display: none; }

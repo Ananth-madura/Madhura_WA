@@ -1625,6 +1625,14 @@ body {
 .hl-input, .hl-select { font-family: var(--font-body); font-size: var(--text-sm); color: var(--color-ink); background: var(--color-paper-2); border: 1px solid var(--color-rule); border-radius: var(--radius-input); padding: 0.625rem 0.875rem; min-height: 42px; transition: border-color var(--dur-short) var(--ease-out), box-shadow var(--dur-short) var(--ease-out); }
 .hl-input::placeholder { color: var(--color-ink-2); opacity: 0.8; }
 .hl-input:hover, .hl-select:hover { border-color: var(--color-ink-2); }
+/* Icon-prefixed inputs must reserve room for the icon. The generic form reset
+   above (input[type="text"] { padding: 0 14px }) is an element selector, so it
+   outranks Tailwind's pl-9 / pl-10 / pr-10 utilities and leaves the icon
+   sitting on top of the placeholder. Two class selectors beat it without
+   affecting plain inputs. */
+.hl-input.pl-9 { padding-left: 2.25rem; }
+.hl-input.pl-10 { padding-left: 2.5rem; }
+.hl-input.pr-10 { padding-right: 2.5rem; }
 .hl-section-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-ink-2); }
 
 /* Tables — 13px body, 44px rows, hairline dividers */

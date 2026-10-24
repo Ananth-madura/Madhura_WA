@@ -64,6 +64,7 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { API, LIVE_BACKEND_URL } from "../config/api";
+import { getEnquiries, getEnquirySummary, createEnquiry, updateEnquiry, convertEnquiry } from "../api/enquiries";
 import { useAuth } from "../auth/AuthContext";
 import { useEnterprise } from "../context/EnterpriseContext";
 import { DEMO_STATUS, DEMO_CHATS, DEMO_MESSAGES_MAP } from "../auth/demoData";
@@ -71,6 +72,7 @@ import socket from "../socket/socket";
 import RichMessageContent from "../components/RichMessageContent";
 import { readLocalMessages, writeLocalMessages, mergeLocalMessages, readLocalMedia, writeLocalMedia, localMediaUrl, localCacheOwner, mediaFromFile } from "../utils/waLocalCache";
 import WAStorageAndSenders from "../components/WAStorageAndSenders";
+import WAEnquiriesMenu from "../components/WAEnquiriesMenu";
 import WAInteractiveOptions from "../components/WAInteractiveOptions";
 import { getInteractiveMessage } from "../utils/waInteractiveMessage";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
@@ -746,6 +748,15 @@ export default function WhatsAppPage() {
   // Team Inbox, Notes & Ticket Status
   const [teamMembers, setTeamMembers] = useState([]);
   const [ticketStatus, setTicketStatus] = useState("open");
+  const [enquiries, setEnquiries] = useState([]);
+  const [convertedEnquiries, setConvertedEnquiries] = useState([]);
+  const [enquiryView, setEnquiryView] = useState("enquiries");
+  const [enquirySummary, setEnquirySummary] = useState(null);
+  const [enquiryOpenTotal, setEnquiryOpenTotal] = useState(0);
+  const [enquiriesLoading, setEnquiriesLoading] = useState(false);
+  const [enquiryBusyId, setEnquiryBusyId] = useState(null);
+  const [enquiryError, setEnquiryError] = useState("");
+  const [enquiryNotice, setEnquiryNotice] = useState("");
   const [assignedAgentName, setAssignedAgentName] = useState("");
   const [showNotesDrawer, setShowNotesDrawer] = useState(false);
   const [internalNotes, setInternalNotes] = useState([]);
@@ -2267,6 +2278,147 @@ export default function WhatsAppPage() {
       setTicketStatus(status);
     } catch (err) {
       alert("Failed to update status: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  // ── Enquiries / lead triage ───────────────────────────────────────────────
+  // Backed by /api/wa/enquiries: open leads carry a cold/warm/hot temperature
+  // and convert atomically into a CRM client (see api/enquiries.js).
+  const loadEnquiries = useCallback(async () => {
+    setEnquiriesLoading(true);
+    setEnquiryError("");
+    try {
+      const [openList, convertedList, summary] = await Promise.all([
+        getEnquiries({ status: "open", limit: 100 }),
+        getEnquiries({ status: "converted", limit: 50 }),
+        getEnquirySummary(),
+      ]);
+      setEnquiries(Array.isArray(openList?.enquiries) ? openList.enquiries : []);
+      setConvertedEnquiries(Array.isArray(convertedList?.enquiries) ? convertedList.enquiries : []);
+      setEnquiryOpenTotal(Number(openList?.total) || 0);
+      setEnquirySummary(summary || null);
+    } catch (err) {
+      setEnquiryError(err.response?.data?.message || "Could not load enquiries.");
+    } finally {
+      setEnquiriesLoading(false);
+    }
+  }, []);
+
+  const refreshEnquirySummary = async () => {
+    try {
+      const [openList, convertedList, summary] = await Promise.all([
+        getEnquiries({ status: "open", limit: 100 }),
+        getEnquiries({ status: "converted", limit: 50 }),
+        getEnquirySummary(),
+      ]);
+      setEnquiries(Array.isArray(openList?.enquiries) ? openList.enquiries : []);
+      setConvertedEnquiries(Array.isArray(convertedList?.enquiries) ? convertedList.enquiries : []);
+      setEnquiryOpenTotal(Number(openList?.total) || 0);
+      setEnquirySummary(summary || null);
+    } catch (_) { /* keep the list already on screen */ }
+  };
+
+  // Keep the Enquiries badge meaningful before the menu is first opened.
+  useEffect(() => {
+    let alive = true;
+    getEnquirySummary()
+      .then((summary) => { if (alive) setEnquirySummary(summary || null); })
+      .catch(() => { /* enquiry service optional until first use */ });
+    getEnquiries({ status: "open", limit: 1 })
+      .then((list) => { if (alive) setEnquiryOpenTotal(Number(list?.total) || 0); })
+      .catch(() => { /* keep badge empty */ });
+    return () => { alive = false; };
+  }, []);
+
+  // The contact drawer shows the same pipeline, so refresh it when opened.
+  useEffect(() => {
+    if (showContactInfoDrawer && selectedChat?.id) loadEnquiries();
+  }, [showContactInfoDrawer, selectedChat?.id, loadEnquiries]);
+
+  const handleUpdateEnquiryTemperature = async (enquiry, temperature) => {
+    if (!enquiry?.id || enquiryBusyId) return;
+    setEnquiryBusyId(enquiry.id);
+    setEnquiryError("");
+    try {
+      const wasNew = String(enquiry.temperature || "new").toLowerCase() === "new";
+      const updated = await updateEnquiry(enquiry.id, { temperature });
+      setEnquiries((prev) => prev.map((item) => (item.id === enquiry.id ? { ...item, ...(updated || {}), temperature } : item)));
+      setEnquiryNotice(
+        wasNew
+          ? `${enquiry.name || "Enquiry"} qualified as a ${temperature} lead.`
+          : `${enquiry.name || "Lead"} marked ${temperature}.`
+      );
+      if (wasNew) setEnquiryView("leads");
+      refreshEnquirySummary();
+    } catch (err) {
+      setEnquiryError(err.response?.data?.message || "Could not update the lead temperature.");
+    } finally {
+      setEnquiryBusyId(null);
+    }
+  };
+
+  const handleConvertEnquiry = async (enquiry) => {
+    if (!enquiry?.id || enquiryBusyId) return;
+    setEnquiryBusyId(enquiry.id);
+    setEnquiryError("");
+    try {
+      const result = await convertEnquiry(enquiry.id);
+      setEnquiries((prev) => prev.filter((item) => item.id !== enquiry.id));
+      if (result?.enquiry) {
+        setConvertedEnquiries((prev) => [result.enquiry, ...prev.filter((item) => item.id !== enquiry.id)]);
+      }
+      setEnquiryOpenTotal((total) => Math.max(0, total - 1));
+      const clientName = result?.client?.name || enquiry.name || "Enquiry";
+      setEnquiryNotice(
+        result?.deduped
+          ? `${clientName} was already a client — the enquiry is now linked.`
+          : `${clientName} converted to a client and added to your CRM.`
+      );
+      refreshEnquirySummary();
+      if (selectedChat && selectedChat.id && (!enquiry.phone || String(selectedChat.id).replace(/\D/g, "").endsWith(String(enquiry.phone).replace(/\D/g, "").slice(-10)))) {
+        fetchContactCrmDetails(selectedChat.id);
+      }
+    } catch (err) {
+      setEnquiryError(err.response?.data?.message || "Could not convert this enquiry.");
+    } finally {
+      setEnquiryBusyId(null);
+    }
+  };
+
+  const handleCreateEnquiryFromChat = async () => {
+    if (!selectedChat || selectedChat.isGroup || enquiryBusyId) return;
+    const chatDigits = String(selectedChat.id || "").replace(/\D/g, "");
+    const alreadyListed = enquiries.some((item) => {
+      const leadDigits = String(item.phone || "").replace(/\D/g, "");
+      return leadDigits && chatDigits && (leadDigits === chatDigits || leadDigits.slice(-10) === chatDigits.slice(-10));
+    });
+    if (alreadyListed) {
+      setEnquiryNotice("This conversation is already in your open enquiries.");
+      return;
+    }
+    setEnquiryBusyId("new");
+    setEnquiryError("");
+    try {
+      const name = selectedChat.name && !selectedChat.name.startsWith("+")
+        ? selectedChat.name
+        : selectedChat.formattedPhone || formatPhoneNumber(selectedChat.phoneNumber) || selectedChat.id;
+      const created = await createEnquiry({
+        name,
+        phone: selectedChat.id,
+        source: "whatsapp",
+        message: selectedChat.lastMessage?.body || `WhatsApp conversation with ${name}`,
+        branch_id: selectedChat.branch_id || activeBranch?.id || undefined,
+        temperature: "new",
+      });
+      if (created) setEnquiries((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
+      setEnquiryOpenTotal((total) => total + 1);
+      setEnquiryView("enquiries");
+      setEnquiryNotice(`${name} added to enquiries as a new lead.`);
+      refreshEnquirySummary();
+    } catch (err) {
+      setEnquiryError(err.response?.data?.message || "Could not add this conversation to enquiries.");
+    } finally {
+      setEnquiryBusyId(null);
     }
   };
 
@@ -3949,6 +4101,79 @@ export default function WhatsAppPage() {
             )}
           </div>
 
+          {/* Enquiry → Lead → Client pipeline for this contact */}
+          {selectedEnquiry && (() => {
+            const temperature = String(selectedEnquiry.temperature || "new").toLowerCase();
+            const isConverted = selectedEnquiry.status === "converted";
+            const busy = enquiryBusyId === selectedEnquiry.id;
+            return (
+              <div className="py-2 border-b border-[var(--color-rule)] space-y-2">
+                <h4 className="hl-section-label text-xs font-bold text-[var(--color-ink-2)] uppercase tracking-wider">Enquiry Pipeline</h4>
+                <div className="hl-card bg-[var(--color-paper)] p-3 rounded-xl border border-[var(--color-rule)] space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-[var(--color-ink)]">This conversation</span>
+                    <span className={`wa-enquiry-temperature is-${isConverted ? "client" : temperature}`}>
+                      {isConverted ? "client" : temperature === "new" ? "enquiry" : temperature}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-[var(--color-ink-2)]">
+                    {selectedEnquiry.company || selectedEnquiry.email || formatPhoneNumber(selectedEnquiry.phone) || selectedEnquiry.phone || "WhatsApp enquiry"}
+                  </p>
+                  {isConverted ? (
+                    <p className="wa-enquiry-client-note">
+                      <CheckCircle2 size={13} />
+                      Added to CRM{selectedEnquiry.converted_client_id ? ` · client #${selectedEnquiry.converted_client_id}` : ""}{selectedEnquiry.crm_lead_id ? ` · lead #${selectedEnquiry.crm_lead_id}` : ""}
+                    </p>
+                  ) : temperature === "new" ? (
+                    <>
+                      <p className="wa-enquiry-step-label">Convert to lead · choose temperature</p>
+                      <div className="wa-enquiry-qualify" role="group" aria-label="Qualify this enquiry">
+                        {["cold", "warm", "hot"].map((level) => (
+                          <button key={level} type="button" className={`is-${level}`} onClick={() => handleUpdateEnquiryTemperature(selectedEnquiry, level)} disabled={busy}>
+                            {level}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="wa-enquiry-temps" role="group" aria-label="Lead temperature">
+                        {["cold", "warm", "hot"].map((level) => (
+                          <button
+                            key={level}
+                            type="button"
+                            className={temperature === level ? `is-active is-${level}` : ""}
+                            onClick={() => handleUpdateEnquiryTemperature(selectedEnquiry, level)}
+                            disabled={busy}
+                            aria-pressed={temperature === level}
+                          >
+                            {level}
+                          </button>
+                        ))}
+                      </div>
+                      <button type="button" className="wa-enquiry-convert" onClick={() => handleConvertEnquiry(selectedEnquiry)} disabled={busy}>
+                        {busy ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}
+                        <span>{busy ? "Converting…" : "Convert to client"}</span>
+                      </button>
+                      {selectedEnquiry.crm_lead_id ? (
+                        <p className="wa-enquiry-lead-note">CRM lead #{selectedEnquiry.crm_lead_id}</p>
+                      ) : (
+                        <button
+                          type="button"
+                          className="wa-enquiry-link-lead"
+                          onClick={() => handleUpdateEnquiryTemperature(selectedEnquiry, temperature)}
+                          disabled={busy}
+                        >
+                          {busy ? "Linking…" : "Create CRM lead"}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* CRM Invoices, Quotations, and AMC History */}
           <div className="py-2 border-b border-[var(--color-rule)] space-y-3">
             <div className="flex items-center justify-between">
@@ -4352,6 +4577,19 @@ export default function WhatsAppPage() {
     );
   };
 
+  // Enquiry funnel: a brand-new enquiry is temperature "new"; qualifying it
+  // moves it into the lead columns; converting it moves it into clients.
+  const newEnquiryRows = enquiries.filter((item) => item.status === "open" && String(item.temperature || "new").toLowerCase() === "new");
+  const leadRows = enquiries.filter((item) => item.status === "open" && ["cold", "warm", "hot"].includes(String(item.temperature || "").toLowerCase()));
+  const activeEnquiryRows = enquiryView === "clients" ? convertedEnquiries : enquiryView === "leads" ? leadRows : newEnquiryRows;
+  const chatPhoneDigits = selectedChat && !selectedChat.isGroup ? String(selectedChat.id || "").replace(/\D/g, "") : "";
+  const selectedEnquiry = chatPhoneDigits
+    ? [...enquiries, ...convertedEnquiries].find((item) => {
+        const leadDigits = String(item.phone || "").replace(/\D/g, "");
+        return leadDigits && (leadDigits === chatPhoneDigits || leadDigits.slice(-10) === chatPhoneDigits.slice(-10));
+      })
+    : null;
+
   return (
     <div className="wa-inbox w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-[var(--color-paper-2)] text-[var(--color-ink)] rounded-xl border border-[var(--color-rule)] shadow-sm overflow-hidden select-text wa-parallel-container">      {syncing && (
         <p className="px-3 py-2 text-xs shrink-0 border-b border-[var(--color-rule)] bg-[var(--color-paper-2)] text-[var(--color-ink-2)]" role="status">
@@ -4394,6 +4632,7 @@ export default function WhatsAppPage() {
           {sidebarMode !== "compact" && (
             <div className="wa-conversations-heading">
               <div><h2>Conversations <span>{allChatsList.length}</span></h2><p>Every customer. One place.</p></div>
+              <WAEnquiriesMenu />
               <div className="flex items-center gap-1.5">
                 <details className="wa-storage-details is-icon">
                   <summary title="Sender & storage" aria-label="Sender and storage"><Database size={15} /><ChevronDown size={13} /></summary>
@@ -4755,6 +4994,127 @@ export default function WhatsAppPage() {
                 <div className="wa-header-actions">
                   <div className="wa-header-tickets">
                     <label className="wa-ticket-field"><span>Status</span><select aria-label="Conversation status" id="wa-ticket-status-select" value={ticketStatus} onChange={event => handleUpdateTicketStatus(event.target.value)}><option value="open">Open</option><option value="pending">Pending</option><option value="resolved">Resolved</option><option value="spam">Spam</option></select></label>
+                    <details className="wa-enquiries-menu" onToggle={event => { if (event.currentTarget.open) loadEnquiries(); }}>
+                      <summary className="wa-enquiries-button" aria-label="Enquiries and leads" title="Enquiries and leads">
+                        <span className="wa-enquiries-label">Enquiries</span>
+                        {enquiryOpenTotal > 0 && <span className="wa-enquiries-count">{enquiryOpenTotal}</span>}
+                        <ChevronDown size={13} />
+                      </summary>
+                      <div className="wa-enquiries-panel" role="dialog" aria-label="Enquiries and leads">
+                        <div className="wa-enquiries-panel-head">
+                          <div>
+                            <strong>Enquiries → Leads → Clients</strong>
+                            <p>
+                              {enquirySummary
+                                ? `${newEnquiryRows.length} enquiry · ${leadRows.length} leads · ${enquirySummary.hot || 0} hot · ${enquirySummary.warm || 0} warm · ${enquirySummary.cold || 0} cold`
+                                : "Qualify enquiries, set lead temperature, convert to clients"}
+                            </p>
+                          </div>
+                          <button type="button" onClick={loadEnquiries} disabled={enquiriesLoading} title="Refresh enquiries" aria-label="Refresh enquiries">
+                            <RefreshCw size={14} className={enquiriesLoading ? "animate-spin" : ""} />
+                          </button>
+                        </div>
+                        <div className="wa-enquiries-tabs" role="tablist" aria-label="Enquiry pipeline">
+                          <button type="button" role="tab" aria-selected={enquiryView === "enquiries"} className={enquiryView === "enquiries" ? "is-active" : ""} onClick={() => setEnquiryView("enquiries")}>
+                            Enquiries <span>{newEnquiryRows.length}</span>
+                          </button>
+                          <button type="button" role="tab" aria-selected={enquiryView === "leads"} className={enquiryView === "leads" ? "is-active" : ""} onClick={() => setEnquiryView("leads")}>
+                            Leads <span>{leadRows.length}</span>
+                          </button>
+                          <button type="button" role="tab" aria-selected={enquiryView === "clients"} className={enquiryView === "clients" ? "is-active" : ""} onClick={() => setEnquiryView("clients")}>
+                            Clients <span>{enquirySummary?.converted || convertedEnquiries.length}</span>
+                          </button>
+                        </div>
+                        {enquiryError && <p role="alert" className="wa-enquiries-error">{enquiryError}</p>}
+                        {enquiryNotice && <p role="status" className="wa-enquiries-notice">{enquiryNotice}</p>}
+                        <div className="wa-enquiries-list">
+                          {enquiriesLoading && activeEnquiryRows.length === 0 ? (
+                            <p className="wa-enquiries-state"><Loader2 size={16} className="animate-spin" /> Loading enquiries…</p>
+                          ) : activeEnquiryRows.length === 0 ? (
+                            <p className="wa-enquiries-state">
+                              {enquiryView === "enquiries"
+                                ? "No new enquiries. Add this chat as an enquiry to start the pipeline."
+                                : enquiryView === "leads"
+                                  ? "No qualified leads yet. Qualify an enquiry as cold, warm or hot."
+                                  : "No clients converted from enquiries yet."}
+                            </p>
+                          ) : (
+                            activeEnquiryRows.map((enquiry) => {
+                              const busy = enquiryBusyId === enquiry.id;
+                              const temperature = String(enquiry.temperature || "new").toLowerCase();
+                              const isClient = enquiryView === "clients" || enquiry.status === "converted";
+                              return (
+                                <article className={`wa-enquiry-row is-${isClient ? "client" : enquiryView === "enquiries" ? "new" : "lead"}`} key={enquiry.id}>
+                                  <div className="wa-enquiry-main">
+                                    <strong>{enquiry.name || "Unnamed enquiry"}</strong>
+                                    <span>{enquiry.company || formatPhoneNumber(enquiry.phone) || enquiry.phone || enquiry.email || "No contact details"}</span>
+                                  </div>
+                                  <span className={`wa-enquiry-temperature is-${isClient ? "client" : temperature}`}>
+                                    {isClient ? "client" : temperature === "new" ? "enquiry" : temperature}
+                                  </span>
+                                  {isClient ? (
+                                    <p className="wa-enquiry-client-note">
+                                      <CheckCircle2 size={13} />
+                                      Added to CRM{enquiry.converted_client_id ? ` · client #${enquiry.converted_client_id}` : ""}{enquiry.crm_lead_id ? ` · lead #${enquiry.crm_lead_id}` : ""}
+                                    </p>
+                                  ) : enquiryView === "enquiries" ? (
+                                    <>
+                                      <p className="wa-enquiry-step-label">Convert to lead · choose temperature</p>
+                                      <div className="wa-enquiry-qualify" role="group" aria-label={`Qualify ${enquiry.name || "enquiry"}`}>
+                                        {["cold", "warm", "hot"].map((level) => (
+                                          <button key={level} type="button" className={`is-${level}`} onClick={() => handleUpdateEnquiryTemperature(enquiry, level)} disabled={busy}>
+                                            {level}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div className="wa-enquiry-temps" role="group" aria-label={`Temperature for ${enquiry.name || "lead"}`}>
+                                        {["cold", "warm", "hot"].map((level) => (
+                                          <button
+                                            key={level}
+                                            type="button"
+                                            className={temperature === level ? `is-active is-${level}` : ""}
+                                            onClick={() => handleUpdateEnquiryTemperature(enquiry, level)}
+                                            disabled={busy}
+                                            aria-pressed={temperature === level}
+                                          >
+                                            {level}
+                                          </button>
+                                        ))}
+                                      </div>
+                                      <button type="button" className="wa-enquiry-convert" onClick={() => handleConvertEnquiry(enquiry)} disabled={busy}>
+                                        {busy ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}
+                                        <span>{busy ? "Converting…" : "Convert to client"}</span>
+                                      </button>
+                                      {enquiry.crm_lead_id ? (
+                                        <p className="wa-enquiry-lead-note">CRM lead #{enquiry.crm_lead_id}</p>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="wa-enquiry-link-lead"
+                                          onClick={() => handleUpdateEnquiryTemperature(enquiry, temperature)}
+                                          disabled={busy}
+                                        >
+                                          {busy ? "Linking…" : "Create CRM lead"}
+                                        </button>
+                                      )}
+                                    </>
+                                  )}
+                                </article>
+                              );
+                            })
+                          )}
+                        </div>
+                        <div className="wa-enquiries-panel-foot">
+                          <button type="button" onClick={handleCreateEnquiryFromChat} disabled={!selectedChat || selectedChat.isGroup || enquiryBusyId === "new"}>
+                            {enquiryBusyId === "new" ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                            {selectedChat?.isGroup ? "Enquiries are for 1-to-1 chats" : "Add this chat as enquiry"}
+                          </button>
+                        </div>
+                      </div>
+                    </details>
                     <label className="wa-ticket-field wa-assignee-field"><Users size={14} /><select aria-label="Assign conversation" value={assignedAgentName} onChange={event => { const member = teamMembers.find(m => `${m.first_name} ${m.last_name || ""}`.trim() === event.target.value); handleAssignAgent(member?.id || null, event.target.value); }}><option value="">Unassigned</option>{teamMembers.map(m => { const name = `${m.first_name} ${m.last_name || ""}`.trim(); return <option key={m.id} value={name}>{name}</option>; })}</select></label>
                     <span className="wa-conversation-branch" title="Assigned branch"><GitBranch size={13} />{selectedChat.branch_name || activeBranch?.name || "Head Office"}</span>
                   </div>

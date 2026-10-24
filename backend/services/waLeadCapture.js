@@ -21,6 +21,51 @@ function clean10DigitPhone(phone) {
   return cleaned.length >= 10 ? cleaned.slice(-10) : cleaned;
 }
 
+// The legacy CRM `telecalls` table ships with different columns depending on
+// the engine: the production MySQL clone has staff_name / call_date /
+// call_outcome / reference / assigned_to, while the embedded SQLite schema
+// stops at followup_notes. Creating a lead from WhatsApp must work on both, so
+// reconcile the columns once per process before touching the table.
+let leadColumnsEnsured = false;
+
+async function ensureLeadTableColumns() {
+  if (leadColumnsEnsured) return;
+  const sqlite = Boolean(db.isSqlite);
+  const wanted = [
+    ["staff_name", sqlite ? "TEXT DEFAULT NULL" : "VARCHAR(150) DEFAULT NULL"],
+    ["call_date", sqlite ? "TEXT DEFAULT NULL" : "DATE DEFAULT NULL"],
+    ["call_outcome", sqlite ? "TEXT DEFAULT NULL" : "VARCHAR(40) DEFAULT NULL"],
+    ["reference", sqlite ? "TEXT DEFAULT NULL" : "VARCHAR(100) DEFAULT NULL"],
+    ["reference_by", sqlite ? "TEXT DEFAULT NULL" : "VARCHAR(150) DEFAULT NULL"],
+    ["assigned_to", "INT DEFAULT NULL"],
+    ["updated_at", sqlite ? "TEXT DEFAULT NULL" : "TIMESTAMP NULL DEFAULT NULL"],
+    ["followup_notes", "TEXT DEFAULT NULL"],
+    ["service_name", sqlite ? "TEXT DEFAULT NULL" : "VARCHAR(255) DEFAULT NULL"],
+  ];
+
+  let existing = new Set();
+  try {
+    if (sqlite) {
+      const rows = await queryAsync("PRAGMA table_info(telecalls)");
+      existing = new Set(rows.map((r) => String(r.name).toLowerCase()));
+    } else {
+      const rows = await queryAsync(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'telecalls'"
+      );
+      existing = new Set(rows.map((r) => String(r.column_name).toLowerCase()));
+    }
+  } catch (_) { /* fall through and try the ALTERs blindly */ }
+
+  for (const [col, def] of wanted) {
+    if (existing.has(col)) continue;
+    try {
+      await queryAsync(`ALTER TABLE telecalls ADD COLUMN ${col} ${def}`);
+    } catch (_) { /* race with another process */ }
+  }
+
+  leadColumnsEnsured = true;
+}
+
 /**
  * Automatically create or update a CRM lead in telecalls with source = 'WhatsApp'
  * @param {Object} leadData
@@ -56,6 +101,8 @@ async function captureLeadFromWhatsApp(leadData = {}) {
     console.warn(`[WA LeadCapture] Skipped lead creation: invalid phone '${phone}'`);
     return { success: false, reason: "invalid_phone" };
   }
+
+  await ensureLeadTableColumns();
 
   const customerName = (name || "").trim() || "WhatsApp Lead";
   const serviceName = (service || "").trim() || "General Inquiry";

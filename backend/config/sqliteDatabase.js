@@ -238,6 +238,14 @@ class SQLiteDatabaseAdapter {
     for (const [name, definition] of Object.entries({ created_by: "INTEGER DEFAULT NULL", phone_number_id: "TEXT DEFAULT NULL", access_token: "TEXT DEFAULT NULL", waba_id: "TEXT DEFAULT NULL", business_account_id: "TEXT DEFAULT NULL", quality_rating: "TEXT DEFAULT NULL", messaging_limit: "TEXT DEFAULT NULL" })) {
       if (!accountColumns.has(name)) this.sqlite.exec(`ALTER TABLE wa_accounts ADD COLUMN ${name} ${definition}`);
     }
+    // Clients: provenance/source columns exist on the MySQL clone but were
+    // never part of the embedded schema. Without them every query that selects
+    // `source` (contact drawer, add-to-crm-client, enquiry conversion) fails
+    // silently on SQLite, so the CRM client link never shows up.
+    const clientColumns = new Set(this.sqlite.prepare("PRAGMA table_info(clients)").all().map((column) => column.name));
+    for (const [name, definition] of Object.entries({ source: "TEXT DEFAULT NULL", original_lead_id: "INTEGER DEFAULT NULL", original_lead_type: "TEXT DEFAULT NULL", converted_at: "TEXT DEFAULT NULL", lead_email: "TEXT DEFAULT NULL", lead_city: "TEXT DEFAULT NULL", lead_reference: "TEXT DEFAULT NULL", lead_purpose: "TEXT DEFAULT NULL", lead_staff_name: "TEXT DEFAULT NULL", lead_id_display: "TEXT DEFAULT NULL" })) {
+      if (!clientColumns.has(name)) this.sqlite.exec(`ALTER TABLE clients ADD COLUMN ${name} ${definition}`);
+    }
     const automationColumns = new Set(this.sqlite.prepare("PRAGMA table_info(wa_automation_logs)").all().map((column) => column.name));
     for (const [name, definition] of Object.entries({ execution_step: "INTEGER DEFAULT 1", session_key: "TEXT DEFAULT NULL", target_chat_id: "TEXT DEFAULT NULL", claimed_at: "TEXT DEFAULT NULL", wa_message_id: "TEXT DEFAULT NULL", trigger_data: "TEXT DEFAULT NULL", scheduled_for: "TEXT DEFAULT NULL" })) {
       if (!automationColumns.has(name)) this.sqlite.exec(`ALTER TABLE wa_automation_logs ADD COLUMN ${name} ${definition}`);

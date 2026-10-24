@@ -13,6 +13,7 @@ const WORKSPACES = {
   branches: { title: "Branches", job: "Manage office routing, operating hours and branch teams.", steps: ["Create a branch and set its business hours.", "Assign employees and WhatsApp numbers.", "Review routing before accepting customer conversations."], links: ["employees", "accounts"] },
   accounts: { title: "Accounts & settings", job: "Configure WhatsApp connections, senders and service settings.", steps: ["Connect a WhatsApp account or configure Meta Cloud API.", "Assign senders to the appropriate branch.", "Review connection status and service settings."], links: ["branches", "employees"] },
   employees: { title: "Employees", job: "Manage staff access, branch assignments and messaging permissions.", steps: ["Add an employee and assign their branch.", "Choose only the permissions their role needs.", "Share their access code and track activation."], links: ["branches", "accounts"] },
+  enquiries: { title: "Enquiries", job: "Triage incoming leads by temperature and convert the ready ones into CRM clients.", steps: ["Log the enquiry with a name, phone and what they asked for.", "Rate it cold, warm or hot from the row dropdown.", "Convert hot leads into a CRM client with one click."], links: ["contacts", "analytics"] },
   "client-portal": { title: "Client portal", job: "Manage client access, shared documents and service requests.", steps: ["Select a CRM client and create an invitation.", "Verify document ownership before publishing.", "Review client responses and service requests."], links: ["contacts", "accounts"] },
 };
 

@@ -165,7 +165,11 @@ app.set("trust proxy", 1);
 app.use(cors({
   origin: corsOrigin,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-Requested-With"],
+  // X-Tenant-Id / X-Branch-Id are required: src/config/axios.js attaches them to
+  // every request, so leaving them off this list made the browser fail the
+  // preflight and drop the response ("Failed to fetch") for any cross-origin
+  // dev/prod call using that instance. Tenant validation stays server-side.
+  allowedHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-Requested-With", "X-Tenant-Id", "X-Branch-Id"],
   exposedHeaders: ["Content-Disposition"],
   credentials: true,
   maxAge: 86400,
@@ -358,6 +362,7 @@ app.use("/api/wa/config", require("./middleware/authMiddleware").verifyToken, re
 app.use("/webhook", require("./routes/waWebhookRoutes"));
 app.use("/api/wa/webhook", require("./routes/waWebhookRoutes"));
 app.use("/api/wa/contacts", require("./routes/waContactRoutes"));
+app.use("/api/wa/enquiries", require("./routes/waEnquiryRoutes"));
 app.use("/api/wa/automations", require("./routes/waAutomationRoutes"));
 app.use("/api/wa/flows", require("./routes/waFlowRoutes"));
 app.use("/api/wa-flows", require("./routes/waFlowRoutes"));

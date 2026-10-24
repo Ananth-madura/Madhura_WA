@@ -18,6 +18,7 @@ import WAFlows from "./pages/whatsappFlows";
 import WAAnalytics from "./pages/whatsappAnalytics";
 import WAAccounts from "./pages/whatsappAccounts";
 import WAEmployees from "./pages/whatsappEmployees";
+import WAEnquiries from "./pages/whatsappEnquiries";
 import WABilling from "./pages/whatsappBilling";
 import { EnterpriseProvider } from "./context/EnterpriseContext";
 import { BranchProvider } from "./context/BranchContext";
@@ -185,6 +186,7 @@ export default function App() {
               <Route path="analytics" element={<WAAnalytics />} />
               <Route path="accounts" element={<WAAccounts />} />
               <Route path="employees" element={<WAEmployees />} />
+              <Route path="enquiries" element={<WAEnquiries />} />
               <Route path="branches" element={<BranchProvider><BranchList /></BranchProvider>} />
               <Route path="branches/new" element={<BranchProvider><BranchCreateWizard /></BranchProvider>} />
               <Route path="branches/:branchId/:slug" element={<BranchProvider><BranchLayout /></BranchProvider>}>

@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Bell,
   GitBranch,
+  Inbox,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
@@ -166,6 +167,15 @@ export default function WhatsAppNav() {
       title: "WhatsApp Contacts Directory",
       path: "/whatsapp/contacts",
       icon: UserCheck,
+    },
+    {
+      // Visible to every role — employees triage and convert leads too.
+      // Delete stays admin/sub-admin only (backend enforced).
+      id: "enquiries",
+      label: "Enquiries",
+      title: "Enquiry Pipeline: cold, warm & hot leads",
+      path: "/whatsapp/enquiries",
+      icon: Inbox,
     },
     {
       id: "templates",
