@@ -24,7 +24,7 @@ async function main(){
         if(!["127.0.0.1","localhost"].includes(url.hostname))return request.abort();
         return request.continue();
       });
-      await page.goto("http://127.0.0.1:15318/whatsapp",{waitUntil:"networkidle2"});await new Promise(resolve=>setTimeout(resolve,1000));
+      await page.goto(`http://127.0.0.1:15318${process.env.FRONTEND_TEST_PATH||"/whatsapp"}`,{waitUntil:"networkidle2"});await new Promise(resolve=>setTimeout(resolve,1000));
       assert.deepEqual(errors,[],`${mode}, demo=${demoMode}: ${errors.join(", ")}`);
       const text=await page.evaluate(()=>document.body.innerText);
       assert(text.trim().length>60,`${mode}: page became blank`);assert(!text.includes("workspace could not open"),`${mode}: render boundary caught an unexpected crash`);

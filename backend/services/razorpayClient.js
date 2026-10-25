@@ -25,28 +25,40 @@
 const axios = require("axios");
 const crypto = require("crypto");
 
-const RAZORPAY_API_BASE = process.env.RAZORPAY_API_BASE || "https://api.razorpay.com/v1";
+const RAZORPAY_API_BASE = process.env.NODE_ENV==="production"?"https://api.razorpay.com/v1":process.env.RAZORPAY_API_BASE || "https://api.razorpay.com/v1";
 const MOCK_KEY_PLACEHOLDER = "rzp_test_mock_key_2026";
 
 function keyId() {
-  const id = process.env.RAZORPAY_KEY_ID;
+  const id = String(process.env.RAZORPAY_KEY_ID || "").trim();
   if (!id || id === MOCK_KEY_PLACEHOLDER) return null;
   return id;
 }
 
 function keySecret() {
-  const secret = process.env.RAZORPAY_KEY_SECRET;
+  const secret = String(process.env.RAZORPAY_KEY_SECRET || "").trim();
   if (!secret || secret === MOCK_KEY_PLACEHOLDER) return null;
   return secret;
 }
 
 function webhookSecret() {
-  return process.env.RAZORPAY_WEBHOOK_SECRET || null;
+  const value=String(process.env.RAZORPAY_WEBHOOK_SECRET||"").trim();
+  return value&&!/CHANGE_ME|REPLACE_ME|TODO/.test(value)?value:null;
 }
 
 /** True when this deployment can actually talk to Razorpay. */
 function isConfigured() {
-  return Boolean(keyId() && keySecret());
+  return /^rzp_(test|live)_[A-Za-z0-9]+$/.test(keyId() || "") && Boolean(keySecret());
+}
+
+function checkoutEnabled() { return process.env.RAZORPAY_CHECKOUT_ENABLED !== "0" && isConfigured(); }
+function status() { return { configured:isConfigured(), checkoutEnabled:checkoutEnabled(), mode:keyId()?.startsWith("rzp_live_")?"live":"test", webhookConfigured:Boolean(webhookSecret()) }; }
+async function fetchPayment(paymentId) {
+  if(!isConfigured())throw Object.assign(new Error("Payment gateway is not configured"),{code:"GATEWAY_NOT_CONFIGURED",status:503});
+  const {data}=await axios.get(`${RAZORPAY_API_BASE}/payments/${encodeURIComponent(paymentId)}`,{headers:{Authorization:authHeader()},timeout:15000});return data;
+}
+async function fetchOrderPayments(orderId) {
+  if(!isConfigured())throw Object.assign(new Error("Payment gateway is not configured"),{code:"GATEWAY_NOT_CONFIGURED",status:503});
+  const {data}=await axios.get(`${RAZORPAY_API_BASE}/orders/${encodeURIComponent(orderId)}/payments`,{headers:{Authorization:authHeader()},timeout:15000});return data.items||[];
 }
 
 function authHeader() {
@@ -72,7 +84,7 @@ async function createOrder({ amountMinor, currency = "INR", receipt, notes = {} 
     err.code = "GATEWAY_NOT_CONFIGURED";
     throw err;
   }
-  if (!Number.isFinite(Number(amountMinor)) || Number(amountMinor) <= 0) {
+  if (!Number.isSafeInteger(Number(amountMinor)) || Number(amountMinor) <= 0) {
     const err = new Error("Order amount must be a positive number of minor units");
     err.code = "INVALID_AMOUNT";
     throw err;
@@ -92,6 +104,7 @@ async function createOrder({ amountMinor, currency = "INR", receipt, notes = {} 
     }
   );
 
+  if(!data.id||Number(data.amount)!==Number(amountMinor)||data.currency!==currency)throw new Error("Payment provider returned an inconsistent order");
   return { id: data.id, amount: data.amount, currency: data.currency, status: data.status, raw: data };
 }
 
@@ -135,6 +148,10 @@ function timingSafeEqualHex(received, expected) {
 
 module.exports = {
   isConfigured,
+  checkoutEnabled,
+  status,
+  fetchPayment,
+  fetchOrderPayments,
   createOrder,
   verifyCheckoutSignature,
   verifyWebhookSignature,

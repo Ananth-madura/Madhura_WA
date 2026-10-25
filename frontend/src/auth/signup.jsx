@@ -18,112 +18,14 @@ import {
   EyeOff,
   Briefcase,
   GitBranch,
-  Globe,
   Phone,
-  Clock,
   AlertCircle,
-  Layers,
 } from "lucide-react";
 import { API } from "../config/api";
 import { useAuth } from "./AuthContext";
 import { startDirectDemoSession } from "./demoSession";
-
-const DEFAULT_PLANS = [
-  {
-    id: "free",
-    name: "Free Tier",
-    badge: "Free",
-    price: "₹0",
-    billing: "forever",
-    maxSenders: 1,
-    maxBranches: 1,
-    maxSeats: 1,
-    maxMonthlyMessages: 500,
-    features: [
-      "1 Connected WhatsApp Number",
-      "1 Head Office Branch",
-      "500 Outbound Messages / mo",
-      "Live Chat Inbox & History",
-      "Standard Message Templates",
-    ],
-  },
-  {
-    id: "starter",
-    name: "Starter Plan",
-    badge: "Popular",
-    price: "₹1,499",
-    billing: "/ month",
-    maxSenders: 3,
-    maxBranches: 1,
-    maxSeats: 5,
-    maxMonthlyMessages: 5000,
-    features: [
-      "3 Connected WhatsApp Numbers",
-      "1 Head Office Branch",
-      "5 Team Seats & Staff Roles",
-      "5,000 Outbound Messages / mo",
-      "Visual Chatbot Flow Builder",
-      "Anti-Ban Humanized Pacing",
-    ],
-  },
-  {
-    id: "growth",
-    name: "Growth Plan",
-    badge: "Recommended",
-    price: "₹3,999",
-    billing: "/ month",
-    maxSenders: 10,
-    maxBranches: 3,
-    maxSeats: 15,
-    maxMonthlyMessages: 25000,
-    features: [
-      "10 Connected WhatsApp Numbers",
-      "3 Regional Branches & Routing",
-      "15 Multi-Branch Team Seats",
-      "25,000 Outbound Messages / mo",
-      "AI Neural Replies & Smart Bots",
-      "Multi-Sender Pool Balancing",
-    ],
-  },
-  {
-    id: "business",
-    name: "Business Plan",
-    badge: "Scale",
-    price: "₹6,999",
-    billing: "/ month",
-    maxSenders: 25,
-    maxBranches: 10,
-    maxSeats: 50,
-    maxMonthlyMessages: 60000,
-    features: [
-      "25 Connected WhatsApp Numbers",
-      "10 Operational Branches",
-      "50 Team Seats & Branch RBAC",
-      "60,000 Outbound Messages / mo",
-      "Shared Multi-Branch Inbox",
-      "Branch-to-Branch Transfers",
-    ],
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    badge: "Custom",
-    price: "₹9,999",
-    billing: "/ month",
-    maxSenders: 50,
-    maxBranches: "Unlimited",
-    maxSeats: 100,
-    maxMonthlyMessages: 100000,
-    features: [
-      "50+ Connected WhatsApp Numbers",
-      "Unlimited Branches & Teams",
-      "100+ Seats & Custom Permissions",
-      "100,000+ Outbound Messages / mo",
-      "Dedicated Meta WABA Cloud API",
-      "24/7 SLA & Dedicated Engineer",
-    ],
-  },
-];
+import {loginDestination} from "./loginDestination";
+import {requireRecords} from "../utils/apiPayload";
 
 const INDUSTRIES = [
   "Retail & E-Commerce",
@@ -160,8 +62,8 @@ export default function Signup() {
 
   // Self-signup state
   const [companyName, setCompanyName] = useState("");
-  const [legalName, setLegalName] = useState("");
-  const [brandName, setBrandName] = useState("");
+  const [legalName] = useState("");
+  const [brandName] = useState("");
   const [industry, setIndustry] = useState(INDUSTRIES[0]);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -178,8 +80,11 @@ export default function Signup() {
   const [timezone, setTimezone] = useState("Asia/Kolkata");
 
   // Plan catalog
-  const [plans, setPlans] = useState(DEFAULT_PLANS);
-  const [selectedPlan, setSelectedPlan] = useState("growth");
+  const [plans, setPlans] = useState([]);
+  const [selectedPlan, setSelectedPlan] = useState(new URLSearchParams(location.search).get("plan")||"free");
+
+  const [plansError,setPlansError]=useState("");
+  const [catalogAttempt,setCatalogAttempt]=useState(0);
 
   // Access-code join state
   const [accessCode, setAccessCode] = useState("");
@@ -211,29 +116,16 @@ export default function Signup() {
     }
   }, [location.search]);
 
-  // Fetch plans from backend if available
-  useEffect(() => {
-    let cancelled = false;
-    axios
-      .get(`${API}/api/auth/plans`, { timeout: 6000 })
-      .then((res) => {
-        if (!cancelled && res.data?.plans && Array.isArray(res.data.plans)) {
-          // Merge with multi-branch schema attributes
-          const mapped = res.data.plans.map((p) => {
-            const fallback = DEFAULT_PLANS.find((dp) => dp.id === p.id) || {};
-            return {
-              ...fallback,
-              ...p,
-            };
-          });
-          setPlans(mapped);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useEffect(()=>{
+    let cancelled=false;setPlansError("");setPlans([]);
+    axios.get(`${API}/api/v2/billing/plans`,{timeout:10000}).then(({data})=>{
+      const rows=requireRecords(data?.plans);
+      if(!rows.length)throw new Error("Plan catalog is unavailable");
+      const mapped=rows.map(plan=>({...plan,price:"\u20b9"+Number(plan.price_inr).toLocaleString("en-IN"),billing:Number(plan.price_inr)===0?"Free plan":"/ 30 days",maxSenders:plan.max_senders,maxBranches:plan.max_branches,maxSeats:plan.max_seats,features:Array.isArray(plan.features)?plan.features:[]}));
+      if(cancelled)return;setPlans(mapped);setSelectedPlan(current=>mapped.some(plan=>plan.id===current)?current:(mapped.find(plan=>Number(plan.price_inr)===0)||mapped[0]).id);
+    }).catch(()=>{if(!cancelled)setPlansError("Plans could not load. Connect the backend and retry before creating your account.");});
+    return()=>{cancelled=true;};
+  },[catalogAttempt]);
 
   // Real-time verification of Access Code
   useEffect(() => {
@@ -246,8 +138,8 @@ export default function Signup() {
         .then((res) => {
           if (!cancelled && res.data?.valid) {
             setVerifiedCodeData(res.data);
-            if (res.data.email && !email) setEmail(res.data.email);
-            if (res.data.first_name && !firstName) setFirstName(res.data.first_name);
+            if (res.data.email) setEmail(current=>current||res.data.email);
+            if (res.data.first_name) setFirstName(current=>current||res.data.first_name);
           }
         })
         .catch(() => {
@@ -297,6 +189,8 @@ export default function Signup() {
     e?.preventDefault?.();
     setError("");
 
+    if(loading)return;
+    if(!plans.some(plan=>plan.id===selectedPlan))return setError("Wait for the current plan catalog or retry loading plans.");
     const cleanCompany = companyName.trim();
     const cleanFirst = firstName.trim();
     const cleanLast = lastName.trim();
@@ -330,12 +224,13 @@ export default function Signup() {
       if ((data?.token || data?.cookieSession) && data?.user) {
         login({
           ...data.user,
+          cookieSession:Boolean(data.cookieSession||data.user?.cookieSession),
           token: data.token,
           active_tenant_id: data.user.tenant_id,
           active_branch_id: data.user.branch_id,
           demoMode: false,
         });
-        navigate("/whatsapp", { replace: true });
+        navigate(loginDestination(data), { replace: true });
         return;
       }
 
@@ -380,6 +275,7 @@ export default function Signup() {
       if ((data?.token || data?.cookieSession) && data?.user) {
         login({
           ...data.user,
+          cookieSession:Boolean(data.cookieSession||data.user?.cookieSession),
           token: data.token,
           active_tenant_id: data.user.tenant_id,
           active_branch_id: data.user.branch_id,
@@ -442,7 +338,7 @@ export default function Signup() {
     }
   };
 
-  const currentPlanMeta = plans.find((p) => p.id === selectedPlan) || plans[2] || DEFAULT_PLANS[2];
+  const currentPlanMeta = plans.find((p) => p.id === selectedPlan) || {name:"Selected plan",features:[]};
 
   return (
     <div className="lp-auth" style={{ minHeight: "100dvh", padding: "24px 16px" }}>
@@ -897,6 +793,8 @@ export default function Signup() {
                       </div>
                     </div>
 
+                    {plansError&&<p role="alert" className="mb-3 text-sm text-red-700">{plansError} <button type="button" onClick={()=>setCatalogAttempt(value=>value+1)}>Retry plans</button></p>}
+                    {!plans.length&&!plansError&&<p role="status">Loading current plans…</p>}
                     {/* Plan Selection */}
                     <div className="mb-5">
                       <div className="flex items-center justify-between mb-2">
@@ -904,16 +802,18 @@ export default function Signup() {
                           Select Messaging &amp; Branch Tier
                         </label>
                         <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                          14-Day Full Access Trial
+                          Paid plans activate after payment
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3" role="radiogroup" aria-label="Signup plan">
                         {plans.map((p) => {
                           const isSelected = selectedPlan === p.id;
                           return (
                             <div
                               key={p.id}
+                              role="radio" aria-checked={isSelected} tabIndex={0}
+                              onKeyDown={event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();setSelectedPlan(p.id);}}}
                               onClick={() => setSelectedPlan(p.id)}
                               className={`p-2.5 rounded-xl border cursor-pointer transition-all relative flex flex-col justify-between ${
                                 isSelected
@@ -978,7 +878,7 @@ export default function Signup() {
 
                       <button
                         type="submit"
-                        disabled={loading}
+                        disabled={loading||!plans.length}
                         className="hl-btn-primary flex-1 py-3 px-4 text-sm font-bold flex items-center justify-center gap-2 rounded-xl shadow-sm transition hover:shadow cursor-pointer"
                         style={{
                           background: "linear-gradient(135deg, #059669 0%, #0d9488 100%)",
@@ -986,11 +886,11 @@ export default function Signup() {
                         }}
                       >
                         {loading ? (
-                          <span>Provisioning Multi-Tenant Architecture…</span>
+                          <span>Creating your account…</span>
                         ) : (
                           <>
                             <Building2 size={16} />
-                            <span>Launch Enterprise Workspace Now</span>
+                            <span>{Number(currentPlanMeta.price_inr)>0?"Create account & continue to payment":"Create free workspace"}</span>
                             <ChevronRight size={16} />
                           </>
                         )}

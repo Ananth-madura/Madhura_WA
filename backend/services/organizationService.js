@@ -22,7 +22,7 @@ const q = (sql, params = []) =>
 async function getUserOrganizations(userId) {
   const uid = Number(userId);
   const rows = await q(
-    `SELECT t.id, t.name, t.slug, t.legal_name, t.brand_name, t.plan, t.plan_status, 
+    `SELECT t.id, t.name, t.slug, t.legal_name, t.brand_name, t.plan, t.plan_status, t.pending_plan_id,
             t.max_branches, t.max_seats, t.max_senders, t.status,
             om.role, om.membership_status, om.joined_at
      FROM tenants t
@@ -69,41 +69,41 @@ async function getOrganizationDetails(tenantId) {
 /**
  * Create a new organization / company with default Head Office branch, owner membership, and trial/plan.
  */
-async function createOrganization({ name, legal_name, brand_name, ownerUserId, plan = "starter", branch_name, branch_code, timezone }) {
+async function createOrganization({ name, legal_name, brand_name, ownerUserId, plan = "free", branch_name, branch_code, timezone }, runQuery = q) {
   const cleanName = (name || "New Organization").trim();
   const cleanLegal = (legal_name || cleanName).trim();
   const cleanBrand = (brand_name || cleanName).trim();
-  const cleanPlan = (plan || "starter").toLowerCase();
+  const requestedPlan = String(plan || "free").toLowerCase();
+  const cleanPlan = "free";
 
-  // Look up plan quotas from plans catalog
-  const plans = await q("SELECT * FROM plans WHERE id = ? LIMIT 1", [cleanPlan]);
-  const planConfig = plans[0] || {
-    max_branches: 1,
-    max_seats: 5,
-    max_senders: 1,
-    max_monthly_messages: 5000,
-  };
+  const [requested]=await runQuery("SELECT * FROM plans WHERE id = ? AND is_active = 1 LIMIT 1",[requestedPlan]);
+  if(!requested)throw Object.assign(new Error("Selected plan is not available"),{status:400});
+  const [planConfig]=await runQuery("SELECT * FROM plans WHERE id = 'free' AND is_active = 1 LIMIT 1");
+  if(!planConfig||Number(planConfig.price_inr)!==0)throw Object.assign(new Error("The free onboarding plan is unavailable"),{status:503});
+  if(!Number.isFinite(Number(requested.price_inr))||Number(requested.price_inr)<0)throw Object.assign(new Error("Selected plan price is invalid"),{status:503});
+  const pendingPlan=Number(requested.price_inr)>0?requested.id:null;
 
   const baseSlug = cleanName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "org";
-  const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}`;
+  const uniqueSlug = `${baseSlug.slice(0,150)}-${crypto.randomBytes(6).toString("hex")}`;
 
   // 1. Insert Tenant
   const insertTenantSql = `
     INSERT INTO tenants 
-      (name, slug, legal_name, brand_name, owner_user_id, plan, plan_status, max_branches, max_seats, max_senders, max_monthly_messages, status)
-    VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, 'active')
+      (name, slug, legal_name, brand_name, owner_user_id, plan, pending_plan_id, plan_status, max_branches, max_seats, max_senders, max_monthly_messages, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, 'active')
   `;
 
-  const tenantResult = await q(insertTenantSql, [
+  const tenantResult = await runQuery(insertTenantSql, [
     cleanName,
     uniqueSlug,
     cleanLegal,
     cleanBrand,
     ownerUserId,
     cleanPlan,
+    pendingPlan,
     planConfig.max_branches || 1,
     planConfig.max_seats || 5,
     planConfig.max_senders || 1,
@@ -121,30 +121,30 @@ async function createOrganization({ name, legal_name, brand_name, ownerUserId, p
     INSERT INTO branches (tenant_id, code, name, timezone, manager_id, is_head_office, status)
     VALUES (?, ?, ?, ?, ?, 1, 'active')
   `;
-  const branchResult = await q(insertBranchSql, [newTenantId, branchCodeClean, branchNameClean, branchTzClean, ownerUserId]);
+  const branchResult = await runQuery(insertBranchSql, [newTenantId, branchCodeClean, branchNameClean, branchTzClean, ownerUserId]);
   const newBranchId = branchResult.insertId || branchResult.lastID;
 
   // 3. Insert Owner Membership
-  await q(
+  await runQuery(
     `INSERT INTO organization_memberships (tenant_id, user_id, role, membership_status)
      VALUES (?, ?, 'organization_owner', 'active')`,
     [newTenantId, ownerUserId]
   );
 
   // 4. Insert Staff Branch Membership
-  await q(
+  await runQuery(
     `INSERT INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary)
      VALUES (?, ?, ?, 1)`,
     [newTenantId, ownerUserId, newBranchId]
   );
 
   // 5. Initialize Wallets
-  await q(
+  await runQuery(
     `INSERT OR IGNORE INTO wallet_accounts (tenant_id, currency, credit_type, balance, reserved_balance)
      VALUES (?, 'INR', 'ai_credits', 200, 0)`,
     [newTenantId]
   );
-  await q(
+  await runQuery(
     `INSERT OR IGNORE INTO wallet_accounts (tenant_id, currency, credit_type, balance, reserved_balance)
      VALUES (?, 'INR', 'software_actions', 1000, 0)`,
     [newTenantId]
@@ -157,6 +157,9 @@ async function createOrganization({ name, legal_name, brand_name, ownerUserId, p
     legal_name: cleanLegal,
     brand_name: cleanBrand,
     plan: cleanPlan,
+    pending_plan_id: pendingPlan,
+    requestedPlanId: requested.id,
+    checkoutRequired: Boolean(pendingPlan),
     head_office_branch_id: newBranchId,
     branch_name: branchNameClean,
     branch_code: branchCodeClean,

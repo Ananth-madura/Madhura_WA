@@ -2,6 +2,20 @@
 
 This records the frontend/backend code checks and deployment requirements. It does not certify the requested full production volume or every legacy CRM feature.
 
+## Signup and first-login payment pass
+
+Paid signup now provisions free quotas, saves the selected plan and continues to real billing through the HttpOnly browser session. Normal owner login resumes unfinished payment; free signup and an explicit free-plan continuation remain available. Successful payment clears the saved choice atomically. The in-app plan modal now routes through billing. Signup and billing share the canonical database catalog.
+
+The actual full backend/MySQL startup pipeline passed signup, cookie login, pending-plan resumption, duplicate/invalid signup rejection, forced branch-creation rollback, provider-fixture payment, later paid login and free/skip paths. The safe integration runner passed all 12 suites. Schema version 7 corrects the MySQL billing-table/index syntax and adds `pending_plan_id`. Deploy the backend and verify readiness before deploying the dependent frontend. No live registration, order or charge was made.
+
+The final frontend run passed 19 suites / 45 tests; the production build passed using your API domain. Targeted lint for signup, login, login routing, the plan modal and billing passed without warnings. Existing warnings elsewhere in the frontend remain.
+
+## Razorpay billing pass
+
+Real Checkout, capture/amount/currency verification, atomic settlement, idempotent webhooks, status recovery, scoped order history, server-derived billing permissions and renewal controls are implemented. A read-only authentication check for the supplied credentials returned HTTP 200; no live order or charge was created. Keys are in the ignored backend environment only. Rotate the secret shared in chat before production use.
+
+Verification passed: 16 frontend suites / 38 tests, targeted billing lint, production frontend build and 12 safe backend integration suites. Payment tests use disposable MySQL and local provider transport, covering eight concurrent confirmations, forced transaction rollback/retry, wrong tenant/plan, invalid proof, pending/underpaid/refunded payment rejection, manual recovery, renewal and free-plan credits. Live deployment and Dashboard webhook delivery are outstanding. See [razorpay_setup.md](razorpay_setup.md) for configuration and the supported billing scope; recurring mandates, refunds and legacy customer-payment-link controls are separate.
+
 ## Domain and blank-screen update
 
 The deployed signed-in CRM was receiving HTML from its own static host for API requests, then crashing on list rendering. The source now selects `https://api.madhuratech.in`, rejects HTML API responses, validates chat lists and keeps an error visible during an API outage. Public domain settings are included for both Vercel projects and the VPS. The root rendering boundary provides a reload action for unexpected crashes.

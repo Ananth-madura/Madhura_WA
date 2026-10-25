@@ -24,6 +24,9 @@ async function getPlans() {
   const plans = await q("SELECT * FROM plans WHERE is_active = 1 ORDER BY price_inr ASC");
   return plans.map((p) => ({
     ...p,
+    price:new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0}).format(Number(p.price_inr)),
+    billing:Number(p.price_inr)===0?"Free plan":"/ 30 days",
+    maxSenders:p.max_senders,maxBranches:p.max_branches,maxSeats:p.max_seats,maxMonthlyMessages:p.max_monthly_messages,maxContacts:p.max_contacts,
     features: typeof p.features_json === "string" ? JSON.parse(p.features_json) : p.features_json || [],
   }));
 }
@@ -36,7 +39,7 @@ async function getTenantBillingSummary(tenantId) {
 
   // 1. Fetch tenant & plan details
   const [tenant] = await q(
-    `SELECT t.id, t.name, t.plan, t.plan_status, t.max_branches, t.max_seats, t.max_senders, t.max_monthly_messages,
+    `SELECT t.id, t.name, t.plan, t.plan_status, t.pending_plan_id, t.max_branches, t.max_seats, t.max_senders, t.max_monthly_messages,
             p.name as plan_name, p.badge as plan_badge, p.price_inr, p.max_contacts, p.features_json
      FROM tenants t
      LEFT JOIN plans p ON t.plan = p.id
@@ -81,6 +84,7 @@ async function getTenantBillingSummary(tenantId) {
       plan_name: tenant.plan_name || tenant.plan,
       plan_badge: tenant.plan_badge || "Active",
       plan_status: tenant.plan_status,
+      pending_plan_id: tenant.pending_plan_id,
       price_inr: tenant.price_inr || 0,
       features: typeof tenant.features_json === "string" ? JSON.parse(tenant.features_json) : tenant.features_json || [],
     },
@@ -95,7 +99,7 @@ async function getTenantBillingSummary(tenantId) {
       seats: { used: Number(members?.count || 0), max: tenant.max_seats },
       senders: { used: Number(senders?.count || 0), max: tenant.max_senders },
       contacts: { used: Number(contacts?.count || 0), max: Number(tenant.max_contacts || 50000) },
-      monthly_messages: { used: Number(messagesThisMonth?.count || 0), max: tenant.max_monthly_messages },
+      monthly_messages: { used: Number(messagesThisMonth?.[0]?.count || 0), max: tenant.max_monthly_messages },
     },
     wallets: wallets.reduce((acc, w) => {
       acc[w.credit_type] = { balance: w.balance, reserved: w.reserved_balance, currency: w.currency };
@@ -113,16 +117,14 @@ async function getTenantBillingSummary(tenantId) {
  * claims about *what it paid for* has to be re-read from this row at confirm
  * time rather than trusted from the request body.
  *
- * With live credentials this is a real Razorpay order (the gateway, not the
- * client, decides the amount). Without them - local/dev - a deterministic
- * `order_dev_...` id is recorded instead so the confirm path still has a row
- * to validate against; it is never acceptable in production.
+ * Simulated paid orders require an explicit development-only opt-in.
  *
  * @returns {{success, provider, live, keyId, orderId, receipt, amount, currency, planId, planName, prefill, notes}}
  */
 async function createCheckoutSession(tenantId, userId, { planId, interval = "month" }) {
   const tid = Number(tenantId);
   const cleanPlanId = String(planId || "").toLowerCase();
+  if(interval!=="month")throw Object.assign(new Error("Only monthly, one-time checkout is supported"),{status:400,code:"INVALID_INTERVAL"});
   const isProduction = process.env.NODE_ENV === "production";
 
   const [plan] = await q("SELECT * FROM plans WHERE id = ? AND is_active = 1 LIMIT 1", [cleanPlanId]);
@@ -135,7 +137,9 @@ async function createCheckoutSession(tenantId, userId, { planId, interval = "mon
 
   const razorpay = require("./razorpayClient");
   const amountMinor = Math.round(Number(plan.price_inr) * 100); // paise
-  const receiptId = `sub_${tid}_${Date.now()}`;
+  if(!Number.isSafeInteger(amountMinor)||amountMinor<0)throw new Error("Plan price is invalid");
+  if(amountMinor>0&&process.env.RAZORPAY_CHECKOUT_ENABLED==="0")throw Object.assign(new Error("New paid checkouts are temporarily paused"),{code:"CHECKOUT_PAUSED",status:503});
+  const receiptId = `sub_${tid}_${crypto.randomBytes(8).toString("hex")}`;
 
   const notes = { tenant_id: String(tid), plan_id: plan.id, interval: String(interval || "month") };
 
@@ -151,15 +155,16 @@ async function createCheckoutSession(tenantId, userId, { planId, interval = "mon
     // for a plan whose catalog price is zero.
     providerOrderId = `order_free_${tid}_${Date.now()}`;
     source = "self_serve";
-  } else if (razorpay.isConfigured()) {
+  } else if (razorpay.checkoutEnabled()) {
     const order = await razorpay.createOrder({ amountMinor, currency: "INR", receipt: receiptId, notes });
     providerOrderId = order.id;
     live = true;
-  } else if (isProduction) {
+  } else if (isProduction || process.env.BILLING_ALLOW_DEV_PAYMENTS !== "1" || razorpay.isConfigured()) {
     // Never let a live deployment issue an order the gateway has never heard
     // of: it would confirm without any way to verify it.
     const err = new Error("Payment gateway is not configured");
     err.code = "GATEWAY_NOT_CONFIGURED";
+    err.status = 503;
     throw err;
   } else {
     providerOrderId = `order_dev_${tid}_${Date.now()}`;
@@ -168,7 +173,7 @@ async function createCheckoutSession(tenantId, userId, { planId, interval = "mon
 
   const insert = await q(
     `INSERT INTO billing_orders
-       (tenant_id, user_id, plan_id, interval, amount_minor, currency, provider,
+       (tenant_id, user_id, plan_id, \`interval\`, amount_minor, currency, provider,
         provider_order_id, receipt, status, source)
      VALUES (?, ?, ?, ?, ?, 'INR', 'razorpay', ?, ?, 'created', ?)`,
     [tid, userId || null, plan.id, String(interval || "month"), amountMinor, providerOrderId, receiptId, source]
@@ -180,9 +185,8 @@ async function createCheckoutSession(tenantId, userId, { planId, interval = "mon
     provider: "razorpay",
     live,
     billingOrderId,
-    keyId: razorpay.keyId() || process.env.RAZORPAY_KEY_ID || "rzp_test_mock_key_2026",
-    // Both names: the gateway calls it order_id, and the existing frontend
-    // sends `receipt` as its orderId, so neither side has to guess.
+    keyId: razorpay.keyId(),
+    // Keep the snake-case alias for existing API consumers.
     orderId: providerOrderId,
     order_id: providerOrderId,
     receipt: receiptId,
@@ -243,101 +247,28 @@ async function findBillingOrder({ tenantId, orderId, receipt, planId }) {
  * @param {string} [args.source]  'gateway' | 'development'
  * @param {object} [args.billingOrder] the row this payment belongs to
  */
-async function processVerifiedPayment({ tenantId, planId, paymentId, orderId, source = "gateway", billingOrder = null }) {
-  const tid = Number(tenantId);
-
-  // When we know the ordered plan, it wins over whatever the caller passed:
-  // a signature that only binds `order_id|payment_id` cannot prove the plan.
-  const cleanPlanId = String((billingOrder && billingOrder.plan_id) || planId || "").toLowerCase();
-
-  const [plan] = await q("SELECT * FROM plans WHERE id = ? LIMIT 1", [cleanPlanId]);
-  if (!plan) throw new Error("Plan does not exist");
-
-  // The gateway payment id is the idempotency key. Falling back to Date.now()
-  // meant a replayed (or duplicated) webhook created a *new* event every time,
-  // so entitlements and wallet credits could be granted repeatedly.
-  const eventKey = paymentId ? `pay_${paymentId}` : orderId ? `order_${orderId}` : null;
-  if (!eventKey) {
-    throw new Error("A gateway payment reference is required to reconcile a subscription");
-  }
-
-  // 1. Idempotency Check via usage_events / ledger
-  const existingEvent = await q("SELECT id FROM usage_events WHERE meter_key = 'subscription_payment' AND external_event_id = ? LIMIT 1", [eventKey]);
-  if (existingEvent && existingEvent.length > 0) {
-    return { success: true, message: "Payment already reconciled" };
-  }
-
-  // 2. Log usage / payment event
-  try {
-    await q(
-      `INSERT INTO usage_events (tenant_id, meter_key, quantity, external_event_id)
-       VALUES (?, 'subscription_payment', ?, ?)`,
-      [tid, plan.price_inr, eventKey]
-    );
-  } catch (err) {
-    // Unique constraint is the race-free idempotency guarantee: a concurrent
-    // webhook that lost the race must not continue to the credit steps.
-    if (/duplicate|unique/i.test(err.message || "")) {
-      return { success: true, message: "Payment already reconciled" };
-    }
-    throw err;
-  }
-
-  // 3. Upsert Subscription
-  // Serialized the same way `periodStart` is above: the SQLite engine binds
-  // primitives, so handing it a Date object throws and the subscription row
-  // was never written (the plan still changed, leaving the two out of step).
-  const periodEnd = `${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 19)
-    .replace("T", " ")}`;
-  await q(
-    `INSERT INTO subscriptions (tenant_id, plan_id, provider, provider_sub_id, status, current_period_end)
-     VALUES (?, ?, 'razorpay', ?, 'active', ?)`,
-    [tid, cleanPlanId, paymentId || orderId, periodEnd]
-  );
-
-  // 4. Update Tenant Entitlements to match the new plan
-  await q(
-    `UPDATE tenants SET 
-      plan = ?, 
-      plan_status = 'active',
-      max_branches = ?,
-      max_seats = ?,
-      max_senders = ?,
-      max_monthly_messages = ?,
-      updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
-    [
-      cleanPlanId,
-      plan.max_branches,
-      plan.max_seats,
-      plan.max_senders,
-      plan.max_monthly_messages,
-      tid,
-    ]
-  );
-
-  // 5. Credit initial wallet bonus for the new plan
-  const aiCreditGrant = cleanPlanId === "growth" ? 500 : cleanPlanId === "business" ? 2500 : cleanPlanId === "enterprise" ? 10000 : 100;
-  await grantWalletCredits(tid, "ai_credits", aiCreditGrant, `Plan upgrade to ${plan.name}`, eventKey);
-
-  // 6. Close out the checkout record, so a second confirmation for the same
-  //    order cannot walk the same entitlement path a second time.
-  if (billingOrder && billingOrder.id) {
-    await q(
-      `UPDATE billing_orders SET status = 'paid', payment_id = ?, paid_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ? AND status = 'created'`,
-      [paymentId || null, billingOrder.id]
-    ).catch(() => {});
-  }
-
-  return {
-    success: true,
-    plan: cleanPlanId,
-    status: "active",
-    expires_at: periodEnd,
-  };
+async function processVerifiedPayment(args) {
+  return require("./billingReconciliation").createReconciler(db)(args);
+}
+async function reconcileGatewayOrder({orderId,paymentId,payment}) {
+  const order=await findBillingOrder({orderId});
+  if(!order||order.provider_order_id!==orderId||order.source!=="gateway")return {ignored:true};
+  const gateway=require("./razorpayClient");
+  if(!payment)payment=paymentId?await gateway.fetchPayment(paymentId):(await gateway.fetchOrderPayments(orderId)).find(row=>row.status==="captured");
+  require("./billingReconciliation").validateCapturedPayment(order,payment);
+  return processVerifiedPayment({tenantId:order.tenant_id,planId:order.plan_id,paymentId:payment.id,orderId,source:"gateway",billingOrder:order});
+}
+async function getBillingOrders(tenantId) {
+  return q("SELECT id, plan_id, amount_minor, currency, provider_order_id, payment_id, status, source, created_at, paid_at FROM billing_orders WHERE tenant_id = ? ORDER BY id DESC LIMIT 50",[Number(tenantId)]);
+}
+async function skipOnboardingPayment(tenantId){
+  await q("UPDATE tenants SET pending_plan_id = NULL WHERE id = ?",[Number(tenantId)]);
+}
+async function canManageBilling(req){
+  if(req.userRole==="organization_owner"||req.user?.role==="platform_admin")return true;
+  const [role]=await q("SELECT id FROM roles WHERE code = ? AND (tenant_id = ? OR tenant_id IS NULL) LIMIT 1",[req.userRole,req.tenantId]);
+  if(!role)return false;
+  return (await q("SELECT id FROM role_permissions WHERE role_id = ? AND permission_code = 'billing.manage' LIMIT 1",[role.id])).length>0;
 }
 
 /**
@@ -351,9 +282,8 @@ async function processVerifiedPayment({ tenantId, planId, paymentId, orderId, so
  *      different thing),
  *   3. only then are entitlements written.
  *
- * Non-production deployments without credentials still confirm - but only for
- * an order this server created, for this same organization, at the price that
- * order recorded. Production never takes that path.
+ * Simulated confirmations require an explicit development-only opt-in and a
+ * stored development order. Production always requires gateway verification.
  */
 async function confirmCheckoutPayment({ tenantId, userId, planId, paymentId, orderId, signature }) {
   const isProduction = process.env.NODE_ENV === "production";
@@ -383,13 +313,13 @@ async function confirmCheckoutPayment({ tenantId, userId, planId, paymentId, ord
 
   let source = "gateway";
 
-  if (Number(billingOrder.amount_minor) <= 0 || billingOrder.source === "self_serve") {
+  if (Number(billingOrder.amount_minor) === 0 && billingOrder.source === "self_serve") {
     // Zero-price order: there is no gateway payment behind it, so there is no
     // signature to verify and none is accepted. Only a row this server created
     // for a catalog plan priced at zero can reach here, and the plan credited
     // is read from that row.
     source = "self_serve";
-    if (!paymentId) paymentId = `free_${tid}_${billingOrder.plan_id}_${billingOrder.id}`;
+    paymentId = `free_${tid}_${billingOrder.plan_id}_${billingOrder.id}`;
   } else if (razorpay.isConfigured()) {
     if (!paymentId || !signature) {
       const err = new Error("Plan changes require a verified gateway payment");
@@ -397,13 +327,14 @@ async function confirmCheckoutPayment({ tenantId, userId, planId, paymentId, ord
       err.status = 400;
       throw err;
     }
+    if(billingOrder.source!=="gateway")throw Object.assign(new Error("Checkout order is not a gateway order"),{code:"INVALID_ORDER_SOURCE",status:409});
     if (!razorpay.verifyCheckoutSignature({ orderId: billingOrder.provider_order_id, paymentId, signature })) {
       const err = new Error("Invalid payment signature");
       err.code = "INVALID_SIGNATURE";
       err.status = 400;
       throw err;
     }
-  } else if (isProduction) {
+  } else if (isProduction || process.env.BILLING_ALLOW_DEV_PAYMENTS !== "1" || billingOrder.source !== "development") {
     const err = new Error("Payment verification is not configured");
     err.code = "GATEWAY_NOT_CONFIGURED";
     err.status = 503;
@@ -416,6 +347,10 @@ async function confirmCheckoutPayment({ tenantId, userId, planId, paymentId, ord
     if (!paymentId) paymentId = `dev_${tid}_${billingOrder.plan_id}_${billingOrder.id}`;
   }
 
+  if(source==="gateway"){
+    const payment=await razorpay.fetchPayment(paymentId);
+    require("./billingReconciliation").validateCapturedPayment(billingOrder,payment);
+  }
   return processVerifiedPayment({
     tenantId: tid,
     planId: billingOrder.plan_id,
@@ -492,6 +427,10 @@ async function evaluateEntitlement(tenantId, featureName) {
 
 module.exports = {
   getPlans,
+  getBillingOrders,
+  skipOnboardingPayment,
+  canManageBilling,
+  reconcileGatewayOrder,
   getPlanCatalog: getPlans,
   getTenantBillingSummary,
   createCheckoutSession,

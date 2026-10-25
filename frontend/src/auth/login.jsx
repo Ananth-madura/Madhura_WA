@@ -1,3 +1,4 @@
+import {loginDestination} from "./loginDestination";
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import axios from "axios";
@@ -132,7 +133,7 @@ export default function Login() {
         demoMode: false,
       });
 
-      const returnUrl = new URLSearchParams(location.search).get("returnUrl") || "/whatsapp";
+      const returnUrl = loginDestination(data,location.search);
       navigate(returnUrl, { replace: true });
     } catch (err) {
       const status = err.response?.status;
@@ -158,7 +159,7 @@ export default function Login() {
       }, { timeout: 15000 });
       if (!data?.token && !data?.cookieSession) throw new Error("Verification did not return a session.");
       login({ ...data.user, cookieSession:Boolean(data.cookieSession||data.user?.cookieSession), token: data.token, demoMode: false });
-      const returnUrl = new URLSearchParams(location.search).get("returnUrl") || "/whatsapp";
+      const returnUrl = loginDestination(data,location.search);
       navigate(returnUrl, { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data?.error || err.message || "The verification code could not be confirmed.");

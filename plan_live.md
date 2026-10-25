@@ -1,5 +1,9 @@
 # Live deployment and shared CRM plan
 
+Signup payment update: `/signup` now uses the canonical billing catalog and creates a free workspace transactionally. Paid selections continue to Razorpay billing and remain resumable on later login until verified payment. Schema version 7 is required; deploy the backend first. Details are in [razorpay_setup.md](./razorpay_setup.md).
+
+Razorpay billing update: real Checkout replaces fake payment proofs, with captured-payment verification, atomic MySQL settlement, signed webhook recovery, scoped history and renewal controls. Backend-only keys are configured locally; the VPS and Dashboard webhook still need deployment. See [razorpay_setup.md](./razorpay_setup.md).
+
 25 October domain update: the landing page is `https://wa.madhuratech.in`, the CRM is `https://live.wa.madhuratech.in`, and the planned API is `https://api.madhuratech.in`. The VPS is not connected yet. The signed-in blank screen was reproduced and corrected in source; deployment settings, verification and the remaining connection steps are in [live_domains.md](./live_domains.md). Redeploy the frontend and landing projects to apply these changes.
 
 Prepared: 24 October 2026. Status: the core shared-number implementation is present and tested locally on `feature/shared-number-assignment`. Production deployment has not been performed. Section 19 records the implemented behavior, verification, and remaining deployment work; optional alternatives elsewhere remain proposals.

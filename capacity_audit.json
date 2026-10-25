@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-25T07:17:04.111Z",
+  "at": "2026-10-25T10:13:26.282Z",
   "method": "Static source inventory and pattern counts; not exhaustive semantic certification. Secrets, runtime data, generated files, dependencies and symlinks excluded.",
   "workload": {
     "businessCustomers": 200,
@@ -24,8 +24,8 @@
       "high": 21701.38888888889
     }
   },
-  "sourceFiles": 340,
-  "totalLines": 92849,
+  "sourceFiles": 353,
+  "totalLines": 92858,
   "files": [
     {
       "file": "backend/.puppeteerrc.cjs",
@@ -469,9 +469,9 @@
     },
     {
       "file": "backend/migrations/enterprise_multi_tenant_multi_branch.js",
-      "bytes": 40213,
-      "lines": 1024,
-      "sha256": "dbeb76a8d38f866fc15a33e8e79ce7eeec4c0bf7485a1c9bb60ed8a1b06873a5",
+      "bytes": 40764,
+      "lines": 1033,
+      "sha256": "d5bf20e8a681fefa27dda7e124c7de5ece3e27ae1ffa070b291315bdbad45b66",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -557,9 +557,9 @@
     },
     {
       "file": "backend/routes/authRoutes.js",
-      "bytes": 91128,
-      "lines": 2148,
-      "sha256": "982c93b402f57734c6e6d86e5be7607529f8958172997eb13343483ccecbe416",
+      "bytes": 86438,
+      "lines": 2006,
+      "sha256": "3d74e51ca60ec2184173997500867b00d9dc2b72b0c14aa866f59bd465dd7ebc",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 4,
@@ -590,9 +590,9 @@
     },
     {
       "file": "backend/routes/enterpriseBillingRoutes.js",
-      "bytes": 8366,
-      "lines": 238,
-      "sha256": "6153e4a6cca6fa0c72cf4ede6087e2ece0d34d8925a6f9c2cdb7609411e1328c",
+      "bytes": 7049,
+      "lines": 171,
+      "sha256": "ac880642d7520894812e7432c2e01a16771d510eb7c596c7c0cc538bf3441609",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -886,6 +886,17 @@
       "lazyImports": 0
     },
     {
+      "file": "backend/scripts/check-razorpay.js",
+      "bytes": 1101,
+      "lines": 18,
+      "sha256": "7bc6dc4acfeec71cd5cba63b7ae9b831e43a97665201933c73dc81031e7cda62",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 1,
+      "lazyImports": 0
+    },
+    {
       "file": "backend/scripts/check-socket-auth.js",
       "bytes": 10008,
       "lines": 253,
@@ -1041,9 +1052,9 @@
     },
     {
       "file": "backend/scripts/verify-shared-core.js",
-      "bytes": 1911,
+      "bytes": 1963,
       "lines": 22,
-      "sha256": "353ac0658b2fe4ad479309411e669a6820b7446f2ed4f5768be9a2e8002be05c",
+      "sha256": "6bd61e098b13ab105bab97554538a0a85571cbc6b217a6c410b30e52dea67925",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -1062,13 +1073,24 @@
       "lazyImports": 0
     },
     {
-      "file": "backend/services/billingService.js",
-      "bytes": 19696,
-      "lines": 504,
-      "sha256": "3520876b05eccf71a139d4a5c0abff58e2e62a630d2995fc6c0ba85eb2995fd6",
+      "file": "backend/services/billingReconciliation.js",
+      "bytes": 5473,
+      "lines": 53,
+      "sha256": "aba136a32e825968bae118f8b35a567eb520c85248287230654cb79e156c50bd",
       "timers": 0,
       "syncFs": 0,
-      "selectStar": 8,
+      "selectStar": 2,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
+      "file": "backend/services/billingService.js",
+      "bytes": 18522,
+      "lines": 443,
+      "sha256": "0742322c5b1bf456ebf83388248149aa700cf88ef0c15459a9fb34cfbcc5c6c6",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 7,
       "httpCalls": 0,
       "lazyImports": 0
     },
@@ -1217,12 +1239,12 @@
     },
     {
       "file": "backend/services/organizationService.js",
-      "bytes": 42471,
-      "lines": 1139,
-      "sha256": "cca909c4b2f1d5d09086c634995745473ff3aad161e3285cfd38e4c844d9c807",
+      "bytes": 43179,
+      "lines": 1142,
+      "sha256": "e58d5c84215cb511658b81c1d5bb2df020f66f47411ee9ead3867207e5435877",
       "timers": 0,
       "syncFs": 0,
-      "selectStar": 4,
+      "selectStar": 5,
       "httpCalls": 0,
       "lazyImports": 0
     },
@@ -1250,13 +1272,13 @@
     },
     {
       "file": "backend/services/razorpayClient.js",
-      "bytes": 4899,
-      "lines": 146,
-      "sha256": "13bc3a23df901d8ae70d6522db0b86d573882cbbd4e6f2451377cdf68ec64b36",
+      "bytes": 6353,
+      "lines": 163,
+      "sha256": "abe54ec2460684035e29a577c643285b17361a72540284bae0a3c973f52c0d64",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
-      "httpCalls": 1,
+      "httpCalls": 3,
       "lazyImports": 0
     },
     {
@@ -1276,6 +1298,17 @@
       "lines": 22,
       "sha256": "004f19cb3d07590a1f9e368a4318c888297e14422236bc6bd77c4b1997a627e5",
       "timers": 1,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
+      "file": "backend/services/selfSignupService.js",
+      "bytes": 3167,
+      "lines": 36,
+      "sha256": "c26fe72b3b40260ac1716da10772b0522d644d9152f5ccfd3158b821ab6f3a4e",
+      "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
       "httpCalls": 0,
@@ -1865,6 +1898,28 @@
       "lazyImports": 0
     },
     {
+      "file": "backend/tests/helpers/signupLifecycle.js",
+      "bytes": 5965,
+      "lines": 47,
+      "sha256": "c0675f3a4df501289884f382504ca47b7d6a52ea86771998ea78c4b77165bd45",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 7,
+      "lazyImports": 0
+    },
+    {
+      "file": "backend/tests/test_billing_mysql.js",
+      "bytes": 8705,
+      "lines": 73,
+      "sha256": "d081408ff031b52c9aef0f742b2e133af59ff7064ed5030f357bd46e1e0723d8",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
       "file": "backend/tests/test_billing_order_integrity.js",
       "bytes": 16328,
       "lines": 300,
@@ -1976,9 +2031,9 @@
     },
     {
       "file": "backend/tests/test_frontend_offline_browser.js",
-      "bytes": 3997,
+      "bytes": 4034,
       "lines": 40,
-      "sha256": "3f91fc945f7edef22a36f41cf482b42d711233fa5e14af5150cf4007f8431de0",
+      "sha256": "e04a4d24be9755381345e5966a5aea569ac8bb066c315b7b5f9d0f8583dbe51e",
       "timers": 0,
       "syncFs": 1,
       "selectStar": 0,
@@ -2041,6 +2096,17 @@
       "lazyImports": 0
     },
     {
+      "file": "backend/tests/test_razorpay_security.js",
+      "bytes": 4831,
+      "lines": 39,
+      "sha256": "e38caaf257a755cafc64ce8e9912e5cab114593bb03dc8cb24b58cecf0a21588",
+      "timers": 0,
+      "syncFs": 1,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
       "file": "backend/tests/test_shared_flow_definition.js",
       "bytes": 3512,
       "lines": 43,
@@ -2064,9 +2130,9 @@
     },
     {
       "file": "backend/tests/test_shared_inbox_boot.js",
-      "bytes": 14952,
-      "lines": 141,
-      "sha256": "e19ef97089cb1381f6ebb7e7165a056a273ffff8a917589879c29bd0de2e7318",
+      "bytes": 15375,
+      "lines": 145,
+      "sha256": "e20719cb13fa02cbe8568d93df5b2aeb73d68482bc6d49d8b12fe20148b4c8f1",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -2559,9 +2625,9 @@
     },
     {
       "file": "frontend/src/auth/login.jsx",
-      "bytes": 27629,
-      "lines": 662,
-      "sha256": "37c7e7970b1093d75838cb52eb90fb082fa5dbfcaddc28b565aaf1d3afd60e10",
+      "bytes": 27622,
+      "lines": 663,
+      "sha256": "e69ca1c88e6cd0d92eb1e6fea0417cfd0b9d8a3af101cf89ff0d709707bc49af",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -2569,14 +2635,47 @@
       "lazyImports": 0
     },
     {
-      "file": "frontend/src/auth/signup.jsx",
-      "bytes": 54287,
-      "lines": 1286,
-      "sha256": "3dc3e2fb21a5efb91982d18f85764386312de2549c63a8be4ef9391d4a350d29",
+      "file": "frontend/src/auth/loginDestination.js",
+      "bytes": 302,
+      "lines": 6,
+      "sha256": "d5439f10e7fcf294ace34288004bbc7b9dc24043752387c7f85d98dd61fb3a48",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
-      "httpCalls": 3,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
+      "file": "frontend/src/auth/loginDestination.test.js",
+      "bytes": 705,
+      "lines": 12,
+      "sha256": "cb79f4c4caaca0b22c9bb3aff6e376243e1657954daea44849842bc34c15faef",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
+      "file": "frontend/src/auth/signup.jsx",
+      "bytes": 53448,
+      "lines": 1186,
+      "sha256": "38d447651b7d7178d10b70a70138f49e2283a794e3a8f0df6a7d07974df64e3b",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 4,
+      "lazyImports": 0
+    },
+    {
+      "file": "frontend/src/auth/signup.test.jsx",
+      "bytes": 3408,
+      "lines": 40,
+      "sha256": "76c42f810940f3416acc3f8e16d5473f73cd7a1a3463a0e89e23dfc5b0ac31cf",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
       "lazyImports": 0
     },
     {
@@ -2944,13 +3043,24 @@
     },
     {
       "file": "frontend/src/components/WAPlanModal.jsx",
-      "bytes": 13636,
-      "lines": 395,
-      "sha256": "8da883e149dd1506e5028e3e32f8decafbf8635d7f8107d603a5d7e68fa19698",
+      "bytes": 10472,
+      "lines": 270,
+      "sha256": "235f807457d2dc3d19402779c4a6c13c2bdd7ff7230ca77ad2db36357a864814",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
-      "httpCalls": 5,
+      "httpCalls": 2,
+      "lazyImports": 0
+    },
+    {
+      "file": "frontend/src/components/WAPlanModal.test.jsx",
+      "bytes": 1102,
+      "lines": 15,
+      "sha256": "57963bb3355dc3890ed768711192764af4cb5ccf86b514377dde6f34aa5d70d6",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
       "lazyImports": 0
     },
     {
@@ -3450,13 +3560,24 @@
     },
     {
       "file": "frontend/src/pages/whatsappBilling.jsx",
-      "bytes": 15756,
-      "lines": 373,
-      "sha256": "5e6159afbd10931a6496b4a9808eeac97b4af38e54ffc3fe0d5abdf536b71ab5",
+      "bytes": 20794,
+      "lines": 412,
+      "sha256": "e24ae52391b097ecddd9350baa07d8a2df3177315d7e2fac63a9344a6993929b",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
-      "httpCalls": 6,
+      "httpCalls": 8,
+      "lazyImports": 0
+    },
+    {
+      "file": "frontend/src/pages/whatsappBilling.test.jsx",
+      "bytes": 3642,
+      "lines": 46,
+      "sha256": "1c4435c009a4d4fece152fe970c52958397fdec39139c31d116dd981b54dc0b4",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
       "lazyImports": 0
     },
     {
@@ -3651,6 +3772,28 @@
       "bytes": 2135,
       "lines": 31,
       "sha256": "a9754271e0daa1716ec97dee44a5420ff7b53d544eac03a6704767e49bf78a46",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
+      "file": "frontend/src/utils/razorpayCheckout.js",
+      "bytes": 1925,
+      "lines": 28,
+      "sha256": "d14c0bcd7a8091f915b09d2c732526128a3a0a28441b4549f2e934a8be83a957",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
+      "file": "frontend/src/utils/razorpayCheckout.test.js",
+      "bytes": 1411,
+      "lines": 18,
+      "sha256": "d0a2817432b4704b5cae0617f136b334ac325299b354058d28357812d8917d9c",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,

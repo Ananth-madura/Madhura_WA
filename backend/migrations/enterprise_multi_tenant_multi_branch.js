@@ -21,7 +21,7 @@ const db = require("../config/database");
  * Backfills and rebuilds are idempotent, but replaying them on every start
  * costs hundreds of statements and a table rebuild on large installations.
  */
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 const MIGRATION_NAME = "enterprise_multi_tenant_multi_branch";
 
 async function alreadyMigrated() {
@@ -46,7 +46,7 @@ async function alreadyMigrated() {
 
 const q = (sql, params = []) =>
   new Promise((resolve, reject) => {
-    const statement = db.isSqlite ? sql : sql.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, "INT AUTO_INCREMENT PRIMARY KEY").replace(/INSERT OR IGNORE/gi, "INSERT IGNORE").replace(/"(\w+)"/g, "`$1`");
+    const statement = db.isSqlite ? sql : sql.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, "INT AUTO_INCREMENT PRIMARY KEY").replace(/INSERT OR IGNORE/gi, "INSERT IGNORE").replace(/"(\w+)"/g, "`$1`").replace(/CREATE (UNIQUE )?INDEX IF NOT EXISTS /gi,"CREATE $1INDEX ");
     db.query(statement, params, (err, rows) => {
       if (err) return reject(err);
       resolve(rows);
@@ -248,6 +248,7 @@ async function migrate() {
   await ensureColumn("tenants", "legal_name", "legal_name VARCHAR(255) DEFAULT NULL");
   await ensureColumn("tenants", "brand_name", "brand_name VARCHAR(255) DEFAULT NULL");
   await ensureColumn("tenants", "owner_user_id", "owner_user_id INT DEFAULT NULL");
+  await ensureColumn("tenants", "pending_plan_id", "pending_plan_id VARCHAR(50) DEFAULT NULL");
   await ensureColumn("tenants", "billing_country", "billing_country VARCHAR(10) DEFAULT 'IN'");
   await ensureColumn("tenants", "timezone", "timezone VARCHAR(64) DEFAULT 'Asia/Kolkata'");
   await ensureColumn("tenants", "max_branches", "max_branches INT DEFAULT 1");
@@ -617,7 +618,7 @@ async function migrate() {
       tenant_id INT NOT NULL,
       user_id INT DEFAULT NULL,
       plan_id VARCHAR(50) NOT NULL,
-      interval VARCHAR(20) DEFAULT 'month',
+      \`interval\` VARCHAR(20) DEFAULT 'month',
       amount_minor INT NOT NULL,
       currency VARCHAR(10) DEFAULT 'INR',
       provider VARCHAR(50) DEFAULT 'razorpay',
@@ -785,6 +786,14 @@ async function migrate() {
         `Grant ${code} to organization_owner`
       );
     }
+  }
+
+  const billingRole=await q("SELECT id FROM roles WHERE code = 'billing_admin' AND tenant_id IS NULL LIMIT 1");
+  if(billingRole?.[0]){
+    for(const code of ["billing.read","billing.manage"])await runSafe(
+      `INSERT OR IGNORE INTO role_permissions (role_id, permission_code) VALUES (${Number(billingRole[0].id)}, '${code}')`,
+      `Grant ${code} to billing_admin`
+    );
   }
 
   // 18. Seed Plans Catalog (Master Blueprint Section 8)

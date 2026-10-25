@@ -1,95 +1,16 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
-import {
-  X,
-  Sparkles,
-  Check,
-  Shield,
-  Layers,
-  ArrowRight,
-  TrendingUp,
-  CreditCard,
-  Building2,
-  Cpu,
-  Loader2,
-} from "lucide-react";
+import {X,Check,Building2} from "lucide-react";
 import { API } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
-
-const DEFAULT_PLANS = [
-  {
-    id: "free",
-    name: "Free Tier",
-    badge: "Free",
-    price: "₹0",
-    billing: "forever",
-    maxSenders: 1,
-    maxMonthlyMessages: 500,
-    features: [
-      "1 Connected WhatsApp Number",
-      "500 Outbound Messages / mo",
-      "Live Chat Inbox & History",
-      "Standard Message Templates",
-      "Basic Keyword Auto-Reply",
-    ],
-  },
-  {
-    id: "starter",
-    name: "Starter Plan",
-    badge: "Popular",
-    price: "₹1,499",
-    billing: "/ month",
-    maxSenders: 3,
-    maxMonthlyMessages: 5000,
-    features: [
-      "3 Connected WhatsApp Numbers",
-      "5,000 Outbound Messages / mo",
-      "Visual Chatbot Flow Builder",
-      "Anti-Ban Humanized Pacing",
-      "Automated Reminders & Invoices",
-    ],
-  },
-  {
-    id: "growth",
-    name: "Growth Plan",
-    badge: "Recommended",
-    price: "₹3,999",
-    billing: "/ month",
-    maxSenders: 10,
-    maxMonthlyMessages: 25000,
-    features: [
-      "10 Connected WhatsApp Numbers",
-      "25,000 Outbound Messages / mo",
-      "Smart AI Neural Replies (OpenAI)",
-      "Multi-Sender Pool Load Balancing",
-      "Automated Drip Sequences & Followups",
-    ],
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    badge: "Scale",
-    price: "₹9,999",
-    billing: "/ month",
-    maxSenders: 50,
-    maxMonthlyMessages: 100000,
-    features: [
-      "50+ Connected WhatsApp Numbers",
-      "100,000+ Outbound Messages / mo",
-      "Dedicated Meta Cloud API Engine",
-      "Unlimited Agents & Isolation",
-      "24/7 Priority SLA & Dedicated Manager",
-    ],
-  },
-];
+import {useNavigate} from "react-router-dom";
 
 export default function WAPlanModal({ isOpen, onClose }) {
-  const { user, login } = useAuth();
-  const [plans, setPlans] = useState(DEFAULT_PLANS);
+  const { user } = useAuth();
+  const navigate=useNavigate();
+  const [plans, setPlans] = useState([]);
   const [tenantUsage, setTenantUsage] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [switching, setSwitching] = useState(false);
-  const [message, setMessage] = useState(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -99,7 +20,7 @@ export default function WAPlanModal({ isOpen, onClose }) {
 
     setLoading(true);
     Promise.all([
-      axios.get(`${API}/api/auth/plans`, { headers, timeout: 6000 }).catch(() => ({ data: { plans: DEFAULT_PLANS } })),
+      axios.get(`${API}/api/auth/plans`, { headers, timeout: 6000 }).catch(() => ({ data: { plans: [] } })),
       axios.get(`${API}/api/auth/tenant-info`, { headers, timeout: 6000 }).catch(() => ({ data: null })),
     ])
       .then(([plansRes, usageRes]) => {
@@ -115,49 +36,11 @@ export default function WAPlanModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const currentPlanId = tenantUsage?.tenant?.plan || user?.plan || "starter";
-  const currentPlanMeta = plans.find((p) => p.id === currentPlanId) || DEFAULT_PLANS[1];
+  const currentPlanId = tenantUsage?.tenant?.plan || user?.plan || "free";
+  const currentPlanMeta = plans.find((p) => p.id === currentPlanId) || {name:currentPlanId,maxSenders:0,maxMonthlyMessages:0,features:[]};
 
-  const handleSwitchPlan = async (targetPlanId) => {
-    if (targetPlanId === currentPlanId) return;
-
-    setSwitching(true);
-    setMessage(null);
-    try {
-      const token = localStorage.getItem("token");
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-      const checkoutRes = await axios.post(
-        `${API}/api/v2/billing/checkout`,
-        { planId: targetPlanId, interval: "month" },
-        { headers }
-      );
-
-      const confirmRes = await axios.post(
-        `${API}/api/v2/billing/confirm-payment`,
-        {
-          planId: targetPlanId,
-          orderId: checkoutRes.data?.receipt || `sub_${Date.now()}`,
-          paymentId: `pay_test_${Date.now()}`,
-          signature: "mock_test_signature",
-        },
-        { headers }
-      );
-
-      if (confirmRes.data?.success) {
-        setMessage({ type: "success", text: `Plan successfully activated for ${targetPlanId.toUpperCase()}!` });
-        login({
-          ...user,
-          plan: targetPlanId,
-        });
-        const refreshUsage = await axios.get(`${API}/api/v2/billing/subscription`, { headers }).catch(() => null);
-        if (refreshUsage?.data) setTenantUsage(refreshUsage.data);
-      }
-    } catch (err) {
-      setMessage({ type: "error", text: err.response?.data?.message || "Failed to upgrade plan via billing engine." });
-    } finally {
-      setSwitching(false);
-    }
+  const handleSwitchPlan = targetPlanId => {
+    onClose();navigate("/whatsapp/billing?plan="+encodeURIComponent(targetPlanId));
   };
 
   return (
@@ -214,15 +97,9 @@ export default function WAPlanModal({ isOpen, onClose }) {
           </div>
         </div>
 
-        {message && (
-          <div
-            className={`hl-badge ${message.type === "success" ? "hl-badge-success" : "hl-badge-error"} mb-4`}
-            style={{ width: "100%", justifyContent: "flex-start", padding: "8px 12px" }}
-          >
-            {message.text}
-          </div>
-        )}
 
+        {loading&&<p role="status">Loading current plans...</p>}
+        {!loading&&!plans.length&&<p role="alert">Plans are unavailable. Open the billing page after the API connection is restored.</p>}
         {/* Usage Snapshot */}
         <div
           style={{
@@ -359,7 +236,7 @@ export default function WAPlanModal({ isOpen, onClose }) {
 
                 <button
                   type="button"
-                  disabled={isCurrent || switching}
+                  disabled={isCurrent||loading}
                   onClick={() => handleSwitchPlan(p.id)}
                   className={isCurrent ? "hl-btn-secondary" : "hl-btn-primary"}
                   style={{
@@ -372,10 +249,8 @@ export default function WAPlanModal({ isOpen, onClose }) {
                 >
                   {isCurrent ? (
                     "Current Plan"
-                  ) : switching ? (
-                    <Loader2 size={13} className="animate-spin" />
                   ) : (
-                    `Switch to ${p.name}`
+                    `Review ${p.name}`
                   )}
                 </button>
               </div>

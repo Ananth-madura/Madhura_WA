@@ -503,6 +503,7 @@ router.post("/login", loginLimiter, (req, res) => {
         );
 
         return res.json({
+          nextPath:activeOrg.pending_plan_id && activeOrg.role === "organization_owner" ? "/whatsapp/billing?onboarding=1&plan="+encodeURIComponent(activeOrg.pending_plan_id):"/whatsapp",
           token,
           user: {
             id: user.id,
@@ -573,9 +574,9 @@ router.post("/login", loginLimiter, (req, res) => {
 });
 
 /* ================= SUBSCRIPTION PLANS (PUBLIC) ================= */
-router.get("/plans", (req, res) => {
+router.get("/plans", async (req, res) => {
   try {
-    const plans = tenantPlanService.getAvailablePlans();
+    const plans = await require("../services/billingService").getPlans();
     res.json({ plans });
   } catch (err) {
     res.status(500).json({ message: "Failed to load plans" });
@@ -583,160 +584,17 @@ router.get("/plans", (req, res) => {
 });
 
 /* ================= SELF SIGNUP (MULTI-TENANT & MULTI-BRANCH WORKSPACE ONBOARDING) ================= */
-router.post("/self-signup", async (req, res) => {
-  try {
-    const {
-      first_name,
-      last_name,
-      email,
-      password,
-      company_name,
-      legal_name,
-      brand_name,
-      industry,
-      mobile_number,
-      branch_name,
-      branch_code,
-      timezone,
-      plan,
-    } = req.body || {};
-
-    const cleanEmail = (email || "").trim().toLowerCase();
-    const cleanFirstName = (first_name || "").trim();
-    const cleanLastName = (last_name || "").trim();
-    const cleanFullName = `${cleanFirstName} ${cleanLastName}`.trim() || cleanFirstName;
-    const cleanPassword = password || "";
-    const cleanCompany = (company_name || "").trim() || `${cleanFirstName}'s Workspace`;
-    const cleanPlan = (plan || "starter").toLowerCase();
-
-    if (!cleanFirstName || !cleanEmail || !cleanPassword) {
-      return res.status(400).json({ message: "Name, email and password are required" });
-    }
-
-    if (cleanPassword.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters" });
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
-      return res.status(400).json({ message: "Please provide a valid email address" });
-    }
-
-    db.query(`SELECT id FROM users WHERE email = ? LIMIT 1`, [cleanEmail], async (err, existing) => {
-      if (err) {
-        console.error("self-signup check error:", err.message);
-        return res.status(500).json({ message: "Failed to verify account availability" });
-      }
-
-      if (existing && existing.length > 0) {
-        return res.status(409).json({ message: "An account with this email already exists. Please sign in." });
-      }
-
-      try {
-        const hash = await bcrypt.hash(cleanPassword, 10);
-        const empId = `EMP-${Math.floor(1000 + Math.random() * 9000)}`;
-
-        // 1. Insert admin user
-        db.query(
-          `INSERT INTO users (first_name, last_name, email, user_password, role, status, emp_id, mobile_number, tenant_id) VALUES (?, ?, ?, ?, 'admin', 'active', ?, ?, 0)`,
-          [cleanFirstName, cleanLastName, cleanEmail, hash, empId, mobile_number || null],
-          async (insertErr, userRes) => {
-            if (insertErr) {
-              console.error("self-signup insert user error:", insertErr.message);
-              return res.status(500).json({ message: "Failed to create account" });
-            }
-
-            const newUserId = userRes.insertId || userRes.lastID || 1;
-
-            try {
-              // 2. Transactionally create Organization, Head Office Branch, Owner Membership, Staff Membership, and Wallets
-              const org = await organizationService.createOrganization({
-                name: cleanCompany,
-                legal_name: legal_name || cleanCompany,
-                brand_name: brand_name || cleanCompany,
-                ownerUserId: newUserId,
-                plan: cleanPlan,
-                branch_name: branch_name || "Head Office (Main)",
-                branch_code: branch_code || "HQ-01",
-                timezone: timezone || "Asia/Kolkata",
-              });
-
-              const newTenantId = org.id;
-              const newBranchId = org.head_office_branch_id;
-
-              // 3. Update user with new tenant_id
-              await queryAsync(`UPDATE users SET tenant_id = ? WHERE id = ?`, [newTenantId, newUserId]);
-
-              // 4. Teammember record
-              try {
-                db.query(
-                  `INSERT INTO teammember (first_name, last_name, emp_email, emp_id, job_title, emp_role, user_id) VALUES (?, ?, ?, ?, 'Workspace Owner', 'Admin', ?)`,
-                  [cleanFirstName, cleanLastName, cleanEmail, empId, newUserId]
-                );
-              } catch (_) {}
-
-              // 5. Fetch organizations and branches
-              const orgs = await organizationService.getUserOrganizations(newUserId).catch(() => [org]);
-              const branches = await organizationService.getBranches(newTenantId).catch(() => []);
-              const activeBranch = branches.find((b) => b.id === newBranchId) || {
-                id: newBranchId,
-                name: org.branch_name || "Head Office (Main)",
-                code: org.branch_code || "HQ-01",
-                is_head_office: 1,
-              };
-
-              const secret = requireJwtSecret(res);
-              if (!secret) return;
-              const token = jwt.sign(
-                {
-                  id: newUserId,
-                  role: "admin",
-                  name: cleanFullName,
-                  email: cleanEmail,
-                  tenant_id: newTenantId,
-                  branch_id: newBranchId,
-                  plan: org.plan,
-                },
-                secret,
-                { expiresIn: "14d" }
-              );
-
-              return res.status(201).json({
-                token,
-                user: {
-                  id: newUserId,
-                  name: cleanFullName,
-                  first_name: cleanFirstName,
-                  last_name: cleanLastName,
-                  email: cleanEmail,
-                  role: "admin",
-                  tenant_id: newTenantId,
-                  tenant_name: org.name,
-                  branch_id: newBranchId,
-                  branch_name: activeBranch.name,
-                  branch_code: activeBranch.code,
-                  plan: org.plan,
-                },
-                activeOrganization: org,
-                organizations: orgs,
-                activeBranch,
-                branches,
-                permittedBranchIds: [newBranchId],
-                message: `Enterprise Organization "${org.name}" created with branch "${activeBranch.name}"!`,
-              });
-            } catch (createErr) {
-              console.error("self-signup createOrganization error:", createErr);
-              return res.status(500).json({ message: "Failed to initialize organization and branch structure" });
-            }
-          }
-        );
-      } catch (tenantErr) {
-        console.error("self-signup error:", tenantErr);
-        return res.status(500).json({ message: "Failed to create tenant workspace" });
-      }
-    });
-  } catch (err) {
-    console.error("self-signup exception:", err);
-    return res.status(500).json({ message: "Server error during registration" });
+const signupLimiter=createRateLimiter({windowMs:15*60*1000,maxRequests:10,category:"workspace_signup"});
+router.post("/self-signup",signupLimiter,async(req,res)=>{
+  const secret=requireJwtSecret(res);if(!secret)return;
+  try{
+    const result=await require("../services/selfSignupService").createSignupService(db,organizationService)(req.body||{});
+    const {user,org,branch}=result;
+    const token=jwt.sign({id:user.id,role:user.role,name:user.name,email:user.email,tenant_id:org.id,branch_id:branch.id,plan:org.plan},secret,{expiresIn:"14d"});
+    res.status(201).json({token,user,activeOrganization:org,organizations:[{...org,role:"organization_owner",membership_status:"active"}],activeBranch:branch,branches:[branch],permittedBranchIds:[branch.id],checkoutRequired:org.checkoutRequired,requestedPlanId:org.requestedPlanId,nextPath:org.checkoutRequired?"/whatsapp/billing?onboarding=1&plan="+encodeURIComponent(org.requestedPlanId):"/whatsapp",message:org.checkoutRequired?"Account created on the free plan. Complete payment to activate your selected plan.":"Your free workspace is ready."});
+  }catch(error){
+    console.error("[self-signup]",error.code||error.status||"SIGNUP_FAILED");
+    res.status(error.status||503).json({message:error.status?error.message:"Workspace signup is unavailable. If an account was already created, sign in to continue."});
   }
 });
 
