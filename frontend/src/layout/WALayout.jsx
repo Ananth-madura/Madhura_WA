@@ -377,11 +377,6 @@ function LegacyWALayout() {
           </Link>
           <OrganizationSwitcher />
           <BranchSwitcher />
-          {user && (
-            <span className="hl-shell-meta hidden lg:inline-flex truncate">
-              {user.name || user.email} · {user.role}
-            </span>
-          )}
         </div>
 
         {/* Global Action Controls: Dashboard, Status, Quota, Sync, Config, Disconnect, Logout */}
