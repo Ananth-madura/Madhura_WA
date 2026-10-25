@@ -478,6 +478,7 @@ function startServer() {
       await require("./services/tenantPlanService").ensureTenantsTable();
       await require("./migrations/shared_number_inbox").migrate(require("./config/database"));
       await require("./migrations/shared_flows").migrate(require("./config/database"));
+      await require("./services/schemaReadiness").assertReady(db);
       await require("./services/sharedFlowRuntime").recover();
       app.set("sharedInboxReady", true);
       require("./services/waStorageRetention").start();

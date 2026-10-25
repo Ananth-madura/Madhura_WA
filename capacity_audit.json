@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-25T10:13:26.282Z",
+  "at": "2026-10-25T11:19:48.126Z",
   "method": "Static source inventory and pattern counts; not exhaustive semantic certification. Secrets, runtime data, generated files, dependencies and symlinks excluded.",
   "workload": {
     "businessCustomers": 200,
@@ -24,8 +24,8 @@
       "high": 21701.38888888889
     }
   },
-  "sourceFiles": 353,
-  "totalLines": 92858,
+  "sourceFiles": 360,
+  "totalLines": 93127,
   "files": [
     {
       "file": "backend/.puppeteerrc.cjs",
@@ -117,9 +117,9 @@
     },
     {
       "file": "backend/config/database.js",
-      "bytes": 85967,
-      "lines": 1248,
-      "sha256": "72616ecba37c3b24c674496bfe93634e1185b7e0619fe5fb3be974162fc14f8d",
+      "bytes": 85940,
+      "lines": 1249,
+      "sha256": "8e1325c1c21ac59a071f3d9ad94cb8a49ccc94449d5c652aabc0549f66f22ce7",
       "timers": 0,
       "syncFs": 1,
       "selectStar": 0,
@@ -150,9 +150,9 @@
     },
     {
       "file": "backend/config/runtimeDefaults.js",
-      "bytes": 6094,
-      "lines": 132,
-      "sha256": "cb140845d9685b8f03239cc13db7962026ae1e3e174e10c1a259781d9261a706",
+      "bytes": 5875,
+      "lines": 128,
+      "sha256": "d4233eedac13d72ffd29bf80093b5c2cb88b72694f41d5cc6c4a4ed09a2caa7c",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -194,9 +194,9 @@
     },
     {
       "file": "backend/deploy/deploy.sh",
-      "bytes": 7960,
+      "bytes": 7962,
       "lines": 184,
-      "sha256": "f53b5eb1e042e1b3a95783658ed469a9b9a549344b4a53fe17394134673be626",
+      "sha256": "956ec1dbff34538a9b8c4a36c7c0375afeaefe6d69fab4abd49179f8229c3279",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -864,6 +864,17 @@
       "lazyImports": 0
     },
     {
+      "file": "backend/scripts/check-mysql.js",
+      "bytes": 1696,
+      "lines": 20,
+      "sha256": "26b1cdbf49b3f1d471ded053749857477ae5037be30ef0ca67ea1920f3160ebf",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
       "file": "backend/scripts/check-production-config.js",
       "bytes": 682,
       "lines": 10,
@@ -919,10 +930,21 @@
       "lazyImports": 0
     },
     {
+      "file": "backend/scripts/copy-mysql-database.js",
+      "bytes": 3988,
+      "lines": 41,
+      "sha256": "f413f1d20bf2bb42b3b3a2b55a7a3f63d4cc44915e87c7c42e5c51eec95c1aea",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
       "file": "backend/scripts/first-boot-db.js",
-      "bytes": 3343,
+      "bytes": 3345,
       "lines": 83,
-      "sha256": "3627bb3b086cf7437bd76634d2fa6652ec1f5138ca6a242bfafd46365b22a67d",
+      "sha256": "a1688f8483cf7440a4486ca0543bd385582a021f21fb8b4de5b8c42887a2e85d",
       "timers": 0,
       "syncFs": 3,
       "selectStar": 0,
@@ -1052,9 +1074,9 @@
     },
     {
       "file": "backend/scripts/verify-shared-core.js",
-      "bytes": 1963,
+      "bytes": 2065,
       "lines": 22,
-      "sha256": "6bd61e098b13ab105bab97554538a0a85571cbc6b217a6c410b30e52dea67925",
+      "sha256": "cb37d28b68b3901861c309f93faa0325059485b61ff5a384e7f6b80d3cd67786",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -1063,9 +1085,9 @@
     },
     {
       "file": "backend/server.js",
-      "bytes": 30697,
-      "lines": 629,
-      "sha256": "cfd4ab8489293005e711f81359c8d646f4e2acd436739df477f835bfbdd9e353",
+      "bytes": 30765,
+      "lines": 630,
+      "sha256": "cd4a35c0715c8b5f295f89c7a679eec9a38f70132d80b51306e4d2d417603685",
       "timers": 1,
       "syncFs": 0,
       "selectStar": 0,
@@ -1283,9 +1305,9 @@
     },
     {
       "file": "backend/services/renderKeepAlive.js",
-      "bytes": 2940,
-      "lines": 102,
-      "sha256": "7ab1103900a7742667c895e2b147cd2850410fcc99f66b65d2ba8aee70ef2024",
+      "bytes": 3177,
+      "lines": 106,
+      "sha256": "a600fe37d455290aebfaaff2ceff519cd1389b244aa4899526d5453cc939166c",
       "timers": 1,
       "syncFs": 0,
       "selectStar": 0,
@@ -1298,6 +1320,17 @@
       "lines": 22,
       "sha256": "004f19cb3d07590a1f9e368a4318c888297e14422236bc6bd77c4b1997a627e5",
       "timers": 1,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
+      "file": "backend/services/schemaReadiness.js",
+      "bytes": 1371,
+      "lines": 20,
+      "sha256": "0ea1ea2e3d6c6b460835e9f227667395ece4e0ae44406b573750894f357e05d1",
+      "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
       "httpCalls": 0,
@@ -1821,6 +1854,17 @@
       "lazyImports": 0
     },
     {
+      "file": "backend/tests/helpers/authBrowser.js",
+      "bytes": 4861,
+      "lines": 45,
+      "sha256": "196c4ad1429d4febc716a9cefa1522ac712341071ea044dbd5c63b113640aea5",
+      "timers": 0,
+      "syncFs": 2,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
       "file": "backend/tests/helpers/flowBrowser.js",
       "bytes": 8490,
       "lines": 79,
@@ -2041,6 +2085,17 @@
       "lazyImports": 0
     },
     {
+      "file": "backend/tests/test_keep_alive.js",
+      "bytes": 1368,
+      "lines": 16,
+      "sha256": "8fed8f2dd04c7ccca96c4a9993fb3c188b2b211ba5d617a8a78ef81fcef0c9e9",
+      "timers": 0,
+      "syncFs": 1,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
       "file": "backend/tests/test_local_cache_browser.js",
       "bytes": 4133,
       "lines": 44,
@@ -2107,6 +2162,17 @@
       "lazyImports": 0
     },
     {
+      "file": "backend/tests/test_schema_readiness.js",
+      "bytes": 1335,
+      "lines": 15,
+      "sha256": "e4d8d82b8e173c720aabf9bdb1f55a40d51affeba57ac064328bbb0f0e44b9d1",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
       "file": "backend/tests/test_shared_flow_definition.js",
       "bytes": 3512,
       "lines": 43,
@@ -2130,9 +2196,9 @@
     },
     {
       "file": "backend/tests/test_shared_inbox_boot.js",
-      "bytes": 15375,
-      "lines": 145,
-      "sha256": "e20719cb13fa02cbe8568d93df5b2aeb73d68482bc6d49d8b12fe20148b4c8f1",
+      "bytes": 15521,
+      "lines": 146,
+      "sha256": "25ef24c8fa888c0fa1534e9313dbe88b2171bd7f93ef0784db27fbc143b90405",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -2581,20 +2647,20 @@
     },
     {
       "file": "frontend/src/auth/browserSession.js",
-      "bytes": 2665,
-      "lines": 50,
-      "sha256": "0f6eba6629c0ba609aadc65713a07d399a5e08270aaa6f2fb61a7e7b78f8b677",
+      "bytes": 3823,
+      "lines": 65,
+      "sha256": "aab27a508c64b210737b08340aed61410912c6e652690167c3507ebbfaf45868",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
-      "httpCalls": 1,
+      "httpCalls": 2,
       "lazyImports": 0
     },
     {
       "file": "frontend/src/auth/browserSession.test.js",
-      "bytes": 2259,
-      "lines": 40,
-      "sha256": "8f9fc8983de2a6541a5b9972b261d8e9ef6725aa36a16f2c159409489edf18c1",
+      "bytes": 3600,
+      "lines": 59,
+      "sha256": "8215efcdc4ff28f1d1dd80968acd8de79c056cfa752927d167e95e6aa90e5e68",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -2625,13 +2691,24 @@
     },
     {
       "file": "frontend/src/auth/login.jsx",
-      "bytes": 27622,
-      "lines": 663,
-      "sha256": "e69ca1c88e6cd0d92eb1e6fea0417cfd0b9d8a3af101cf89ff0d709707bc49af",
+      "bytes": 27827,
+      "lines": 667,
+      "sha256": "d4fbde358461f91c04ac117ce8bbeb4cc34e51b8a293eca7ac5a49c0c9e914d5",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
       "httpCalls": 3,
+      "lazyImports": 0
+    },
+    {
+      "file": "frontend/src/auth/login.test.jsx",
+      "bytes": 2084,
+      "lines": 27,
+      "sha256": "1e8d9f2b1b8f5b46269d4d63243ee6f6af6a955a2fc20329b21e5b3830dcfe9d",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
       "lazyImports": 0
     },
     {
@@ -2658,20 +2735,20 @@
     },
     {
       "file": "frontend/src/auth/signup.jsx",
-      "bytes": 53448,
-      "lines": 1186,
-      "sha256": "38d447651b7d7178d10b70a70138f49e2283a794e3a8f0df6a7d07974df64e3b",
+      "bytes": 55258,
+      "lines": 1201,
+      "sha256": "882b71e69186ffb88472ebf20ecc097ca4042d394f3432d6a36cf44d0d02086e",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
-      "httpCalls": 4,
+      "httpCalls": 5,
       "lazyImports": 0
     },
     {
       "file": "frontend/src/auth/signup.test.jsx",
-      "bytes": 3408,
-      "lines": 40,
-      "sha256": "76c42f810940f3416acc3f8e16d5473f73cd7a1a3463a0e89e23dfc5b0ac31cf",
+      "bytes": 5048,
+      "lines": 53,
+      "sha256": "9d4d0a4cffa766cb74bf476696006bb520b20601586e58ebaee84f9dd57cd66c",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -3153,9 +3230,9 @@
     },
     {
       "file": "frontend/src/config/index.js",
-      "bytes": 1197,
-      "lines": 20,
-      "sha256": "61c275d5bcc47fc2f6281a801732fce0e757a25f94604fde839946e4ec074278",
+      "bytes": 1744,
+      "lines": 30,
+      "sha256": "b640e6106f2eba53e694595cf018d0c7f3a34b8920d615f24bc9937b760d1937",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -3164,9 +3241,9 @@
     },
     {
       "file": "frontend/src/config/index.test.js",
-      "bytes": 692,
-      "lines": 10,
-      "sha256": "96603d36de32e8cc68ca80c69b7d9265da63f6b9925bebd4ab14cfe05bad1b30",
+      "bytes": 1328,
+      "lines": 16,
+      "sha256": "a0f52cd4745bb33a23e9f21fca7ca76c4a6a700fd66bafac2604234845720086",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,

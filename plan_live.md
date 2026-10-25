@@ -1,5 +1,9 @@
 # Live deployment and shared CRM plan
 
+Authentication redirect fix: the local launcher no longer overwrites API settings with a LAN IP. Local API/socket hosts follow the browser hostname, and cookie sessions are confirmed before login/signup navigation. Both localhost and 127.0.0.1 browser journeys passed. See [database_setup.md](./database_setup.md#login-and-signup-redirects).
+
+Database update: the local app now uses MySQL `madhura_wa` on port 3306. The previous `achme_wa` data was copied and verified, with the original and SQL backup retained. Startup creates an absent database, applies the known schema and checks critical fields before workspace readiness. See [database_setup.md](./database_setup.md) for prerequisites, verification and VPS steps.
+
 Signup payment update: `/signup` now uses the canonical billing catalog and creates a free workspace transactionally. Paid selections continue to Razorpay billing and remain resumable on later login until verified payment. Schema version 7 is required; deploy the backend first. Details are in [razorpay_setup.md](./razorpay_setup.md).
 
 Razorpay billing update: real Checkout replaces fake payment proofs, with captured-payment verification, atomic MySQL settlement, signed webhook recovery, scoped history and renewal controls. Backend-only keys are configured locally; the VPS and Dashboard webhook still need deployment. See [razorpay_setup.md](./razorpay_setup.md).

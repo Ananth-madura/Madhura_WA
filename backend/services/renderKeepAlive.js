@@ -11,6 +11,7 @@ const http = require("http");
 const { URL } = require("url");
 
 let timer = null;
+let initialTimer = null;
 
 function pingServer(url) {
   try {
@@ -59,7 +60,7 @@ function pingServer(url) {
  */
 function startKeepAlive(options = {}) {
   if (timer) return;
-  if (process.env.DISABLE_RENDER_KEEP_ALIVE === "1" || process.env.NODE_ENV === "test") {
+  if (process.env.ENABLE_RENDER_KEEP_ALIVE !== "1" || process.env.DISABLE_RENDER_KEEP_ALIVE === "1" || process.env.NODE_ENV === "test") {
     return;
   }
 
@@ -69,14 +70,16 @@ function startKeepAlive(options = {}) {
     "https://madhura-wa-backend.onrender.com";
 
   const targetUrl = `${rawBase.trim().replace(/\/+$/, "")}/health`;
-  const intervalMinutes = Math.max(1, Number(process.env.RENDER_KEEP_ALIVE_MINUTES || options.intervalMinutes || 7));
+  const configuredMinutes=Number(process.env.RENDER_KEEP_ALIVE_MINUTES || options.intervalMinutes || 7);
+  const intervalMinutes = Number.isFinite(configuredMinutes)?Math.max(1,configuredMinutes):7;
   const intervalMs = intervalMinutes * 60 * 1000;
 
   console.log(`[KeepAlive] 🔄 Anti-sleep keep-alive loop active: pinging ${targetUrl} every ${intervalMinutes} min`);
 
   // Initial ping after 45 seconds to let server finish boot
   const initialDelay = options.initialDelayMs ?? 45000;
-  const initialTimer = setTimeout(() => {
+  initialTimer = setTimeout(() => {
+    initialTimer=null;
     pingServer(targetUrl);
   }, initialDelay);
   if (initialTimer && initialTimer.unref) initialTimer.unref();
@@ -92,6 +95,7 @@ function startKeepAlive(options = {}) {
 }
 
 function stopKeepAlive() {
+  if(initialTimer){clearTimeout(initialTimer);initialTimer=null;}
   if (timer) {
     clearInterval(timer);
     timer = null;

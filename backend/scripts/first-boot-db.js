@@ -47,7 +47,7 @@ function tryConnect(cfg) {
     port: Number(env.DB_PORT) || 3306,
     user: env.DB_USER || "root",
   };
-  const dbName = env.DB_NAME || "achme_wa";
+  const dbName = env.DB_NAME || "madhura_wa";
   const candidates = [];
   for (const p of [env.DB_PASS, "root", "admin@123", "", "password", "mysql", "root123"]) {
     if (p !== undefined && !candidates.includes(p)) candidates.push(p);

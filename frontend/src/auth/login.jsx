@@ -1,4 +1,5 @@
 import {loginDestination} from "./loginDestination";
+import {confirmBrowserSession} from "./browserSession";
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import axios from "axios";
@@ -123,6 +124,7 @@ export default function Login() {
         return;
       }
 
+      await confirmBrowserSession(data);
       // Establish session with organization and branch context
       login({
         ...data.user,
@@ -137,7 +139,8 @@ export default function Login() {
       navigate(returnUrl, { replace: true });
     } catch (err) {
       const status = err.response?.status;
-      if (status === 503 || !err.response) {
+      if(err.friendlyMessage){setError(err.friendlyMessage);}
+      else if (status === 503 || !err.response) {
         setError("The enterprise backend service is unreachable. Check your internet connection or use 1-Click Demo Login.");
       } else {
         setError(err.response?.data?.message || err.response?.data?.error || "Login failed. Please verify your credentials.");
@@ -158,6 +161,7 @@ export default function Login() {
         otp: twoFactorCode.trim(),
       }, { timeout: 15000 });
       if (!data?.token && !data?.cookieSession) throw new Error("Verification did not return a session.");
+      await confirmBrowserSession(data);
       login({ ...data.user, cookieSession:Boolean(data.cookieSession||data.user?.cookieSession), token: data.token, demoMode: false });
       const returnUrl = loginDestination(data,location.search);
       navigate(returnUrl, { replace: true });

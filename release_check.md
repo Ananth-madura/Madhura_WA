@@ -2,6 +2,18 @@
 
 This records the frontend/backend code checks and deployment requirements. It does not certify the requested full production volume or every legacy CRM feature.
 
+## Login/signup loop verification
+
+The browser reproduction failed before the fix: signup briefly reached `/whatsapp`, then workspace and refresh requests returned 401 and it returned to `/login`. The launcher was rewriting the API address to a LAN IP while the frontend was opened on localhost. Local hostname normalization now keeps API/socket cookies on the same site, and the launcher preserves existing environment files. Login/signup/2FA/access-code activation confirm the cookie session before setting client authentication state.
+
+Passed: 20 frontend suites / 53 tests, targeted authentication lint and the full 14-suite isolated backend/browser pipeline. Real browser journeys cover signup, workspace entry, reload, authenticated public-login navigation, logout and later login on localhost and 127.0.0.1. Existing inbox, WebSocket/device cache, mobile layout, templates and flow-builder tests also passed. A read-only check of the running local frontend confirmed matching API hosts and no page errors. Test accounts and payment fixtures were confined to disposable test databases; no account or charge was created in `madhura_wa` for this verification.
+
+## MySQL connection and database-name update
+
+The local app is connected to MySQL `madhura_wa` at `127.0.0.1:3306`. The copy from `achme_wa` verified 119 tables and 10,833 rows using row counts and table checksums before switching. Original databases, SQLite files and an ignored SQL snapshot were retained. Defaults and deployment examples now select MySQL and the new database name. Self-pings are opt-in and disabled locally and in the production example.
+
+Fourteen safe backend suites passed, including actual startup against an initially absent disposable database, full schema creation, signup/payment fixtures and checks that missing critical fields cannot report workspace readiness. The frontend run passed 19 suites / 46 tests. A real local browser displayed five signup plans with no page errors, no catalog error, and signup enabled; no account or payment was submitted. Local health reported `ok=true`, MySQL ready and workspace ready. See [database_setup.md](database_setup.md) for OS service and VPS DNS limitations.
+
 ## Signup and first-login payment pass
 
 Paid signup now provisions free quotas, saves the selected plan and continues to real billing through the HttpOnly browser session. Normal owner login resumes unfinished payment; free signup and an explicit free-plan continuation remain available. Successful payment clears the saved choice atomically. The in-app plan modal now routes through billing. Signup and billing share the canonical database catalog.

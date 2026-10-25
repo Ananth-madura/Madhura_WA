@@ -1,6 +1,6 @@
 import axios from "axios";
 import { API } from "../config/api";
-import { installBrowserSession } from "./browserSession";
+import { installBrowserSession, confirmBrowserSession } from "./browserSession";
 import { portalApi } from "../utils/clientPortalApi";
 
 beforeEach(() => localStorage.clear());
@@ -36,4 +36,23 @@ test("staff portal uses browser cookies while customer portal retains its separa
   const customerResponse = await customer.get("/profile", { adapter });
   expect(customerResponse.config.headers.Authorization).toBe("Bearer customer-fixture-token");
   expect(customerResponse.config.withCredentials).not.toBe(true);
+});
+test("cookie authentication is checked before the caller publishes the new profile",async()=>{
+  const previousFetch=global.fetch;
+  global.fetch=jest.fn().mockResolvedValue({ok:true,status:200,json:async()=>({success:true,user:{id:7}})});
+  try{
+    const data={cookieSession:true,user:{id:7}};
+    await expect(confirmBrowserSession(data)).resolves.toBe(data);
+    expect(global.fetch.mock.calls[0][1].credentials).toBe("include");
+    expect(global.fetch.mock.calls[0][1].headers.Authorization).toBeUndefined();
+    global.fetch.mockResolvedValue({ok:false,status:401,json:async()=>({})});
+    await expect(confirmBrowserSession(data)).rejects.toMatchObject({code:"BROWSER_SESSION_UNAVAILABLE"});
+  }finally{global.fetch=previousFetch;}
+});
+test("a cookie for another account cannot confirm a new login",async()=>{
+  const previousFetch=global.fetch;global.fetch=jest.fn().mockResolvedValue({ok:true,status:200,json:async()=>({success:true,user:{id:99}})});
+  try{await expect(confirmBrowserSession({cookieSession:true,user:{id:7}})).rejects.toMatchObject({code:"BROWSER_SESSION_UNAVAILABLE"});}finally{global.fetch=previousFetch;}
+});
+test("bearer authentication keeps its existing flow",async()=>{
+  const data={token:"fixture-only",user:{id:7}};await expect(confirmBrowserSession(data)).resolves.toBe(data);
 });

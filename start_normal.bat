@@ -61,8 +61,8 @@ if "%MYSQL_ACTIVE%"=="1" (
 echo.
 
 :: ---- Step 2b: Database info ----
-echo [2b/7] Checking achme_wa database configuration...
-echo        Target database: "achme_wa" on port 3306.
+echo [2b/7] Checking backend database configuration...
+echo        Target database is read from backend\.env. Default: madhura_wa, port 3306.
 echo        Auto-configuration will run in Step 4b using Node.js.
 echo.
 
@@ -97,18 +97,16 @@ for /f "tokens=2 delims=:" %%i in ('ipconfig ^| findstr /R /C:"IPv4 Address" ^| 
     )
 )
 
-(
-echo PORT=3001
-echo REACT_APP_API_URL=http://!LAN_IP!:5001
-echo REACT_APP_MARKETING_URL=http://!LAN_IP!:3002
-) > "%ROOT%\frontend\.env"
-echo [OK]   Frontend .env set to port 3001, backend http://!LAN_IP!:5001, marketing http://!LAN_IP!:3002.
+if not exist "%ROOT%\frontend\.env" (
+    copy "%ROOT%\frontend\.env.example" "%ROOT%\frontend\.env" >nul
+)
+echo [OK]   Frontend configuration preserved. Local API/socket hosts follow the browser hostname.
 
-(
-echo VITE_APP_URL=http://!LAN_IP!:3001
-echo VITE_API_URL=http://!LAN_IP!:5001
-) > "%ROOT%\landing_page\.env"
-echo [OK]   Landing page .env set to app http://!LAN_IP!:3001.
+if not exist "%ROOT%\landing_page\.env" (
+    echo VITE_APP_URL=http://localhost:3001> "%ROOT%\landing_page\.env"
+    echo VITE_API_URL=http://localhost:5001>> "%ROOT%\landing_page\.env"
+)
+echo [OK]   Existing landing page configuration preserved.
 echo.
 
 :: ---- Step 4: Check and Install Dependencies ----

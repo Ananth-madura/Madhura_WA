@@ -7,6 +7,21 @@ const installed=new WeakSet();
 export function hasCookieSession() {
   try{return JSON.parse(localStorage.getItem("user")||"null")?.cookieSession===true;}catch(_){return false;}
 }
+export async function confirmBrowserSession(data){
+  if(!(data?.cookieSession||data?.user?.cookieSession))return data;
+  let response,profile;
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+  try{
+    response=await fetch(`${API}/api/auth/session`,{credentials:"include",headers:{"X-Browser-Session":"1"},signal:controller.signal});
+    profile=await response.json().catch(()=>null);
+  }catch(_){throw Object.assign(new Error("The sign-in session could not be checked. Check the API connection and sign in again."),{friendlyMessage:"The sign-in session could not be checked. Check the API connection and sign in again."});}
+  finally{clearTimeout(timer);}
+  if(!response.ok||!profile?.success||Number(profile.user?.id)!==Number(data.user?.id)){
+    const message=response.status>=500?"The session service is unavailable. Sign in again when the backend is ready.":"Your browser could not keep the sign-in session. Use matching app and API hostnames and allow cookies, then sign in again.";
+    throw Object.assign(new Error(message),{code:"BROWSER_SESSION_UNAVAILABLE",friendlyMessage:message});
+  }
+  return data;
+}
 function backendRequest(config) {
   try{return new URL(config.url,config.baseURL||API||window.location.origin).origin===new URL(API||window.location.origin).origin;}catch(_){return false;}
 }

@@ -46,7 +46,6 @@ function applyDefaults(env = process.env) {
   set("WA_MAX_SESSIONS", "15", "concurrent WhatsApp Web sessions");
   set("WA_HEADLESS", "true", "Chromium runs headless");
   set("WA_ENABLE_WEB_ENGINE", "1", "WhatsApp Web engine on (set 0 for small instances)");
-  set("RENDER_KEEP_ALIVE_MINUTES", "7", "interval in minutes to ping /health and prevent Render from sleeping");
 
   // ── public URLs ───────────────────────────────────────────────────────────
   const renderHost = env.RENDER_EXTERNAL_HOSTNAME
@@ -60,17 +59,14 @@ function applyDefaults(env = process.env) {
   );
 
   // ── boot behaviour ────────────────────────────────────────────────────────
-  set("ALLOW_START_WITHOUT_DB", "1", "boot degraded rather than crash-loop when the DB is missing");
+  set("ALLOW_START_WITHOUT_DB", "0", "wait for the application database before serving requests");
 
   // ── database ──────────────────────────────────────────────────────────────
-  const hasMysql = Boolean(env.DB_HOST && env.DB_NAME && env.DB_USER && env.DB_PASS);
-  if (!hasMysql && String(env.DB_ENGINE || "").toLowerCase() !== "mysql" && !truthy(env.DISABLE_R2)) {
-    set("USE_SQLITE", "1", "auto-enable SQLite persistence when MySQL is not provided");
-    set("DB_ENGINE", "r2", "dual adaptive storage engine");
-  } else {
-    set("DB_HOST", "127.0.0.1", "localhost database");
-    set("DB_PORT", "3306", "standard MySQL port");
-  }
+  set("DB_NAME", "madhura_wa", "default application database name");
+  set("DB_ENGINE", truthy(env.USE_SQLITE)?"sqlite":"mysql", "MySQL is the default application database");
+  set("USE_SQLITE", "0", "embedded storage requires explicit configuration");
+  set("DB_HOST", "127.0.0.1", "localhost database");
+  set("DB_PORT", "3306", "standard MySQL port");
 
   // ── admin seed ────────────────────────────────────────────────────────────
   set("ADMIN_SEED_PASSWORD", "Admin@123", "default admin seed password for zero-config instances");

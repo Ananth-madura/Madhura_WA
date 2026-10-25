@@ -25,6 +25,7 @@ import { API } from "../config/api";
 import { useAuth } from "./AuthContext";
 import { startDirectDemoSession } from "./demoSession";
 import {loginDestination} from "./loginDestination";
+import {confirmBrowserSession} from "./browserSession";
 import {requireRecords} from "../utils/apiPayload";
 
 const INDUSTRIES = [
@@ -84,6 +85,8 @@ export default function Signup() {
   const [selectedPlan, setSelectedPlan] = useState(new URLSearchParams(location.search).get("plan")||"free");
 
   const [plansError,setPlansError]=useState("");
+  const [signupBackendReady,setSignupBackendReady]=useState(false);
+  const [signupBackendNotice,setSignupBackendNotice]=useState("");
   const [catalogAttempt,setCatalogAttempt]=useState(0);
 
   // Access-code join state
@@ -117,13 +120,21 @@ export default function Signup() {
   }, [location.search]);
 
   useEffect(()=>{
-    let cancelled=false;setPlansError("");setPlans([]);
-    axios.get(`${API}/api/v2/billing/plans`,{timeout:10000}).then(({data})=>{
+    let cancelled=false;setPlansError("");setPlans([]);setSignupBackendReady(false);setSignupBackendNotice("");
+    Promise.all([axios.get(`${API}/api/v2/billing/plans`,{timeout:10000}),axios.get(`${API}/health`,{timeout:10000})]).then(([{data},{data:health}])=>{
       const rows=requireRecords(data?.plans);
       if(!rows.length)throw new Error("Plan catalog is unavailable");
       const mapped=rows.map(plan=>({...plan,price:"\u20b9"+Number(plan.price_inr).toLocaleString("en-IN"),billing:Number(plan.price_inr)===0?"Free plan":"/ 30 days",maxSenders:plan.max_senders,maxBranches:plan.max_branches,maxSeats:plan.max_seats,features:Array.isArray(plan.features)?plan.features:[]}));
       if(cancelled)return;setPlans(mapped);setSelectedPlan(current=>mapped.some(plan=>plan.id===current)?current:(mapped.find(plan=>Number(plan.price_inr)===0)||mapped[0]).id);
-    }).catch(()=>{if(!cancelled)setPlansError("Plans could not load. Connect the backend and retry before creating your account.");});
+      const ready=health?.ok===true&&health?.sharedInboxReady===true&&health?.dbEngine==="mysql";
+      setSignupBackendReady(ready);
+      if(!ready)setSignupBackendNotice(health?.dbEngine?.startsWith("sqlite")?"Plans are loaded. New workspace signup and Razorpay settlement require MySQL. Connect your MySQL server and restart the backend to continue. Existing accounts can still use Sign in.":"Plans are loaded, but the backend database is not ready for new workspaces yet. Check readiness and retry.");
+    }).catch(error=>{
+      if(cancelled)return;
+      const status=error.response?.status;
+      const detail=error.code==="INVALID_API_RESPONSE"?"The API returned a webpage instead of plan data. Check the frontend API address.":status===404?"The plans endpoint is missing. Restart or update the backend.":status===503?"The backend database or schema is not ready yet.":status>=500?"The backend could not read the plan catalog. Check its database configuration.":"The configured API could not be reached. Check its address and allowed frontend origins.";
+      setPlansError(`Plans could not load. ${detail}`);
+    });
     return()=>{cancelled=true;};
   },[catalogAttempt]);
 
@@ -190,6 +201,7 @@ export default function Signup() {
     setError("");
 
     if(loading)return;
+    if(!signupBackendReady)return setError(signupBackendNotice||"The backend is not ready for workspace signup yet.");
     if(!plans.some(plan=>plan.id===selectedPlan))return setError("Wait for the current plan catalog or retry loading plans.");
     const cleanCompany = companyName.trim();
     const cleanFirst = firstName.trim();
@@ -222,6 +234,7 @@ export default function Signup() {
 
       const data = res.data;
       if ((data?.token || data?.cookieSession) && data?.user) {
+        await confirmBrowserSession(data);
         login({
           ...data.user,
           cookieSession:Boolean(data.cookieSession||data.user?.cookieSession),
@@ -236,7 +249,7 @@ export default function Signup() {
 
       setDoneMessage(data?.message || "Enterprise workspace created successfully!");
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data?.error;
+      const msg = err.friendlyMessage || err.response?.data?.message || err.response?.data?.error;
       setError(msg || "Could not complete enterprise signup. Please review your details and try again.");
     } finally {
       setLoading(false);
@@ -273,6 +286,7 @@ export default function Signup() {
 
       const data = res.data;
       if ((data?.token || data?.cookieSession) && data?.user) {
+        await confirmBrowserSession(data);
         login({
           ...data.user,
           cookieSession:Boolean(data.cookieSession||data.user?.cookieSession),
@@ -288,7 +302,7 @@ export default function Signup() {
       setDoneMessage(data?.message || "Access verified! Your employee account is active.");
     } catch (err) {
       setError(
-        err.response?.data?.message ||
+        err.friendlyMessage || err.response?.data?.message ||
           "Could not activate with this Access Code. Please check the code with your admin."
       );
     } finally {
@@ -794,6 +808,7 @@ export default function Signup() {
                     </div>
 
                     {plansError&&<p role="alert" className="mb-3 text-sm text-red-700">{plansError} <button type="button" onClick={()=>setCatalogAttempt(value=>value+1)}>Retry plans</button></p>}
+                    {signupBackendNotice&&<p role="status" className="mb-3 text-sm text-amber-800">{signupBackendNotice} <button type="button" onClick={()=>setCatalogAttempt(value=>value+1)}>Check backend again</button></p>}
                     {!plans.length&&!plansError&&<p role="status">Loading current plans…</p>}
                     {/* Plan Selection */}
                     <div className="mb-5">
@@ -878,7 +893,7 @@ export default function Signup() {
 
                       <button
                         type="submit"
-                        disabled={loading||!plans.length}
+                        disabled={loading||!plans.length||!signupBackendReady}
                         className="hl-btn-primary flex-1 py-3 px-4 text-sm font-bold flex items-center justify-center gap-2 rounded-xl shadow-sm transition hover:shadow cursor-pointer"
                         style={{
                           background: "linear-gradient(135deg, #059669 0%, #0d9488 100%)",

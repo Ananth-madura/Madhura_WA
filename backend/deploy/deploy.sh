@@ -23,7 +23,7 @@ umask 077
 
 APP_DIR="${APP_DIR:-/home/wauser/app/backend}"
 WA_DATA_DIR="${WA_DATA_DIR:-/home/wauser/wa-data}"
-DB_NAME="${DB_NAME:-achme_wa}"
+DB_NAME="${DB_NAME:-madhura_wa}"
 MYSQL_BACKUP_LOGIN_PATH="${MYSQL_BACKUP_LOGIN_PATH:-wa-crm-backup}"
 SKIP_DB_BACKUP="${SKIP_DB_BACKUP:-0}"
 

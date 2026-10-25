@@ -11,7 +11,7 @@ async function main() {
   if (!process.env.INBOX_TEST_MYSQL_PORT) { console.log("SKIP: isolated INBOX_TEST_MYSQL_PORT required"); return; }
   const database = `inbox_boot_${process.pid}_${Date.now()}`;
   const connection = await mysql.createConnection({ host: "127.0.0.1", port: Number(process.env.INBOX_TEST_MYSQL_PORT), user: "root", password: "" });
-  await connection.query(`CREATE DATABASE \`${database}\``);
+  // Leave the test database absent: backend startup must create it itself.
   const logPath = path.resolve(__dirname, "../../scratch/shared-inbox-boot.log");
   const log = fs.openSync(logPath, "w");
   const secret = "isolated-boot-test-secret-over-32-characters";
@@ -25,7 +25,7 @@ async function main() {
       DB_USER: "root", DB_PASS: "", DB_NAME: database, JWT_SECRET: secret, SMTP_ENCRYPTION_KEY: "a".repeat(32), ALLOW_START_WITHOUT_DB: "0",
       WA_ENABLE_WEB_ENGINE: "0", WA_ACCESS_TOKEN: "", WA_PHONE_NUMBER_ID: "", WA_APP_SECRET: "fixture-app-secret", REDIS_URL: "", REQUIRE_HARD_CONFIG: "0",
       WA_DATA_DIR: path.resolve(__dirname, "../../scratch/shared-inbox-runtime"), ADMIN_SEED_PASSWORD: "isolated-admin-only", WA_SERVER_CHAT_STORAGE: "0", PUBLIC_BASE_URL: "http://127.0.0.1:15317",
-      ALLOWED_ORIGINS:"http://127.0.0.1:15317,http://127.0.0.1:15318", WA_LEGACY_PUBLIC_UPLOADS:"0", R2_REQUIRED:"0",OPS_METRICS_TOKEN:"isolated-metrics-fixture-over-32-characters",WA_ENABLE_CRM_SWEEP:"0",
+      ALLOWED_ORIGINS:"http://127.0.0.1:15317,http://127.0.0.1:15318,http://localhost:15318", WA_LEGACY_PUBLIC_UPLOADS:"0", R2_REQUIRED:"0",OPS_METRICS_TOKEN:"isolated-metrics-fixture-over-32-characters",WA_ENABLE_CRM_SWEEP:"0",
     },
   });
   const base = "http://127.0.0.1:15317";
@@ -43,6 +43,7 @@ async function main() {
     for(let i=0;i<40;i++)assert.equal((await fetch(`${base}/api/auth/refresh`,{method:"POST",headers:{Origin:base}})).status,401,"shared-office refresh traffic must not consume the old 35-login IP quota");
     await connection.query(`USE \`${database}\``);
     await require("./helpers/signupLifecycle").run({base,connection});
+    if(process.env.INBOX_TEST_AUTH_BROWSER==="1")await require("./helpers/authBrowser").verify();
     const [[admin]] = await connection.query("SELECT id,email FROM users WHERE role='admin' ORDER BY id LIMIT 1");
     assert(admin);
     await connection.query("UPDATE tenants SET max_seats=100 WHERE id=1");
@@ -138,7 +139,7 @@ async function main() {
     fs.closeSync(log);
     await meta.close();
     await signupProvider.close();
-    await connection.query(`DROP DATABASE \`${database}\``); await connection.end();
+    await connection.query(`DROP DATABASE IF EXISTS \`${database}\``); await connection.end();
   }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

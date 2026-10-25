@@ -1219,8 +1219,8 @@ attemptConnect();
  * The migration file used to run only when someone executed it by hand, so a
  * freshly provisioned deployment never got any of it - a developer's local
  * database.sqlite was already migrated, which is why nothing looked wrong.
- * It is non-fatal by design: a deployment that cannot migrate still serves
- * what the current schema supports, and the next boot retries.
+ * Migration failures reject readiness so unsupported schemas do not serve
+ * partially initialized account and payment operations.
  */
 async function runEnterpriseMigration() {
   if (
@@ -1233,7 +1233,8 @@ async function runEnterpriseMigration() {
   try {
     await require("../migrations/enterprise_multi_tenant_multi_branch").migrate();
   } catch (err) {
-    console.error("[database] Enterprise migration failed (continuing on the current schema):", err.message);
+    console.error("[database] Enterprise migration failed:", err.message);
+    throw err;
   }
 }
 
