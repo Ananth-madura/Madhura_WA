@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import FlowPageBoundary from "./components/FlowPageBoundary";
+import {MARKETING as MARKETING_URL} from "./config/index";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from "react-router-dom";
 import { Agentation } from "agentation";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
@@ -43,7 +44,6 @@ const ClientPortalManage = lazy(() => import("./pages/ClientPortalManage"));
 
 /* Marketing site now lives in the sibling `landing_page` project (port 3002).
    Old public URLs on this origin hand off there so shared links keep working. */
-const MARKETING_URL = (process.env.REACT_APP_MARKETING_URL || "").replace(/\/+$/, "");
 
 function MarketingHandoff({ to = "" }) {
   const { pathname, search, hash } = useLocation();

@@ -15,10 +15,10 @@
 const stripTrailingSlash = (value) => String(value || "").replace(/\/+$/, "");
 
 export const APP_URL = stripTrailingSlash(
-  import.meta.env.VITE_APP_URL || "http://localhost:3001"
+  import.meta.env.VITE_APP_URL || (import.meta.env.PROD?"https://live.wa.madhuratech.in":"http://localhost:3001")
 );
 
-export const API_URL = stripTrailingSlash(import.meta.env.VITE_API_URL || "");
+export const API_URL = stripTrailingSlash(import.meta.env.VITE_API_URL || (import.meta.env.PROD?"https://api.madhuratech.in":""));
 
 /** Canonical live workspace web app URL */
 export const LIVE_APP_URL = "https://live.wa.madhuratech.in";

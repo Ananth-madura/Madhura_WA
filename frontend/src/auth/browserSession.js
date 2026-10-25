@@ -1,5 +1,6 @@
 import axios from "axios";
 import { API } from "../config/api";
+import {validateJsonResponse} from "../utils/apiPayload";
 
 let pendingRefresh;
 const installed=new WeakSet();
@@ -25,6 +26,7 @@ export function installBrowserSession(client) {
   installed.add(client);
   client.interceptors.request.use(config=>{
     if(!backendRequest(config))return config;
+    if((config.method||"get").toLowerCase()==="get"&&!config.timeout)config.timeout=15000;
     config.withCredentials=true;
     config.headers=config.headers||{};
     config.headers["X-Browser-Session"]="1";
@@ -37,7 +39,7 @@ export function installBrowserSession(client) {
     }
     return config;
   });
-  client.interceptors.response.use(response=>response,async error=>{
+  client.interceptors.response.use(response=>backendRequest(response.config||{})?validateJsonResponse(response):response,async error=>{
     const config=error.config;
     if(!config||!backendRequest(config)||!hasCookieSession()||error.response?.status!==401||config._browserRetried||/\/auth\//.test(config.url))throw error;
     config._browserRetried=true;

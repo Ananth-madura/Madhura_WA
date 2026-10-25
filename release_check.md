@@ -2,6 +2,14 @@
 
 This records the frontend/backend code checks and deployment requirements. It does not certify the requested full production volume or every legacy CRM feature.
 
+## Domain and blank-screen update
+
+The deployed signed-in CRM was receiving HTML from its own static host for API requests, then crashing on list rendering. The source now selects `https://api.madhuratech.in`, rejects HTML API responses, validates chat lists and keeps an error visible during an API outage. Public domain settings are included for both Vercel projects and the VPS. The root rendering boundary provides a reload action for unexpected crashes.
+
+Current verification: 14 frontend suites / 31 tests passed; 7 safe backend suites passed; frontend and landing production builds passed; landing internal-link validation passed. Six browser scenarios exercise HTML-200 responses, malformed JSON and an offline API in demo and cached signed-in sessions, including hard reload. They passed against the final production build and asserted that non-demo API requests use `https://api.madhuratech.in`. These fixtures make no production API requests. Targeted lint for the new response validation, domain resolver, session interceptor, error boundary and shared inbox passed without warnings.
+
+The VPS is not connected yet, and these source changes have not been deployed. Follow [live_domains.md](live_domains.md) for the two Vercel redeployments and later VPS/DNS/TLS setup. The integration results below belong to the earlier full pipeline; this domain pass reran core backend checks and the disconnected-API browser checks.
+
 ## Changes completed in the final pass
 
 - The flow canvas reuses its supported palette, step metadata, validation index and graph edges across unrelated viewport updates. Editing and dragging still invalidate the graph when needed.
@@ -15,7 +23,7 @@ This records the frontend/backend code checks and deployment requirements. It do
 
 | Check | Result |
 |---|---|
-| All frontend unit/component suites | Passed: 11 suites, 26 tests |
+| All frontend unit/component suites | Passed: 14 suites, 31 tests |
 | Backend core verification | Passed: 7 suites |
 | Isolated MySQL and real-browser pipeline | Passed: 10 suites, including the 7 core suites |
 | Production frontend build without test-origin overrides | Passed; existing legacy lint warnings remain |

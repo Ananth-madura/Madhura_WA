@@ -3,5 +3,6 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "build":{"env":{"VITE_APP_URL":"https://live.wa.madhuratech.in","VITE_API_URL":"https://api.madhuratech.in"}},
   "rewrites": [{ "source": "/((?!assets/).*)", "destination": "/index.html" }]
 }

@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-25T06:11:08.305Z",
+  "at": "2026-10-25T07:17:04.111Z",
   "method": "Static source inventory and pattern counts; not exhaustive semantic certification. Secrets, runtime data, generated files, dependencies and symlinks excluded.",
   "workload": {
     "businessCustomers": 200,
@@ -24,8 +24,8 @@
       "high": 21701.38888888889
     }
   },
-  "sourceFiles": 334,
-  "totalLines": 92746,
+  "sourceFiles": 340,
+  "totalLines": 92849,
   "files": [
     {
       "file": "backend/.puppeteerrc.cjs",
@@ -205,9 +205,9 @@
     },
     {
       "file": "backend/deploy/nginx-api.conf",
-      "bytes": 1217,
+      "bytes": 1229,
       "lines": 42,
-      "sha256": "cc7abc6177b399dcb2bf3570ca5b499067e8c43f5134c10b304e15f481ce43bc",
+      "sha256": "6458700809695460d9e3fa235dfb49cf31c52fa67ccf65786db7087f68049932",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -1975,6 +1975,17 @@
       "lazyImports": 0
     },
     {
+      "file": "backend/tests/test_frontend_offline_browser.js",
+      "bytes": 3997,
+      "lines": 40,
+      "sha256": "3f91fc945f7edef22a36f41cf482b42d711233fa5e14af5150cf4007f8431de0",
+      "timers": 0,
+      "syncFs": 1,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
       "file": "backend/tests/test_local_cache_browser.js",
       "bytes": 4133,
       "lines": 44,
@@ -2482,9 +2493,9 @@
     },
     {
       "file": "frontend/src/App.js",
-      "bytes": 11665,
+      "bytes": 11637,
       "lines": 220,
-      "sha256": "a58e8a853fc86bf50549a2c34cb4897a3466b22ca270f6ee8be494203d0fd814",
+      "sha256": "87b38488e11f50d1bab2e5f0dc0ccb8981b6f900a7b606cf38ca7628cf3e5cc5",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -2504,9 +2515,9 @@
     },
     {
       "file": "frontend/src/auth/browserSession.js",
-      "bytes": 2449,
-      "lines": 48,
-      "sha256": "96475e2b56817a50bf0742798d5875d125d5f6037910c9603ddfef20552d5c78",
+      "bytes": 2665,
+      "lines": 50,
+      "sha256": "0f6eba6629c0ba609aadc65713a07d399a5e08270aaa6f2fb61a7e7b78f8b677",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -2548,9 +2559,9 @@
     },
     {
       "file": "frontend/src/auth/login.jsx",
-      "bytes": 27483,
-      "lines": 661,
-      "sha256": "761255c3ed223b6a4b2935b9c636a690fa0b70fcca1ed38f44182166e155fbbc",
+      "bytes": 27629,
+      "lines": 662,
+      "sha256": "37c7e7970b1093d75838cb52eb90fb082fa5dbfcaddc28b565aaf1d3afd60e10",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -2566,6 +2577,28 @@
       "syncFs": 0,
       "selectStar": 0,
       "httpCalls": 3,
+      "lazyImports": 0
+    },
+    {
+      "file": "frontend/src/components/AppErrorBoundary.jsx",
+      "bytes": 767,
+      "lines": 11,
+      "sha256": "4d29cca907767a0c6f75139b86b05cda5683b91b3fe72da9248cae5a8ed2b68d",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
+      "file": "frontend/src/components/AppErrorBoundary.test.jsx",
+      "bytes": 866,
+      "lines": 9,
+      "sha256": "88e01fa1bd41e00182a78c6b862edb6f80f8eaa270db7944f1d611093b393224",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
       "lazyImports": 0
     },
     {
@@ -2757,9 +2790,9 @@
     },
     {
       "file": "frontend/src/components/SharedTeamInbox.jsx",
-      "bytes": 17631,
-      "lines": 204,
-      "sha256": "1b2065c2b07059ba04a29db759633d6c89977f0b6503f4499300bf26839a4084",
+      "bytes": 17986,
+      "lines": 207,
+      "sha256": "ebd520fa8880d585e7c026f4196f976127b49cd45c7b36a976276776153231ef",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -3010,9 +3043,20 @@
     },
     {
       "file": "frontend/src/config/index.js",
-      "bytes": 690,
-      "lines": 16,
-      "sha256": "ca4f1602d34e79546ff5d81de7591d5889b3875619798a3fecde7c59893547da",
+      "bytes": 1197,
+      "lines": 20,
+      "sha256": "61c275d5bcc47fc2f6281a801732fce0e757a25f94604fde839946e4ec074278",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
+      "file": "frontend/src/config/index.test.js",
+      "bytes": 692,
+      "lines": 10,
+      "sha256": "96603d36de32e8cc68ca80c69b7d9265da63f6b9925bebd4ab14cfe05bad1b30",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -3098,9 +3142,9 @@
     },
     {
       "file": "frontend/src/index.js",
-      "bytes": 1070,
-      "lines": 28,
-      "sha256": "8bccd89fe4d16d63d86ed7bbc8e1b6a97b130616b9f4d8eb3e19f09e08aea7f5",
+      "bytes": 1169,
+      "lines": 29,
+      "sha256": "9dcc203dab7f98e22e95bc29762ef598b79b99cc6c4396ad66d6be4709a06c3f",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -3351,13 +3395,13 @@
     },
     {
       "file": "frontend/src/pages/whatsapp.jsx",
-      "bytes": 371071,
-      "lines": 7594,
-      "sha256": "f25615d3669f2d7b51ff0459c3fa2c7bfdcf1af2e7bde0d08ec2109cb333a36a",
+      "bytes": 370861,
+      "lines": 7584,
+      "sha256": "0311509ee4489603e431f32765a22ea3d4f081c429da1780437aeffa40f5cc53",
       "timers": 4,
       "syncFs": 0,
       "selectStar": 0,
-      "httpCalls": 52,
+      "httpCalls": 49,
       "lazyImports": 0
     },
     {
@@ -3559,6 +3603,28 @@
       "lazyImports": 0
     },
     {
+      "file": "frontend/src/utils/apiPayload.js",
+      "bytes": 976,
+      "lines": 16,
+      "sha256": "b8606ab78fa1696aabffc69d580fe8e7a55416491910f15243b94a3d79e5e6e6",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
+      "file": "frontend/src/utils/apiPayload.test.js",
+      "bytes": 990,
+      "lines": 13,
+      "sha256": "5a4d44f46d9de200bc78d57f234027ddef3c3e233ad5f3cd2e8b6dc60ad73cb7",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
       "file": "frontend/src/utils/clientPortalApi.js",
       "bytes": 2147,
       "lines": 33,
@@ -3692,9 +3758,9 @@
     },
     {
       "file": "frontend/vercel.json",
-      "bytes": 2098,
-      "lines": 99,
-      "sha256": "16c18814570e941bac33fcddb8ff4f6e94cc974139f58a3fa4575d8aba7bab49",
+      "bytes": 2277,
+      "lines": 102,
+      "sha256": "c5686303ced92c4a339caa1ded6741e7fe26d1169f8a66ae69326836655525b8",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,

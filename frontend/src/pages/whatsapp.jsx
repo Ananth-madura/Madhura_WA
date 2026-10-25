@@ -1,4 +1,5 @@
 import { waUiStorage } from "../utils/waUiStorage";
+import {requireRecords,cachedRecords} from "../utils/apiPayload";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
@@ -63,7 +64,7 @@ import {
   GitBranch,
 } from "lucide-react";
 import axios from "axios";
-import { API, LIVE_BACKEND_URL } from "../config/api";
+import { API } from "../config/api";
 import { getEnquiries, getEnquirySummary, createEnquiry, updateEnquiry, convertEnquiry } from "../api/enquiries";
 import { useAuth } from "../auth/AuthContext";
 import { useEnterprise } from "../context/EnterpriseContext";
@@ -605,7 +606,7 @@ export default function WhatsAppPage() {
   const [chats, setChats] = useState(() => {
     try {
       const saved = waUiStorage.getItem("wa_cached_chats");
-      return saved ? JSON.parse(saved) : [];
+      return saved ? cachedRecords(JSON.parse(saved)) : [];
     } catch {
       return [];
     }
@@ -625,7 +626,7 @@ export default function WhatsAppPage() {
         const parsed = JSON.parse(savedChat);
         if (parsed?.id) {
           const cachedMsgs = waUiStorage.getItem(`wa_chat_messages_${parsed.id}`);
-          if (cachedMsgs) return JSON.parse(cachedMsgs);
+          if (cachedMsgs) return cachedRecords(JSON.parse(cachedMsgs));
         }
       }
     } catch (_) {}
@@ -974,11 +975,8 @@ export default function WhatsAppPage() {
       try {
         res = await axios.get(`${API}/api/whatsapp/unified-status`, { headers, timeout: 10000 });
       } catch (e1) {
-        try {
-          res = await axios.get(`${LIVE_BACKEND_URL}/api/whatsapp/unified-status`, { headers, timeout: 10000 });
-        } catch (e2) {
-          res = await axios.get(`${LIVE_BACKEND_URL}/api/whatsapp/status`, { headers, timeout: 10000 });
-        }
+        if(e1.response?.status!==404)throw e1;
+        res = await axios.get(`${API}/api/whatsapp/status`, { headers, timeout: 10000 });
       }
       const raw = res.data;
       const isCloud = Boolean(raw.cloud?.configured || raw.isCloud);
@@ -1063,12 +1061,7 @@ export default function WhatsAppPage() {
       const token = waUiStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const endpoint = force ? "/api/whatsapp/qr?refresh=true" : "/api/whatsapp/qr";
-      let res;
-      try {
-        res = await axios.get(`${API}${endpoint}`, { headers, timeout: 10000 });
-      } catch (e1) {
-        res = await axios.get(`${LIVE_BACKEND_URL}${endpoint}`, { headers, timeout: 10000 });
-      }
+      const res = await axios.get(`${API}${endpoint}`, { headers, timeout: 10000 });
       if (res.data && res.data.connected) {
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
         setQrCode(null);
@@ -1218,12 +1211,7 @@ export default function WhatsAppPage() {
         ...enterpriseHeaders,
       };
       const endpoint = refresh ? `/api/whatsapp/chats?refresh=true` : `/api/whatsapp/chats`;
-      let res;
-      try {
-        res = await axios.get(`${API}${endpoint}`, { headers });
-      } catch (e1) {
-        res = await axios.get(endpoint, { headers });
-      }
+      const res = await axios.get(`${API}${endpoint}`, { headers });
       if (res.data && Array.isArray(res.data)) {
         hasLoadedChatsOnce.current = true;
         setChats((prev) => {
@@ -1399,12 +1387,13 @@ export default function WhatsAppPage() {
   };
 
   const fetchTemplates = useCallback(async () => {
+    if(demoMode)return;
     try {
       const token = waUiStorage.getItem("token");
       const { data } = await axios.get(`${API}/api/wa/templates`, { headers: { Authorization: `Bearer ${token}` } });
-      setTemplates(data || []);
+      setTemplates(requireRecords(data));
     } catch { }
-  }, []);
+  }, [demoMode]);
 
   useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
 
@@ -1419,7 +1408,7 @@ export default function WhatsAppPage() {
     try {
       const token = waUiStorage.getItem("token");
       const { data } = await axios.post(`${API}/api/wa/templates/seed`, {}, { headers: { Authorization: `Bearer ${token}` } });
-      if (data.templates) setTemplates(data.templates);
+      if (data.templates) setTemplates(requireRecords(data.templates));
       else fetchTemplates();
     } catch (e) {
       alert("Failed to seed default templates: " + (e.response?.data?.error || e.message));
@@ -1786,12 +1775,13 @@ export default function WhatsAppPage() {
   };
 
   const fetchQuickReplies = async () => {
+    if(demoMode)return;
     try {
       const token = waUiStorage.getItem("token");
       const res = await axios.get(`${API}/api/whatsapp/quick-replies`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setQuickReplies(res.data || []);
+      setQuickReplies(requireRecords(res.data));
     } catch (_) { }
   };
 

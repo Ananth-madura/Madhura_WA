@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
+import AppErrorBoundary from './components/AppErrorBoundary';
 
 // NOTE: the Socket.IO clients are imported *by the pages that need them*
 // (whatsapp.jsx, whatsappAccounts.jsx, WhatsAppNav.jsx,
@@ -22,6 +23,6 @@ const container = document.getElementById('root');
 const root = createRoot(container);
 root.render(
   <React.StrictMode>
-    <App />
+    <AppErrorBoundary><App /></AppErrorBoundary>
   </React.StrictMode>
 );

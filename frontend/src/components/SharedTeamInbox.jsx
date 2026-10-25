@@ -6,9 +6,10 @@ import { useEnterprise } from "../context/EnterpriseContext";
 import SharedAssistantSettings from "./SharedAssistantSettings";
 import SharedFlowControls from "./SharedFlowControls";
 import { createInboxRefreshScheduler } from "../utils/inboxRefreshScheduler";
+import {requireRecords} from "../utils/apiPayload";
 
 const root = "/api/v2/inbox";
-const errorText = error => error.response?.data?.message || "The inbox could not complete this action.";
+const errorText = error => error.response?.data?.message || error.friendlyMessage || (!error.response?"The backend is unavailable. Connect the API service and try again.":"The inbox could not complete this action.");
 
 export default function SharedTeamInbox({ branchId }) {
   const { activeTenant } = useEnterprise();
@@ -42,6 +43,7 @@ export default function SharedTeamInbox({ branchId }) {
     try {
       const { data } = await api.get(`${root}/conversations`, { params: { branch_id: branchId || "all", status: filter, search: query, sort:"activity" } });
       if (version !== context.current) return;
+      requireRecords(data?.conversations);
       setConversations(data.conversations); setCursor(data.nextCursor); setCanManage(data.canManage); setError("");
       if (active.current && !data.conversations.some(row => row.id === active.current.id)) {
         const selectedId=active.current.id;
@@ -72,14 +74,15 @@ export default function SharedTeamInbox({ branchId }) {
   }, [refresh, activeTenant?.id]);
   useEffect(() => {
     if (!canManage) return;
-    api.get(`${root}/routing/employees`).then(({ data }) => setEmployees(data.employees)).catch(() => setEmployees([]));
+    api.get(`${root}/routing/employees`).then(({ data }) => setEmployees(requireRecords(data?.employees))).catch(() => setEmployees([]));
   }, [canManage, activeTenant?.id]);
   const load = useCallback(async row => {
     const version = context.current;
     try {
       const [{ data }, noteResult, cached, contactResult] = await Promise.all([api.get(`${root}/conversations/${row.id}/messages`), api.get(`${root}/conversations/${row.id}/notes`), readLocalMessages(cacheKey(row)), api.get(`${root}/conversations/${row.id}/contact`)]);
       if (version !== context.current || active.current?.id !== row.id) return;
-      setMessages(mergeLocalMessages(cached || [], data.messages)); setNotes(noteResult.data.notes); setError("");
+      const incoming=requireRecords(data?.messages),sharedNotes=requireRecords(noteResult.data?.notes);
+      setMessages(mergeLocalMessages(cached || [], incoming)); setNotes(sharedNotes); setError("");
       setContact(contactResult.data.contact);
       setAiQuestion((cached||[]).find(message=>!message.isMe&&message.body)?.body||"");
       api.post(`${root}/conversations/${row.id}/read`).catch(() => {});
@@ -181,7 +184,7 @@ export default function SharedTeamInbox({ branchId }) {
       <aside className="space-y-2" aria-label="Conversations">
         {loading ? <p>Loading conversations…</p> : !conversations.length && <p>No conversations in this view.</p>}
         {conversations.map(row => <button key={row.id} aria-pressed={selected?.id === row.id} className={`w-full text-left border rounded p-3 ${selected?.id === row.id ? "border-emerald-600" : ""}`} onClick={() => select(row)}><strong>{row.contact_name || row.contact_phone}</strong><br />{row.contact_phone}<br /><small>{row.sender_phone} · {row.owner_user_id ? `Agent ${row.owner_user_id}` : "Unassigned"}</small></button>)}
-        {cursor && <button className="border rounded p-2" onClick={async () => { try { const { data } = await api.get(`${root}/conversations`, { params: { before: cursor, status: filter, search: query, sort:"activity", branch_id: branchId || "all" } }); setConversations(previous => [...new Map([...previous, ...data.conversations].map(row=>[row.id,row])).values()]); setCursor(data.nextCursor); } catch (err) { setError(errorText(err)); } }}>Load more conversations</button>}
+        {cursor && <button className="border rounded p-2" onClick={async () => { try { const { data } = await api.get(`${root}/conversations`, { params: { before: cursor, status: filter, search: query, sort:"activity", branch_id: branchId || "all" } }); const incoming=requireRecords(data?.conversations); setConversations(previous => [...new Map([...previous, ...incoming].map(row=>[row.id,row])).values()]); setCursor(data.nextCursor); } catch (err) { setError(errorText(err)); } }}>Load more conversations</button>}
       </aside>
       {selected ? <div className="space-y-4 min-w-0">
         <h2 className="font-semibold">{selected.contact_name} · {selected.contact_phone}</h2>

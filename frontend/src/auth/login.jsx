@@ -125,6 +125,7 @@ export default function Login() {
       // Establish session with organization and branch context
       login({
         ...data.user,
+        cookieSession:Boolean(data.cookieSession||data.user?.cookieSession),
         token: data.token,
         active_tenant_id: data.user.tenant_id,
         active_branch_id: data.user.branch_id,
@@ -156,7 +157,7 @@ export default function Login() {
         otp: twoFactorCode.trim(),
       }, { timeout: 15000 });
       if (!data?.token && !data?.cookieSession) throw new Error("Verification did not return a session.");
-      login({ ...data.user, token: data.token, demoMode: false });
+      login({ ...data.user, cookieSession:Boolean(data.cookieSession||data.user?.cookieSession), token: data.token, demoMode: false });
       const returnUrl = new URLSearchParams(location.search).get("returnUrl") || "/whatsapp";
       navigate(returnUrl, { replace: true });
     } catch (err) {

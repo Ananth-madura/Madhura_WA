@@ -1,5 +1,7 @@
 # Live deployment and shared CRM plan
 
+25 October domain update: the landing page is `https://wa.madhuratech.in`, the CRM is `https://live.wa.madhuratech.in`, and the planned API is `https://api.madhuratech.in`. The VPS is not connected yet. The signed-in blank screen was reproduced and corrected in source; deployment settings, verification and the remaining connection steps are in [live_domains.md](./live_domains.md). Redeploy the frontend and landing projects to apply these changes.
+
 Prepared: 24 October 2026. Status: the core shared-number implementation is present and tested locally on `feature/shared-number-assignment`. Production deployment has not been performed. Section 19 records the implemented behavior, verification, and remaining deployment work; optional alternatives elsewhere remain proposals.
 
 Open [plan_live_visual.html](./plan_live_visual.html) in a browser for an animated walkthrough. This file contains the detailed plan and Mermaid diagrams; Markdown viewers may require Mermaid support.
