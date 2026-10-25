@@ -1,5 +1,6 @@
 import axios from "axios";
 import { API } from "./index";
+import { installBrowserSession, hasCookieSession } from "../auth/browserSession";
 
 const api = axios.create({
   baseURL: API,
@@ -11,7 +12,7 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
-  if (token) {
+  if (token && !hasCookieSession()) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   const tenantId = localStorage.getItem("active_tenant_id");
@@ -29,7 +30,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     // Session token expired or revoked
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !hasCookieSession()) {
       const isAuthRoute =
         error.config?.url?.includes("/auth/login") ||
         error.config?.url?.includes("/auth/verify");
@@ -48,6 +49,7 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+installBrowserSession(api);
 
 export default api;
 

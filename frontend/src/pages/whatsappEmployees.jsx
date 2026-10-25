@@ -1,4 +1,5 @@
 import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
+import InboxRoutingSettings from "../components/InboxRoutingSettings";
 import useWADialog from "../hooks/useWADialog";
 import React, { useState, useEffect, useCallback } from "react";
 import {
@@ -73,7 +74,7 @@ const ACCESS_LEVEL_META = {
 };
 
 export default function WAEmployees() {
-  const { user } = useAuth();
+  const { user, demoMode } = useAuth();
   const { activeTenant, activeBranch, branches, enterpriseHeaders } = useEnterprise();
 
   // Employee data & analytics
@@ -370,6 +371,7 @@ export default function WAEmployees() {
         </div>
       )}
 
+      {!demoMode && <InboxRoutingSettings />}
       {/* Page Header */}
       <div className="hl-commandbar p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

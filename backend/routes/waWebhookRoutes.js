@@ -177,12 +177,14 @@ async function resolveWebhookAccount(phoneId) {
 }
 
 router.post("/", async (req, res) => {
+  const release=require("../middleware/requestAdmission").webhooks.enter();
+  if(!release)return res.set("Retry-After","2").sendStatus(503);
   try {
     const authorization = await require("../services/waWebhookAuth").authorizeWebhook(req, resolveWebhookAccount);
     if (!authorization.valid) return res.sendStatus(403);
     const body = req.body;
 
-    await db.promise().query(
+    if(require("../services/waChatPrivacy").serverChatStorageEnabled())await db.promise().query(
       "INSERT INTO wa_webhook_events (event_type, payload) VALUES (?, ?)",
       ["webhook_received", JSON.stringify(body)]
     );
@@ -213,18 +215,19 @@ router.post("/", async (req, res) => {
   } catch (err) {
     console.error("Webhook error:", err.message);
     res.sendStatus(503);
-  }
+  } finally { release(); }
 });
 
 /** Atomic claim in a dedicated table; legacy event rows are left intact. */
-async function claimEvent(eventType, msgId, phone, status, payload) {
+async function claimEvent(eventType, msgId, phone, status, payload, scope = "legacy") {
+  eventType = `${eventType}:${require("crypto").createHash("sha256").update(String(scope)).digest("hex").slice(0, 16)}`;
   if (!msgId) return false;
   try {
     const [res] = await db.promise().query(
       "INSERT IGNORE INTO wa_webhook_claims (event_type, wa_message_id, status) VALUES (?, ?, ?)",
       [eventType, msgId, status]
     );
-    if (res.affectedRows > 0) await db.promise().query(
+    if (res.affectedRows > 0 && require("../services/waChatPrivacy").serverChatStorageEnabled()) await db.promise().query(
       "INSERT INTO wa_webhook_events (event_type, wa_message_id, phone, status, payload) VALUES (?, ?, ?, ?, ?)",
       [eventType, msgId, phone, status, JSON.stringify(payload)]
     ).catch(() => {});
@@ -236,6 +239,17 @@ async function claimEvent(eventType, msgId, phone, status, payload) {
 }
 
 async function handleIncomingMessage(msg, metadata, contacts = [], account = null) {
+  let claimed = false;
+  try { await processIncomingMessage(msg, metadata, contacts, account, () => { claimed = true; }); }
+  catch (error) {
+    const scope = metadata?.phone_number_id || account?.sessionKey || "legacy";
+    const eventType = `incoming_message:${require("crypto").createHash("sha256").update(String(scope)).digest("hex").slice(0, 16)}`;
+    if (claimed) await db.promise().query("DELETE FROM wa_webhook_claims WHERE event_type = ? AND wa_message_id = ? AND status = 'received'", [eventType, msg.id]).catch(() => {});
+    throw error;
+  }
+}
+
+async function processIncomingMessage(msg, metadata, contacts = [], account = null, markClaimed = () => {}) {
   const phone = msg.from;
   account = account || await resolveWebhookAccount(metadata?.phone_number_id);
   if (!account) throw new Error("Webhook sender has no configured owner");
@@ -244,11 +258,17 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
   const msgId = msg.id;
   const timestamp = msg.timestamp ? new Date(parseInt(msg.timestamp) * 1000) : new Date();
   const contactProfileName = contacts?.[0]?.profile?.name || null;
+  const inbox = require("../services/sharedInboxService").createInboxService(db);
+  const [sharedSenders] = await db.promise().query("SELECT id, tenant_id, status FROM wa_senders WHERE phone_number_id = ? LIMIT 1", [metadata?.phone_number_id]);
+  const sharedSender = sharedSenders[0];
+  if (sharedSender && sharedSender.status !== "connected") return;
 
-  if (!(await claimEvent("incoming_message", msgId, phone, "received", msg))) {
+  if (!(await claimEvent("incoming_message", msgId, phone, "received", msg, metadata?.phone_number_id || sessionKey))) {
     console.log(`🔁 [WA Webhook] Duplicate delivery of ${msgId} from +${phone} — already processed, skipping.`);
     return;
   }
+  markClaimed();
+  const sharedConversation = sharedSender ? await inbox.inbound({ tenantId: Number(sharedSender.tenant_id), senderId: Number(sharedSender.id), phone, name: contactProfileName, timestamp }) : null;
 
   let messageText = "";
   let messageType = "text";
@@ -283,7 +303,7 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
         timestamp: timestamp.toISOString(),
       };
       console.log(
-        `👆 [WA Interactive] ${interaction.type} from +${phone}: actionId="${interaction.actionId}" title="${interaction.title}" msgId=${msgId}`
+        `[WA Interactive] ${interaction.type} msgId=${msgId}`
       );
     }
   } else if (isMediaMsg) {
@@ -294,7 +314,10 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
     messageText = msg[msg.type]?.caption || msg[msg.type]?.id || "";
   }
 
-  await db.promise().query(
+  if (sharedConversation) {
+    await db.promise().query(`INSERT IGNORE INTO wa_message_logs (tenant_id, conversation_id, sender_id, branch_id, session_key, phone, direction, message_type, message_text, wa_message_id, status, media_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'inbound', ?, ?, ?, 'delivered', ?, ?)`, [sharedSender.tenant_id, sharedConversation.id, sharedSender.id, sharedConversation.branch_id, sessionKey, phone, messageType, messageText, msgId, cloudMediaId, timestamp]);
+  } else await db.promise().query(
     `INSERT INTO wa_message_logs (phone, direction, message_type, message_text, wa_message_id, status, metadata, interactive_payload, has_media, media_mime_type, media_filename, created_at)
      VALUES (?, 'inbound', ?, ?, ?, 'delivered', ?, ?, ?, ?, ?, ?)`,
     [
@@ -318,9 +341,9 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
   });
 
   // (the wa_webhook_events row was already written by claimEvent above)
-  await db.promise().query("UPDATE wa_message_logs SET session_key = ?, media_id = ? WHERE wa_message_id = ?", [sessionKey, cloudMediaId || null, msgId]).catch(() => {});
+  if(!sharedConversation)await db.promise().query("UPDATE wa_message_logs SET session_key = ?, media_id = ? WHERE wa_message_id = ?", [sessionKey, cloudMediaId || null, msgId]).catch(() => {});
 
-  require("../services/waTransientHistory").remember(phone, sessionKey, { id: msgId, body: messageText, isMe: false });
+  if (!sharedConversation) require("../services/waTransientHistory").remember(phone, sessionKey, { id: msgId, body: messageText, isMe: false });
 
   // Emit socket event for real-time live chat update
   const chatId = `${phone}@c.us`;
@@ -332,7 +355,7 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
     const app = require("../server");
     const io = app.get && app.get("io");
     if (io) {
-      io.to(`user:${sessionKey}`).emit("wa_message_received", {
+      const liveEvent = {
         phone,
         chatId,
         sessionKey,
@@ -348,7 +371,9 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
           mimetype: mediaMimeType || "",
           cloudMediaId,
         },
-      });
+      };
+      if (sharedConversation) await inbox.emit(io, sharedConversation, "inbox_message", liveEvent);
+      else io.to(`user:${sessionKey}`).emit("wa_message_received", liveEvent);
     }
   } catch (_) {}
 
@@ -387,10 +412,10 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
   // the same person each get their own contact instead of one NULL row that
   // every scoped query has to make a special case for.
   const contactTenantId = await require("../services/waContactTenancy").tenantForContactWrite({
-    tenantId: account?.tenantId,
+    tenantId: sharedSender?.tenant_id || account?.tenantId,
     sessionKey,
   });
-  await db.promise().query(
+  if (!sharedConversation) await db.promise().query(
     `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
      VALUES (?, ?, ?, '91', 'WhatsApp Cloud API', 1, ?, NOW(), 1)
      ON DUPLICATE KEY UPDATE
@@ -400,6 +425,22 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
     [contactTenantId, contactProfileName || `+${phone}`, phone.slice(-10), messageText]
   ).catch(() => {});
 
+  // Shared numbers are handled by their assigned employees; legacy session bots do not own these conversations.
+  if (sharedConversation) {
+    const keyword = String(messageText).trim().toLowerCase();
+    if (OPT_OUT_KEYWORDS.includes(keyword)) {
+      await require("../services/sharedInboxAssistant").pause(sharedSender.tenant_id,sharedConversation.id);
+      await db.promise().query("UPDATE wa_contacts SET is_unsubscribed = 1, opt_in_status = 0 WHERE id = ? AND tenant_id = ?", [sharedConversation.contact_id, sharedSender.tenant_id]);
+      await db.promise().query("INSERT IGNORE INTO wa_opt_outs (tenant_id, phone, reason, opt_out_keyword) VALUES (?, ?, 'user_request', ?)", [sharedSender.tenant_id, phone, keyword]);
+    } else if(msg.type==="text"||msg.type==="interactive"||msg.type==="button") {
+      if(Math.abs(Date.now()-Number(msg.timestamp)*1000)>120000)return;
+      const input=msg.interactive?.button_reply?.id||msg.interactive?.list_reply?.id||msg.button?.payload||messageText;
+      const handled=await require("../services/sharedFlowRuntime").handle(sharedSender.tenant_id,sharedConversation.id,msgId,input,sharedConversation.isNew);
+      if(!handled&&msg.type==="text")require("../services/sharedInboxAssistant").enqueue(sharedSender.tenant_id,sharedConversation.id,msgId,messageText,sharedConversation.isNew);
+    }
+    return;
+  }
+
   // ── 🔗 AUTO-CAPTURE: Create CRM lead for first-time inbound WhatsApp Cloud API contacts ──
   try {
     const waLeadCapture = require("../services/waLeadCapture");
@@ -407,7 +448,7 @@ async function handleIncomingMessage(msg, metadata, contacts = [], account = nul
       phone: phone,
       sessionKey,
       name: contactProfileName || undefined,
-      notes: (messageText || "").slice(0, 500) || "Customer messaged via WhatsApp Cloud API",
+      notes: "Customer messaged via WhatsApp Cloud API",
       sourceDetail: "WhatsApp Cloud API Inbound",
     }).catch(() => {});
   } catch (_) {}
@@ -546,7 +587,7 @@ async function handleStatusUpdate(status, account) {
 
   // Claimed per (message, status) so sent/delivered/read each apply once —
   // otherwise a retry double-counts campaign delivered_count / read_count.
-  if (!(await claimEvent("status_update", msgId, phone, statusName, status))) {
+  if (!(await claimEvent("status_update", msgId, phone, statusName, status, account?.phoneNumberId || account?.sessionKey))) {
     return;
   }
 
@@ -558,6 +599,11 @@ async function handleStatusUpdate(status, account) {
     const app = require("../server");
     const io = app.get && app.get("io");
     if (io) {
+      const [sharedRows] = await db.promise().query("SELECT c.* FROM conversations c JOIN wa_message_logs m ON m.conversation_id = c.id AND m.tenant_id = c.tenant_id WHERE m.wa_message_id = ? LIMIT 1", [msgId]);
+      if (sharedRows[0]) {
+        await require("../services/sharedInboxService").createInboxService(db).emit(io, sharedRows[0], "inbox_message", { message: { id: msgId, status: statusName, ack: ackMap[statusName] || 1 } });
+        return;
+      }
       io.to(`user:${account.sessionKey}`).emit("wa_message_ack", {
         phone,
         message: {

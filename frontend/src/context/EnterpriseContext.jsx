@@ -6,13 +6,17 @@
  * Reference: MADHURA_WHATSAPP_ENTERPRISE_SAAS_MASTER_BLUEPRINT.md
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import { API } from "../config/api";
+import { hasCookieSession } from "../auth/browserSession";
+import { useAuth } from "../auth/AuthContext";
 
 const EnterpriseContext = createContext(null);
 
 export function EnterpriseProvider({ children }) {
+  const { user, initializing } = useAuth();
+  const version = useRef(0);
   const [activeTenant, setActiveTenant] = useState(null);
   const [organizations, setOrganizations] = useState([]);
   const [activeBranch, setActiveBranch] = useState(null);
@@ -33,17 +37,19 @@ export function EnterpriseProvider({ children }) {
   }, []);
 
   const refreshEnterpriseContext = useCallback(async () => {
+    const current=++version.current;
+    if(initializing)return;
     const token = localStorage.getItem("token");
-    if (!token) {
+    if (!user || (!token && !hasCookieSession())) {
+      setActiveTenant(null);setOrganizations([]);setActiveBranch(null);setBranches([]);setPermittedBranchIds([]);setRoleInActiveOrg("agent");
       setLoading(false);
       return;
     }
 
     try {
       const headers = getHeaders();
-      const res = await axios.get(`${API}/api/v2/me`, { headers, timeout: 8000 }).catch(async () => {
-        return axios.get(`/api/v2/me`, { headers, timeout: 8000 });
-      });
+      const res = await axios.get(`${API}/api/v2/me`, { headers, timeout: 15000 });
+      if(current!==version.current)return;
 
       if (res?.data?.success) {
         const {
@@ -58,28 +64,28 @@ export function EnterpriseProvider({ children }) {
         setOrganizations(orgs || []);
         setActiveTenant(activeOrganization || (orgs && orgs[0]) || null);
         setBranches(branchList || []);
-        setActiveBranch(branch || (branchList && branchList[0]) || null);
+        setActiveBranch(branch || null);
         setPermittedBranchIds(permBranches || []);
         setRoleInActiveOrg(role || "agent");
 
         if (activeOrganization?.id) {
           localStorage.setItem("active_tenant_id", activeOrganization.id);
-          axios.defaults.headers.common["x-tenant-id"] = activeOrganization.id;
         }
         if (branch?.id) {
           localStorage.setItem("active_branch_id", branch.id);
-          axios.defaults.headers.common["x-branch-id"] = branch.id;
-        }
+        } else localStorage.removeItem("active_branch_id");
       }
     } catch (err) {
       console.warn("[EnterpriseContext] Notice fetching /api/v2/me:", err?.message);
     } finally {
-      setLoading(false);
+      if(current===version.current)setLoading(false);
     }
-  }, [getHeaders]);
+  }, [getHeaders, initializing, user]);
 
   useEffect(() => {
+    const requests=version;
     refreshEnterpriseContext();
+    return()=>{requests.current++;};
   }, [refreshEnterpriseContext]);
 
   const switchOrganization = useCallback(
@@ -89,10 +95,9 @@ export function EnterpriseProvider({ children }) {
 
       localStorage.setItem("active_tenant_id", targetOrg.id);
       localStorage.removeItem("active_branch_id"); // Reset branch when switching company
-      axios.defaults.headers.common["x-tenant-id"] = targetOrg.id;
-      delete axios.defaults.headers.common["x-branch-id"];
 
       setActiveTenant(targetOrg);
+      setActiveBranch(null);setBranches([]);setPermittedBranchIds([]);setRoleInActiveOrg("agent");
       setLoading(true);
       await refreshEnterpriseContext();
     },
@@ -105,7 +110,6 @@ export function EnterpriseProvider({ children }) {
       if (!targetBranch) return;
 
       localStorage.setItem("active_branch_id", targetBranch.id);
-      axios.defaults.headers.common["x-branch-id"] = targetBranch.id;
       setActiveBranch(targetBranch);
       window.dispatchEvent(new CustomEvent("branch_changed", { detail: { branch: targetBranch } }));
     },
@@ -147,14 +151,14 @@ export function useEnterprise() {
   const ctx = useContext(EnterpriseContext);
   if (!ctx) {
     return {
-      activeTenant: { id: 1, name: "Madhura Primary Organization", plan: "growth" },
+      activeTenant: null,
       organizations: [],
-      activeBranch: { id: 1, name: "Head Office (Main)", code: "HEADOFFICE" },
+      activeBranch: null,
       branches: [],
-      permittedBranchIds: [1],
-      roleInActiveOrg: "organization_owner",
-      isOwnerOrAdmin: true,
-      isBranchManager: true,
+      permittedBranchIds: [],
+      roleInActiveOrg: "agent",
+      isOwnerOrAdmin: false,
+      isBranchManager: false,
       loading: false,
       switchOrganization: () => {},
       switchBranch: () => {},

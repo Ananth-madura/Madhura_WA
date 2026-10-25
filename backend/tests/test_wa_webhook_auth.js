@@ -24,7 +24,7 @@ const resolve = async (id) => id === 'A' ? { sessionKey: '41', appSecret: 'secre
   database.exec('CREATE TABLE wa_webhook_claims (event_type TEXT, wa_message_id TEXT, status TEXT, PRIMARY KEY (event_type, wa_message_id, status)); CREATE TABLE wa_webhook_events (event_type TEXT, wa_message_id TEXT, phone TEXT, status TEXT, payload TEXT)');
   const source = fs.readFileSync(require.resolve('../routes/waWebhookRoutes'), 'utf8');
   const start = source.indexOf('async function claimEvent('), end = source.indexOf('async function handleIncomingMessage(', start);
-  const context = { console, db: { promise: () => ({ query: async (sql, params) => [{ affectedRows: database.prepare(sql.replace('INSERT IGNORE', 'INSERT OR IGNORE')).run(...params).changes }] }) } };
+  const context = { console, require, db: { promise: () => ({ query: async (sql, params) => [{ affectedRows: database.prepare(sql.replace('INSERT IGNORE', 'INSERT OR IGNORE')).run(...params).changes }] }) } };
   vm.runInNewContext(source.slice(start, end) + '\nglobalThis.claim = claimEvent;', context);
   const results = await Promise.all([context.claim('incoming_message', 'wamid.1', 'fixture-phone', 'received', {}), context.claim('incoming_message', 'wamid.1', 'fixture-phone', 'received', {})]);
   assert.equal(results.filter(Boolean).length, 1);
@@ -32,6 +32,7 @@ const resolve = async (id) => id === 'A' ? { sessionKey: '41', appSecret: 'secre
   assert.equal(await context.claim('status_update', 'wamid.1', 'fixture-phone', 'read', {}), false);
   assert.equal(await context.claim('status_update', 'wamid.1', 'fixture-phone', 'delivered', {}), true);
   assert.equal(await context.claim('incoming_message', null, 'fixture-phone', 'received', {}), false);
+  assert.equal(await context.claim('incoming_message', 'wamid.1', 'fixture-phone', 'received', {}, 'different-number'), true);
   database.close();
   console.log('PASS: unsigned/tampered/foreign webhooks rejected, per-account signatures checked, production cannot bypass verification');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

@@ -5,6 +5,9 @@ const path = require("path");
 const vm = require("vm");
 const { createRequire } = require("module");
 const { normalizeConditions, matchesConditions } = require("../services/waRuleConditions");
+const databasePath=require.resolve("../config/database");
+const unexpectedDatabase=()=>{throw new Error("Unmocked database access in dynamic workflow test");};
+require.cache[databasePath]={id:databasePath,filename:databasePath,loaded:true,exports:{query:unexpectedDatabase,promise:()=>({query:unexpectedDatabase})}};
 
 function load(relative, mocks) {
   const filename = path.resolve(__dirname, relative);
@@ -12,7 +15,7 @@ function load(relative, mocks) {
   const module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(filename, "utf8"), {
     module, exports: module.exports, __dirname: path.dirname(filename),
-    require: (name) => Object.hasOwn(mocks, name) ? mocks[name] : realRequire(name),
+    require: (name) => Object.hasOwn(mocks, name) ? mocks[name] : /waContactTenancy$/.test(name) ? {tenantForContactWrite:async()=>1} : realRequire(name),
     console, process, Date, setTimeout, setInterval, clearTimeout, clearInterval, URL,
   }, { filename });
   return module.exports;

@@ -64,7 +64,7 @@ function applyDefaults(env = process.env) {
 
   // ── database ──────────────────────────────────────────────────────────────
   const hasMysql = Boolean(env.DB_HOST && env.DB_NAME && env.DB_USER && env.DB_PASS);
-  if (!hasMysql && !truthy(env.DISABLE_R2)) {
+  if (!hasMysql && String(env.DB_ENGINE || "").toLowerCase() !== "mysql" && !truthy(env.DISABLE_R2)) {
     set("USE_SQLITE", "1", "auto-enable SQLite persistence when MySQL is not provided");
     set("DB_ENGINE", "r2", "dual adaptive storage engine");
   } else {

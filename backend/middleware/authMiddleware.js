@@ -28,7 +28,11 @@ const verifyToken = (req, res, next) => {
   // browser history and Referer headers.
   const incomingApiKey = req.headers["x-api-key"] || null;
   const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : authHeader;
+  const sessions = require("../services/browserSessions");
+  const cookieToken = sessions.cookies(req.headers.cookie)[sessions.ACCESS_COOKIE];
+  const headerToken=authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : authHeader;
+  const token = headerToken || cookieToken;
+  if(token && req._verifiedToken===token && req.user?.id)return next();
 
   // 1. Direct API Key check (for external CRM connections)
   if (configuredApiKey && incomingApiKey && safeEqual(incomingApiKey, configuredApiKey)) {
@@ -63,9 +67,14 @@ const verifyToken = (req, res, next) => {
     const decoded = jwt.verify(token, jwtSecret, { algorithms: ["HS256"] });
     if (decoded.portal || decoded.role === "client" || [decoded.aud].flat().includes("client-portal")) return res.status(403).json({ message: "Client portal sessions cannot access the staff workspace" });
     req.user = decoded;
+    if(decoded.sid) {
+      if(!headerToken && !["GET","HEAD","OPTIONS"].includes(req.method))sessions.requireOrigin(req);
+      return sessions.active(decoded).then(()=>{req._verifiedToken=token;next();}).catch(error=>res.status(error.status||503).json({message:error.status?error.message:"Browser session verification unavailable"}));
+    }
+    req._verifiedToken=token;
     next();
   } catch (err) {
-    return res.status(403).json({ message: "Invalid token" });
+    return res.status(!headerToken && cookieToken && err.name === "TokenExpiredError" ? 401 : err.status||403).json({ message: err.status?err.message:"Invalid token" });
   }
 };
 

@@ -327,7 +327,7 @@ export default function Signup() {
       );
 
       const data = res.data;
-      if (data?.token && data?.user) {
+      if ((data?.token || data?.cookieSession) && data?.user) {
         login({
           ...data.user,
           token: data.token,
@@ -377,7 +377,7 @@ export default function Signup() {
       );
 
       const data = res.data;
-      if (data?.token && data?.user) {
+      if ((data?.token || data?.cookieSession) && data?.user) {
         login({
           ...data.user,
           token: data.token,

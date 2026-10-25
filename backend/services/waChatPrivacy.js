@@ -1,6 +1,7 @@
 "use strict";
 const serverChatStorageEnabled = () => process.env.WA_SERVER_CHAT_STORAGE === "1";
 const PRIVATE_COLUMNS = {
+  conversations: new Set(["last_message_text", "subject"]),
   wa_message_logs: new Set(["message_text", "metadata", "interactive_payload", "media_url", "media_filename"]),
   wa_contacts: new Set(["last_message_text"]),
   wa_webhook_events: new Set(["payload"]),

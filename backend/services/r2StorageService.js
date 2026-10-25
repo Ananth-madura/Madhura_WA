@@ -13,10 +13,13 @@ const {
   PutObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  HeadBucketCommand,
+  DeleteObjectCommand,
 } = require("@aws-sdk/client-s3");
 
 class R2StorageService {
-  constructor() {
+  constructor({ env = process.env, client } = {}) {
+    this.env = env;
     this.client = null;
     this.bucket = null;
     this.accountId = null;
@@ -29,47 +32,58 @@ class R2StorageService {
     this.authFailed = false;
     this.authError = null;
     this.disabled = false;
+    this.lastProbe = null;
 
     this.init();
+    if (client) this.client = client;
   }
 
   init() {
+    const env = this.env;
+    this.disabled = false;
+    this.client = null;
     this.authFailed = false;
     this.authError = null;
 
-    if (["1", "true", "yes"].includes(String(process.env.DISABLE_R2 || process.env.SKIP_R2 || "").toLowerCase())) {
+    if ([env.DISABLE_R2, env.SKIP_R2].some(value => ["1", "true", "yes"].includes(String(value || "").toLowerCase()))) {
       this.client = null;
       this.disabled = true;
-      console.log("ℹ️ [Cloudflare R2] Cloud backup disabled by environment (DISABLE_R2=1). SQLite operating in local mode.");
+      console.log("ℹ️ [Cloudflare R2] Object storage disabled by environment.");
       return;
     }
 
     const accountId = (
-      process.env.R2_ACCOUNT_ID ||
-      process.env.CLOUDFLARE_ACCOUNT_ID ||
+      env.R2_ACCOUNT_ID ||
+      env.CLOUDFLARE_ACCOUNT_ID ||
       ""
     ).trim();
 
     const accessKeyId = (
-      process.env.R2_ACCESS_KEY_ID ||
-      process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ||
+      env.R2_ACCESS_KEY_ID ||
+      env.CLOUDFLARE_R2_ACCESS_KEY_ID ||
       ""
     ).trim();
 
     const secretAccessKey = (
-      process.env.R2_SECRET_ACCESS_KEY ||
-      process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY ||
+      env.R2_SECRET_ACCESS_KEY ||
+      env.CLOUDFLARE_R2_SECRET_ACCESS_KEY ||
       ""
     ).trim();
 
     const bucket = (
-      process.env.R2_BUCKET_NAME ||
-      process.env.CLOUDFLARE_R2_BUCKET ||
-      process.env.R2_BUCKET ||
+      env.R2_BUCKET_NAME ||
+      env.CLOUDFLARE_R2_BUCKET ||
+      env.R2_BUCKET ||
       ""
     ).trim();
 
-    this.publicDomain = (process.env.R2_PUBLIC_DOMAIN || "").trim().replace(/\/+$/, "");
+    this.publicDomain = (env.R2_PUBLIC_DOMAIN || "").trim().replace(/\/+$/, "");
+    this.publicBucket = (env.R2_PUBLIC_BUCKET_NAME || "").trim() || null;
+    if (this.publicBucket && this.publicBucket === bucket) throw new Error("Use separate private and public R2 buckets");
+    if (this.publicDomain) {
+      const domain = new URL(this.publicDomain);
+      if (domain.protocol !== "https:" || domain.origin !== this.publicDomain || domain.username || domain.password) throw new Error("R2_PUBLIC_DOMAIN must be an HTTPS origin");
+    }
 
     // Only attempt S3 client connection when valid credentials are explicitly provided in environment
     if (accountId && accessKeyId && secretAccessKey && bucket) {
@@ -78,6 +92,7 @@ class R2StorageService {
       try {
         this.client = new S3Client({
           region: "auto",
+          maxAttempts: 2,
           endpoint: `https://${this.accountId}.r2.cloudflarestorage.com`,
           credentials: {
             accessKeyId,
@@ -93,7 +108,7 @@ class R2StorageService {
       this.client = null;
       this.bucket = null;
       this.accountId = null;
-      console.log("ℹ️ [Cloudflare R2] Cloud backup credentials not set. SQLite operating in local persistence mode.");
+      console.log("ℹ️ [Cloudflare R2] Object storage credentials are not configured.");
     }
   }
 
@@ -129,7 +144,7 @@ class R2StorageService {
     }
     console.warn(
       `⚠️ [Cloudflare R2] Access Denied: Cloudflare R2 credentials for bucket "${this.bucket || "unknown"}" are invalid or expired.\n` +
-      `   Automatic sync has been paused to protect performance. Local SQLite database is safe and operating.\n` +
+      `   R2 operations are paused. The configured application database is unchanged.\n` +
       `   To enable cloud backup, set valid R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY in backend/.env, or set DISABLE_R2=1.`
     );
   }
@@ -147,10 +162,44 @@ class R2StorageService {
       bucket: this.bucket || null,
       accountId: this.accountId ? `${this.accountId.slice(0, 6)}...` : null,
       publicDomain: this.publicDomain || null,
+      publicAssetsReady: Boolean(this.isConfigured() && this.publicDomain && this.publicBucket),
       lastSyncAt: this.lastSyncAt,
       lastRestoreAt: this.lastRestoreAt,
       isSyncing: this.isSyncing,
+      lastProbe: this.lastProbe,
     };
+  }
+
+  async verifyConnection({ roundTrip = false, prefix = "checks" } = {}) {
+    if (!this.isConfigured()) return { ok: false, reason: this.disabled ? "disabled" : this.authFailed ? "authentication_failed" : "not_configured" };
+    const { randomUUID, randomBytes } = require("node:crypto");
+    const key = `${prefix}/${randomUUID()}.bin`, body = randomBytes(32);
+    const send = command => this.client.send(command, { abortSignal: AbortSignal.timeout(15000) });
+    let wrote = false, failure = null;
+    try {
+      if (roundTrip) {
+        wrote = true;
+        await send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: "application/octet-stream", CacheControl: "no-store" }));
+        const result = await send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+        const downloaded = Buffer.from(await result.Body.transformToByteArray());
+        if (!body.equals(downloaded)) throw new Error("ContentMismatch");
+      } else await send(new HeadBucketCommand({ Bucket: this.bucket }));
+    } catch (error) { failure = this.isAuthError(error) ? "access_denied" : "connection_or_integrity_failed"; }
+    finally {
+      if (wrote) try { await send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key })); }
+      catch (_) { failure = "probe_cleanup_failed"; }
+    }
+    this.lastProbe = { ok: !failure, mode: roundTrip ? "put_get_delete" : "head_bucket", checkedAt: new Date().toISOString(), ...(failure ? { reason: failure } : {}) };
+    return this.lastProbe;
+  }
+
+  async deleteMedia(key) {
+    if (!this.isConfigured()) throw new Error("R2 unavailable");
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.mediaBucket(key), Key: key }), { abortSignal: AbortSignal.timeout(15000) });
+  }
+
+  mediaBucket(key) {
+    return /^tenants\/\d+\/public-assets\//.test(key) ? this.publicBucket : this.bucket;
   }
 
   /**
@@ -245,7 +294,7 @@ class R2StorageService {
         },
       });
 
-      await this.client.send(putCommand);
+      await this.client.send(putCommand, { abortSignal: AbortSignal.timeout(15000) });
       this.lastSyncAt = new Date().toISOString();
       this.authFailed = false;
       this.authError = null;
@@ -314,22 +363,24 @@ class R2StorageService {
    * @param {string} contentType - MIME type
    * @returns {Promise<{ success: boolean, url: string, key: string }>}
    */
-  async uploadMedia(fileData, key, contentType = "application/octet-stream") {
+  async uploadMedia(fileData, key, contentType = "application/octet-stream", { published = false } = {}) {
     if (!this.isConfigured()) {
       return { success: false, reason: "r2_not_configured" };
     }
+    if (published && (!this.publicBucket || !this.publicDomain)) return { success: false, reason: "public_bucket_not_configured" };
 
     try {
       const body = Buffer.isBuffer(fileData) ? fileData : fs.readFileSync(fileData);
       const putCommand = new PutObjectCommand({
-        Bucket: this.bucket,
+        Bucket: published ? this.publicBucket : this.bucket,
         Key: key,
         Body: body,
         ContentType: contentType,
+        CacheControl: published ? "public, max-age=3600" : "private, no-store",
       });
 
-      await this.client.send(putCommand);
-      const url = this.publicDomain
+      await this.client.send(putCommand, { abortSignal: AbortSignal.timeout(15000) });
+      const url = published && this.publicDomain
         ? `${this.publicDomain}/${key}`
         : `/api/storage/r2/${encodeURIComponent(key)}`;
 
@@ -352,15 +403,17 @@ class R2StorageService {
     if (!this.isConfigured()) return null;
     try {
       const command = new GetObjectCommand({
-        Bucket: this.bucket,
+        Bucket: this.mediaBucket(key),
         Key: key,
       });
-      return await this.client.send(command);
+      return await this.client.send(command, { abortSignal: AbortSignal.timeout(15000) });
     } catch (err) {
-      return null;
+      if (err.name === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) return null;
+      throw new Error("R2 download unavailable");
     }
   }
 }
 
 const instance = new R2StorageService();
 module.exports = instance;
+module.exports.R2StorageService = R2StorageService;

@@ -43,6 +43,10 @@ const GUARDS = /\b(verifyToken|requireAuth|isAdmin|isAdminOnly|isEmployee|auth|p
 
 /** Route handlers in bare mounts that are intentional public entry points. */
 const INTENTIONAL_PUBLIC_HANDLERS = {
+  "enterpriseBillingRoutes.js": {
+    "/plans": "Public plan catalog",
+    "/webhook": "Gateway webhook validates raw HMAC signature in billing service",
+  },
   "clientPortalRoutes.js": {
     "/settings": "Public client portal theme, branding, and status configuration",
     "/auth/login": "Client portal email/password login with strict rate limiters",
@@ -87,6 +91,7 @@ function parseHandlers(file) {
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(/router\.(get|post|put|patch|delete)\s*\(/);
     if (!m) continue;
+    const routerGuards = lines.slice(0, i).some(line => /^\s*router\.use\(\s*(verifyToken|auth)\b/.test(line));
 
     // Accumulate the full call signature, which is often wrapped over many lines.
     let stmt = lines[i];
@@ -119,7 +124,7 @@ function parseHandlers(file) {
       line: i + 1,
       method: m[1].toUpperCase(),
       routePath,
-      guarded: realGuards.length > 0,
+      guarded: realGuards.length > 0 || routerGuards,
       guards: [...new Set(realGuards)],
       nonAuth: [...new Set(nonAuth)],
     });
@@ -217,7 +222,7 @@ console.log(
 // One honest exception, always surfaced rather than buried:
 // express.static has no middleware chain at all, so this script cannot see it.
 console.log("  NOT COVERED BY THIS AUDIT: the /uploads static mount.");
-console.log("  It is served by express.static with no auth. See DEPLOYMENT.md section 10.");
+console.log("  Disabled in production unless WA_LEGACY_PUBLIC_UPLOADS=1; inspect the mount separately.");
 console.log("");
 
 process.exit(open.length === 0 ? 0 : 1);

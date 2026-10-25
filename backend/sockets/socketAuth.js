@@ -43,7 +43,8 @@ const extractToken = (socket) => {
     return queryToken;
   }
 
-  return null;
+  const sessions=require("../services/browserSessions");
+  return sessions.cookies(socket.handshake?.headers?.cookie)[sessions.ACCESS_COOKIE] || null;
 };
 
 /**
@@ -74,6 +75,19 @@ const authenticateSocket = (socket, next) => {
       name: decoded.name || decoded.first_name || "",
     };
 
+    const allow=()=>{
+      socket.data.sessionId=decoded.sid||null;
+      if(decoded.exp) {
+        const timer=setTimeout(()=>{socket.emit("session_expired");socket.disconnect(true);},Math.max(1,Math.min(2147483647,decoded.exp*1000-Date.now())));
+        timer.unref();socket.once("disconnect",()=>clearTimeout(timer));
+      }
+      next();
+    };
+    if(decoded.sid) {
+      const sessions=require("../services/browserSessions");
+      sessions.requireOrigin({headers:socket.handshake?.headers||{}});
+      return sessions.active(decoded).then(allow).catch(()=>next(new Error("unauthorized: browser session revoked")));
+    }
     return next();
   } catch (err) {
     return next(new Error(`unauthorized: ${err.message}`));
@@ -86,8 +100,7 @@ const socketIsAdmin = (socket) => ADMIN_ROLES.includes(socket.data?.user?.role);
 /**
  * Can this socket join a per-user room?
  *
- * Admins may join any user's room (they need to see the workspace).
- * Everyone else may only join their own. This is the check that stops
+ * A user may only join their own room. This check stops
  * `socket.emit("join", 42)` from being an impersonation.
  */
 const canJoinUserRoom = (socket, targetUserId) => {
@@ -96,15 +109,12 @@ const canJoinUserRoom = (socket, targetUserId) => {
   const target = Number(targetUserId);
   if (!Number.isFinite(target)) return false;
   if (user.id === target) return true;
-  return socketIsAdmin(socket);
+  return false;
 };
 
 /** May this socket join an arbitrary named room (e.g. "whatsapp")? */
 const canJoinNamedRoom = (socket, room) => {
   if (!socket.data?.user || !room) return false;
-  // The shared workspace room. Any authenticated member of this tenant may
-  // join — it is not a per-user channel.
-  if (room === "whatsapp") return true;
   // Anything user-scoped must match the authenticated identity.
   if (typeof room === "string" && room.startsWith("user:")) {
     return canJoinUserRoom(socket, room.slice(5));

@@ -1,132 +1,71 @@
-/**
- * r2Routes.js — API endpoints for Cloudflare R2 storage management and sync
- */
-
-const express = require("express");
-const router = express.Router();
-const path = require("path");
+"use strict";
+const router = require("express").Router();
+const { pipeline } = require("node:stream/promises");
 const multer = require("multer");
-const r2Storage = require("../services/r2StorageService");
-const sqliteAdapter = require("../config/sqliteDatabase");
-const { mediaDir } = require("../config/runtimePaths");
+const storage = require("../services/r2StorageService");
+const assets = require("../services/workspaceAssets");
+const { verifyToken } = require("../middleware/authMiddleware");
+const { requireTenantContext } = require("../middleware/tenantMiddleware");
+const { campaignLaunchLimiter } = require("../middleware/waRateLimiter");
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
-const { verifyToken: auth } = require("../middleware/authMiddleware");
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+router.use(verifyToken, requireTenantContext, (req, res, next) => {
+  if (["organization_owner", "organization_admin"].includes(req.userRole) || req.user.role === "platform_admin") return next();
+  res.status(403).json({ error: "Organization administrator required" });
 });
+router.use((req, res, next) => { res.set("Cache-Control", "private, no-store"); next(); });
 
-/**
- * GET /api/storage/status
- * Returns Cloudflare R2 connection & sync status
- */
-router.get("/status", auth, (req, res) => {
-  const r2Status = r2Storage.getStatus();
-  const db = require("../config/database");
-
+router.get("/status", (req, res) => {
+  const db = require("../config/database"), status = storage.getStatus();
   res.json({
-    r2: r2Status,
-    database: {
-      engine: db.isSqlite ? "sqlite" : "mysql",
-      isSqlite: Boolean(db.isSqlite),
-      r2Backed: Boolean(db.r2Enabled || (db.isSqlite && r2Status.configured)),
-      localPath: sqliteAdapter.dbPath || null,
-    },
-    timestamp: new Date().toISOString(),
+    r2: { configured: status.configured, disabled: status.disabled, authFailed: status.authFailed, publicAssetsReady: status.publicAssetsReady, lastProbe: status.lastProbe },
+    database: { engine: db.isSqlite ? "sqlite" : "mysql", isSqlite: Boolean(db.isSqlite), r2Backed: Boolean(db.isSqlite && status.configured) },
+    tenantId: req.tenantId,
   });
 });
 
-/**
- * POST /api/storage/sync
- * Manually trigger SQLite database snapshot upload to Cloudflare R2
- */
-router.post("/sync", auth, async (req, res) => {
-  if (!r2Storage.isConfigured()) {
-    return res.status(400).json({
-      error: "Cloudflare R2 is not configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME in environment.",
-    });
-  }
-
-  if (!sqliteAdapter.dbPath) {
-    return res.status(400).json({
-      error: "SQLite database path not found or MySQL engine in use.",
-    });
-  }
-
-  try {
-    const result = await r2Storage.uploadDatabaseToR2(sqliteAdapter.dbPath);
-    res.json({
-      success: result.synced,
-      message: result.synced
-        ? "SQLite database successfully synced to Cloudflare R2"
-        : result.error || "Sync failed",
-      size: result.size,
-      lastSyncAt: result.lastSyncAt,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message || "Failed to sync to Cloudflare R2" });
-  }
+router.post("/verify", campaignLaunchLimiter, async (req, res) => {
+  const result = await storage.verifyConnection({ roundTrip: true, prefix: `tenants/${req.tenantId}/checks` });
+  res.status(result.ok ? 200 : 503).json(result);
 });
 
-/**
- * POST /api/storage/upload
- * Upload media directly to Cloudflare R2 bucket
- */
-router.post("/upload", auth, upload.single("file"), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No file provided" });
-  }
-
-  const filename = `${Date.now()}_${Math.round(Math.random() * 1e9)}_${req.file.originalname}`;
-  const key = `uploads/${filename}`;
-
-  if (r2Storage.isConfigured()) {
-    const uploadResult = await r2Storage.uploadMedia(req.file.buffer, key, req.file.mimetype);
-    if (uploadResult.success) {
-      return res.json({
-        url: uploadResult.url,
-        key: uploadResult.key,
-        storage: "cloudflare-r2",
-      });
-    }
-  }
-
-  // Fallback to local storage if R2 is not configured
-  const fs = require("fs");
-  const localTarget = path.join(mediaDir, filename);
-  if (!fs.existsSync(mediaDir)) fs.mkdirSync(mediaDir, { recursive: true });
-  fs.writeFileSync(localTarget, req.file.buffer);
-
-  return res.json({
-    url: `/uploads/wa-media/${filename}`,
-    key: filename,
-    storage: "local",
-  });
+router.post("/sync", async (req, res) => {
+  if (req.user.role !== "platform_admin") return res.status(403).json({ error: "Global database snapshots require platform administration" });
+  if (!require("../config/database").isSqlite) return res.status(409).json({ error: "MySQL is authoritative. Use the VPS database backup workflow; R2 assets do not synchronize MySQL automatically." });
+  try {
+    const adapter = require("../config/sqliteDatabase");
+    const result = await storage.uploadDatabaseToR2(adapter.dbPath, true);
+    res.status(result.synced ? 200 : 503).json({ success: Boolean(result.synced) });
+  } catch (_) { res.status(503).json({ error: "Snapshot unavailable" }); }
 });
 
-/**
- * GET /api/storage/r2/...
- * Stream file from Cloudflare R2
- */
-router.get(/^\/r2\/(.+)/, auth, async (req, res) => {
-  const key = req.params[0] || (req.params && req.params.key);
-  if (!key) return res.status(400).json({ error: "Missing key" });
+router.post("/upload", campaignLaunchLimiter, upload.single("file"), async (req, res) => {
+  try { res.status(201).json(await assets.upload(req)); }
+  catch (error) { res.status(error.status || 503).json({ error: error.status ? error.message : "R2 upload unavailable" }); }
+});
 
+router.get(/^\/r2\/(.+)$/, async (req, res) => {
+  const key = req.params[0];
+  if (!assets.ownsKey(req.tenantId, key)) return res.status(404).json({ error: "Asset not found" });
   try {
-    const obj = await r2Storage.getMediaStream(key);
-    if (!obj || !obj.Body) {
-      return res.status(404).json({ error: "File not found on Cloudflare R2" });
-    }
+    if (!storage.isConfigured()) return res.status(503).json({ error: "R2 storage unavailable" });
+    const object = await storage.getMediaStream(key);
+    if (!object?.Body) return res.status(404).json({ error: "Asset not found" });
+    res.set({ "Content-Type": object.ContentType || "application/octet-stream", "Content-Disposition": "attachment", "X-Content-Type-Options": "nosniff" });
+    if (object.ContentLength != null) res.set("Content-Length", String(object.ContentLength));
+    await pipeline(object.Body, res);
+  } catch (_) { if (!res.headersSent) res.status(503).json({ error: "R2 download unavailable" }); else res.destroy(); }
+});
 
-    if (obj.ContentType) res.setHeader("Content-Type", obj.ContentType);
-    if (obj.ContentLength) res.setHeader("Content-Length", obj.ContentLength);
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+router.delete(/^\/r2\/(.+)$/, async (req, res) => {
+  if (!assets.ownsKey(req.tenantId, req.params[0])) return res.status(404).json({ error: "Asset not found" });
+  try { await storage.deleteMedia(req.params[0]); res.json({ success: true }); }
+  catch (_) { res.status(503).json({ error: "R2 deletion unavailable" }); }
+});
 
-    obj.Body.pipe(res);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+router.use((error, req, res, next) => {
+  if (!(error instanceof multer.MulterError)) return next(error);
+  res.status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ error: "Asset upload rejected; maximum file size is 20 MB" });
 });
 
 module.exports = router;

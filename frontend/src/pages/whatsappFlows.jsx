@@ -1,4 +1,9 @@
 import WAFlowEditor from "../components/WAFlowEditor";
+import FlowTemplateFields from "../components/FlowTemplateFields";
+import FlowInputOptions from "../components/FlowInputOptions";
+import FlowRuleOptions from "../components/FlowRuleOptions";
+import FlowHoursOptions from "../components/FlowHoursOptions";
+import FlowWorkspaceGate from "../components/FlowWorkspaceGate";
 import { flowPorts, setFlowPort, removeFlowNodes, duplicateFlowNodes } from "../utils/waFlowGraph";
 import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
 import WAFlowOutline from "../components/WAFlowOutline";
@@ -78,6 +83,7 @@ const PALETTE_CATEGORIES = [
     color: "text-amber-500",
     items: [
       { type: "condition", label: "Condition (If/Else)", icon: "🔀", desc: "Branch on Yes/No or value", color: "border-amber-500 bg-amber-50 text-amber-900" },
+      { type: "business_hours", label: "Business Hours", desc: "Timezone, weekdays and overnight shifts" },
       { type: "ai_intent", label: "AI Intent Router", icon: "🎯", desc: "LLM Natural language classifier", color: "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-900" },
       { type: "ai_generate", label: "AI Smart Reply", icon: "🧠", desc: "Auto-answer via AI agent", color: "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-900" },
       { type: "delay", label: "Pacing Delay", icon: "⏱️", desc: "Human typing delay pause", color: "border-orange-500 bg-orange-50 text-orange-900" },
@@ -90,6 +96,7 @@ const PALETTE_CATEGORIES = [
     color: "text-blue-500",
     items: [
       { type: "crm_lookup", label: "CRM Live Lookup", icon: "🔍", desc: "Fetch balances, invoices, AMC", color: "border-sky-500 bg-sky-50 text-sky-900" },
+      { type: "contact_lookup", label: "Contact Snapshot", desc: "Current conversation's shared name, phone and email" },
       { type: "create_lead", label: "Create CRM Lead", icon: "💼", desc: "Save contact as hot sales lead", color: "border-blue-500 bg-blue-50 text-blue-900" },
       { type: "api_webhook", label: "API Webhook", icon: "🌐", desc: "Call external REST API", color: "border-violet-500 bg-violet-50 text-violet-900" },
       { type: "set_variable", label: "Set Variable", icon: "⚙️", desc: "Assign custom session variable", color: "border-slate-500 bg-slate-50 text-slate-900" },
@@ -150,6 +157,7 @@ const getFlowIssues = (list, entryKey) => {
     if (node.node_type === "condition" && (!cfg.true_next || !cfg.false_next)) {
       issues.push({ severity: "error", nodeKey: node.node_key, text: "Connect both the yes and no routes of this condition." });
     }
+    if(node.node_type==="business_hours"&&(!cfg.open_next||!cfg.closed_next))issues.push({severity:"error",nodeKey:node.node_key,text:"Connect both Open and Closed business-hours routes."});
 
     links.forEach(l => {
       if (!nodeMap[l.target]) {
@@ -249,6 +257,10 @@ function FlowTestDialog({ request, flowName, setFlowName, phone, setPhone, sendi
 }
 
 export default function WhatsAppFlows() {
+  return <FlowWorkspaceGate>{tenant=><FlowsWorkspace key={tenant?.id||"none"}/>}</FlowWorkspaceGate>;
+}
+
+function FlowsWorkspace() {
   const navigate = useNavigate();
   const location = useLocation();
   const { flowId } = useParams();
@@ -1072,6 +1084,10 @@ export default function WhatsAppFlows() {
         true_next: "",
         false_next: ""
       };
+    } else if(item.type==="business_hours"){
+      newConfig={timezone:"Asia/Kolkata",days:[1,2,3,4,5],start:"09:00",end:"18:00",open_next:"",closed_next:""};
+    } else if(item.type==="contact_lookup"){
+      newConfig={next_node_key:""};
     } else if (item.type === "crm_lookup") {
       newConfig = { lookup_type: "customer", next_node_key: "" };
     } else if (item.type === "create_lead") {
@@ -1741,6 +1757,7 @@ export default function WhatsAppFlows() {
         )}
 
         {/* ── TEXT MESSAGE CONFIGURATION ────────────────────────────── */}
+        {selectedNode.node_type === "send_template" && <FlowTemplateFields config={cfg} onChange={updateConfig}/>}
         {selectedNode.node_type === "send_message" && (
           <div className="space-y-3">
             <div>
@@ -1948,7 +1965,10 @@ export default function WhatsAppFlows() {
         )}
 
         {/* ── CONDITION BRANCHING CONFIGURATION ─────────────────────── */}
-        {selectedNode.node_type === "condition" && (
+        {selectedNode.node_type === "condition"&&<FlowRuleOptions config={cfg} onChange={updateConfig}/>}
+        {selectedNode.node_type === "business_hours"&&<FlowHoursOptions config={cfg} onChange={updateConfig}/>}
+        {selectedNode.node_type === "contact_lookup"&&<p className="text-xs">Loads customer.name, customer.phone, customer.email and contact.exists from this conversation's organization-owned contact. Preview uses sample contact data. No balances or banking records are fetched.</p>}
+        {selectedNode.node_type === "condition" && !cfg.rules?.length && (
           <div className="space-y-3">
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">Subject Variable</label>
@@ -2048,6 +2068,8 @@ export default function WhatsAppFlows() {
         )}
 
         {/* ── COLLECT INPUT CONFIGURATION ───────────────────────────── */}
+        {selectedNode.node_type === "collect_input"&&<FlowInputOptions config={cfg} onChange={updateConfig}/>}
+        {selectedNode.node_type === "collect_input" && <label className="block text-xs mb-3">Save this answer to the shared contact<select className="w-full border rounded p-2" value={cfg.contact_field||""} onChange={event=>updateConfig({contact_field:event.target.value})}><option value="">Keep only in transient bot state and device chat</option><option value="name">Contact name</option><option value="email">Contact email</option></select></label>}
         {selectedNode.node_type === "collect_input" && (
           <div className="space-y-3">
             <div>
@@ -2100,9 +2122,9 @@ export default function WhatsAppFlows() {
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
               <p className="font-bold flex items-center gap-1"><ShieldAlert size={14} /> Agent Transfer Protocol</p>
               <p className="text-[11px] text-amber-800">
-                1. Pauses bot automation for 120 minutes.<br />
-                2. Alerts live CRM support dashboard with customer variables.<br />
-                3. Allows human agents to take over in real time.
+                1. Stops automatic replies until a staff member explicitly starts a bot again.<br />
+                2. Sends the handoff message to the customer and connected, permitted employees.<br />
+                3. Keeps collected answers transient unless a contact field was explicitly selected for saving.
               </p>
             </div>
           </div>
@@ -2422,7 +2444,7 @@ export default function WhatsAppFlows() {
         )}
 
         {/* ── GENERIC FALLBACK FOR ANY NODE WITH NEXT STEP ────────────── */}
-        {!["interactive_menu", "send_buttons", "send_list", "send_message", "send_media", "send_template", "send_cta", "condition", "ai_intent", "ai_generate", "crm_lookup", "collect_input", "create_lead", "delay", "api_webhook", "set_variable", "handoff", "end", "start"].includes(selectedNode.node_type) && !selectedNode.node_type?.includes("trigger") && (
+        {!["interactive_menu", "send_buttons", "send_list", "send_message", "send_media", "send_template", "send_cta", "condition", "business_hours", "contact_lookup", "ai_intent", "ai_generate", "crm_lookup", "collect_input", "create_lead", "delay", "api_webhook", "set_variable", "handoff", "end", "start"].includes(selectedNode.node_type) && !selectedNode.node_type?.includes("trigger") && (
           <div className="space-y-3">
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
@@ -2523,7 +2545,7 @@ export default function WhatsAppFlows() {
                     : (simDarkTheme ? "bg-[#005c4b] text-[#e9edef] rounded-tr-sm" : "bg-[#d9fdd3] text-slate-800 rounded-tr-sm")
                 }`}>
                   {/* Message Main Body */}
-                  <p className="whitespace-pre-line leading-relaxed text-[11px] font-sans">
+                  <p className="whitespace-pre-line leading-relaxed text-[11px] font-sans" style={{color:simDarkTheme?"#e9edef":"#1e293b"}}>
                     {interactiveMenu?.header && <strong className="block mb-1">{interactiveMenu.header}</strong>}
                     {interactiveMenu ? interactiveMenu.body : msg.text}
                   </p>
@@ -2561,7 +2583,7 @@ export default function WhatsAppFlows() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (simInputText.trim()) {
+            if (!simTyping&&!simEnded&&simInputText.trim()) {
               const text = simInputText.trim();
               setSimInputText("");
               executeSimStep(text);
@@ -2574,6 +2596,7 @@ export default function WhatsAppFlows() {
           <input
             type="text"
             value={simInputText}
+            disabled={simTyping||simEnded}
             onChange={(e) => setSimInputText(e.target.value)}
             placeholder="Type a message or option #..."
             className={`flex-1 px-3 py-1.5 rounded-full text-xs outline-none ${
@@ -2643,7 +2666,7 @@ export default function WhatsAppFlows() {
     const studioContent = (
       <div id="madhura-visual-flow-studio" className="flow-studio-shell" style={{ position: "fixed", inset: 0, width: "100%", height: "100dvh", zIndex: 99999 }}>
         <WAFlowEditor
-          nodes={nodes} categories={PALETTE_CATEGORIES} selectedKey={selectedNodeKey}
+          nodes={nodes} categories={PALETTE_CATEGORIES.map(category=>({...category,items:category.items.filter(item=>!["send_media","ai_intent","ai_generate","delay","crm_lookup","create_lead","api_webhook","jump_to_flow"].includes(item.type))})).filter(category=>category.items.length)} selectedKey={selectedNodeKey}
           onSelect={setSelectedNodeKey} onInspect={setSelectedNodeKey}
           onChange={(next, typing = false) => { if (typing) snapshotNodesThrottled(); else snapshotNodes(); setNodes(next); setDirty(true); }}
           onTransientChange={setNodes} onCommit={recordHistory} onAdd={addNodeFromPalette}
@@ -2767,7 +2790,7 @@ export default function WhatsAppFlows() {
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button onClick={handleSeedFlows} className="hl-btn-secondary">
-              <Database size={15} /> Load templates
+              <Database size={15} /> Load 10 bot starters
             </button>
             <button onClick={() => navigate("/whatsapp/flows/create")} className="hl-btn-primary">
               <Plus size={16} /> Create flow
@@ -2837,7 +2860,7 @@ export default function WhatsAppFlows() {
                     onClick={handleSeedFlows}
                     className="px-4 py-2 bg-slate-100 text-slate-800 rounded-xl text-xs font-bold hover:bg-slate-200"
                   >
-                    Load Templates
+                    Load 10 bot starters
                   </button>
                   <button
                     onClick={() => navigate("/whatsapp/flows/create")}

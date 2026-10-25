@@ -1,42 +1,43 @@
 import { lazy, Suspense, useEffect } from "react";
+import FlowPageBoundary from "./components/FlowPageBoundary";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from "react-router-dom";
 import { Agentation } from "agentation";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
-import { LIVE_BACKEND_URL } from "./config/api";
 import Login from "./auth/login";
-import Signup from "./auth/signup";
-import WALayout from "./layout/WALayout";
-import WhatsAppPage from "./pages/whatsapp";
-import WAContacts from "./pages/whatsappContacts";
-import WATemplates from "./pages/whatsappTemplates";
-import WATemplateCreate from "./pages/whatsappTemplateCreate";
-import WAGroups from "./pages/whatsappGroups";
-import WACampaigns from "./pages/whatsappCampaigns";
-import WAAutomations from "./pages/whatsappAutomations";
-import WAReminders from "./pages/whatsappReminders";
-import WAFlows from "./pages/whatsappFlows";
-import WAAnalytics from "./pages/whatsappAnalytics";
-import WAAccounts from "./pages/whatsappAccounts";
-import WAEmployees from "./pages/whatsappEmployees";
-import WAEnquiries from "./pages/whatsappEnquiries";
-import WABilling from "./pages/whatsappBilling";
-import { EnterpriseProvider } from "./context/EnterpriseContext";
+import { EnterpriseProvider, useEnterprise } from "./context/EnterpriseContext";
 import { BranchProvider } from "./context/BranchContext";
-import BranchList from "./pages/branches/BranchList";
-import BranchCreateWizard from "./pages/branches/BranchCreateWizard";
-import BranchLayout from "./pages/branches/BranchLayout";
-import BranchOverview from "./pages/branches/BranchOverview";
-import BranchInbox from "./pages/branches/BranchInbox";
-import BranchContacts from "./pages/branches/BranchContacts";
-import BranchEmployees from "./pages/branches/BranchEmployees";
-import BranchNumbers from "./pages/branches/BranchNumbers";
-import BranchCampaigns from "./pages/branches/BranchCampaigns";
-import BranchAutomations from "./pages/branches/BranchAutomations";
-import BranchFlows from "./pages/branches/BranchFlows";
-import BranchAiAgents from "./pages/branches/BranchAiAgents";
-import BranchAnalytics from "./pages/branches/BranchAnalytics";
-import BranchSettings from "./pages/branches/BranchSettings";
-import BranchAudit from "./pages/branches/BranchAudit";
+const Signup = lazy(() => import("./auth/signup"));
+const WALayout = lazy(() => import("./layout/WALayout"));
+const WhatsAppPage = lazy(() => import("./pages/whatsapp"));
+const WAContacts = lazy(() => import("./pages/whatsappContacts"));
+const WATemplates = lazy(() => import("./pages/whatsappTemplates"));
+const WATemplateCreate = lazy(() => import("./pages/whatsappTemplateCreate"));
+const WAGroups = lazy(() => import("./pages/whatsappGroups"));
+const WACampaigns = lazy(() => import("./pages/whatsappCampaigns"));
+const WAAutomations = lazy(() => import("./pages/whatsappAutomations"));
+const WAReminders = lazy(() => import("./pages/whatsappReminders"));
+const WAFlows = lazy(() => import("./pages/whatsappFlows"));
+const WAAnalytics = lazy(() => import("./pages/whatsappAnalytics"));
+const WAAccounts = lazy(() => import("./pages/whatsappAccounts"));
+const WAEmployees = lazy(() => import("./pages/whatsappEmployees"));
+const SharedTeamInbox = lazy(() => import("./components/SharedTeamInbox"));
+const WAEnquiries = lazy(() => import("./pages/whatsappEnquiries"));
+const WABilling = lazy(() => import("./pages/whatsappBilling"));
+const BranchList = lazy(() => import("./pages/branches/BranchList"));
+const BranchCreateWizard = lazy(() => import("./pages/branches/BranchCreateWizard"));
+const BranchLayout = lazy(() => import("./pages/branches/BranchLayout"));
+const BranchOverview = lazy(() => import("./pages/branches/BranchOverview"));
+const BranchInbox = lazy(() => import("./pages/branches/BranchInbox"));
+const BranchContacts = lazy(() => import("./pages/branches/BranchContacts"));
+const BranchEmployees = lazy(() => import("./pages/branches/BranchEmployees"));
+const BranchNumbers = lazy(() => import("./pages/branches/BranchNumbers"));
+const BranchCampaigns = lazy(() => import("./pages/branches/BranchCampaigns"));
+const BranchAutomations = lazy(() => import("./pages/branches/BranchAutomations"));
+const BranchFlows = lazy(() => import("./pages/branches/BranchFlows"));
+const BranchAiAgents = lazy(() => import("./pages/branches/BranchAiAgents"));
+const BranchAnalytics = lazy(() => import("./pages/branches/BranchAnalytics"));
+const BranchSettings = lazy(() => import("./pages/branches/BranchSettings"));
+const BranchAudit = lazy(() => import("./pages/branches/BranchAudit"));
 const ClientPortal = lazy(() => import("./pages/ClientPortal"));
 const ClientPortalManage = lazy(() => import("./pages/ClientPortalManage"));
 
@@ -79,7 +80,8 @@ const MARKETING_SECTIONS = [
 ];
 
 function RequireAuth({ children }) {
-  const { user } = useAuth();
+  const { user, initializing } = useAuth();
+  if(initializing)return <p className="p-4">Checking your browser session…</p>;
   const token = localStorage.getItem("token");
   if (!user && !token) return <Navigate to="/login" replace />;
   return children;
@@ -88,7 +90,8 @@ function RequireAuth({ children }) {
 /* Signed-in users have no business on the public pages — send them into the
    app instead of showing them a "Sign in" button that would just work. */
 function PublicOnly({ children }) {
-  const { user } = useAuth();
+  const { user, initializing } = useAuth();
+  if(initializing)return <p className="p-4">Checking your browser session…</p>;
   const token = localStorage.getItem("token");
   if (user || token) return <Navigate to="/whatsapp" replace />;
   return children;
@@ -99,24 +102,20 @@ function FlowParamRedirect() {
   return <Navigate to={flowId ? `/whatsapp/flows/build/${flowId}` : "/whatsapp/flows/build"} replace />;
 }
 
+function WorkspaceInbox() {
+  const { user, demoMode } = useAuth();
+  const {isOwnerOrAdmin}=useEnterprise();
+  return !demoMode && !isOwnerOrAdmin && user?.role!=="platform_admin"
+    ? <SharedTeamInbox /> : <WhatsAppPage />;
+}
+
 export default function App() {
-  // Anti-sleep keep-alive: ping Render backend every 7 minutes to prevent free-tier spin down
-  useEffect(() => {
-    const keepAlivePing = () => {
-      try {
-        fetch(`${LIVE_BACKEND_URL}/health`, { method: "GET", mode: "no-cors" }).catch(() => {});
-      } catch (_) {}
-    };
-    keepAlivePing();
-    const interval = setInterval(keepAlivePing, 7 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
   return (
     <AuthProvider>
       <EnterpriseProvider>
         <BrowserRouter>
           <ScrollToTop />
-          <Routes>
+          <Suspense fallback={<p className="p-4">Loading workspace…</p>}><Routes>
             <Route path="/portal/*" element={<Suspense fallback={<p className="p-8">Opening client portal…</p>}><ClientPortal /></Suspense>} />
             <Route path="/client-portal" element={<Navigate to="/portal" replace />} />
             <Route
@@ -168,7 +167,8 @@ export default function App() {
                 </RequireAuth>
               }
             >
-              <Route index element={<WhatsAppPage />} />
+              <Route index element={<WorkspaceInbox />} />
+              <Route path="team-inbox" element={<SharedTeamInbox />} />
               <Route path="contacts" element={<WAContacts />} />
               <Route path="templates" element={<WATemplates />} />
               <Route path="templates/create" element={<WATemplateCreate />} />
@@ -177,12 +177,12 @@ export default function App() {
               <Route path="campaigns" element={<WACampaigns />} />
               <Route path="automations" element={<WAAutomations />} />
               <Route path="reminders" element={<WAReminders />} />
-              <Route path="flows" element={<WAFlows />} />
-              <Route path="flows/create" element={<WAFlows />} />
-              <Route path="flows/build" element={<WAFlows />} />
-              <Route path="flows/build/:flowId" element={<WAFlows />} />
-              <Route path="flows/builder" element={<WAFlows />} />
-              <Route path="flows/builder/:flowId" element={<WAFlows />} />
+              <Route path="flows" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
+              <Route path="flows/create" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
+              <Route path="flows/build" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
+              <Route path="flows/build/:flowId" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
+              <Route path="flows/builder" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
+              <Route path="flows/builder/:flowId" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
               <Route path="analytics" element={<WAAnalytics />} />
               <Route path="accounts" element={<WAAccounts />} />
               <Route path="employees" element={<WAEmployees />} />
@@ -208,8 +208,9 @@ export default function App() {
               <Route path="billing" element={<WABilling />} />
               <Route path="client-portal" element={<Suspense fallback={<p className="p-8">Loading portal management…</p>}><ClientPortalManage /></Suspense>} />
             </Route>
+            <Route path="/employee" element={<Navigate to="/whatsapp/employees" replace />} />
             <Route path="*" element={<Navigate to="/whatsapp" replace />} />
-          </Routes>
+          </Routes></Suspense>
           {process.env.NODE_ENV === "development" && <Agentation />}
         </BrowserRouter>
       </EnterpriseProvider>

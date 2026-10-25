@@ -28,7 +28,7 @@ if (process.env.NODE_ENV === "production") {
 }
 
 const SITE_URL = (process.env.VERIFY_SITE_URL || "http://localhost:3001").replace(/\/+$/, "");
-const API_URL = (process.env.VERIFY_API_URL || "http://localhost:5001").replace(/\/+$/, "");
+const API_URL = (process.env.VERIFY_API_URL || process.env.REACT_APP_API_URL || "http://localhost:5001").replace(/\/+$/, "");
 const TOKEN = process.env.VERIFY_WITH_TOKEN || "";
 const SOCKET_URL = (process.env.REACT_APP_SOCKET_URL || "").replace(/\/+$/, "");
 
@@ -125,9 +125,9 @@ async function getJson(url, opts = {}) {
   let health;
   try {
     health = await getJson(`${API_URL}/health`);
-    const isUp = health.status === 200 && (health.json?.ok === true || health.json?.degraded === true);
+    const isUp = health.status === 200 && health.json?.ok === true && health.json?.sharedInboxReady === true;
     check(
-      "1. Backend /health responds 200",
+      "1. Backend database and shared inbox are ready",
       isUp,
       `status=${health.status} degraded=${Boolean(health.json?.degraded)} body=${(health.text || "").slice(0, 120)}`
     );
@@ -163,7 +163,7 @@ async function getJson(url, opts = {}) {
       headers: {
         Origin: origin,
         "Access-Control-Request-Method": "POST",
-        "Access-Control-Request-Headers": "content-type,authorization",
+        "Access-Control-Request-Headers": "content-type,authorization,x-tenant-id,x-branch-id,x-browser-session",
       },
     });
     const preAcao = pre.headers["access-control-allow-origin"];
@@ -171,7 +171,7 @@ async function getJson(url, opts = {}) {
     const allowHeaders = (pre.headers["access-control-allow-headers"] || "").toLowerCase();
     check(
       "3. CORS preflight passes (methods, credentials, Authorization header)",
-      pre.status >= 200 && pre.status < 300 && preAcao === origin && creds && allowHeaders.includes("authorization"),
+      pre.status >= 200 && pre.status < 300 && preAcao === origin && creds && ["authorization","x-tenant-id","x-branch-id","x-browser-session"].every(header=>allowHeaders.includes(header)),
       `status=${pre.status} allow-origin=${preAcao} allow-credentials=${pre.headers["access-control-allow-credentials"]} ` +
         `allow-headers=${pre.headers["access-control-allow-headers"]}`
     );
@@ -199,15 +199,13 @@ async function getJson(url, opts = {}) {
   }
 
   /* ── Link 5: uploads are served over the public internet ──────────────────── */
-  // Meta Cloud API fetches media from PUBLIC_BASE_URL. If /uploads is not
-  // publicly reachable, outbound WhatsApp media silently fails.
+  // Private assets are authorized through the API; campaigns can use public R2 assets.
   try {
     const up = await getJson(`${API_URL}/uploads/`, { timeout: 8000 });
-    // 404 is fine: the mount exists, there is just no directory index.
     check(
-      "5. /uploads is mounted on the backend (PUBLIC_BASE_URL media path)",
-      up.status !== 502 && up.status !== 503,
-      `status=${up.status} ${up.status === 404 ? "(404 = mounted, no index — good)" : ""}`
+      "5. Legacy public upload serving is disabled",
+      health.json?.storage?.legacyPublicUploads === false && up.status === 404,
+      `status=${up.status}; private assets use authorized R2 downloads`
     );
   } catch (err) {
     check("5. /uploads is mounted on the backend", false, err.message);
@@ -217,7 +215,8 @@ async function getJson(url, opts = {}) {
   const sockTarget = SOCKET_URL || API_URL;
   try {
     const hs = await getJson(
-      `${sockTarget}/socket.io/?EIO=4&transport=polling&t=${Date.now()}`
+      `${sockTarget}/socket.io/?EIO=4&transport=polling&t=${Date.now()}`,
+      { headers: { Origin: origin } }
     );
     const body = hs.text || "";
     check(
@@ -243,11 +242,11 @@ async function getJson(url, opts = {}) {
   /* ── Link 8: authenticated round trip ────────────────────────────────────── */
   if (TOKEN) {
     try {
-      const me = await getJson(`${API_URL}/api/auth/me`, {
+      const me = await getJson(`${API_URL}/api/v2/me`, {
         headers: { Authorization: `Bearer ${TOKEN}` },
       });
       check(
-        "8. Authenticated GET /api/auth/me returns 200",
+        "8. Authenticated GET /api/v2/me returns 200",
         me.status === 200,
         `status=${me.status} ${(me.text || "").slice(0, 120)}`
       );

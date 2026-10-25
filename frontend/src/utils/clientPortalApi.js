@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { API } from '../config/api';
+import { installBrowserSession } from '../auth/browserSession';
 export const PORTAL_TOKEN = 'client_portal_token';
 export function portalToken() { return sessionStorage.getItem(PORTAL_TOKEN); }
 export function setPortalToken(value) { if (value) sessionStorage.setItem(PORTAL_TOKEN, value); else sessionStorage.removeItem(PORTAL_TOKEN); }
@@ -16,6 +17,7 @@ export function portalApi(staff = false) {
     }
     return Promise.reject(error);
   });
+  if (staff) installBrowserSession(client);
   return client;
 }
 export const portalError = (error) => error.response?.data?.error || (error.code === 'ECONNABORTED' ? 'The request timed out. Your draft is still here; try again.' : 'The service could not be reached. Please try again.');

@@ -40,11 +40,7 @@ if (!dbName) {
 }
 
 const r2Storage = require("../services/r2StorageService");
-const isR2OrSqliteRequested =
-  r2Storage.isConfigured() ||
-  ["1", "true", "sqlite", "r2"].includes(
-    String(process.env.USE_SQLITE || process.env.DB_ENGINE || "").toLowerCase()
-  );
+const isR2OrSqliteRequested = require("./databaseEngine").usesSqlite();
 
 const sqliteAdapter = require("./sqliteDatabase");
 
@@ -1141,7 +1137,8 @@ const ready = new Promise((resolve, reject) => {
           console.log(`Using database ${dbName}`);
 
           // 2. Initialize High-Performance Production Connection Pool
-          const poolLimit = Math.max(10, Number(process.env.DB_POOL_LIMIT || process.env.DB_CONNECTION_LIMIT || 25));
+          const capacity = require("./capacity").limits();
+          const poolLimit = capacity.pool;
           activePool = mysql.createPool({
             host: process.env.DB_HOST,
             port: dbPort,
@@ -1152,7 +1149,9 @@ const ready = new Promise((resolve, reject) => {
             multipleStatements: true,
             waitForConnections: true,
             connectionLimit: poolLimit,
-            queueLimit: 0,
+            queueLimit: capacity.poolQueue,
+            maxIdle: poolLimit,
+            idleTimeout: 60000,
             enableKeepAlive: true,
             keepAliveInitialDelay: 10000,
           });

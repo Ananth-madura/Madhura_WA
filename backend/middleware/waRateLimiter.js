@@ -12,6 +12,7 @@ const { resolveTenantId } = require("./tenantMiddleware");
 // Key: `${tenantId}:${identifier}:${category}` -> [timestamps]
 const requestWindows = new Map();
 const throttleMap = new Map();
+const maxBuckets=require("../config/capacity").integer(process.env.RATE_LIMIT_MAX_BUCKETS,100000,1000,200000);
 
 // Periodic cleanup of expired window buckets every 3 minutes
 setInterval(() => {
@@ -31,7 +32,7 @@ setInterval(() => {
       throttleMap.delete(key);
     }
   }
-}, 3 * 60 * 1000);
+}, 3 * 60 * 1000).unref();
 
 /**
  * Extracts a dependable unique client identifier accounting for reverse proxies (Render, Vercel, Cloudflare, nginx)
@@ -42,7 +43,7 @@ function getClientIdentifier(req) {
   const xRealIp = req.headers["x-real-ip"];
   const xForwarded = req.headers["x-forwarded-for"]?.split(",")[0]?.trim();
   const rawIp = req.ip || req.connection?.remoteAddress;
-  return `ip:${cfIp || xRealIp || xForwarded || rawIp || "anon"}`;
+  return `ip:${rawIp || cfIp || xRealIp || xForwarded || "anon"}`;
 }
 
 /**
@@ -52,14 +53,15 @@ function getClientIdentifier(req) {
  * @param {number} options.maxRequests - Max requests allowed per window (default 120)
  * @param {string} options.category - Category identifier (e.g., 'campaign_launch', 'message_send', 'qr_refresh')
  */
-function createRateLimiter({ windowMs = 60000, maxRequests = 120, category = "default" } = {}) {
+function createRateLimiter({ windowMs = 60000, maxRequests = 120, category = "default", identify = getClientIdentifier } = {}) {
   return (req, res, next) => {
     // Scope the bucket by organization, but never pretend the caller is
     // tenant 1: an unscoped identity gets its own (0) bucket rather than
     // sharing the primary organization's allowance.
-    const tenantId = resolveTenantId(req);
-    const identifier = getClientIdentifier(req);
+    const tenantId = req.tenantId || resolveTenantId(req);
+    const identifier = identify(req);
     const key = `${tenantId}:${identifier}:${category}`;
+    if(!requestWindows.has(key)&&requestWindows.size>=maxBuckets){res.setHeader("Retry-After",60);return res.status(503).json({code:"RATE_LIMIT_CAPACITY"});}
     const now = Date.now();
     const windowStart = now - windowMs;
 
@@ -100,6 +102,7 @@ function createThrottle({ cooldownMs = 1500, category = "throttle" } = {}) {
   return (req, res, next) => {
     const identifier = getClientIdentifier(req);
     const key = `${identifier}:${category}`;
+    if(!throttleMap.has(key)&&throttleMap.size>=maxBuckets){res.setHeader("Retry-After",60);return res.status(503).json({code:"RATE_LIMIT_CAPACITY"});}
     const now = Date.now();
     const lastCalled = throttleMap.get(key) || 0;
 
@@ -143,13 +146,19 @@ function verifyMetaWebhookSignature(req, res, next) {
   }
 }
 
+const loginIp=createRateLimiter({windowMs:15*60000,maxRequests:500,category:"login_ip"});
+const loginAccount=createRateLimiter({windowMs:15*60000,maxRequests:35,category:"login_account",identify:req=>{
+  const account=String(req.body?.email||req.body?.emp_id||req.body?.username||"").trim().toLowerCase().slice(0,256);
+  return account?"account:"+crypto.createHash("sha256").update(account).digest("hex"):getClientIdentifier(req);
+}});
 module.exports = {
   createRateLimiter,
   createThrottle,
   campaignLaunchLimiter: createRateLimiter({ windowMs: 60000, maxRequests: 40, category: "campaign_launch" }),
   messageSendLimiter: createRateLimiter({ windowMs: 60000, maxRequests: 350, category: "message_send" }),
   qrRefreshLimiter: createRateLimiter({ windowMs: 15000, maxRequests: 6, category: "qr_refresh" }),
-  loginLimiter: createRateLimiter({ windowMs: 15 * 60 * 1000, maxRequests: 35, category: "login" }),
+  loginLimiter: (req,res,next)=>loginIp(req,res,()=>loginAccount(req,res,next)),
+  refreshLimiter: createRateLimiter({windowMs:60000,maxRequests:1000,category:"browser_refresh"}),
   otpLimiter: createRateLimiter({ windowMs: 10 * 60 * 1000, maxRequests: 10, category: "email_otp" }),
   generalApiLimiter: createRateLimiter({ windowMs: 60000, maxRequests: 1000, category: "general_api" }),
   sessionResetThrottle: createThrottle({ cooldownMs: 4000, category: "session_reset" }),

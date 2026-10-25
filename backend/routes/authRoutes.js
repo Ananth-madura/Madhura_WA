@@ -932,96 +932,14 @@ router.get("/employees", verifyToken, isAdmin, async (req, res) => {
 // 2. POST /api/auth/employees — Admin creates employee & generates Access Code
 router.post("/employees", verifyToken, isAdmin, async (req, res) => {
   try {
-    const tenantId = resolveTenantId(req);
-    if (!tenantId) return res.status(403).json({ message: "Organization context required", code: "TENANT_REQUIRED" });
-    const { first_name, last_name, email, role, whatsapp_access_level, mobile, job_title } = req.body || {};
-
-    const cleanFirst = (first_name || "").trim();
-    const cleanLast = (last_name || "").trim();
-    const cleanEmail = (email || "").trim().toLowerCase();
-    const cleanRole = role === "agent" ? "agent" : (role === "admin" ? "admin" : "employee");
-    const cleanAccessLevel = ["full", "chat_only", "read_only", "campaign_only"].includes(whatsapp_access_level)
-      ? whatsapp_access_level
-      : "full";
-    const cleanJob = (job_title || "").trim() || (cleanRole === "admin" ? "Administrator" : "WhatsApp Support Executive");
-    const cleanMobile = (mobile || "").trim();
-
-    if (!cleanFirst || !cleanEmail) {
-      return res.status(400).json({ message: "Employee first name and email address are required" });
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
-      return res.status(400).json({ message: "Please enter a valid work email address" });
-    }
-
-    // Check if email already exists
-    db.query(`SELECT id, tenant_id FROM users WHERE email = ? LIMIT 1`, [cleanEmail], (chkErr, existing) => {
-      if (chkErr) return res.status(500).json({ message: "Database query failed" });
-      if (existing && existing.length) {
-        return res.status(409).json({ message: "An account with this email address already exists." });
-      }
-
-      const accessCode = generateEmployeeAccessCode();
-      const empId = `EMP-${Math.floor(1000 + Math.random() * 9000)}`;
-
-      db.query(
-        `INSERT INTO users (first_name, last_name, email, role, status, emp_id, tenant_id, access_code, whatsapp_access_level)
-         VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
-        [cleanFirst, cleanLast || null, cleanEmail, cleanRole, empId, tenantId, accessCode, cleanAccessLevel],
-        (insErr, result) => {
-          if (insErr) {
-            console.error("insert employee user error:", insErr.message);
-            return res.status(500).json({ message: "Failed to create employee account" });
-          }
-
-          const newUserId = result.insertId || result.lastID;
-
-          try {
-            const targetBranchId = Number(req.body?.branch_id) || 1;
-            db.query(
-              `INSERT INTO teammember (first_name, last_name, emp_email, mobile, job_title, emp_role, emp_id, user_id, tenant_id, access_code, whatsapp_access_level, branch_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [cleanFirst, cleanLast || null, cleanEmail, cleanMobile || null, cleanJob, cleanRole === "admin" ? "Admin" : "Sales", empId, newUserId, tenantId, accessCode, cleanAccessLevel, targetBranchId]
-            );
-
-            // Record in organization_memberships
-            db.query(
-              `INSERT OR IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status)
-               VALUES (?, ?, ?, 'active')`,
-              [tenantId, newUserId, cleanRole === "admin" ? "organization_admin" : "agent"]
-            );
-
-            // Record in staff_branch_memberships
-            db.query(
-              `INSERT OR IGNORE INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary)
-               VALUES (?, ?, ?, 1)`,
-              [tenantId, newUserId, targetBranchId]
-            );
-          } catch (_) {}
-
-          res.status(201).json({
-            message: `Employee "${cleanFirst}" created! Access Code: ${accessCode}`,
-            employee: {
-              id: newUserId,
-              first_name: cleanFirst,
-              last_name: cleanLast,
-              email: cleanEmail,
-              role: cleanRole,
-              status: "pending",
-              emp_id: empId,
-              access_code: accessCode,
-              whatsapp_access_level: cleanAccessLevel,
-              job_title: cleanJob,
-              tenant_id: tenantId,
-              created_at: new Date().toISOString(),
-            },
-          });
-        }
-      );
-    });
-  } catch (err) {
-    console.error("POST /employees exception:", err);
-    res.status(500).json({ message: "Failed to create employee" });
+    const tenantId = req.tenantId || resolveTenantId(req);
+    if (!tenantId) return res.status(403).json({ message: "Organization context required" });
+    const branchId = Number(req.body.branch_id);
+    if (!Number.isSafeInteger(branchId) || branchId < 1) return res.status(400).json({ message: "Select a branch for this employee" });
+    const employee = await organizationService.createBranchEmployee(tenantId, branchId, req.body, req.user.id);
+    res.status(201).json({ message: "Employee created. Share their access code privately.", employee, access_code: employee.access_code });
+  } catch (error) {
+    res.status(400).json({ message: error.code === "ER_DUP_ENTRY" ? "An account with this email already exists" : error.message });
   }
 });
 
@@ -1056,83 +974,36 @@ router.post("/employees/:id/regenerate-code", verifyToken, isAdmin, (req, res) =
 });
 
 // 4. PUT /api/auth/employees/:id — Admin updates role, status, name, access level
-router.put("/employees/:id", verifyToken, isAdmin, (req, res) => {
-  const tenantId = resolveTenantId(req);
-  if (!tenantId) return res.status(403).json({ message: "Organization context required", code: "TENANT_REQUIRED" });
-  const targetId = parseInt(req.params.id, 10);
-  const { first_name, last_name, whatsapp_access_level, role, status, job_title } = req.body || {};
-
-  if (!targetId) return res.status(400).json({ message: "Invalid employee ID" });
-
-  db.query(`SELECT id, email, role FROM users WHERE id = ? AND tenant_id = ?`, [targetId, tenantId], (err, rows) => {
-    if (err || !rows || !rows.length) {
-      return res.status(404).json({ message: "Employee not found in your workspace" });
-    }
-
-    const updates = [];
-    const params = [];
-
-    if (first_name !== undefined) {
-      updates.push("first_name = ?");
-      params.push(first_name.trim());
-    }
-    if (last_name !== undefined) {
-      updates.push("last_name = ?");
-      params.push(last_name.trim());
-    }
-    if (whatsapp_access_level !== undefined && ["full", "chat_only", "read_only", "campaign_only"].includes(whatsapp_access_level)) {
-      updates.push("whatsapp_access_level = ?");
-      params.push(whatsapp_access_level);
-    }
-    if (role !== undefined && ["admin", "employee", "agent"].includes(role)) {
-      updates.push("role = ?");
-      params.push(role);
-    }
-    if (status !== undefined && ["active", "pending", "banned"].includes(status)) {
-      updates.push("status = ?");
-      params.push(status);
-    }
-
-    if (!updates.length) {
-      return res.status(400).json({ message: "No valid fields provided for update" });
-    }
-
-    params.push(targetId);
-    params.push(tenantId);
-
-    db.query(`UPDATE users SET ${updates.join(", ")} WHERE id = ? AND tenant_id = ?`, params, (upErr) => {
-      if (upErr) return res.status(500).json({ message: "Failed to update employee details" });
-
-      try {
-        if (job_title) {
-          db.query(`UPDATE teammember SET job_title = ? WHERE user_id = ?`, [job_title.trim(), targetId]);
-        }
-        if (whatsapp_access_level) {
-          db.query(`UPDATE teammember SET whatsapp_access_level = ? WHERE user_id = ?`, [whatsapp_access_level, targetId]);
-        }
-
-        const targetBranchId = req.body?.branch_id !== undefined ? req.body.branch_id : (req.body?.branchId !== undefined ? req.body.branchId : null);
-        if (targetBranchId) {
-          const bid = Number(targetBranchId);
-          db.query(`UPDATE teammember SET branch_id = ? WHERE user_id = ?`, [bid, targetId]);
-          db.query(
-            `UPDATE staff_branch_memberships SET branch_id = ? WHERE user_id = ? AND tenant_id = ?`,
-            [bid, targetId, tenantId],
-            (sbErr, sbRes) => {
-              if (!sbRes || sbRes.affectedRows === 0) {
-                db.query(
-                  `INSERT INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary) VALUES (?, ?, ?, 1)`,
-                  [tenantId, targetId, bid]
-                );
-              }
-            }
-          );
-        }
-      } catch (_) {}
-
-      res.json({ message: "Employee updated successfully!" });
+router.put("/employees/:id", verifyToken, isAdmin, async (req, res) => {
+  const tenantId = req.tenantId || resolveTenantId(req);
+  const targetId = Number(req.params.id);
+  if (!tenantId || !Number.isSafeInteger(targetId) || targetId < 1) return res.status(400).json({ message: "Valid employee and organization required" });
+  try {
+    await require("../services/sharedInboxService").createInboxService(db).transaction(async q => {
+      await q("INSERT INTO wa_routing_cursors (tenant_id,last_user_id) VALUES (?,0) ON DUPLICATE KEY UPDATE tenant_id=VALUES(tenant_id)", [tenantId]);
+      await q("SELECT tenant_id FROM wa_routing_cursors WHERE tenant_id = ? FOR UPDATE", [tenantId]);
+      const [employee] = await q("SELECT u.id, m.role FROM users u JOIN organization_memberships m ON m.user_id=u.id AND m.tenant_id=u.tenant_id WHERE u.id=? AND u.tenant_id=? FOR UPDATE", [targetId,tenantId]);
+      if (!employee || employee.role === 'organization_owner') throw new Error("Employee not found or owner cannot be edited here");
+      const fields = [], params = [];
+      for (const field of ['first_name','last_name']) if (req.body[field] !== undefined) { fields.push(field+' = ?'); params.push(String(req.body[field]).trim().slice(0,100)); }
+      for (const [field, allowed] of [['role',['admin','employee','agent']],['status',['active','pending','banned']],['whatsapp_access_level',['full','chat_only','read_only','campaign_only']]]) {
+        if (req.body[field] !== undefined) { if (!allowed.includes(req.body[field])) throw new Error('Invalid '+field); fields.push(field+' = ?'); params.push(req.body[field]); }
+      }
+      if (fields.length) await q('UPDATE users SET '+fields.join(', ')+' WHERE id = ? AND tenant_id = ?', [...params,targetId,tenantId]);
+      if (req.body.role !== undefined) await q("UPDATE organization_memberships SET role = ? WHERE tenant_id = ? AND user_id = ?", [req.body.role==='admin'?'organization_admin':'agent',tenantId,targetId]);
+      const branchId = Number(req.body.branch_id || req.body.branchId);
+      if (branchId) {
+        const [branch] = await q("SELECT id FROM branches WHERE id = ? AND tenant_id = ? AND status = 'active'", [branchId,tenantId]);
+        if (!branch) throw new Error('Branch is outside this organization');
+        await q("DELETE FROM staff_branch_memberships WHERE tenant_id = ? AND user_id = ? AND branch_id <> ?", [tenantId,targetId,branchId]);
+        await q("INSERT IGNORE INTO staff_branch_memberships (tenant_id,user_id,branch_id,is_primary) VALUES (?,?,?,1)", [tenantId,targetId,branchId]);
+        await q("UPDATE teammember SET branch_id = ? WHERE user_id = ? AND tenant_id = ?", [branchId,targetId,tenantId]);
+        await q("UPDATE conversations SET owner_user_id = NULL WHERE tenant_id = ? AND owner_user_id = ? AND branch_id <> ?", [tenantId,targetId,branchId]);
+      }
+      if (req.body.status && req.body.status !== 'active') await q("UPDATE conversations SET owner_user_id = NULL WHERE tenant_id = ? AND owner_user_id = ?", [tenantId,targetId]);
     });
-  });
+    res.json({ message: "Employee updated successfully" });
+  } catch (error) { res.status(400).json({ message: error.message }); }
 });
 
 // 5. DELETE /api/auth/employees/:id — Admin deletes employee (cannot delete self)
@@ -1480,7 +1351,8 @@ router.post("/reset-password/:id", verifyToken, isAdmin, (req, res) => {
       if (errHash) return res.status(500).json({ message: "Hash failed" });
       db.query(`UPDATE users SET user_password = ? WHERE id = ?`, [hash, req.params.id], (err2) => {
         if (err2) return res.status(500).json({ message: "Reset failed" });
-        res.json({ message: "Password reset successfully" });
+        const sessions=require("../services/browserSessions");
+        sessions.query("UPDATE browser_sessions SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=?",[Number(req.params.id)]).then(()=>{sessions.disconnectSessions({userId:Number(req.params.id)});res.json({message:"Password reset successfully; browser sessions revoked"});}).catch(()=>res.status(503).json({message:"Password reset, but session revocation could not be completed"}));
       });
     });
   });
@@ -1493,7 +1365,8 @@ router.get("/notifications", verifyToken, isAdmin, (req, res) => {
   let sql = `SELECT an.*, u.first_name, u.email, u.role, u.emp_id, u.status as user_status 
              FROM admin_notifications an 
              LEFT JOIN users u ON an.user_id = u.id 
-             WHERE 1=1`;
+             WHERE u.tenant_id = ?`;
+  params.push(req.tenantId);
 
   if (type) { sql += " AND an.type = ?"; params.push(type); }
   sql += " ORDER BY an.created_at DESC";
@@ -1547,7 +1420,8 @@ router.get("/profile-change-requests", verifyToken, isAdmin, (req, res) => {
     `SELECT pcr.*, u.first_name, u.email 
      FROM profile_change_requests pcr 
      LEFT JOIN users u ON pcr.user_id = u.id 
-     ORDER BY pcr.created_at DESC`,
+     WHERE u.tenant_id = ? ORDER BY pcr.created_at DESC`,
+    [req.tenantId],
     (err, rows) => {
       if (err) return res.status(500).json(err);
       res.json(rows);
@@ -1561,7 +1435,7 @@ router.put("/handle-change-request/:requestId", verifyToken, isAdmin, (req, res)
   const { requestId } = req.params;
   if (!["approved", "declined"].includes(action)) return res.status(400).json({ message: "Invalid action" });
 
-  db.query("SELECT * FROM profile_change_requests WHERE id = ?", [requestId], (err, rows) => {
+  db.query("SELECT p.* FROM profile_change_requests p JOIN users u ON u.id=p.user_id WHERE p.id = ? AND u.tenant_id = ?", [requestId,req.tenantId], (err, rows) => {
     if (err || !rows.length) return res.status(404).json({ message: "Request not found" });
     const req_data = rows[0];
 
@@ -1772,7 +1646,8 @@ router.post("/change-password-direct", verifyToken, (req, res) => {
         console.error("change-password-direct db error:", upErr);
         return res.status(500).json({ message: "Failed to update password" });
       }
-      res.json({ message: "Password updated successfully" });
+      const sessions=require("../services/browserSessions");
+      sessions.query("UPDATE browser_sessions SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=?",[userId]).then(()=>{sessions.disconnectSessions({userId});sessions.clearCookies(res);res.json({message:"Password updated. Sign in again."});}).catch(()=>res.status(503).json({message:"Password updated, but session revocation could not be completed"}));
     });
   });
 });

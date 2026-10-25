@@ -10,7 +10,7 @@ const crypto = require("crypto");
 
 const q = (sql, params = []) =>
   new Promise((resolve, reject) => {
-    db.query(sql, params, (err, rows) => {
+    db.query(db.isSqlite ? sql : sql.replace(/INSERT OR IGNORE/gi, "INSERT IGNORE").replace(/\bexcluded\.(\w+)/g, "VALUES($1)"), params, (err, rows) => {
       if (err) return reject(err);
       resolve(rows);
     });
@@ -807,6 +807,7 @@ async function transferConversationBranch(tenantId, conversationId, targetBranch
   if (!targetBranch) throw new Error("Target branch does not belong to this organization");
 
   const oldBranchId = conv.branch_id;
+  await require("./sharedInboxAssistant").pause(tid,cid);
   await q(
     "UPDATE conversations SET branch_id = ?, owner_user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?",
     [targetBid, uid, cid, tid]
@@ -1030,6 +1031,7 @@ async function transferBranchContact(tenantId, contactId, targetBranchId, actorU
  * Create a new employee directly assigned to a branch.
  */
 async function createBranchEmployee(tenantId, branchId, employeeData, actorUserId = null) {
+  return require("./sharedInboxService").createInboxService(db).transaction(async q => {
   const tid = Number(tenantId);
   const bid = Number(branchId);
   const { first_name, last_name, email, role = "employee", whatsapp_access_level = "full", mobile, job_title } = employeeData;
@@ -1048,6 +1050,9 @@ async function createBranchEmployee(tenantId, branchId, employeeData, actorUserI
   const [branch] = await q("SELECT id, name FROM branches WHERE id = ? AND tenant_id = ? LIMIT 1", [bid, tid]);
   if (!branch) throw new Error("Branch not found in this organization");
 
+  const [tenant] = await q("SELECT max_seats FROM tenants WHERE id = ? FOR UPDATE", [tid]);
+  const [seatCount] = await q("SELECT COUNT(*) AS count FROM organization_memberships WHERE tenant_id = ? AND membership_status = 'active'", [tid]);
+  if (!tenant || Number(seatCount.count) >= Number(tenant.max_seats)) throw new Error("Organization seat limit reached");
   const [existing] = await q("SELECT id FROM users WHERE email = ? LIMIT 1", [cleanEmail]);
   if (existing) throw new Error("An account with this email address already exists.");
 
@@ -1073,21 +1078,15 @@ async function createBranchEmployee(tenantId, branchId, employeeData, actorUserI
     `INSERT INTO organization_memberships (tenant_id, user_id, role, membership_status)
      VALUES (?, ?, ?, 'active')`,
     [tid, newUserId, cleanRole === "admin" ? "organization_admin" : "agent"]
-  ).catch(async () => {});
+  );
 
   // Insert staff branch membership
   await q(
     `INSERT INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary)
      VALUES (?, ?, ?, 1)`,
     [tid, newUserId, bid]
-  ).catch(async () => {});
+  );
 
-  await recordBranchAudit(tid, bid, actorUserId, "branch.employee.created", {
-    user_id: newUserId,
-    email: cleanEmail,
-    name: cleanFirst,
-    access_code: accessCode,
-  });
 
   return {
     id: newUserId,
@@ -1105,6 +1104,7 @@ async function createBranchEmployee(tenantId, branchId, employeeData, actorUserI
     branch_id: bid,
     branch_name: branch.name,
   };
+  });
 }
 
 module.exports = {

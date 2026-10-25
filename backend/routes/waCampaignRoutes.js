@@ -15,6 +15,21 @@ const { campaignLaunchLimiter } = require("../middleware/waRateLimiter");
 
 // Apply authentication, fail-closed tenant validation, and branch scoping to all campaign routes
 router.use(auth, requireTenantContext, requireBranchScope);
+router.use(require("../middleware/organizationAdmin"));
+router.use(async(req,res,next)=>{
+  try{
+    const templateId=req.body?.template_id||req.body?.message?.template_id;
+    if(templateId){
+      const [rows]=await db.promise().query("SELECT id FROM wa_templates WHERE tenant_id=? AND id=? AND meta_status='APPROVED' AND meta_template_id IS NOT NULL",[req.tenantId,templateId]);
+      if(!rows.length)return res.status(400).json({error:"Select a template synchronized from this organization's Meta account with approval"});
+    }
+    if(req.body?.flow_id){
+      const [rows]=await db.promise().query("SELECT id FROM wa_flows WHERE tenant_id=? AND id=?",[req.tenantId,req.body.flow_id]);
+      if(!rows.length)return res.status(404).json({error:"Flow not found in this organization"});
+    }
+    next();
+  }catch(_){res.status(503).json({error:"Campaign references could not be verified"});}
+});
 
 // Upload target comes from config/runtimePaths so that on the VPS it resolves
 // to a directory OUTSIDE the deploy directory. See that file for why.
@@ -52,8 +67,8 @@ router.get("/", async (req, res) => {
              g.name as group_name,
              b.name as branch_name, b.code as branch_code
       FROM wa_campaigns c
-      LEFT JOIN wa_templates t ON c.template_id = t.id
-      LEFT JOIN wa_flows f ON c.flow_id = f.id
+      LEFT JOIN wa_templates t ON c.template_id = t.id AND t.tenant_id = c.tenant_id
+      LEFT JOIN wa_flows f ON c.flow_id = f.id AND f.tenant_id = c.tenant_id
       LEFT JOIN wa_contact_groups g ON c.group_id = g.id
       LEFT JOIN branches b ON c.branch_id = b.id
       WHERE ${whereClauses.join(" AND ")}
@@ -289,8 +304,8 @@ router.post("/", async (req, res) => {
     const [row] = await db.promise().query(`
       SELECT c.*, (SELECT COUNT(*) FROM wa_campaign_messages cm WHERE cm.campaign_id = c.id AND cm.status = 'unknown') AS unknown_count, t.name as template_name, f.name as flow_name, g.name as group_name
       FROM wa_campaigns c
-      LEFT JOIN wa_templates t ON c.template_id = t.id
-      LEFT JOIN wa_flows f ON c.flow_id = f.id
+      LEFT JOIN wa_templates t ON c.template_id = t.id AND t.tenant_id = c.tenant_id
+      LEFT JOIN wa_flows f ON c.flow_id = f.id AND f.tenant_id = c.tenant_id
       LEFT JOIN wa_contact_groups g ON c.group_id = g.id
       WHERE c.id = ?
     `, [result.insertId]);
@@ -320,8 +335,8 @@ router.get("/:id", async (req, res) => {
       SELECT c.*, (SELECT COUNT(*) FROM wa_campaign_messages cm WHERE cm.campaign_id = c.id AND cm.status = 'unknown') AS unknown_count, t.name as template_name, f.name as flow_name, g.name as group_name,
              b.name as branch_name, b.code as branch_code
       FROM wa_campaigns c
-      LEFT JOIN wa_templates t ON c.template_id = t.id
-      LEFT JOIN wa_flows f ON c.flow_id = f.id
+      LEFT JOIN wa_templates t ON c.template_id = t.id AND t.tenant_id = c.tenant_id
+      LEFT JOIN wa_flows f ON c.flow_id = f.id AND f.tenant_id = c.tenant_id
       LEFT JOIN wa_contact_groups g ON c.group_id = g.id
       LEFT JOIN branches b ON c.branch_id = b.id
       WHERE c.id = ? AND c.tenant_id = ?
@@ -376,8 +391,8 @@ router.put("/:id", async (req, res) => {
     const [row] = await db.promise().query(`
       SELECT c.*, (SELECT COUNT(*) FROM wa_campaign_messages cm WHERE cm.campaign_id = c.id AND cm.status = 'unknown') AS unknown_count, t.name as template_name, f.name as flow_name, g.name as group_name
       FROM wa_campaigns c
-      LEFT JOIN wa_templates t ON c.template_id = t.id
-      LEFT JOIN wa_flows f ON c.flow_id = f.id
+      LEFT JOIN wa_templates t ON c.template_id = t.id AND t.tenant_id = c.tenant_id
+      LEFT JOIN wa_flows f ON c.flow_id = f.id AND f.tenant_id = c.tenant_id
       LEFT JOIN wa_contact_groups g ON c.group_id = g.id
       WHERE c.id = ? AND c.tenant_id = ?
     `, [req.params.id, req.tenantId]);
@@ -429,7 +444,8 @@ router.post("/:id/start", campaignLaunchLimiter, async (req, res) => {
     let templateName = null;
     let templateComponents = [];
     if (campaign.template_id) {
-      const [tmpl] = await db.promise().query("SELECT * FROM wa_templates WHERE id = ?", [campaign.template_id]);
+      const [tmpl] = await db.promise().query("SELECT * FROM wa_templates WHERE id = ? AND tenant_id = ? AND meta_status='APPROVED' AND meta_template_id IS NOT NULL", [campaign.template_id,req.tenantId]);
+      if(!tmpl.length)return res.status(409).json({error:"The campaign template is unavailable or awaiting Meta approval"});
       if (tmpl.length) {
         templateName = tmpl[0].name;
         if (tmpl[0].header_type && tmpl[0].header_value) {
@@ -775,7 +791,7 @@ router.post("/create-direct", auth, campaignLaunchLimiter, async (req, res) => {
 });
 
 // ── Upload campaign media (image/video/audio/document/excel/pdf) ───────────────
-router.post("/upload-media", auth, upload.single("file"), async (req, res) => {
+router.post("/upload-media", auth, require("../middleware/r2CampaignUpload"), require("../middleware/legacyUploads").requireLegacyUploads, upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   const mime = (req.file.mimetype || "").toLowerCase();
   const ext = path.extname(req.file.originalname).toLowerCase();
@@ -851,7 +867,8 @@ router.post("/create-wizard", auth, campaignLaunchLimiter, async (req, res) => {
     let templateName = null;
     let templateComponents = [];
     if (template_id) {
-      const [tmpl] = await db.promise().query("SELECT * FROM wa_templates WHERE id = ?", [template_id]);
+      const [tmpl] = await db.promise().query("SELECT * FROM wa_templates WHERE id = ? AND tenant_id = ? AND meta_status='APPROVED' AND meta_template_id IS NOT NULL", [template_id,req.tenantId]);
+      if(!tmpl.length)return res.status(409).json({error:"The template is unavailable or awaiting Meta approval"});
       if (tmpl.length) {
         templateName = tmpl[0].name;
         if (tmpl[0].header_type && tmpl[0].header_value) {

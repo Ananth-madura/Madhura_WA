@@ -34,3 +34,12 @@ logs
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+scratch/shared-inbox-mysql/
+scratch/shared-inbox-runtime/
+scratch/shared-inbox-*.log
+scratch/shared-inbox-auth-audit.json
+scratch/shared-inbox-*.png
+scratch/flow-integration-mysql/
+scratch/flows-*.log
+scratch/flows-*.png
+scratch/flow-mysql-init.log

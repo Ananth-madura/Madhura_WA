@@ -5,6 +5,7 @@ import {
   ArrowLeft, AlertTriangle, CheckCircle2, FileText, Loader2, Tag, Trash2
 } from "lucide-react";
 import axios from "axios";
+import {useEnterprise} from "../context/EnterpriseContext";
 import { API } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
 import { DEMO_TEMPLATES } from "../auth/demoData";
@@ -83,6 +84,11 @@ const iconBox = {
 };
 
 export default function WATemplateCreate() {
+  const {activeTenant,loading}=useEnterprise();
+  return loading?null:<TemplateEditorWorkspace key={activeTenant?.id||"none"}/>;
+}
+
+function TemplateEditorWorkspace() {
   const { templateId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -116,7 +122,7 @@ export default function WATemplateCreate() {
       return;
     }
 
-    const passed = location.state && location.state.template &&
+    const passed = demoMode && location.state && location.state.template &&
       String(location.state.template.id) === String(templateId);
 
     if (passed) {

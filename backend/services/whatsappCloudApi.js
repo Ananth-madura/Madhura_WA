@@ -109,7 +109,7 @@ class WhatsAppCloudApi {
     };
   }
 
-  async sendText(to, text, previewUrl = false) {
+  async sendText(to, text, previewUrl = false, timeoutMs = 60000) {
     if (!this.isConfigured()) throw new Error("WhatsApp Cloud API not configured");
     const target = cleanRecipient(to);
     // Auto-enable rich link preview whenever the body carries a URL
@@ -124,7 +124,7 @@ class WhatsAppCloudApi {
           type: "text",
           text: { body: text, preview_url: previewUrl || hasLink },
         },
-        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
+        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: Math.max(1000,Math.min(60000,Number(timeoutMs)||60000)) }
       );
       return data;
     } catch (err) {
@@ -132,7 +132,7 @@ class WhatsAppCloudApi {
     }
   }
 
-  async sendInteractiveButtons(to, bodyText, buttons = [], headerText = null, footerText = null) {
+  async sendInteractiveButtons(to, bodyText, buttons = [], headerText = null, footerText = null, timeout = 60000) {
     if (!this.isConfigured()) throw new Error("WhatsApp Cloud API not configured");
     const target = cleanRecipient(to);
     const interactive = {
@@ -165,7 +165,7 @@ class WhatsAppCloudApi {
           type: "interactive",
           interactive,
         },
-        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
+        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout }
       );
       return data;
     } catch (err) {
@@ -177,7 +177,7 @@ class WhatsAppCloudApi {
    * rowsOrSections accepts EITHER a flat row array [{id,title,description}]
    * OR a section array [{title, rows:[...]}]. WhatsApp caps the list at 10 rows total.
    */
-  async sendInteractiveList(to, bodyText, buttonLabel, rowsOrSections = [], headerText = null, footerText = null) {
+  async sendInteractiveList(to, bodyText, buttonLabel, rowsOrSections = [], headerText = null, footerText = null, timeout = 60000) {
     if (!this.isConfigured()) throw new Error("WhatsApp Cloud API not configured");
     const target = cleanRecipient(to);
 
@@ -224,7 +224,7 @@ class WhatsAppCloudApi {
           type: "interactive",
           interactive,
         },
-        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
+        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout }
       );
       return data;
     } catch (err) {
@@ -244,7 +244,7 @@ class WhatsAppCloudApi {
    * Only ONE button is supported by Meta, and it cannot be mixed with reply
    * buttons in the same message.
    */
-  async sendCTAUrl(to, bodyText, displayText, url, headerText = null, footerText = null) {
+  async sendCTAUrl(to, bodyText, displayText, url, headerText = null, footerText = null, timeout = 60000) {
     if (!this.isConfigured()) throw new Error("WhatsApp Cloud API not configured");
     if (!url) throw new Error("CTA URL message requires a url");
     // Meta rejects anything that is not a public http(s) link.
@@ -277,7 +277,7 @@ class WhatsAppCloudApi {
           type: "interactive",
           interactive,
         },
-        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
+        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout }
       );
       return data;
     } catch (err) {
@@ -285,7 +285,7 @@ class WhatsAppCloudApi {
     }
   }
 
-  async sendTemplate(to, templateName, languageCode = "en", components = []) {
+  async sendTemplate(to, templateName, languageCode = "en", components = [], timeout = 60000) {
     if (!this.isConfigured()) throw new Error("WhatsApp Cloud API not configured");
     const target = cleanRecipient(to);
     const body = {
@@ -303,7 +303,7 @@ class WhatsAppCloudApi {
       const { data } = await axios.post(
         `${BASE_URL}/${this.phoneNumberId}/messages`,
         body,
-        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout: 60000 }
+        { headers: { Authorization: `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, timeout }
       );
       return data;
     } catch (err) {
@@ -381,11 +381,22 @@ class WhatsAppCloudApi {
 
   async getTemplates() {
     if (!this.isConfigured()) throw new Error("WhatsApp Cloud API not configured");
-    const { data } = await axios.get(
-      `${BASE_URL}/${this.wabaId}/message_templates`,
-      { headers: { Authorization: `Bearer ${this.accessToken}` } }
-    );
-    return data;
+    if(!this.wabaId)throw new Error("WhatsApp Business Account is required");
+    const templates=[];let after;
+    for(let page=0;page<20;page++){
+      const {data}=await axios.get(`${BASE_URL}/${this.wabaId}/message_templates`,{headers:{Authorization:`Bearer ${this.accessToken}`},params:{limit:100,after},timeout:15000});
+      if(!Array.isArray(data.data))throw new Error("Invalid template response from Meta");
+      templates.push(...data.data);
+      if(!data.paging?.next)return {data:templates};
+      after=data.paging?.cursors?.after;
+      if(typeof after!=="string"||after.length>2048)throw new Error("Invalid template pagination cursor");
+    }
+    throw new Error("More than 2000 templates; narrow the account import before retrying");
+  }
+
+  async createTemplate(payload){
+    if(!this.isConfigured()||!this.wabaId)throw new Error("WhatsApp Business Account is required");
+    try{return (await axios.post(`${BASE_URL}/${this.wabaId}/message_templates`,payload,{headers:{Authorization:`Bearer ${this.accessToken}`},timeout:15000})).data;}catch(error){throw formatMetaError(error);}
   }
 
   async uploadMedia(fileBytes, mimeType, filename = "attachment") {
@@ -429,6 +440,7 @@ class WhatsAppCloudApi {
     const bin = await axios.get(meta.url, {
       headers: { Authorization: `Bearer ${this.accessToken}` },
       responseType: "arraybuffer",
+      maxContentLength: 50 * 1024 * 1024,
       timeout: 30000,
     });
 

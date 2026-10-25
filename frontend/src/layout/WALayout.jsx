@@ -1,6 +1,6 @@
 import { waUiStorage } from "../utils/waUiStorage";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
+import { Outlet, useNavigate, useLocation, Link, Navigate } from "react-router-dom";
 import axios from "axios";
 import {
   Loader2,
@@ -17,6 +17,7 @@ import {
   GitBranch,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
+import { useEnterprise } from "../context/EnterpriseContext";
 import useWALocalInbox from "../hooks/useWALocalInbox";
 import { describeDemoReason } from "../auth/demoSession";
 import { API } from "../config/api";
@@ -33,6 +34,28 @@ import "../pages/whatsapp-operations.css";
 // Corporate Shell for Whatsapp_CRM — Hallmark Workbench shell (design.md).
 // Deep-navy slab, yellow hairline, quiet type. Routes and logic untouched.
 export default function WALayout() {
+  const { user, demoMode } = useAuth();
+  const {isOwnerOrAdmin,loading}=useEnterprise();
+  if(loading&&!demoMode)return <p className="p-4">Loading workspace…</p>;
+  return !demoMode && !isOwnerOrAdmin && user?.role!=="platform_admin" ? <AssignedWorkspace /> : <LegacyWALayout />;
+}
+
+function AssignedWorkspace() {
+  const { user, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const allowed = ["/whatsapp", "/whatsapp/", "/whatsapp/team-inbox"].includes(location.pathname);
+  return <div className="min-h-screen flex flex-col">
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+      <Link to="/whatsapp/team-inbox" className="font-semibold">Team inbox</Link>
+      <span>{user?.name || user?.first_name || "Employee"}</span>
+      <button className="hl-btn-secondary" onClick={() => { logout(); navigate("/login"); }}>Log out</button>
+    </header>
+    <main className="flex-1 min-w-0">{allowed ? <Outlet /> : <Navigate to="/whatsapp/team-inbox" replace />}</main>
+  </div>;
+}
+
+function LegacyWALayout() {
   const { user, logout, demoMode } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -176,12 +199,7 @@ export default function WALayout() {
     try {
       const token = localStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      let res;
-      try {
-        res = await axios.get(`${API}/api/whatsapp/unified-status`, { headers, timeout: 6000 });
-      } catch (e1) {
-        res = await axios.get(`/api/whatsapp/unified-status`, { headers, timeout: 6000 });
-      }
+      const res = await axios.get(`${API}/api/whatsapp/unified-status`, { headers, timeout: 6000 });
       if (res && res.data) {
         setStatus(res.data);
       }
@@ -190,7 +208,7 @@ export default function WALayout() {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 10000);
+    const interval = setInterval(()=>{if(!document.hidden)fetchStatus();},120000+Math.floor(Math.random()*15000));
     const handleRealtime = () => fetchStatus();
     socket.on("wa_ready", handleRealtime);
     socket.on("wa_disconnected", handleRealtime);

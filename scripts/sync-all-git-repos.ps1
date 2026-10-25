@@ -20,7 +20,7 @@ $RequiredRemotes = @{
     "monorepo"      = "https://github.com/Ananth-madura/Madhura_WA.git"
     "frontend-repo" = "https://github.com/madhuratech/Madhura-wa-frontend.git"
     "backend-repo"  = "https://github.com/madhuratech/Madhura-wa-backend.git"
-    "landing-repo"  = "https://github.com/Ananth-madura/whatsapp_landing.git"
+    "landing-repo"  = "https://github.com/madhuratech/wa-landing_page-.git"
 }
 
 foreach ($name in $RequiredRemotes.Keys) {

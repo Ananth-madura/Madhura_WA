@@ -29,7 +29,7 @@ const q = (sql, params = []) =>
  * GET /api/v2/me
  * Comprehensive context: user identity, active tenant, active branch, memberships, and permissions.
  */
-router.get("/me", verifyToken, async (req, res) => {
+router.get("/me", verifyToken, requireTenantContext, async (req, res) => {
   try {
     const userId = req.user.id;
     const [user] = await q(
@@ -44,12 +44,9 @@ router.get("/me", verifyToken, async (req, res) => {
     const organizations = await orgService.getUserOrganizations(userId);
 
     // Determine active tenant (from header, param, or first available org)
-    let activeTenantId = Number(req.headers["x-tenant-id"] || req.user.tenant_id);
-    let activeOrg = organizations.find((o) => o.id === activeTenantId);
-    if (!activeOrg && organizations.length > 0) {
-      activeOrg = organizations[0];
-      activeTenantId = activeOrg.id;
-    }
+    const activeTenantId = Number(req.tenantId);
+    const activeOrg = organizations.find((o) => Number(o.id) === activeTenantId);
+    if (!activeOrg) return res.status(403).json({ success: false, message: "Active organization membership required" });
 
     let branches = [];
     let permittedBranchIds = [];
@@ -70,16 +67,15 @@ router.get("/me", verifyToken, async (req, res) => {
           [activeTenantId, userId]
         );
         permittedBranchIds = staffBranches.map((sb) => sb.branch_id);
-        if (permittedBranchIds.length === 0 && branches.length > 0) {
-          permittedBranchIds = [branches[0].id];
-        }
+        branches = branches.filter(branch => permittedBranchIds.includes(Number(branch.id)));
+        permittedBranchIds = branches.map(branch => Number(branch.id));
       }
 
       const reqBranchId = Number(req.headers["x-branch-id"]);
       if (reqBranchId && permittedBranchIds.includes(reqBranchId)) {
         activeBranch = branches.find((b) => b.id === reqBranchId);
       } else {
-        activeBranch = branches.find((b) => permittedBranchIds.includes(b.id)) || branches[0] || null;
+        activeBranch = branches.find((b) => permittedBranchIds.includes(Number(b.id))) || null;
       }
     }
 

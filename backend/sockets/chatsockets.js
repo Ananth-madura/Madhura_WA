@@ -1,5 +1,4 @@
 const { Server } = require("socket.io");
-const db = require("../config/database");
 const { authenticateSocket, canJoinUserRoom, canJoinNamedRoom } = require("./socketAuth");
 
 const onlineUsers = new Map();
@@ -13,6 +12,9 @@ function initSocket(server, corsOrigin = "*") {
       methods: ["GET", "POST", "PUT", "DELETE"],
       credentials: true,
     },
+    maxHttpBufferSize: 65536,
+    perMessageDeflate: false,
+    allowRequest: (req,callback)=>callback(null,io.engine.clientsCount<require("../config/capacity").integer(process.env.SOCKET_MAX_CONNECTIONS,1000,10,50000)),
   });
   globalIO = io;
 
@@ -34,7 +36,7 @@ function initSocket(server, corsOrigin = "*") {
       }
       onlineUsers.set(String(userId), socket.id);
       socket.join(`user:${userId}`);
-      io.emit("online_users", Array.from(onlineUsers.keys()));
+      socket.emit("online_users", [me.id]);
     });
 
     socket.on("join_room", (room) => {
@@ -46,64 +48,14 @@ function initSocket(server, corsOrigin = "*") {
       socket.join(room);
     });
 
-    socket.on("task_updated", (data) => {
-      io.emit("task_updated", data);
-      io.emit("data_changed", { resource: "tasks", action: "update", ...data });
-    });
-
-    socket.on("new_task", (data) => {
-      io.emit("new_task", data);
-      io.emit("data_changed", { resource: "tasks", action: "create", ...data });
-    });
-
-    socket.on("target_updated", (data) => {
-      io.emit("target_updated", data);
-      io.emit("data_changed", { resource: "targets", action: "update", ...data });
-    });
-
-    socket.on("new_target", (data) => {
-      io.emit("new_target", data);
-      io.emit("data_changed", { resource: "targets", action: "create", ...data });
-    });
-
-    socket.on("send_message", (data = {}) => {
-      const senderId = data.senderId || data.sender_id;
-      const receiverId = data.receiverId || data.receiver_id;
-      const text = data.text || data.message || "";
-      const type = data.type || "text";
-
-      if (!senderId || !receiverId || !text) return;
-
-      db.query(
-        "INSERT INTO messages (sender_id, receiver_id, message, type) VALUES (?,?,?,?)",
-        [senderId, receiverId, text, type],
-        (err, result) => {
-          if (err) {
-            socket.emit("socket_error", { message: "Message could not be saved" });
-            return;
-          }
-
-          const message = {
-            ...data,
-            id: result.insertId,
-            senderId,
-            receiverId,
-            text,
-            message: text,
-            type
-          };
-
-          io.to(`user:${senderId}`).to(`user:${receiverId}`).emit("receive_message", message);
-          io.emit("data_changed", { resource: "messages", action: "create", id: result.insertId });
-        }
-      );
-    });
+    for (const event of ["task_updated", "new_task", "target_updated", "new_target", "send_message"]) {
+      socket.on(event, () => socket.emit("socket_error", { code: "REST_REQUIRED", message: "Use the authorized workspace API for changes." }));
+    }
 
     socket.on("disconnect", () => {
       for (const [userId, socketId] of onlineUsers.entries()) {
         if (socketId === socket.id) onlineUsers.delete(userId);
       }
-      io.emit("online_users", Array.from(onlineUsers.keys()));
     });
   });
 

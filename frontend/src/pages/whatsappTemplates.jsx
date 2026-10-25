@@ -1,5 +1,7 @@
 import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
-import { useState, useEffect } from "react";
+import TemplateProviderControls from "../components/TemplateProviderControls";
+import {useEnterprise} from "../context/EnterpriseContext";
+import { useState, useEffect, useCallback } from "react";
 import {
   FileText, Plus, Edit2, Trash2, Copy, Loader2, Sparkles,
   Send, Zap, MessageSquare, Tag, Check, CheckCircle2
@@ -41,6 +43,11 @@ export function renderPreviewText(templateText) {
 }
 
 export default function WATemplates() {
+  const {activeTenant,loading}=useEnterprise();
+  return loading?null:<TemplatesWorkspace key={activeTenant?.id||"none"}/>;
+}
+
+function TemplatesWorkspace() {
   const navigate = useNavigate();
   const location = useLocation();
   const [templates, setTemplates] = useState([]);
@@ -57,7 +64,7 @@ export default function WATemplates() {
 
   const { demoMode } = useAuth();
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     setLoading(true);
     setLoadError("");
     if (demoMode) {
@@ -77,11 +84,11 @@ export default function WATemplates() {
     } finally {
       setLoading(false);
     }
-  };
+  },[demoMode]);
 
   useEffect(() => {
     fetchTemplates();
-  }, []);
+  }, [fetchTemplates]);
 
   useEffect(() => {
     if (!savedNotice) return;
@@ -180,6 +187,8 @@ export default function WATemplates() {
           </button>
         </div>
       </div>
+
+      {!demoMode&&<TemplateProviderControls templates={templates} onChanged={fetchTemplates}/>}
 
       {loadError && (
         <div role="alert" className="hl-card flex flex-wrap items-center justify-between gap-3 p-3 text-sm" style={{ borderColor: "var(--color-error)", color: "var(--color-error)" }}>
@@ -310,6 +319,7 @@ export default function WATemplates() {
                         <span className="hl-id uppercase px-1.5 py-0.5">
                           {t.language || "en"}
                         </span>
+                        <span className={`hl-badge ${t.meta_status==="APPROVED"&&t.meta_template_id?"hl-badge-success":"hl-badge-warn"}`}>{t.meta_template_id?t.meta_status:"DRAFT"}</span>
                         {t.header_type && (
                           <span className="hl-badge hl-badge-warn px-1.5 py-0.5">
                             {t.header_type}

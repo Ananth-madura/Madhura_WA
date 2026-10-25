@@ -5,6 +5,15 @@ const multer = require("multer");
 const db = require("../config/database");
 const mgr = require("../services/whatsappService");
 const qrcode = require("qrcode");
+router.use(async (req, res, next) => {
+  const requested = req.headers["x-session-key"] || req.query?.sessionKey;
+  if (!requested || String(requested) === String(req.user?.id)) return next();
+  try {
+    const [rows] = await db.promise().query("SELECT id FROM users WHERE id = ? AND tenant_id = ? LIMIT 1", [requested, req.tenantId]);
+    if (!rows.length) return res.status(403).json({ error: "Session is outside this organization" });
+    next();
+  } catch (_) { res.status(503).json({ error: "Session access could not be verified" }); }
+});
 const { messageSendLimiter, qrRefreshLimiter, sessionResetThrottle } = require("../middleware/waRateLimiter");
 
 const toDataUrl = async (qr) => {
@@ -981,7 +990,7 @@ router.get("/chat/:chatId/media/:messageId", async (req, res) => {
   }
 });
 
-router.post("/upload-media", upload.single("file"), async (req, res) => {
+router.post("/upload-media", require("../middleware/r2CampaignUpload"), require("../middleware/legacyUploads").requireLegacyUploads, upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   const mime = (req.file.mimetype || "").toLowerCase();
   const ext = path.extname(req.file.originalname).toLowerCase();

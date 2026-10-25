@@ -1,0 +1,13 @@
+FROM node:24-bookworm-slim
+WORKDIR /app
+ENV NODE_ENV=production PUPPETEER_SKIP_DOWNLOAD=true WA_ENABLE_WEB_ENGINE=0 WA_DATA_DIR=/var/data
+COPY package.json package-lock.json ./
+COPY patches ./patches
+RUN npm ci --omit=dev && npx --no-install patch-package --error-on-fail && npm cache clean --force
+COPY . .
+RUN mkdir -p /var/data && chown node:node /var/data
+USER node
+VOLUME ["/var/data"]
+EXPOSE 5001
+HEALTHCHECK --interval=30s --timeout=6s --start-period=90s --retries=3 CMD node scripts/readiness-check.js
+CMD ["node", "server.js"]

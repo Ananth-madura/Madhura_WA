@@ -227,13 +227,14 @@ if (!claim.affectedRows) {
         ? JSON.parse(template_components || "[]")
         : (template_components || [])
       );
-      const [tmplRows] = await db.promise().query("SELECT body FROM wa_templates WHERE name = ? LIMIT 1", [template_name]);
+      const [tmplRows] = await db.promise().query("SELECT body,language FROM wa_templates WHERE name = ? AND tenant_id = ? AND meta_status='APPROVED' AND meta_template_id IS NOT NULL LIMIT 1", [template_name,tenantId]);
+      if(!tmplRows.length)throw new Error("The organization's template is unavailable or awaiting approval");
       const bodyComponent = tmplRows[0] ? buildTemplateBodyComponent(tmplRows[0].body, contact_name, mergedData) : null;
       // Preserve explicitly authored positional template parameters. Named
       // placeholders can be resolved from CRM only when no body was supplied.
       const finalComponents = components.some((c) => c.type === "body") || !bodyComponent
         ? components : [...components, bodyComponent];
-      result = await waLoadBalancer.sendTemplateMessage(phone, template_name, "en", finalComponents, sessionKey, null, poolId, routingStrategy, tenantId);
+      result = await waLoadBalancer.sendTemplateMessage(phone, template_name, tmplRows[0].language||"en", finalComponents, sessionKey, null, poolId, routingStrategy, tenantId);
     } else if (media_type && media_url) {
       result = await waLoadBalancer.sendMediaMessage(phone, media_type, media_url, resolvedText || "", "", sessionKey, null, poolId, routingStrategy, tenantId);
     } else {

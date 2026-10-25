@@ -153,6 +153,7 @@ export default function WhatsAppNav() {
   };
 
   const tabs = [
+    { id: "team-inbox", label: "Team Inbox", title: "Assigned conversations and shared notes", path: "/whatsapp/team-inbox", icon: Inbox },
     {
       id: "chats",
       label: "Live Chats",
@@ -284,7 +285,7 @@ export default function WhatsAppNav() {
       <div className="flex items-center min-w-0 w-full overflow-hidden">
         {/* Top Tabs — responsive full-width strip with zero horizontal scroll on desktop */}
         <div className="wa-nav-tabs-bar">
-          {tabs.map((tab) => {
+          {tabs.filter(tab => ["admin", "subadmin", "platform_admin"].includes(user?.role) || tab.id === "team-inbox").map((tab) => {
             const Icon = tab.icon;
             const active = isTabActive(tab);
             return (

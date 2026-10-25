@@ -1,5 +1,6 @@
 import { io } from "socket.io-client";
 import { SOCKET } from "../config/api";
+import { hasCookieSession, refreshBrowserSession } from "../auth/browserSession";
 
 // SOCKET is REACT_APP_SOCKET_URL when set (direct to the VPS backend), otherwise
 // it falls back to the API origin, i.e. same-origin through the Vercel rewrite.
@@ -34,7 +35,7 @@ const readUser = () => {
  * So in demo mode the sockets are never opened at all. The UI is static but
  * honest; there is no phantom "connecting" state to debug later.
  */
-const hasToken = Boolean(localStorage.getItem("token"));
+const hasToken = Boolean(localStorage.getItem("token")) || hasCookieSession();
 
 const socketOptions = {
   path: "/socket.io",
@@ -67,9 +68,7 @@ const notificationSocket = io(`${socketUrl}/notifications`, { ...socketOptions, 
 
 const joinMainRooms = () => {
   const user = readUser();
-  const userId = user.id || user._id || localStorage.getItem("userId") || "1";
-
-  socket.emit("join_room", "whatsapp");
+  const userId = user.id || user._id || localStorage.getItem("userId");
   if (userId) {
     socket.emit("join", userId);
     socket.emit("join_room", `user:${userId}`);
@@ -131,14 +130,15 @@ notificationSocket.on("reconnect", () => {
 if (typeof window !== "undefined") {
   window.addEventListener("online", () => {
     console.log("🌐 [Network] Device online — refreshing real-time link...");
-    connectSocket();
+    if(hasCookieSession())refreshBrowserSession().then(()=>connectSocket()).catch(error=>{if([401,403].includes(error.status))window.dispatchEvent(new CustomEvent("wa_auth_expired"));});
+    else connectSocket();
   });
 }
 
 // Connect helper when logging in
 export const connectSocket = () => {
   const token = readToken();
-  if (token) {
+  if (token || hasCookieSession()) {
     try {
       if (!socket.connected) socket.connect();
       if (!notificationSocket.connected) notificationSocket.connect();
@@ -148,12 +148,18 @@ export const connectSocket = () => {
 
 export const disconnectSocket = () => {
   try {
-    if (socket.connected) socket.disconnect();
-    if (!notificationSocket.connected) notificationSocket.disconnect();
+    socket.disconnect();
+    notificationSocket.disconnect();
   } catch (_) {}
 };
 
 export const isSocketConnected = () => Boolean(socket.connected);
+socket.on("session_expired",()=>{
+  refreshBrowserSession().then(()=>connectSocket()).catch(error=>{if([401,403].includes(error.status))window.dispatchEvent(new CustomEvent("wa_auth_expired"));});
+});
+notificationSocket.on("session_expired",()=>{
+  refreshBrowserSession().then(()=>connectSocket()).catch(error=>{if([401,403].includes(error.status))window.dispatchEvent(new CustomEvent("wa_auth_expired"));});
+});
 
 export { socket, notificationSocket };
 export default socket;

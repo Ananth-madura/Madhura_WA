@@ -1,0 +1,16 @@
+[Unit]
+Description=Check encrypted backup metadata and prune unused packs
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=wauser
+Group=wauser
+WorkingDirectory=/home/wauser/app/backend
+ExecStart=/usr/bin/flock -w 3600 /home/wauser/wa-data/backup.lock /usr/bin/node scripts/backup-mysql.js --maintenance
+Nice=10
+IOSchedulingClass=idle
+MemoryMax=512M
+TimeoutStartSec=6h
+NoNewPrivileges=true
+PrivateTmp=true

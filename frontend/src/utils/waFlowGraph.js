@@ -8,6 +8,9 @@ export function flowPorts(node) {
   if (node.node_type === "condition") {
     add("true", "Yes", ["true_next"], cfg.true_next);
     add("false", "No", ["false_next"], cfg.false_next);
+  } else if(node.node_type==="business_hours"){
+    add("open","Open",["open_next"],cfg.open_next);
+    add("closed","Closed",["closed_next"],cfg.closed_next);
   } else if (node.node_type === "ai_intent") {
     Object.entries(cfg.branches || {}).forEach(([name, target]) => add(name, name, ["branches", name], target));
   } else if (node.node_type === "crm_lookup") {
@@ -21,6 +24,7 @@ export function flowPorts(node) {
     const key = node.node_type === "send_list" && cfg.rows ? "rows" : "buttons";
     (cfg[key] || []).forEach((button, b) => add(`b${b}`, button.title || button.label || `Option ${b + 1}`, [key, b], button.next_node_key || button.nextNodeId, true));
   } else add("next", "Next", ["next_node_key"], cfg.next_node_key);
+  if(node.node_type==="collect_input")add("invalid","Invalid after retries",["invalid_next"],cfg.invalid_next);
   return ports;
 }
 
@@ -63,10 +67,10 @@ export function parseFlowImport(text, allowedTypes) {
   if (value.name != null && typeof value.name !== "string") throw new Error("The flow name must be text.");
   if (value.description != null && typeof value.description !== "string") throw new Error("The description must be text.");
   if (value.trigger_config?.keywords != null && (!Array.isArray(value.trigger_config.keywords) || value.trigger_config.keywords.some(keyword => typeof keyword !== "string"))) throw new Error("Trigger keywords must be an array of text values.");
-  if (!Array.isArray(value.nodes) || !value.nodes.length || value.nodes.length > 500) throw new Error("Choose a flow JSON file containing between 1 and 500 steps.");
+  if (!Array.isArray(value.nodes) || !value.nodes.length || value.nodes.length > 100) throw new Error("Choose a flow JSON file containing between 1 and 100 steps.");
   const keys = new Set();
   const nodes = value.nodes.map((node, index) => {
-    if (typeof node.node_key !== "string" || !/^[a-zA-Z0-9_]+$/.test(node.node_key) || keys.has(node.node_key)) throw new Error(`Step ${index + 1} needs a unique key containing letters, numbers or underscores.`);
+    if (typeof node.node_key !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(node.node_key) || keys.has(node.node_key)) throw new Error(`Step ${index + 1} needs a unique key containing letters, numbers, hyphens or underscores.`);
     if (!allowedTypes.has(node.node_type)) throw new Error(`Unsupported step type: ${node.node_type}`);
     if (!node.config || typeof node.config !== "object" || Array.isArray(node.config)) throw new Error(`Invalid configuration for ${node.node_key}.`);
     keys.add(node.node_key);

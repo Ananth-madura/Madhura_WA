@@ -1,0 +1,78 @@
+"use strict";
+const assert=require("node:assert/strict"),http=require("node:http"),fs=require("node:fs"),path=require("node:path"),puppeteer=require("puppeteer");
+async function verify({email,secondId}){
+  const build=path.resolve(__dirname,"../../../frontend/build");
+  const server=http.createServer((req,res)=>{
+    const target=path.resolve(build,"."+new URL(req.url,"http://localhost").pathname);
+    if(!target.startsWith(build+path.sep))return res.writeHead(403).end();
+    const file=fs.existsSync(target)&&fs.statSync(target).isFile()?target:path.join(build,"index.html");
+    res.setHeader("Content-Type",file.endsWith(".js")?"text/javascript":file.endsWith(".css")?"text/css":"text/html");fs.createReadStream(file).pipe(res);
+  });
+  await new Promise(resolve=>server.listen(15318,"127.0.0.1",resolve));let browser;
+  try{
+    const executablePath=[process.env.INBOX_TEST_BROWSER,"C:/Program Files/Google/Chrome/Application/chrome.exe","C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].find(file=>file&&fs.existsSync(file));
+    browser=await puppeteer.launch({headless:true,...(executablePath?{executablePath}:{}),args:["--no-sandbox"]});
+    const page=await browser.newPage(),errors=[];page.on("pageerror",error=>errors.push(error.message));
+    await page.setViewport({width:1440,height:1000});await page.setRequestInterception(true);page.on("request",req=>["127.0.0.1","localhost"].includes(new URL(req.url()).hostname)?req.continue():req.abort());
+    await page.goto("http://127.0.0.1:15318/login?returnUrl=/whatsapp/flows",{waitUntil:"networkidle2"});
+    await page.type("#hl-email",email);await page.type("#hl-password","isolated-admin-only");
+    const workspaceReady=page.waitForResponse(response=>response.url().endsWith("/api/v2/me")&&response.ok());
+    await page.click('form button[type="submit"]');await workspaceReady;
+    await page.waitForNetworkIdle({idleTime:500,timeout:15000});
+    await page.evaluate(()=>{localStorage.setItem("active_tenant_id","1");localStorage.removeItem("active_branch_id");});
+    await page.goto("http://127.0.0.1:15318/whatsapp/flows",{waitUntil:"networkidle2"});
+    await page.waitForFunction(()=>[...document.querySelectorAll("h3")].some(el=>el.textContent==="Sales qualification"),{timeout:30000});
+    await page.evaluate(()=>[...document.querySelectorAll("h3")].find(el=>el.textContent==="Sales qualification").click());
+    await page.waitForSelector('input[aria-label="Flow name"]');
+    await page.waitForFunction(()=>[...document.querySelectorAll("button")].some(el=>el.textContent==="Preview"&&!el.disabled));
+    await page.evaluate(()=>[...document.querySelectorAll("button")].find(el=>el.textContent==="Preview").click());
+    await page.waitForFunction(()=>{const panel=document.querySelector('aside[aria-label="preview panel"]');return panel?.textContent.includes("Which product or service interests you?")&&!panel.querySelector("input")?.disabled;});
+    const answer=async(text,expected,ended=false)=>{
+      const response=page.waitForResponse(result=>result.url().endsWith("/draft-simulate")&&result.request().method()==="POST");
+      await page.type('input[placeholder="Type a message or option #..."]',text);await page.keyboard.press("Enter");
+      const result=await response;assert(result.ok(),await result.text());const payload=await result.json();assert.equal(Boolean(payload.isEnded),ended);
+      await page.waitForFunction((value,done)=>{const panel=document.querySelector('aside[aria-label="preview panel"]');return panel?.textContent.includes(value)&&panel.querySelector("input").disabled===done;},{},expected,ended);
+      return payload;
+    };
+    const next=await answer("Browser product","What budget range should our team consider?");assert.equal(next.currentNodeKey,"question_2");
+    const completed=await answer("Browser budget","Your assigned team member will review it.",true);assert(completed.isHandedOff);assert.equal(completed.vars.sales_1,"Browser product");assert.equal(completed.vars.sales_2,"Browser budget");
+    const published=page.waitForResponse(response=>response.url().endsWith("/versions/publish")&&response.request().method()==="POST");
+    await page.evaluate(()=>[...document.querySelectorAll("button")].find(el=>el.textContent==="Publish").click());
+    const publishResponse=await published;assert(publishResponse.ok(),await publishResponse.text());
+    await page.screenshot({path:path.resolve(__dirname,"../../../scratch/flows-builder-browser.png"),fullPage:true});
+    await page.goto("http://127.0.0.1:15318/whatsapp/flows/create",{waitUntil:"networkidle2"});
+    await page.waitForSelector('input[aria-label="Flow name"]');
+    await page.waitForFunction(()=>document.querySelector('aside[aria-label="library panel"]')?.textContent.includes("Start from a workflow"));
+    await page.waitForSelector('aside[aria-label="library panel"] option[value="branch_hours"]');
+    await page.select('aside[aria-label="library panel"] select',"branch_hours");
+    await page.evaluate(()=>[...document.querySelectorAll("button")].find(button=>button.textContent==="Use this starter").click());
+    await page.waitForFunction(()=>document.querySelector('input[aria-label="Flow name"]')?.value==="Branch hours and callback routing");
+    await page.evaluate(()=>[...document.querySelectorAll("button")].find(button=>button.textContent==="Add step").click());
+    await page.waitForFunction(()=>document.querySelector('aside[aria-label="library panel"]')?.textContent.includes("Business Hours"));
+    assert(await page.evaluate(()=>document.querySelector('aside[aria-label="library panel"]').textContent.includes("Contact Snapshot")));
+    await page.evaluate(()=>[...document.querySelectorAll("button.fe-node-label")].find(button=>button.textContent==="business hours").click());
+    await page.waitForFunction(()=>document.querySelector('aside[aria-label="inspector panel"]')?.textContent.includes("Overnight shifts are supported"));
+    const draftSaved=page.waitForResponse(response=>response.url().endsWith("/api/wa-flows")&&response.request().method()==="POST");
+    await page.evaluate(()=>[...document.querySelectorAll("button")].find(button=>button.textContent==="Save draft").click());
+    const savedResponse=await draftSaved;assert.equal(savedResponse.status(),201,await savedResponse.text());
+    await page.waitForFunction(()=>document.body.textContent.includes("Draft saved."));
+    await page.screenshot({path:path.resolve(__dirname,"../../../scratch/flows-create-options.png"),fullPage:true});
+    await page.goto("http://127.0.0.1:15318/whatsapp/templates",{waitUntil:"networkidle2"});
+    await page.waitForFunction(()=>document.body.textContent.includes("verified_greeting")&&document.body.textContent.includes("APPROVED"));
+    assert(await page.$('section[aria-label="Meta template approval"]'));
+    const senderValue=await page.$eval('section[aria-label="Meta template approval"] select',select=>select.options[1].value);
+    await page.select('section[aria-label="Meta template approval"] select',senderValue);
+    const synced=page.waitForResponse(response=>response.url().endsWith("/api/wa/templates/sync")&&response.request().method()==="POST");
+    await page.evaluate(()=>[...document.querySelectorAll("button")].find(button=>button.textContent==="Sync Meta templates").click());
+    const syncResponse=await synced;assert(syncResponse.ok(),await syncResponse.text());
+    await page.waitForFunction(()=>document.body.textContent.includes("verified_greeting"));
+    await page.setViewport({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
+    await page.screenshot({path:path.resolve(__dirname,"../../../scratch/flows-templates-browser.png"),fullPage:true});
+    await page.evaluate(id=>{localStorage.setItem("active_tenant_id",String(id));localStorage.removeItem("active_branch_id");},secondId);
+    await page.reload({waitUntil:"networkidle2"});
+    await page.waitForFunction(()=>document.body.textContent.includes("No templates yet"));assert(!(await page.content()).includes("verified_greeting"));
+    assert.deepEqual(errors,[]);
+    console.log("PASS: actual browser admin cookie login, flow builder loading/preview/input/handoff/publish, verified template badges and controls, mobile template layout and organization-switch isolation.");
+  }finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}
+}
+module.exports={verify};

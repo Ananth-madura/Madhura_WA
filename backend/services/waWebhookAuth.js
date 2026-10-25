@@ -20,6 +20,7 @@ async function authorizeWebhook(req, resolveAccount, env = process.env) {
     if (!account) {
       account = await resolveAccount(id);
       if (!account) return { valid: false, accounts };
+      account.phoneNumberId = id;
       accounts.set(id, account);
     }
     if (!verifySignature(req.rawBody, signature, account.appSecret) && !allowUnsigned) return { valid: false, accounts };

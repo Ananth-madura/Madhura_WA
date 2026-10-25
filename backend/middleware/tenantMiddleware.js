@@ -54,8 +54,10 @@ async function requireTenantContext(req, res, next) {
   }
 
   // Support super-admin API connector bypass if explicitly marked
-  if (req.user.isApiKey && req.headers["x-tenant-id"]) {
-    req.tenantId = Number(req.headers["x-tenant-id"]);
+  if (req.user.isApiKey) {
+    req.tenantId = Number(process.env.WA_API_KEY_TENANT_ID || 1);
+    if (req.headers["x-tenant-id"] && Number(req.headers["x-tenant-id"]) !== req.tenantId) return res.status(403).json({ message: "Connector tenant is fixed by server configuration" });
+    req.userRole = "organization_admin";
     return next();
   }
 
@@ -82,12 +84,17 @@ async function requireTenantContext(req, res, next) {
       message: "Invalid organization identifier provided",
     });
   }
+  if(req._tenantVerified && req.tenantId===tid && req._tenantUserId===req.user.id)return next();
 
   try {
     // 1. Verify tenant exists and is active
     const tenants = await q(
-      "SELECT id, name, slug, plan, plan_status, max_branches, max_seats, max_senders, max_monthly_messages, status FROM tenants WHERE id = ? LIMIT 1",
-      [tid]
+      `SELECT t.id,t.name,t.slug,t.plan,t.plan_status,t.max_branches,t.max_seats,t.max_senders,t.max_monthly_messages,t.status,
+        u.id AS active_user_id,u.whatsapp_access_level AS wa_access_level,m.user_id AS membership_user_id,
+        m.role AS membership_role,m.membership_status
+        FROM tenants t LEFT JOIN users u ON u.id=? AND u.status='active'
+        LEFT JOIN organization_memberships m ON m.tenant_id=t.id AND m.user_id=u.id WHERE t.id=? LIMIT 1`,
+      [req.user.id,tid]
     );
 
     if (!tenants || tenants.length === 0) {
@@ -98,8 +105,8 @@ async function requireTenantContext(req, res, next) {
       });
     }
 
-    const tenant = tenants[0];
-    if (tenant.status === "suspended") {
+    const {active_user_id,wa_access_level,membership_user_id,membership_role,membership_status,...tenant} = tenants[0];
+    if (tenant.status !== "active") {
       return res.status(403).json({
         success: false,
         code: "ORGANIZATION_SUSPENDED",
@@ -107,19 +114,19 @@ async function requireTenantContext(req, res, next) {
       });
     }
 
+    if (!active_user_id) return res.status(403).json({ success: false, code: "ACCOUNT_INACTIVE", message: "This account is not active" });
+    req.waAccessLevel = wa_access_level || "full";
     // 2. Platform super admins can access any organization
     if (req.user.role === "platform_admin") {
       req.tenantId = tid;
       req.tenant = tenant;
       req.userRole = "organization_owner";
+      req._tenantVerified=true;req._tenantUserId=req.user.id;
       return next();
     }
 
     // 3. Verify user membership in this organization
-    const memberships = await q(
-      "SELECT role, membership_status FROM organization_memberships WHERE tenant_id = ? AND user_id = ? LIMIT 1",
-      [tid, req.user.id]
-    );
+    const memberships = membership_user_id ? [{role:membership_role,membership_status}] : [];
 
     let effectiveRole = "agent";
     if (memberships && memberships.length > 0) {
@@ -133,22 +140,18 @@ async function requireTenantContext(req, res, next) {
       }
       effectiveRole = m.role || "agent";
     } else {
-      // Check legacy admin on tenant 1 compatibility
-      if (tid === 1 && (req.user.role === "admin" || req.user.tenant_id === 1)) {
-        effectiveRole = "organization_owner";
-      } else {
-        return res.status(403).json({
-          success: false,
-          code: "FORBIDDEN_TENANT_ACCESS",
-          message: "You are not an authorized member of this organization",
-        });
-      }
+      return res.status(403).json({
+        success: false,
+        code: "FORBIDDEN_TENANT_ACCESS",
+        message: "You are not an authorized member of this organization",
+      });
     }
 
     // 4. Attach scoped context to request
     req.tenantId = tid;
     req.tenant = tenant;
     req.userRole = effectiveRole;
+    req._tenantVerified=true;req._tenantUserId=req.user.id;
     next();
   } catch (err) {
     console.error("[requireTenantContext] Error verifying tenant:", err);
@@ -199,10 +202,7 @@ async function requireBranchScope(req, res, next) {
         [req.tenantId, req.user.id]
       );
       req.permittedBranchIds = userBranchRows.map((r) => r.branch_id);
-      // Fallback: If no explicit branch assigned, allow head office branch if active
-      if (req.permittedBranchIds.length === 0 && allBranches.length > 0) {
-        req.permittedBranchIds = [allBranches[0].id];
-      }
+      req.permittedBranchIds = req.permittedBranchIds.filter(id => allBranches.some(branch => Number(branch.id) === Number(id)));
     }
 
     // 2. Resolve active branch ID
@@ -230,7 +230,7 @@ async function requireBranchScope(req, res, next) {
       activeBranchId = bid;
     } else {
       // Default to first permitted branch or Head Office
-      activeBranchId = req.permittedBranchIds[0] || (allBranches[0] && allBranches[0].id) || null;
+      activeBranchId = req.permittedBranchIds[0] || null;
     }
 
     req.branchId = activeBranchId;

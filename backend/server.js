@@ -87,11 +87,13 @@ const app = express();
  * actually true at request time.
  */
 const r2Storage = require("./services/r2StorageService");
-const isR2OrSqliteActive =
-  r2Storage.isConfigured() ||
-  ["1", "true", "sqlite", "r2"].includes(
-    String(process.env.USE_SQLITE || process.env.DB_ENGINE || "").toLowerCase()
-  );
+const isR2OrSqliteActive = require("./config/databaseEngine").usesSqlite();
+const r2Required = process.env.R2_REQUIRED === "1";
+if(r2Required && r2Storage.isConfigured()) {
+  const verifyStorage=()=>r2Storage.verifyConnection().catch(()=>{});
+  verifyStorage();
+  const storageTimer=setInterval(verifyStorage,300000);storageTimer.unref();
+}
 
 const dbState = {
   connected: false,
@@ -105,6 +107,7 @@ const dbState = {
   ),
   lastError: null,
 };
+const databaseHealth=require("./services/databaseHealth").createDatabaseHealth(db,{onResult:result=>{dbState.connected=result.ok;dbState.lastError=result.errorCode;}});
 
 // Never let a database failure become an unhandled rejection. Without this, a
 // dead database crashes the process even in degraded mode, which defeats the
@@ -169,7 +172,7 @@ app.use(cors({
   // every request, so leaving them off this list made the browser fail the
   // preflight and drop the response ("Failed to fetch") for any cross-origin
   // dev/prod call using that instance. Tenant validation stays server-side.
-  allowedHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-Requested-With", "X-Tenant-Id", "X-Branch-Id"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-Requested-With", "X-Tenant-Id", "X-Branch-Id", "X-Browser-Session"],
   exposedHeaders: ["Content-Disposition"],
   credentials: true,
   maxAge: 86400,
@@ -190,29 +193,40 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: "50mb", verify: (req, res, buf) => { req.rawBody = buf; } }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
+app.use(require("./middleware/requestAdmission").admitRequest);
+app.use(express.json({ limit: process.env.HTTP_JSON_LIMIT || "2mb", verify: (req, res, buf) => { if(req.path.includes("webhook"))req.rawBody = buf; } }));
+app.use(express.urlencoded({ limit: process.env.HTTP_JSON_LIMIT || "2mb", extended: true, parameterLimit: 2000 }));
 
 server.keepAliveTimeout = 65000;
 server.headersTimeout = 66000;
 server.requestTimeout = 120000;
 
+app.set("sharedInboxReady", false);
+app.set("databaseHealth",databaseHealth);
+app.get("/api/ops/metrics",require("./services/runtimeMetrics").protectedSnapshot);
 app.get(["/health", "/api/health"], (req, res) => {
   // Truth over green ticks. The status stays 200 so orchestrators do not
   // kill-loop the container, but the body reports the real state — a monitor
   // reading `ok` sees degraded, and a human reading the deploy log sees why.
-  const dbUp = dbState.connected;
+  const dbUp = dbState.connected && databaseHealth.status().ok;
   const webEngineOn = webEngine.isWebEngineEnabled();
   const r2Storage = require("./services/r2StorageService");
   const isSqlite = Boolean(db.isSqlite);
   const r2Status = r2Storage.getStatus();
   res.json({
-    ok: dbUp,
+    ok: !app.get("draining") && dbUp && app.get("sharedInboxReady") && (!r2Required || Boolean(r2Status.configured && r2Status.lastProbe?.ok)),
+    draining: Boolean(app.get("draining")),
+    sharedInboxReady: app.get("sharedInboxReady"),
     service: "whatsapp-crm",
     database: dbUp ? "ready" : "disconnected",
+    databaseCheckAt: databaseHealth.status().checkedAt,
     dbEngine: isSqlite ? (r2Status.configured ? "sqlite-r2" : "sqlite") : "mysql",
     storage: {
       r2Configured: r2Status.configured,
+      r2Required,
+      r2Verified: Boolean(r2Status.configured && r2Status.lastProbe?.ok),
+      r2LastCheck: r2Status.lastProbe?.checkedAt || null,
+      legacyPublicUploads: require("./middleware/legacyUploads").enabled(),
       r2Bucket: r2Status.bucket,
       lastSyncAt: r2Status.lastSyncAt,
     },
@@ -273,7 +287,7 @@ app.use("/api", (req, res, next) => {
   // requested. Gating this on degradedAllowed left a hole: with the flag off and
   // no database, routes were allowed through to a dead socket and produced raw
   // driver errors and unhandled rejections instead of one clear 503.
-  if (dbState.connected) return next();
+  if (dbState.connected && databaseHealth.status().ok) return next();
 
   if (!dbState.degradedAllowed) {
     console.warn(
@@ -317,7 +331,9 @@ app.use((req, res, next) => {
 // ── Routes ───────────────────────────────────────────────────────────────────
 // Auth plane (login/register/2FA + verifyToken) — duplicated from the CRM so
 // the WA frontend can log in against the cloned users table. See README.
-app.use("/api/auth", require("./routes/authRoutes"));
+app.use("/api", require("./middleware/sharedWorkspaceGuard"));
+app.use("/api/auth", require("./routes/browserSessionRoutes"));
+app.use("/api/auth", require("./middleware/authWorkspaceScope"), require("./services/browserSessions").interceptLogin, require("./routes/authRoutes"));
 app.use("/api/client-portal", require("./routes/clientPortalRoutes"));
 
 // ── Enterprise Multi-Tenant & Multi-Branch v2 REST APIs ──────────────────────
@@ -325,7 +341,7 @@ app.use("/api/v2", require("./routes/enterpriseBranchRoutes"));
 app.use("/api/v2", require("./routes/enterpriseOrganizationRoutes"));
 app.use("/api/v2/meta", require("./routes/enterpriseMetaRoutes"));
 app.use("/api/v2/billing", require("./routes/enterpriseBillingRoutes"));
-app.use("/api/v2/inbox", require("./routes/enterpriseInboxRoutes"));
+app.use("/api/v2/inbox", (req, res, next) => app.get("sharedInboxReady") ? next() : res.status(503).json({ message: "Shared inbox schema is not ready" }), require("./routes/enterpriseInboxRoutes"));
 app.use("/webhooks/razorpay", require("./routes/enterpriseBillingRoutes"));
 
 app.use("/api/teammember", require("./middleware/authMiddleware").verifyToken, (req, res) => {
@@ -410,6 +426,7 @@ ensureRuntimeDirs();
 app.use(
   "/uploads",
   (req, res, next) => {
+    if(!require("./middleware/legacyUploads").enabled())return res.sendStatus(404);
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
     next();
@@ -459,9 +476,16 @@ function startServer() {
     try {
       await require("./services/waDatabase").ensureWATables();
       await require("./services/tenantPlanService").ensureTenantsTable();
+      await require("./migrations/shared_number_inbox").migrate(require("./config/database"));
+      await require("./migrations/shared_flows").migrate(require("./config/database"));
+      await require("./services/sharedFlowRuntime").recover();
+      app.set("sharedInboxReady", true);
+      require("./services/waStorageRetention").start();
     } catch (e) {
       console.warn("⚠️ WhatsApp tables setup warning:", e.message);
     }
+
+    await databaseHealth.check();databaseHealth.start();
 
     // Load active Meta WhatsApp Cloud API credentials on boot
     try {
@@ -507,7 +531,7 @@ function startServer() {
 
     // Universal CRM Real-Time Event Bus & Database Change Sweep (Invoices, Quotes, AMC, Leads, Walkins)
     try {
-      require("./services/crmEventBus").startCrmRealtimeSweep();
+      if(process.env.WA_ENABLE_CRM_SWEEP!=="0")require("./services/crmEventBus").startCrmRealtimeSweep();
     } catch (e) {
       console.warn("⚠️ CRM Event Bus sweep warning:", e.message);
     }
@@ -570,11 +594,14 @@ function startServer() {
 app.startServer = startServer;
 
 function setupGracefulShutdown() {
+  let stopping=false;
   const shutdown = (signal) => {
+    if(stopping)return;stopping=true;app.set("draining",true);databaseHealth.stop();
     console.log(`\n🛑 [Server Guard] Received ${signal} — draining connections and shutting down gracefully...`);
     server.close(async () => {
       console.log("  HTTP/WebSocket servers closed to new connections.");
       try {
+        await require("./services/sharedInboxAssistant").idle();
         const { messageQueue } = require("./services/waQueue");
         if (messageQueue && messageQueue.close) await messageQueue.close().catch(() => {});
         if (db && db.end) await new Promise((r) => db.end(r)).catch(() => {});
@@ -582,10 +609,12 @@ function setupGracefulShutdown() {
       console.log("  Clean shutdown completed.");
       process.exit(0);
     });
+    const io=require("./sockets/chatsockets").getIO();
+    if(io){io.of("/").disconnectSockets(true);io.of("/notifications").disconnectSockets(true);io.engine.close();}
     setTimeout(() => {
-      console.error("  Forced exit after 10s shutdown timeout.");
+      console.error("  Forced exit after 30s shutdown timeout.");
       process.exit(1);
-    }, 10000).unref();
+    }, 30000).unref();
   };
 
   process.on("SIGTERM", () => shutdown("SIGTERM"));

@@ -1,0 +1,14 @@
+[Unit]
+Description=WhatsApp CRM readiness and capacity check
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=wauser
+Group=wauser
+WorkingDirectory=/home/wauser/app/backend
+ExecStart=/usr/bin/node scripts/ops-check.js
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only

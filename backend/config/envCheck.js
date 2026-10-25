@@ -185,12 +185,7 @@ function checkAllowedOrigins(env) {
  */
 function checkEnv(env = process.env) {
   const isProd = env.NODE_ENV === "production";
-  const r2Storage = require("../services/r2StorageService");
-  const isR2OrSqlite =
-    r2Storage.isConfigured() ||
-    ["1", "true", "sqlite", "r2"].includes(
-      String(env.USE_SQLITE || env.DB_ENGINE || "").toLowerCase()
-    );
+  const isR2OrSqlite = require("./databaseEngine").usesSqlite(env);
   const isMysqlConfigured = ["DB_HOST", "DB_NAME", "DB_USER"].every(
     (k) => !isBlank(env[k]) && !isPlaceholder(env[k])
   );
@@ -200,6 +195,7 @@ function checkEnv(env = process.env) {
   const errors = [];
   const warnings = [];
   const infos = [];
+  if(isProd)errors.push(...require("./capacity").validateOperations(env));
 
   // Strict mode is opt-in via REQUIRE_HARD_CONFIG=1.
   const strict = ["1", "true", "yes", "on"].includes(String(env.REQUIRE_HARD_CONFIG || "").toLowerCase());

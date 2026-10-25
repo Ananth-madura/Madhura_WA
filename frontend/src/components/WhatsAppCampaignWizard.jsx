@@ -56,6 +56,8 @@ export default function WhatsAppCampaignWizard({ isOpen, onClose, onSuccess, ini
   const [mediaPreview, setMediaPreview] = useState(null);
   const [uploadedMedia, setUploadedMedia] = useState(null); // {url, media_type}
   const [uploading, setUploading] = useState(false);
+  const [hostedMediaUrl, setHostedMediaUrl] = useState("");
+  const [hostedMediaType, setHostedMediaType] = useState("image");
 
   // ── Step 3: location ─────────────────────────────────────────────────────
   const [includeLocation, setIncludeLocation] = useState(false);
@@ -180,6 +182,7 @@ export default function WhatsAppCampaignWizard({ isOpen, onClose, onSuccess, ini
     setMediaFile(file);
     setMediaPreview(URL.createObjectURL(file));
     setUploading(true);
+    setUploadedMedia(null);
     setError(null);
     try {
       const formData = new FormData();
@@ -194,6 +197,19 @@ export default function WhatsAppCampaignWizard({ isOpen, onClose, onSuccess, ini
   };
 
   const removeMedia = () => { setMediaFile(null); setMediaPreview(null); setUploadedMedia(null); };
+
+  const attachHostedMedia = () => {
+    try {
+      const url = new URL(hostedMediaUrl.trim());
+      if (url.protocol !== "https:" || url.username || url.password) throw new Error();
+      setUploadedMedia({ url: url.href, media_type: hostedMediaType, filename: "Hosted media" });
+      setMediaFile(null);
+      setMediaPreview(url.href);
+      setError(null);
+    } catch (_) {
+      setError("Enter an HTTPS media URL without a username or password.");
+    }
+  };
 
   // ── Location step handlers ───────────────────────────────────────────────
   const useMyLocation = () => {
@@ -547,7 +563,7 @@ export default function WhatsAppCampaignWizard({ isOpen, onClose, onSuccess, ini
                           <img src={mediaPreview} alt="attachment" className="w-16 h-16 rounded-lg object-cover" />
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-[var(--color-ink)] truncate">{mediaFile?.name}</p>
+                          <p className="text-xs text-[var(--color-ink)] truncate">{mediaFile?.name || uploadedMedia?.filename}</p>
                           {uploading ? (
                             <span className="text-xs text-[var(--color-focus)] flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Uploading...</span>
                           ) : uploadedMedia ? (
@@ -557,6 +573,17 @@ export default function WhatsAppCampaignWizard({ isOpen, onClose, onSuccess, ini
                         <button onClick={removeMedia} className="p-1.5 hover:bg-[var(--color-paper)] rounded text-[var(--color-error)]"><Trash2 size={14} className="text-[var(--color-error)]" /></button>
                       </div>
                     )}
+                    <div className="mt-3 space-y-2">
+                      <label htmlFor="campaign-hosted-media" className="text-xs text-[var(--color-ink-2)]">Or attach an existing HTTPS media URL</label>
+                      <input id="campaign-hosted-media" type="url" value={hostedMediaUrl} onChange={e => setHostedMediaUrl(e.target.value)} placeholder="https://assets.example.com/product.jpg" className="w-full rounded border border-[var(--color-rule)] p-2 text-sm" />
+                      <div className="flex gap-2">
+                        <select aria-label="Hosted media type" value={hostedMediaType} onChange={e => setHostedMediaType(e.target.value)} className="rounded border border-[var(--color-rule)] p-2 text-sm">
+                          <option value="image">Image</option><option value="video">Video</option>
+                        </select>
+                        <button type="button" onClick={attachHostedMedia} disabled={uploading || !hostedMediaUrl.trim()} className="rounded border border-[var(--color-rule)] px-3 text-sm disabled:opacity-50">Attach URL</button>
+                      </div>
+                      <p className="text-xs text-[var(--color-ink-2)]">The URL must remain available to WhatsApp until the campaign finishes.</p>
+                    </div>
                   </div>
                 </>
               )}

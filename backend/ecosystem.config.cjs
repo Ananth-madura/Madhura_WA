@@ -5,23 +5,11 @@
  *   pm2 start ecosystem.config.cjs
  *   pm2 save && pm2 startup      # survives a reboot
  *
- * Key decisions and why:
- *
- *  - instances: 1, exec_mode: "fork". NOT cluster. This app holds a WhatsApp
- *    Web session, which is a stateful Chromium profile with a lock file. Two
- *    forks would fight over the same profile and one would crash-loop. If you
- *    ever need more throughput, scale the whole box, not the fork count.
- *
- *  - max_memory_restart: 2G. Puppeteer/Chromium is the memory hog; a leak here
- *    is the difference between a healthy inbox and a dead one at 3am.
- *
- *  - The persistent dirs (whatsapp-sessions/, uploads/, .env) live OUTSIDE the
- *    deploy directory and are bind-mounted in via env, so `git pull` deploys
- *    never touch them. This is the single most important thing in this file.
- *
- *  - ENABLE_CHROME is not a thing; PUPPETEER_* are read by .puppeteerrc.cjs.
- *    skipDownload is true in that file, so Chrome is installed ONCE by
- *    deploy.sh (PUPPETEER_SKIP_DOWNLOAD=false) rather than on every npm ci.
+ * Cloud API pilot profile for a 4 GB VM shared with MySQL.
+ * One process owns in-memory assistant queues and rate controls. Adding PM2
+ * instances requires distributed event delivery and worker/scheduler ownership.
+ * The 768 MB heap and 1100 MB RSS restart threshold are resource fuses, not a
+ * throughput guarantee. Persistent state stays outside the checkout.
  */
 
 const path = require("path");
@@ -38,12 +26,12 @@ module.exports = {
       script: path.join(APP_DIR, "server.js"),
       cwd: APP_DIR,
 
-      // Fork, not cluster — see note above about the Chromium session profile.
+      // The assistant queue and local admission counters have one process owner.
       instances: 1,
       exec_mode: "fork",
 
-      // Node 20 LTS (matches frontend/.nvmrc). Node 18 also works.
-      node_args: "--max-old-space-size=1536",
+      // Use the declared Node 24 runtime.
+      node_args: "--max-old-space-size=768",
       exec_interpreter: "node",
 
       // Restart policy: crash always, in-flight requests get a moment to drain.
@@ -51,14 +39,22 @@ module.exports = {
       max_restarts: 15,
       restart_delay: 3000,
       exp_backoff_restart_delay: 200,
-      kill_timeout: 8000,
+      kill_timeout: 35000,
       listen_timeout: 10000,
       wait_ready: false,
-      max_memory_restart: "2G",
+      max_memory_restart: "1100M",
 
       env: {
         NODE_ENV: "production",
         PORT: "5001",
+        DB_ENGINE: "mysql",
+        USE_SQLITE: "0",
+        REQUIRE_HARD_CONFIG: "1",
+        ALLOW_START_WITHOUT_DB: "0",
+        WA_ENABLE_WEB_ENGINE: "0",
+        WA_SERVER_CHAT_STORAGE: "0",
+        WA_LEGACY_PUBLIC_UPLOADS: "0",
+        AUTH_BROWSER_COOKIES: "1",
 
         // ── PERSISTENT STATE (survives git pull) ────────────────────────────
         // whatsapp-web.js reads PuppeteerProfile path from these.
@@ -74,7 +70,7 @@ module.exports = {
 
         // ── RUNTIME ────────────────────────────────────────────────────────
         TZ: "Asia/Kolkata",
-        NODE_OPTIONS: "--max-old-space-size=1536",
+        NODE_OPTIONS: "--max-old-space-size=768",
       },
 
       // NOTE: dotenv runs with override:false, so anything exported by

@@ -25,7 +25,7 @@ async function ensureWATables() {
       buttons JSON DEFAULT NULL,
       variables JSON DEFAULT NULL,
       meta_template_id VARCHAR(100) DEFAULT NULL,
-      meta_status VARCHAR(50) DEFAULT 'APPROVED',
+      meta_status VARCHAR(50) DEFAULT 'DRAFT',
       created_by INT DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -965,7 +965,7 @@ async function ensureWATables() {
       for (const t of defaultTemplates) {
         await queryAsync(
           `INSERT INTO wa_templates (name, category, language, header_value, body, footer, meta_status) VALUES (?,?,?,?,?,?,?)`,
-          t
+          [...t.slice(0,6), "DRAFT"]
         );
       }
       console.log("✅ Seeded 10 universal WhatsApp template presets");
@@ -998,32 +998,6 @@ async function ensureWATables() {
          VALUES (1, 0, 'text', 'Hello {name}! Welcome to Madhura Tech. Thank you for reaching out to us. How can we help you today?', 24)`
       );
       console.log("✅ Seeded default Welcome Auto-Reply settings (disabled by default)");
-    }
-
-    // ── Safe Rebranding Data Migration: Update any existing rows containing 'ACHME' / 'Achme' ──
-    try {
-      await queryAsync(
-        `UPDATE wa_welcome_settings
-         SET welcome_text = REPLACE(REPLACE(welcome_text, 'ACHME', 'Madhura Tech'), 'Achme', 'Madhura Tech')
-         WHERE welcome_text LIKE '%ACHME%' OR welcome_text LIKE '%Achme%'`
-      );
-      await queryAsync(
-        `UPDATE wa_templates
-         SET header_value = REPLACE(REPLACE(header_value, 'ACHME', 'Madhura Tech'), 'Achme', 'Madhura Tech'),
-             body = REPLACE(REPLACE(body, 'ACHME', 'Madhura Tech'), 'Achme', 'Madhura Tech'),
-             footer = REPLACE(REPLACE(footer, 'ACHME', 'Madhura Tech'), 'Achme', 'Madhura Tech')
-         WHERE header_value LIKE '%ACHME%' OR body LIKE '%ACHME%' OR footer LIKE '%ACHME%'
-            OR header_value LIKE '%Achme%' OR body LIKE '%Achme%' OR footer LIKE '%Achme%'`
-      );
-      await queryAsync(
-        `UPDATE wa_automations
-         SET message_text = REPLACE(REPLACE(message_text, 'ACHME', 'Madhura Tech'), 'Achme', 'Madhura Tech'),
-             followup_message_text = REPLACE(REPLACE(followup_message_text, 'ACHME', 'Madhura Tech'), 'Achme', 'Madhura Tech')
-         WHERE message_text LIKE '%ACHME%' OR followup_message_text LIKE '%ACHME%'
-            OR message_text LIKE '%Achme%' OR followup_message_text LIKE '%Achme%'`
-      );
-    } catch (migErr) {
-      console.warn("⚠️ WhatsApp rebranding data migration note:", migErr.message);
     }
 
     const aiSettingsCount = await queryAsync("SELECT COUNT(*) as count FROM wa_ai_settings");

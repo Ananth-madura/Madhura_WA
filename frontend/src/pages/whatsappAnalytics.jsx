@@ -1,14 +1,14 @@
 import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   BarChart3, TrendingUp, Users, Send, CheckCircle2, Eye, XCircle,
   MessageCircle, RefreshCw, Loader2, Globe, UserX, ShieldCheck,
-  Bot, ArrowUpRight, Zap, Sparkles, DollarSign, Download, Filter,
-  Search, ArrowDownRight, Layers, Smartphone, FileText, CheckCheck,
-  Clock, ShieldAlert, Cpu
+  ArrowUpRight, Zap, Sparkles, DollarSign, Download,
+  Search
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
+import { useEnterprise } from "../context/EnterpriseContext";
 
 // CSV Export Utility
 const exportToCsv = (filename, headers, rows) => {
@@ -97,19 +97,20 @@ function MiniBar({ label, value, max, color, percentage }) {
 }
 
 export default function WAAnalytics() {
+  const { activeTenant } = useEnterprise();
   const [activeTab, setActiveTab] = useState("overview"); // 'overview' | 'campaigns' | 'automations' | 'flows' | 'logs'
   const [dashboard, setDashboard] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
   const [automations, setAutomations] = useState([]);
   const [flows, setFlows] = useState([]);
   const [daily, setDaily] = useState([]);
-  const [webhookEvents, setWebhookEvents] = useState([]);
   const [logs, setLogs] = useState([]);
   const [logsTotal, setLogsTotal] = useState(0);
   const [logPage, setLogPage] = useState(1);
   const [logStatus, setLogStatus] = useState("");
   const [logDirection, setLogDirection] = useState("");
   const [logSearch, setLogSearch] = useState("");
+  const [logQuery,setLogQuery]=useState("");
 
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
@@ -122,19 +123,18 @@ export default function WAAnalytics() {
   const analyticsRequest = useRef(0);
   const logsRequest = useRef(0);
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     const requestId = ++analyticsRequest.current;
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
-      const [dRes, cRes, aRes, fRes, dlRes, wRes] = await Promise.all([
+      const [dRes, cRes, aRes, fRes, dlRes] = await Promise.all([
         axios.get(`${API}/api/wa/analytics/dashboard`, { headers }).catch(() => ({ data: null, failed: true })),
         axios.get(`${API}/api/wa/analytics/campaigns`, { headers }).catch(() => ({ data: [], failed: true })),
         axios.get(`${API}/api/wa/analytics/automations`, { headers }).catch(() => ({ data: [], failed: true })),
         axios.get(`${API}/api/wa/analytics/flows`, { headers }).catch(() => ({ data: [], failed: true })),
         axios.get(`${API}/api/wa/analytics/daily?days=${days}`, { headers }).catch(() => ({ data: [], failed: true })),
-        axios.get(`${API}/api/wa/analytics/webhook-events?limit=30`, { headers }).catch(() => ({ data: [], failed: true })),
       ]);
 
       if (requestId !== analyticsRequest.current) return;
@@ -143,9 +143,8 @@ export default function WAAnalytics() {
       setAutomations(aRes.data || []);
       setFlows(fRes.data || []);
       setDaily(dlRes.data || []);
-      setWebhookEvents(wRes.data || []);
-      if (!dRes.failed) setLastUpdated(new Date());
-      const failedSources = [dRes, cRes, aRes, fRes, dlRes, wRes].filter((result) => result.failed).length;
+      if (!dRes.failed) setLastUpdated(new Date(dRes.data?.generatedAt||Date.now()));
+      const failedSources = [dRes, cRes, aRes, fRes, dlRes].filter((result) => result.failed).length;
       setFetchError(failedSources ? `${failedSources} analytics source${failedSources === 1 ? "" : "s"} could not be reached. Some figures may be incomplete.` : "");
     } catch (err) {
       if (requestId !== analyticsRequest.current) return;
@@ -154,15 +153,15 @@ export default function WAAnalytics() {
     } finally {
       if (requestId === analyticsRequest.current) setLoading(false);
     }
-  };
+  },[days]);
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     const requestId = ++logsRequest.current;
     setLogsError("");
     try {
       const token = localStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
-      const queryParams = `?page=${logPage}&limit=40${logStatus ? `&status=${logStatus}` : ""}${logDirection ? `&direction=${logDirection}` : ""}${logSearch ? `&search=${encodeURIComponent(logSearch)}` : ""}`;
+      const queryParams = `?page=${logPage}&limit=40${logStatus ? `&status=${logStatus}` : ""}${logDirection ? `&direction=${logDirection}` : ""}${logQuery ? `&search=${encodeURIComponent(logQuery)}` : ""}`;
       const res = await axios.get(`${API}/api/wa/analytics/logs${queryParams}`, { headers });
       if (requestId !== logsRequest.current) return;
       setLogs(res.data.logs || []);
@@ -172,30 +171,34 @@ export default function WAAnalytics() {
       console.error("Error fetching message logs:", err);
       setLogsError(err.response?.data?.message || err.response?.data?.error || "Message logs could not be loaded.");
     }
-  };
+  },[logPage,logStatus,logDirection,logQuery]);
+  useEffect(()=>{const timer=setTimeout(()=>setLogQuery(logSearch),300);return()=>clearTimeout(timer);},[logSearch]);
 
   useEffect(() => {
+    const requests=analyticsRequest,logRequests=logsRequest;
+    setDashboard(null);setCampaigns([]);setAutomations([]);setFlows([]);setDaily([]);setLogs([]);setLogsTotal(0);setLogPage(1);
     fetchAll();
-  }, [days]);
+    return()=>{requests.current++;logRequests.current++;};
+  }, [fetchAll,activeTenant?.id]);
 
   useEffect(() => {
     if (activeTab === "logs") {
       fetchLogs();
     }
-  }, [activeTab, logPage, logStatus, logDirection, logSearch]);
+  }, [activeTab, fetchLogs, activeTenant?.id]);
 
-  // Reactive 10-second auto-poll
   useEffect(() => {
     if (autoRefresh) {
       autoPollRef.current = setInterval(() => {
+        if(document.hidden)return;
         fetchAll();
         if (activeTab === "logs") fetchLogs();
-      }, 10000);
+      }, 60000+Math.floor(Math.random()*10000));
     }
     return () => {
       if (autoPollRef.current) clearInterval(autoPollRef.current);
     };
-  }, [autoRefresh, days, activeTab, logPage, logStatus, logDirection, logSearch]);
+  }, [autoRefresh, activeTab, fetchAll, fetchLogs]);
 
   const d = dashboard || {};
   const maxDaily = Math.max(...daily.map((r) => r.sent || 0), 1);
@@ -221,12 +224,13 @@ export default function WAAnalytics() {
               {autoRefresh && (
                 <span className="hl-badge hl-badge-success">
                   <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--color-success)" }} />
-                  Live Sync
+                  Auto-refresh
                 </span>
               )}
             </div>
             <p className="hl-subtitle">
-              Comprehensive real-time reporting across Bulk Campaigns, CRM Automations, Chatbot Flows, and Delivery Logs.
+              The selected organization's retained campaign, automation and delivery records.
+              {lastUpdated&&<span className="block">Summary generated at {lastUpdated.toLocaleTimeString()}. Auto-refresh runs every minute while visible.</span>}
             </p>
           </div>
         </div>
@@ -837,7 +841,7 @@ export default function WAAnalytics() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="font-bold text-sm text-[var(--color-ink)]" style={{ fontFamily: "var(--font-display)" }}>Real-Time Message Delivery Audit Logs</h2>
-                  <p className="hl-subtitle">Live searchable ledger of every inbound and outbound message</p>
+                  <p className="hl-subtitle">Retained delivery records for this organization. Device-only history keeps message bodies on the receiving device.</p>
                 </div>
 
                 <div className="hl-actions">
@@ -845,7 +849,7 @@ export default function WAAnalytics() {
                     <Search size={14} className="text-[var(--color-ink-2)]" />
                     <input
                       type="text"
-                      placeholder="Search phone or text..."
+                      placeholder="Search phone..."
                       value={logSearch}
                       onChange={(e) => { setLogSearch(e.target.value); setLogPage(1); }}
                       className="bg-transparent outline-none text-xs w-44"

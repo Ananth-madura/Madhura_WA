@@ -1,0 +1,12 @@
+[mysqld]
+# Pilot starting point when MySQL shares a 4 GB VM with Node. Benchmark first.
+innodb_buffer_pool_size=1G
+max_connections=40
+tmp_table_size=16M
+max_heap_table_size=16M
+max_allowed_packet=16M
+innodb_flush_log_at_trx_commit=1
+sync_binlog=1
+binlog_expire_logs_seconds=259200
+slow_query_log=ON
+long_query_time=1

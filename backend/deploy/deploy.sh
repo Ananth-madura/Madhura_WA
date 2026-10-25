@@ -15,18 +15,16 @@
 #   3. If the new build does not pass its health check, roll back to the
 #      previous commit and restart. Do not leave a half-broken API serving
 #      messages.
-#   4. Never install Chrome on every deploy. .puppeteerrc.cjs sets
-#      skipDownload:true, so Chrome is installed once by setup-vps.sh. This
-#      script installs it only if it is genuinely missing.
+#   4. This Cloud API deployment does not install or start Chromium.
 # =============================================================================
 
 set -euo pipefail
+umask 077
 
 APP_DIR="${APP_DIR:-/home/wauser/app/backend}"
 WA_DATA_DIR="${WA_DATA_DIR:-/home/wauser/wa-data}"
 DB_NAME="${DB_NAME:-achme_wa}"
-DB_USER="${DB_USER:-root}"
-SKIP_MIGRATIONS="${SKIP_MIGRATIONS:-0}"
+MYSQL_BACKUP_LOGIN_PATH="${MYSQL_BACKUP_LOGIN_PATH:-wa-crm-backup}"
 SKIP_DB_BACKUP="${SKIP_DB_BACKUP:-0}"
 
 cd "$APP_DIR"
@@ -42,6 +40,12 @@ PREV_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo 'none')"
 log "Preflight"
 # -----------------------------------------------------------------------------
 [ -f .env ] || die "No .env in $APP_DIR. Copy .env.production.example and fill it in."
+node scripts/production-preflight.js || die "Production configuration preflight failed"
+WA_DATA_DIR="$(node -e 'require("./scripts/production-preflight").load();process.stdout.write(process.env.WA_DATA_DIR)')"
+DB_NAME="$(node -e 'require("./scripts/production-preflight").load();process.stdout.write(process.env.DB_NAME)')"
+DB_HOST="$(node -e 'require("./scripts/production-preflight").load();process.stdout.write(process.env.DB_HOST)')"
+DB_PORT="$(node -e 'require("./scripts/production-preflight").load();process.stdout.write(process.env.DB_PORT || "3306")')"
+git diff --quiet && git diff --cached --quiet || die "Tracked source changes exist; deploy from a clean checkout"
 
 # A placeholder JWT_SECRET means every restart invalidates every login, and in
 # production it means anyone can forge a token.
@@ -71,20 +75,20 @@ if [ "$SKIP_DB_BACKUP" != "1" ]; then
   DUMP="$WA_DATA_DIR/backups/${DB_NAME}-${STAMP}.sql.gz"
   if command -v mysqldump >/dev/null; then
     set +e
-    mysqldump --single-transaction --quick --routines --triggers \
-      -u "$DB_USER" -p"${DB_PASS:-}" "$DB_NAME" 2>/dev/null | gzip -9 > "$DUMP"
+    mysqldump --login-path="$MYSQL_BACKUP_LOGIN_PATH" --host="$DB_HOST" --port="$DB_PORT" --single-transaction --quick --no-tablespaces --routines --triggers \
+      "$DB_NAME" | gzip -9 > "$DUMP"
     RC=$?
     set -e
     if [ $RC -eq 0 ] && [ -s "$DUMP" ]; then
-      # Keep the last 10 dumps. A full disk is how MySQL starts failing writes.
+      # Keep two local pre-deploy dumps; encrypted nightly snapshots live off-server.
       ls -1t "$WA_DATA_DIR"/backups/${DB_NAME}-*.sql.gz 2>/dev/null \
-        | tail -n +11 | xargs -r rm -f
+        | tail -n +3 | while IFS= read -r old_dump; do rm -f -- "$old_dump"; done
       ok "Wrote $(basename "$DUMP") ($(du -h "$DUMP" | cut -f1))"
     else
-      warn "mysqldump failed — continuing without a backup. Fix this before shipping a migration."
+      die "mysqldump failed; no code or schema update was started"
     fi
   else
-    warn "mysqldump not on PATH. On Hostinger use: /usr/bin/mysqldump or the panel's phpMyAdmin export."
+    die "Install mysqldump and configure the private backup login path before deploying"
   fi
 fi
 
@@ -105,7 +109,7 @@ PUPPETEER_SKIP_DOWNLOAD=true npm ci --omit=dev || die "npm ci failed"
 ok "npm ci complete"
 
 if [ -d patches ] && ls patches/*.patch >/dev/null 2>&1; then
-  npx --no-install patch-package || warn "patch-package did not apply cleanly. Check the log above."
+  npx --no-install patch-package --error-on-fail || die "Dependency patch verification failed"
   ok "patches applied: $(ls patches/*.patch | wc -l) file(s)"
 else
   warn "No patches/ directory in the deployed copy."
@@ -114,41 +118,16 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-log "Chromium"
-# -----------------------------------------------------------------------------
-# .puppeteerrc.cjs sets skipDownload:true, so `npm ci` never installs Chrome.
-# Install it once, here, only if it is missing — never on every deploy.
-export PUPPETEER_CACHE_DIR="$WA_DATA_DIR/.cache/puppeteer"
-if ls "$PUPPETEER_CACHE_DIR"/chrome*/*/chrome-linux64/chrome >/dev/null 2>&1; then
-  ok "Chromium already present in $PUPPETEER_CACHE_DIR"
-else
-  warn "Chromium missing — installing once into $PUPPETEER_CACHE_DIR"
-  PUPPETEER_SKIP_DOWNLOAD=false npx puppeteer browsers install chrome || \
-    die "Could not install Chromium. whatsapp-web.js will fail to launch a session without it."
-  ok "Chromium installed"
-fi
+ok "Cloud API-only deployment; Chromium installation skipped"
 
-# -----------------------------------------------------------------------------
 log "Application"
 # -----------------------------------------------------------------------------
 export WA_DATA_DIR
 export NODE_ENV=production
 export PORT=5001
 
-if [ "$SKIP_MIGRATIONS" != "1" ]; then
-  # First boot: creates the schema and seeds the admin account.
-  node scripts/first-boot-db.js || die "first-boot-db.js failed"
-
-  # Idempotent data migrations. Each one is written to be safe to re-run.
-  for m in migrations/wa_webhook_idempotency.js \
-           migrations/wa_dedupe_message_logs.js \
-           migrations/wa_dedupe_and_unique_keys.js; do
-    if [ -f "$m" ]; then
-      node "$m" || warn "$m failed — continuing. Inspect before declaring the deploy good."
-    fi
-  done
-  ok "Migrations complete"
-fi
+node scripts/production-preflight.js --database || die "Database preflight failed"
+# The application applies its reviewed additive migrations before inbox readiness.
 
 pm2 startOrRestart ecosystem.config.cjs --update-env
 pm2 save
@@ -157,12 +136,11 @@ ok "pm2 restarted"
 # -----------------------------------------------------------------------------
 log "Health check"
 # -----------------------------------------------------------------------------
-# Poll rather than sleep-and-hope: the app boots a Chromium session engine and
-# touches the DB, so first response is not instant.
+# Wait for database and inbox migrations, not just an HTTP listener.
 HEALTHY=0
-for i in $(seq 1 30); do
+for i in $(seq 1 120); do
   BODY="$(curl -fsS --max-time 5 http://127.0.0.1:5001/health 2>/dev/null || true)"
-  if echo "$BODY" | grep -q '"ok":true'; then
+  if echo "$BODY" | grep -q '"ok":true' && echo "$BODY" | grep -q '"sharedInboxReady":true'; then
     HEALTHY=1
     ok "Healthy after ${i}s — $BODY"
     break

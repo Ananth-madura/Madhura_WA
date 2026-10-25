@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WhatsApp CRM — live architecture walkthrough</title>
+<style>
+  :root{font-family:system-ui,sans-serif;color:#172f31;background:#f4f5ef}
+  *{box-sizing:border-box}body{margin:0;padding:clamp(18px,4vw,56px)}main{max-width:1100px;margin:auto}
+  h1{font-size:clamp(26px,4vw,40px);margin:0 0 12px;letter-spacing:-.03em}p{line-height:1.6;max-width:85ch}
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:end;margin:24px 0}
+  label{display:grid;gap:6px;font-weight:600}button,select{font:inherit;border:1px solid #647c79;border-radius:5px;padding:10px 14px;background:white;color:#172f31}
+  button{cursor:pointer}button:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid #1c7661;outline-offset:4px}
+  .diagram{overflow-x:auto;background:white;border:1px solid #becbc7;border-radius:8px}
+  svg{display:block;width:100%;min-width:650px;height:auto}rect{fill:#f2f5f1;stroke:#829b94;stroke-width:1.5}
+  .active rect{fill:#d7f0e5;stroke:#155a48;stroke-width:3}.done rect{fill:#e8f3ed}
+  text{font-family:system-ui,sans-serif;fill:#172f31;font-size:16px;text-anchor:middle}.small{font-size:13px}
+  .edge{fill:none;stroke:#a4b7b0;stroke-width:2;marker-end:url(#arrow)}.packet{fill:#17644e}
+  #step{font-size:20px;font-weight:650;margin-bottom:8px}.explanation{min-height:130px}
+  .facts{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:24px}.facts section{border-top:3px solid #758d83;padding-top:10px}h2{font-size:18px}
+  a{color:#135c48}.notice{border-left:4px solid #17644e;padding:4px 16px;background:#e9f0e8}
+  @media(max-width:650px){.facts{grid-template-columns:1fr}.explanation{min-height:180px}}
+  @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body><main>
+<h1>How your live CRM works</h1>
+<p>Vercel serves the website and app. Your VPS handles Meta, shared CRM records, and live updates. This walkthrough illustrates the implemented device-history flow and optional assistant; it sends no data. Retained shared history remains a proposed alternative.</p>
+<div class="controls">
+  <label>Workflow<select id="scenario"><option value="message">Customer message</option><option value="note">Shared internal note</option><option value="assistant">Optional assistant and handoff</option></select></label>
+  <label>Chat body policy<select id="policy"><option value="local">A · Device-only history</option><option value="shared">B/C · Retained shared history</option></select></label>
+  <button id="play" type="button">Play</button><button id="next" type="button">Next step</button><button id="reset" type="button">Restart</button>
+</div>
+<div class="diagram">
+<svg viewBox="0 0 1040 430" role="img" aria-labelledby="title desc">
+<title id="title">CRM data flow</title><desc id="desc">Customer to Meta to VPS. The VPS saves shared CRM data and delivers live events to the Vercel app. Chat content can be cached on the agent device; another agent can fetch shared records.</desc>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="none" stroke="#7b9288"/></marker></defs>
+<path class="edge" d="M200 85H265"/><path class="edge" d="M455 85H525"/>
+<path class="edge" d="M715 85H800"/><path class="edge" d="M620 125V245H455"/>
+<path class="edge" d="M265 285V345"/><path class="edge" d="M455 245H800"/>
+<g id="customer" transform="translate(20 45)"><rect width="180" height="80" rx="5"/><text x="90" y="35">Customer</text><text x="90" y="59" class="small">WhatsApp message</text></g>
+<g id="meta" transform="translate(265 45)"><rect width="190" height="80" rx="5"/><text x="95" y="35">Meta Cloud API</text><text x="95" y="59" class="small">Signed webhook</text></g>
+<g id="backend" transform="translate(525 45)"><rect width="190" height="80" rx="5"/><text x="95" y="35">VPS backend</text><text x="95" y="59" class="small">Auth · validate · route</text></g>
+<g id="database" transform="translate(800 45)"><rect width="210" height="80" rx="5"/><text x="105" y="35">Shared database</text><text x="105" y="59" class="small">CRM + message metadata</text></g>
+<g id="agent" transform="translate(265 205)"><rect width="190" height="80" rx="5"/><text x="95" y="35">Agent A · Vercel app</text><text x="95" y="59" class="small">Authorized live inbox</text></g>
+<g id="cache" transform="translate(170 345)"><rect width="300" height="65" rx="5"/><text x="150" y="28">Device A · IndexedDB</text><text x="150" y="49" class="small">Local chat cache, subject to eviction</text></g>
+<g id="other" transform="translate(800 205)"><rect width="210" height="80" rx="5"/><text x="105" y="35">Agent B · another device</text><text x="105" y="59" class="small">Fetch authorized shared records</text></g>
+<circle id="packet" class="packet" cx="110" cy="85" r="7"/>
+<text x="675" y="360" class="small">Website + app: Vercel</text><text x="675" y="386" class="small">API + workers + sockets: VPS</text>
+</svg></div>
+<div class="explanation" aria-live="polite" aria-atomic="true"><p id="step"></p><p id="detail"></p></div>
+<p class="notice" id="limitation"></p>
+<div class="facts"><section><h2>Always shared through the database</h2><p>Contacts, client details, notes, assignments, statuses, consent, and business settings. Access is checked for each tenant, branch, user, and sender.</p></section><section><h2>Personal browser state</h2><p>Preferences belong in localStorage. Chat caches belong in IndexedDB. Proposed login credentials use a secure HttpOnly refresh cookie and an in-memory access token.</p></section></div>
+<p><a href="plan_live.md">Read the full deployment plan and launch checklist</a></p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const coordinates={customer:[110,85],meta:[360,85],backend:[620,85],database:[905,85],agent:[360,245],cache:[320,378],other:[905,245]};
+let index=0,timer=null,motion=null;
+function steps(){
+  if($('scenario').value==='note')return [
+    ['agent','1. Agent A writes an internal note','The app submits the note and record version to the VPS. A browser-only save would not make this a shared note.'],
+    ['backend','2. Backend checks access','Validate the login, tenant membership, branch permissions, and target contact. Internal notes are never sent to the customer.'],
+    ['database','3. Commit the shared record','Save the note, author, timestamps, and audit event in a transaction. Detect competing edits using record versions.'],
+    ['agent','4. Confirm the save','Return the committed record. The app displays saved only after the backend confirms success.'],
+    ['other','5. Notify Agent B','A scoped socket event prompts Agent B to refetch the permitted record. Reconnect also refreshes shared CRM data.'],
+    ['database','6. Shared across devices','Both agents read the authoritative note from the database. This works regardless of the selected chat-body policy.']
+  ];
+  if($('scenario').value==='assistant') return [
+    ['customer','1. Customer sends a message','The business uses one shared number. Employees do not need individual WhatsApp QR sessions.'],
+    ['meta','2. Signed Meta webhook','The VPS verifies the event and identifies its tenant and sender.'],
+    ['database','3. Route and store metadata','MySQL records ownership, contact details, and message state. The body is not stored for replay.'],
+    ['backend','4. Check explicit assistant settings','The assistant starts disabled. Only an enabled tenant and assistant-mode conversation enter the bounded, transient queue.'],
+    ['backend','5. Generate and check handoff','Send only the current question, customer name, and business instructions to the configured provider. Recheck mode, version, opt-out, and service window before sending.'],
+    ['agent','6. Human takeover','An employee reply, transfer, close, human request, or provider failure pauses automation. A reply already accepted by Meta cannot be recalled.'],
+    ['cache','7. Deliver authorized live updates','Connected permitted employees receive the reply and cache it locally. Restarted queues and offline chat bodies cannot be recovered in this mode.']
+  ];
+  const shared=$('policy').value==='shared';
+  return [
+    ['customer','1. Customer sends a message','The customer uses WhatsApp. No browser session needs to be open for Meta to attempt webhook delivery.'],
+    ['meta','2. Meta delivers the event','Meta sends a signed webhook to the public VPS callback. It is not a general conversation-history fetch.'],
+    ['backend','3. Backend validates and routes','Verify the raw-body signature, resolve the tenant and sender, and handle duplicates safely.'],
+    ['database','4. Save permitted shared data',shared?'Proposed B/C: durably capture authorized message content plus metadata before acknowledgement; implement encryption, retention, and replay.':'Mode A: save contact and message metadata without bodies. This does not create durable offline body recovery.'],
+    ['agent','5. Deliver to connected agents','Send an authenticated, scoped live event. Connected agents can see the body. Disconnected agents cannot receive this event.'],
+    ['cache','6. Cache on this device',shared?'Device cache accelerates display. Another authorized agent can recover retained content only within the implemented retention window.':'Cache the body in this device’s IndexedDB. Agent B may have shared CRM data while earlier message content remains unavailable.']
+  ];
+}
+function stop(){clearInterval(timer);timer=null;$('play').textContent='Play';}
+function render(animate=false){
+  const sequence=steps();const [node,title,detail]=sequence[index];
+  Object.keys(coordinates).forEach(id=>{$(id).classList.remove('active','done');});
+  sequence.slice(0,index).forEach(s=>$(s[0]).classList.add('done'));$(node).classList.add('active');
+  $('step').textContent=title;$('detail').textContent=detail;
+  $('limitation').textContent=$('policy').value==='local'?'Mode A: shared CRM data, device-only chat history. Clearing the cache or missing a live event can leave a permanent body gap.':'B/C are proposed alternatives requiring implementation. They store message bodies on the server and need explicit retention, deletion, and recovery policies.';
+  const packet=$('packet');const target=coordinates[node];if(motion)motion.cancel();
+  const prior=[Number(packet.getAttribute('cx')),Number(packet.getAttribute('cy'))];
+  if(animate&&!matchMedia('(prefers-reduced-motion: reduce)').matches){motion=packet.animate([{transform:`translate(${prior[0]}px,${prior[1]}px)`},{transform:`translate(${target[0]}px,${target[1]}px)`}],{duration:550,easing:'ease-in-out'});packet.setAttribute('cx','0');packet.setAttribute('cy','0');motion.onfinish=()=>{packet.setAttribute('cx',target[0]);packet.setAttribute('cy',target[1]);motion.cancel();};}
+  else{packet.setAttribute('cx',target[0]);packet.setAttribute('cy',target[1]);}
+}
+$('play').onclick=()=>{if(timer){stop();return;}if(index===steps().length-1){index=0;render();}$('play').textContent='Pause';timer=setInterval(()=>{index++;render(true);if(index===steps().length-1)stop();},2400);};
+$('next').onclick=()=>{stop();index=(index+1)%steps().length;render(true);};
+$('reset').onclick=()=>{stop();index=0;render();};
+['scenario','policy'].forEach(id=>$(id).onchange=()=>{stop();index=0;render();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
+render();
+</script>
+</body>
+</html>

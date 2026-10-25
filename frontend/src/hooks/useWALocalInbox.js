@@ -12,10 +12,10 @@ export default function useWALocalInbox() {
     const report = () => setWarning("Local chat storage is unavailable or full. Free device space or clear local history in Accounts.");
     const receive = (event) => {
       const owner = localCacheOwner(), message = event?.message;
-      if (!message?.id || (event.sessionKey && String(event.sessionKey) !== owner)) return;
+      if (!message?.id || (event.sessionKey && String(event.sessionKey) !== String(JSON.parse(localStorage.getItem("user") || "null")?.id))) return;
       const chatId = event.chatId || `${event.phone}@c.us`;
       writeLocalMessages(chatId, [message], owner).catch(report);
-      if (message.isMe || !message.hasMedia) return;
+      if (localStorage.getItem("wa_auto_cache_media") !== "1" || message.isMe || !message.hasMedia) return;
       const key = `${chatId}:${message.id}`;
       if (active.has(key)) return;
       const task = (async () => {

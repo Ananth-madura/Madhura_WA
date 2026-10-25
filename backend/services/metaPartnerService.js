@@ -14,7 +14,8 @@ const META_GRAPH_BASE = "https://graph.facebook.com";
 
 const q = (sql, params = []) =>
   new Promise((resolve, reject) => {
-    db.query(sql, params, (err, rows) => {
+    const statement = db.isSqlite ? sql : sql.replace(/INSERT OR IGNORE/gi, "INSERT IGNORE").replace(/\bexcluded\.(\w+)/g, "VALUES($1)");
+    db.query(statement, params, (err, rows) => {
       if (err) return reject(err);
       resolve(rows);
     });
@@ -136,7 +137,8 @@ async function completeOnboarding(tenantId, userId, payload) {
   await q(
     `INSERT INTO waba_connections (tenant_id, waba_id, partner_type, encrypted_token, status)
      VALUES (?, ?, 'tech_provider', ?, 'connected')
-     ON DUPLICATE KEY UPDATE encrypted_token = excluded.encrypted_token, status = 'connected'`,
+     ON DUPLICATE KEY UPDATE encrypted_token = CASE WHEN tenant_id = excluded.tenant_id THEN excluded.encrypted_token ELSE encrypted_token END,
+       status = CASE WHEN tenant_id = excluded.tenant_id THEN 'connected' ELSE status END`,
     [tid, metaWabaId, finalAccessToken]
   );
 
@@ -197,7 +199,7 @@ async function completeOnboarding(tenantId, userId, payload) {
 async function getTenantSenders(tenantId) {
   const tid = Number(tenantId);
   const senders = await q(
-    `SELECT s.*, 
+    `SELECT s.id, s.tenant_id, s.phone_number_id, s.display_phone, s.verified_name, s.quality, s.messaging_tier, s.is_shared, s.status, s.created_at,
             wc.waba_id, wc.partner_type,
             (SELECT GROUP_CONCAT(b.name, ', ') 
              FROM sender_branch_assignments sba 
@@ -270,6 +272,7 @@ async function resolveSenderCredentials(tenantId, senderId = null, branchId = nu
       [Number(senderId), tid]
     );
     if (rows && rows.length > 0) sender = rows[0];
+    if (!sender) throw Object.assign(new Error("Requested WhatsApp number is not connected to this organization"), { code: "SENDER_NOT_FOUND" });
   }
 
   // 2. Branch assigned sender requested
@@ -353,7 +356,7 @@ async function resolveSenderCredentials(tenantId, senderId = null, branchId = nu
 /**
  * Register a direct Meta Cloud API sender manually with provided credentials.
  */
-async function registerDirectSender(tenantId, userId, { phoneNumberId, accessToken, wabaId, displayName, displayPhone, isShared = 1, branchIds = [] }) {
+async function registerDirectSender(tenantId, userId, { phoneNumberId, accessToken, wabaId, displayName, displayPhone, isShared = 1, branchIds = [], appSecret, verifyToken }) {
   const tid = Number(tenantId);
   const cleanPhoneId = (phoneNumberId || "").trim();
   const cleanToken = (accessToken || "").trim();
@@ -364,28 +367,46 @@ async function registerDirectSender(tenantId, userId, { phoneNumberId, accessTok
   if (!cleanPhoneId || !cleanToken) {
     throw new Error("Phone Number ID and Access Token are required");
   }
+  const [existingSender] = await q("SELECT tenant_id FROM wa_senders WHERE phone_number_id = ? LIMIT 1", [cleanPhoneId]);
+  const [existingWaba] = await q("SELECT tenant_id FROM waba_connections WHERE waba_id = ? LIMIT 1", [cleanWabaId]);
+  if ((existingSender && Number(existingSender.tenant_id) !== tid) || (existingWaba && Number(existingWaba.tenant_id) !== tid)) throw new Error("WhatsApp assets belong to another organization");
+  if (!Array.isArray(branchIds)) throw new Error("Branch assignments must be a list");
+  const permittedBranches = await q("SELECT id FROM branches WHERE tenant_id = ? AND status = 'active' ORDER BY id", [tid]);
+  if (branchIds.some(id => !permittedBranches.some(branch => Number(branch.id) === Number(id)))) throw new Error("A branch is outside this organization");
+  if (!branchIds.length) branchIds = isShared ? permittedBranches.map(branch => branch.id) : [];
+  if (!branchIds.length) throw new Error("Select at least one active branch for this number");
+  const { encrypt } = require("../backendutil/cryptoHelper");
+  const encryptedToken = encrypt(cleanToken);
 
   // 1. Upsert WABA Connection
   await q(
     `INSERT INTO waba_connections (tenant_id, waba_id, partner_type, encrypted_token, status)
      VALUES (?, ?, 'direct_token', ?, 'connected')
-     ON DUPLICATE KEY UPDATE encrypted_token = excluded.encrypted_token, status = 'connected'`,
-    [tid, cleanWabaId, cleanToken]
+     ON DUPLICATE KEY UPDATE encrypted_token = CASE WHEN tenant_id = excluded.tenant_id THEN excluded.encrypted_token ELSE encrypted_token END,
+       status = CASE WHEN tenant_id = excluded.tenant_id THEN 'connected' ELSE status END`,
+    [tid, cleanWabaId, encryptedToken]
   );
 
   const [wabaRow] = await q("SELECT id FROM waba_connections WHERE waba_id = ? AND tenant_id = ? LIMIT 1", [cleanWabaId, tid]);
+  if (!wabaRow) throw new Error("WABA is owned by another organization");
   const wabaConnId = wabaRow ? wabaRow.id : null;
 
   // 2. Upsert WhatsApp Sender
   await q(
     `INSERT INTO wa_senders (tenant_id, waba_connection_id, phone_number_id, display_phone, verified_name, quality, messaging_tier, is_shared, status)
      VALUES (?, ?, ?, ?, ?, 'GREEN', 'TIER_1K', ?, 'connected')
-     ON DUPLICATE KEY UPDATE display_phone = excluded.display_phone, verified_name = excluded.verified_name, is_shared = excluded.is_shared, status = 'connected'`,
+     ON DUPLICATE KEY UPDATE display_phone = CASE WHEN tenant_id = excluded.tenant_id THEN excluded.display_phone ELSE display_phone END,
+       verified_name = CASE WHEN tenant_id = excluded.tenant_id THEN excluded.verified_name ELSE verified_name END,
+       waba_connection_id = CASE WHEN tenant_id = excluded.tenant_id THEN excluded.waba_connection_id ELSE waba_connection_id END,
+       is_shared = CASE WHEN tenant_id = excluded.tenant_id THEN excluded.is_shared ELSE is_shared END,
+       status = CASE WHEN tenant_id = excluded.tenant_id THEN 'connected' ELSE status END`,
     [tid, wabaConnId, cleanPhoneId, cleanPhone, cleanName, isShared ? 1 : 0]
   );
 
   const [senderRow] = await q("SELECT id FROM wa_senders WHERE phone_number_id = ? AND tenant_id = ? LIMIT 1", [cleanPhoneId, tid]);
   const senderId = senderRow ? senderRow.id : null;
+  if (!senderId) throw new Error("WhatsApp number is owned by another organization");
+  if (senderId && (appSecret || process.env.WA_APP_SECRET)) await q("UPDATE wa_senders SET app_secret = ?, verify_token = ? WHERE tenant_id = ? AND id = ?", [encrypt(appSecret || process.env.WA_APP_SECRET), verifyToken || process.env.WA_VERIFY_TOKEN || "", tid, senderId]);
 
   // 3. Branch assignments
   if (senderId && Array.isArray(branchIds) && branchIds.length > 0) {

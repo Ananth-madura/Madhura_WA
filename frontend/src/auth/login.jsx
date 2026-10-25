@@ -117,7 +117,7 @@ export default function Login() {
         setNotice("A verification code was sent to your email. It expires after five minutes.");
         return;
       }
-      if (!data?.token) {
+      if (!data?.token && !data?.cookieSession) {
         setError("Login failed — no authentication token returned from server.");
         return;
       }
@@ -155,7 +155,7 @@ export default function Login() {
         email: twoFactorEmail,
         otp: twoFactorCode.trim(),
       }, { timeout: 15000 });
-      if (!data?.token) throw new Error("Verification did not return a session token.");
+      if (!data?.token && !data?.cookieSession) throw new Error("Verification did not return a session.");
       login({ ...data.user, token: data.token, demoMode: false });
       const returnUrl = new URLSearchParams(location.search).get("returnUrl") || "/whatsapp";
       navigate(returnUrl, { replace: true });

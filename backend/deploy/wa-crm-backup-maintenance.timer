@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly encrypted backup repository maintenance
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=wa-crm-backup-maintenance.service
+
+[Install]
+WantedBy=timers.target

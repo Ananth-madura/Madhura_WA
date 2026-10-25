@@ -21,7 +21,7 @@ const db = require("../config/database");
  * Backfills and rebuilds are idempotent, but replaying them on every start
  * costs hundreds of statements and a table rebuild on large installations.
  */
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 const MIGRATION_NAME = "enterprise_multi_tenant_multi_branch";
 
 async function alreadyMigrated() {
@@ -46,7 +46,8 @@ async function alreadyMigrated() {
 
 const q = (sql, params = []) =>
   new Promise((resolve, reject) => {
-    db.query(sql, params, (err, rows) => {
+    const statement = db.isSqlite ? sql : sql.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, "INT AUTO_INCREMENT PRIMARY KEY").replace(/INSERT OR IGNORE/gi, "INSERT IGNORE").replace(/"(\w+)"/g, "`$1`");
+    db.query(statement, params, (err, rows) => {
       if (err) return reject(err);
       resolve(rows);
     });
