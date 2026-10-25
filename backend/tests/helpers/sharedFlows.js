@@ -21,6 +21,9 @@ async function verify({base,headers,secondHeaders,employeeToken,connection,sende
   const [[conversation]]=await connection.query("SELECT id FROM conversations WHERE tenant_id=1 ORDER BY id LIMIT 1");
   await connection.query("UPDATE conversations SET status='open',service_window_expires_at=DATE_ADD(NOW(),INTERVAL 1 DAY),automation_mode='human' WHERE id=?",[conversation.id]);
   assert.equal((await api("POST",`/v2/inbox/conversations/${conversation.id}/flow`,{flowId},employeeHeaders)).status,200);
+  const [[runningBefore]]=await connection.query("SELECT id FROM wa_flow_runs WHERE conversation_id=? AND status='active' ORDER BY id DESC LIMIT 1",[conversation.id]);
+  assert.equal((await api("POST",`/v2/inbox/conversations/${conversation.id}/flow`,{flowId:2147483647},employeeHeaders)).status,409);
+  const [[runningAfter]]=await connection.query("SELECT id FROM wa_flow_runs WHERE conversation_id=? AND status='active' ORDER BY id DESC LIMIT 1",[conversation.id]);assert.equal(runningAfter.id,runningBefore.id);
   const before=meta.deliveries.length;assert(before>0);assert(meta.deliveries.at(-1).text.body.includes("product"));
   const deliver=async(text,type="text")=>{
     const id=`wamid.flow.${crypto.randomUUID()}`;

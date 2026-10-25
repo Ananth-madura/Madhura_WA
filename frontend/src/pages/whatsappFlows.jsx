@@ -115,6 +115,8 @@ const PALETTE_CATEGORIES = [
   }
 ];
 
+const SHARED_PALETTE = PALETTE_CATEGORIES.map(category=>({...category,items:category.items.filter(item=>!["send_media","ai_intent","ai_generate","delay","crm_lookup","create_lead","api_webhook","jump_to_flow"].includes(item.type))})).filter(category=>category.items.length);
+
 const makeEntryNode = () => ({
   node_key: "start",
   node_type: "start",
@@ -2666,7 +2668,7 @@ function FlowsWorkspace() {
     const studioContent = (
       <div id="madhura-visual-flow-studio" className="flow-studio-shell" style={{ position: "fixed", inset: 0, width: "100%", height: "100dvh", zIndex: 99999 }}>
         <WAFlowEditor
-          nodes={nodes} categories={PALETTE_CATEGORIES.map(category=>({...category,items:category.items.filter(item=>!["send_media","ai_intent","ai_generate","delay","crm_lookup","create_lead","api_webhook","jump_to_flow"].includes(item.type))})).filter(category=>category.items.length)} selectedKey={selectedNodeKey}
+          nodes={nodes} categories={SHARED_PALETTE} selectedKey={selectedNodeKey}
           onSelect={setSelectedNodeKey} onInspect={setSelectedNodeKey}
           onChange={(next, typing = false) => { if (typing) snapshotNodesThrottled(); else snapshotNodes(); setNodes(next); setDirty(true); }}
           onTransientChange={setNodes} onCommit={recordHistory} onAdd={addNodeFromPalette}

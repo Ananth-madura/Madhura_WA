@@ -87,7 +87,7 @@ function step(flow,input="",state=null,initial={},execution={}){
   const text=String(input||"").trim().slice(0,2000);
   const retry=(message,c)=>{
     vars._invalid_count=(Number(vars._invalid_count)||0)+1;
-    if(vars._invalid_count>=(c.max_attempts||3))return c.invalid_next?step({...flow,entry_node_key:c.invalid_next},"",null,vars,execution):{messages:[{sender:"bot",type:"handoff",text:"A team member will help you continue."}],vars,currentNodeKey:null,isEnded:true,isHandedOff:true,logs};
+    if(vars._invalid_count>=(c.max_attempts||3))return c.invalid_next?step({...flow,entry_node_key:c.invalid_next},"",null,vars,{...execution,contact:execution.contact||initial}):{messages:[{sender:"bot",type:"handoff",text:"A team member will help you continue."}],vars,currentNodeKey:null,isEnded:true,isHandedOff:true,logs};
     return {messages:[{sender:"bot",type:"text",text:message}],vars,currentNodeKey:key,waiting:true,isEnded:false,logs};
   };
   if(waiting){
@@ -119,7 +119,7 @@ function step(flow,input="",state=null,initial={},execution={}){
       let url;try{url=rules.secureUrl(c.url,vars);}catch(_){throw fail("Configure a fixed HTTPS destination before previewing this link step");}
       messages.push({sender:"bot",type:"cta_url",text:interpolate(c.text,vars),url,button_text:interpolate(c.button_text,vars),buttons:[{type:"url",title:interpolate(c.button_text,vars),url}]});
     }
-    if(node.node_type==="contact_lookup")for(const field of ["customer.name","customer.phone","customer.email","contact.exists"])vars[field]=initial[field]??(field==="contact.exists"?false:"");
+    if(node.node_type==="contact_lookup")for(const field of ["customer.name","customer.phone","customer.email","contact.exists"])vars[field]=(execution.contact||initial)[field]??(field==="contact.exists"?false:"");
     if(node.node_type==="business_hours"){const open=rules.openHours(c,execution.now||new Date());vars["business.is_open"]=open;key=open?c.open_next:c.closed_next;continue;}
     if(node.node_type==="set_variable")vars[c.variable||c.variable_name||"value"]=interpolate(c.value,vars);
     if(node.node_type==="condition"){

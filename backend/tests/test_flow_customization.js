@@ -15,4 +15,13 @@ const first=step(flow),invalid=step(flow,"!",first);assert(invalid.waiting);asse
 const blueprints=require("../services/serviceFlowBlueprints");assert.equal(blueprints.length,3);
 for(const source of blueprints){const input=JSON.parse(JSON.stringify(source));if(input.key==="account_service")input.nodes.find(n=>n.node_key==="portal").config.url="https://portal.example.test";const normalized=normalize(input,{publish:true});assert(step(normalized,"",null,{"customer.name":"Customer","contact.exists":true},{now:new Date("2026-10-26T04:00:00Z")}));}
 assert.throws(()=>normalize(blueprints[0],{publish:true}),/HTTPS/);
+const recovery=normalize({name:"Trusted recovery snapshot",trigger_type:"manual",nodes:[
+  {node_key:"start",node_type:"collect_input",config:{prompt_text:"Email?",var_key:"answer",validation_type:"email",max_attempts:1,invalid_next:"snapshot",next_node_key:"end"}},
+  {node_key:"snapshot",node_type:"contact_lookup",config:{next_node_key:"reply"}},
+  {node_key:"reply",node_type:"send_message",config:{text:"{customer.email}",next_node_key:"end"}},
+  {node_key:"end",node_type:"end",config:{}},
+]},{publish:true});
+const initial={"customer.email":"trusted@fixture.test","contact.exists":true};
+const waiting=step(recovery,"",null,initial);waiting.vars["customer.email"]="overridden@fixture.test";
+assert.equal(step(recovery,"bad email",waiting,initial).messages[0].text,"trusted@fixture.test");
 console.log("PASS: grouped AND/OR conditions, strict numeric comparisons, office/overnight routing, fixed-domain encoded HTTPS links, bounded retries/recovery and all three service blueprints.");

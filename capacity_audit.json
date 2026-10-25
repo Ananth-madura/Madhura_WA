@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-25T04:54:05.779Z",
+  "at": "2026-10-25T06:11:08.305Z",
   "method": "Static source inventory and pattern counts; not exhaustive semantic certification. Secrets, runtime data, generated files, dependencies and symlinks excluded.",
   "workload": {
     "businessCustomers": 200,
@@ -24,8 +24,8 @@
       "high": 21701.38888888889
     }
   },
-  "sourceFiles": 332,
-  "totalLines": 92637,
+  "sourceFiles": 334,
+  "totalLines": 92746,
   "files": [
     {
       "file": "backend/.puppeteerrc.cjs",
@@ -535,9 +535,9 @@
     },
     {
       "file": "backend/package.json",
-      "bytes": 2195,
-      "lines": 65,
-      "sha256": "7f6d4e31642aa4578046ec579481133d2c92890fbd6588b85ed78e07885c7a8e",
+      "bytes": 2414,
+      "lines": 68,
+      "sha256": "4b0fe99895c2096ba266daea6a97c82fe65be2387c38c20c1623c5f2e6c25c4c",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -1040,6 +1040,17 @@
       "lazyImports": 0
     },
     {
+      "file": "backend/scripts/verify-shared-core.js",
+      "bytes": 1911,
+      "lines": 22,
+      "sha256": "353ac0658b2fe4ad479309411e669a6820b7446f2ed4f5768be9a2e8002be05c",
+      "timers": 0,
+      "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
       "file": "backend/server.js",
       "bytes": 30697,
       "lines": 629,
@@ -1140,9 +1151,9 @@
     },
     {
       "file": "backend/services/flowDefinition.js",
-      "bytes": 15262,
+      "bytes": 15323,
       "lines": 137,
-      "sha256": "495ca808881f17cd93f4d8b907c5ff8f5e6e55da14832f01137d180606191e1f",
+      "sha256": "9aba918f39170ed787a528391d6700a25238ef764250f4dbe092bc0e2ef1849f",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -1283,9 +1294,9 @@
     },
     {
       "file": "backend/services/sharedFlowRuntime.js",
-      "bytes": 14033,
-      "lines": 123,
-      "sha256": "d1f2c6ac8f71f2af4ef33b2e89036c91ffe8d9d47c5bc602c7bc5d0dba326735",
+      "bytes": 15597,
+      "lines": 144,
+      "sha256": "3e9e14e46bf4f1123d510f9eae2c160f63f57d6027ce3f7883190616a39e7dc6",
       "timers": 1,
       "syncFs": 0,
       "selectStar": 1,
@@ -1844,9 +1855,9 @@
     },
     {
       "file": "backend/tests/helpers/sharedFlows.js",
-      "bytes": 12484,
-      "lines": 112,
-      "sha256": "9cd65ad028a1645535fd9803be83e4305e99f0d0d54c562e66131481f1b78e99",
+      "bytes": 13000,
+      "lines": 115,
+      "sha256": "578e5760920d20d8cab7b12271bd69527e67bdc78b5805ff8c74a22f7ac34c66",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -1954,9 +1965,9 @@
     },
     {
       "file": "backend/tests/test_flow_customization.js",
-      "bytes": 2900,
-      "lines": 19,
-      "sha256": "98eeee4f77f5bcf40ce93ecdb2f87358c5e5d92b10845b11e2eb11cb4513f1e2",
+      "bytes": 3696,
+      "lines": 28,
+      "sha256": "179359dfaabafe5c59c91b3eb6c317a505688d217ac0ae2303cbd95bc5e93d27",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -2025,6 +2036,17 @@
       "sha256": "755c75021494c782886d807184d0132845100b76b57ed0c5d34dc2e54e334198",
       "timers": 0,
       "syncFs": 0,
+      "selectStar": 0,
+      "httpCalls": 0,
+      "lazyImports": 0
+    },
+    {
+      "file": "backend/tests/test_shared_flow_lifecycle.js",
+      "bytes": 4069,
+      "lines": 47,
+      "sha256": "c6fd967b257aab196b222acd754d5e9e2ba33d5683b13f5ce1d3961e25eedc6e",
+      "timers": 0,
+      "syncFs": 1,
       "selectStar": 0,
       "httpCalls": 0,
       "lazyImports": 0
@@ -2823,9 +2845,9 @@
     },
     {
       "file": "frontend/src/components/WAFlowEditor.jsx",
-      "bytes": 32581,
-      "lines": 183,
-      "sha256": "9adf83f9b0d8b0222702eb15730891f227bb81d35d99b03c93a858b3ef49b2b0",
+      "bytes": 32838,
+      "lines": 185,
+      "sha256": "4c4167793c8b8f53e55bcd18197f7ede3b841711b252940ac65e5bff10763ebe",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,
@@ -3461,9 +3483,9 @@
     },
     {
       "file": "frontend/src/pages/whatsappFlows.jsx",
-      "bytes": 154061,
-      "lines": 3110,
-      "sha256": "709ab4fd03040729a65db428ee65883aa5185e421172daca5cd98b0e9b605c88",
+      "bytes": 154101,
+      "lines": 3112,
+      "sha256": "b8c19b918e769827684e42b3261110e3d9bc088f997b779f48d1255f5342b798",
       "timers": 0,
       "syncFs": 0,
       "selectStar": 0,

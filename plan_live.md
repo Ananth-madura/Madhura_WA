@@ -753,3 +753,9 @@ Pending organization context displays a visible status instead of returning an e
 
 These are servicing/intake capabilities. Bank-system authentication, transaction execution, approval segregation and regulatory certification require separate implementations and verification. See [enterprise_flows.md](enterprise_flows.md) for the supported contract and production limits.
 
+## 25. Final optimization and repeatable verification
+
+[release_check.md](release_check.md) records the final code checks and remaining deployment requirements. The canvas now reuses its palette and graph indexes. Bot initiation validates a replacement before ending an active run, explicitly selected flows are resolved directly by organization/ID, and idle cleanup returns expired conversations to human mode with a version guard and a scoped UI update. Recovery routes keep the trusted contact snapshot separate from answer state.
+
+`npm.cmd --prefix backend test` runs the safe core allowlist without loading development database settings. `verify:integration` and `verify:browser` additionally require an explicitly configured isolated MySQL port. The legacy runner is separate and is not part of these default release checks. Live Meta/R2, Linux recovery and realistic hosting capacity remain release gates.
+
