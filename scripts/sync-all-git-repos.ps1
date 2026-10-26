@@ -51,8 +51,18 @@ function Invoke-Git {
         [switch]$AllowFailure
     )
 
-    $raw = & git @Arguments 2>&1
-    $code = $LASTEXITCODE
+    # Windows PowerShell 5.1 turns native stderr into a terminating error when the
+    # caller's preference is Stop, even with 2>&1. Relax it for the duration of the
+    # call so output is captured instead of aborting the script.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $raw = & git @Arguments 2>&1
+        $code = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
 
     $lines = @($raw | ForEach-Object {
         if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { [string]$_ }
