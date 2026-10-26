@@ -314,7 +314,7 @@ app.use((req, res, next) => {
     if (shouldEmit && res.statusCode < 400) {
       const io = req.app.get("io");
       if (io) {
-        io.emit("data_changed", {
+        io.to(`user:${req.user?.id || "none"}`).emit("data_changed", {
           method: req.method,
           path: req.originalUrl,
           status: res.statusCode,
@@ -342,6 +342,7 @@ app.use("/api/v2", require("./routes/enterpriseOrganizationRoutes"));
 app.use("/api/v2/meta", require("./routes/enterpriseMetaRoutes"));
 app.use("/api/v2/billing", require("./routes/enterpriseBillingRoutes"));
 app.use("/api/v2/inbox", (req, res, next) => app.get("sharedInboxReady") ? next() : res.status(503).json({ message: "Shared inbox schema is not ready" }), require("./routes/enterpriseInboxRoutes"));
+app.use("/api/v2/workspace", (req, res, next) => app.get("sharedInboxReady") ? next() : res.status(503).json({ message: "Employee workspace schema is not ready" }), require("./routes/employeeWorkspaceRoutes"));
 app.use("/webhooks/razorpay", require("./routes/enterpriseBillingRoutes"));
 
 app.use("/api/teammember", require("./middleware/authMiddleware").verifyToken, (req, res) => {
@@ -476,11 +477,14 @@ function startServer() {
     try {
       await require("./services/waDatabase").ensureWATables();
       await require("./services/tenantPlanService").ensureTenantsTable();
+      await require("./services/enquiryService").ensureEnquiryTables();
       await require("./migrations/shared_number_inbox").migrate(require("./config/database"));
       await require("./migrations/shared_flows").migrate(require("./config/database"));
       await require("./services/schemaReadiness").assertReady(db);
       await require("./services/sharedFlowRuntime").recover();
       app.set("sharedInboxReady", true);
+      require("./services/employeeOwnershipRecovery").start(db, app.get("io"));
+      await require("./services/waCampaignEngine").startWorker();
       require("./services/waStorageRetention").start();
     } catch (e) {
       console.warn("⚠️ WhatsApp tables setup warning:", e.message);

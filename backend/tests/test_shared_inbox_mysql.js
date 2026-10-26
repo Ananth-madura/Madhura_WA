@@ -61,7 +61,7 @@ async function main() {
     if(process.env.INBOX_TEST_BENCHMARK==="1")await require("./helpers/inboxBenchmark").run(db,created);
     const otherSender = await service.inbound({ tenantId: 1, senderId: 2, phone: "919000000000", timestamp: new Date() });
     assert.notEqual(otherSender.id, created[0].id);
-    assert.equal(otherSender.branch_id, 1);
+    assert.equal(otherSender.branch_id,[1,2].includes(Number(created[0].owner_user_id))?1:null,"A second number inherits the established owner only when that employee can access it");
     const independentlyRouted=[];
     for(let i=0;i<8;i++) {
       independentlyRouted.push(await incoming(`91888888888${i}`));
@@ -74,7 +74,10 @@ async function main() {
     const hidden = created.find(row => row.owner_user_id === 2);
     await service.conversation(employee, owned.id);
     await assert.rejects(service.conversation(employee, hidden.id), { status: 404 });
+    await sql.query("UPDATE conversations SET automation_mode='flow' WHERE id=?",[owned.id]);
     await assert.rejects(service.reassign(employee, owned.id, { userId: 2 }), { status: 403 });
+    await assert.rejects(service.reassign(admin, owned.id, { userId: 10,branchId:1 }), { status: 400 });
+    assert.equal((await service.conversation(employee,owned.id)).automation_mode,"flow","Denied and failed assignments must not pause the current bot");
     await service.reassign(admin, owned.id, { userId: 3, branchId: 2 });
     await assert.rejects(service.conversation(employee, owned.id), { status: 404 });
     const recipients = await service.recipients({ ...owned, owner_user_id: 3, branch_id: 2 });
@@ -210,7 +213,7 @@ async function main() {
     await sql.query("UPDATE staff_branch_memberships SET is_available=1,max_open_chats=100 WHERE user_id=3");
     const scopedNumber = await incoming("919666666666");assert.equal(scopedNumber.owner_user_id,3);
     assert.equal((await api("get", `/v2/inbox/conversations/${hidden.id}/messages`,2)).status,404);
-    const permittedNumber = await service.inbound({tenantId:1,senderId:2,phone:"919666666666",timestamp:new Date()});assert.equal(permittedNumber.owner_user_id,2);
+    const permittedNumber = await service.inbound({tenantId:1,senderId:2,phone:"919666666666",timestamp:new Date()});assert.equal(permittedNumber.owner_user_id,null,"A second number must not split customer ownership when the existing owner cannot access that number");
     await sql.query("INSERT INTO wa_webhook_claims VALUES ('2001-01-01')");
     await sql.query("INSERT INTO wa_webhook_events VALUES ('2001-01-01')");
     await sql.query("INSERT INTO wa_message_logs (tenant_id,phone,status,created_at) VALUES (1,'old','delivered','2001-01-01')");

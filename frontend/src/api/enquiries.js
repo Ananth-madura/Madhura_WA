@@ -6,6 +6,22 @@ import api from "../config/axios";
  * temperature and a Convert-to-Client action.
  */
 
+// Mirrors backend/services/enquiryService.js ENQUIRY_TYPES. `source` stays
+// provenance (manual / whatsapp_chat); this describes what the enquiry is about.
+export const ENQUIRY_TYPES = [
+  { value: "general", label: "General enquiry" },
+  { value: "product", label: "Product / service" },
+  { value: "pricing", label: "Pricing / quote" },
+  { value: "support", label: "Support" },
+  { value: "appointment", label: "Appointment" },
+  { value: "partnership", label: "Partnership" },
+];
+
+export const enquiryTypeLabel = (value) => {
+  const match = ENQUIRY_TYPES.find((type) => type.value === String(value || "").toLowerCase());
+  return match ? match.label : "General enquiry";
+};
+
 export const getEnquiries = async (params = {}) => {
   const res = await api.get("/api/wa/enquiries", { params });
   return res.data;

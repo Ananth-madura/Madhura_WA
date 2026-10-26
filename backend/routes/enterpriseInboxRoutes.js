@@ -6,6 +6,9 @@ const { requireTenantContext } = require("../middleware/tenantMiddleware");
 const { createInboxService } = require("../services/sharedInboxService");
 const { serverChatStorageEnabled } = require("../services/waChatPrivacy");
 const inbox = createInboxService(db);
+const outbound = require("../services/inboxOutbound").createInboxOutbound(db);
+const multer = require("multer");
+const attachmentUpload = multer({storage:multer.memoryStorage(),limits:{fileSize:require("../services/inboxOutbound").MAX_UPLOAD,files:1,fields:12,fieldSize:32768}});
 const { messageSendLimiter } = require("../middleware/waRateLimiter");
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const handle = work => async (req, res) => {
@@ -49,7 +52,7 @@ router.get("/conversations", handle(async (req, res) => {
     FROM conversations c JOIN wa_contacts ct ON ct.id = c.contact_id AND ct.tenant_id = c.tenant_id
     JOIN wa_senders s ON s.id = c.sender_id AND s.tenant_id = c.tenant_id WHERE ${where} ORDER BY ${activity?"c.updated_at DESC, c.id DESC":"c.id DESC"} LIMIT ?`, [...params, limit]);
   const last=rows[rows.length-1];
-  res.json({ success: true, conversations: rows, nextCursor: rows.length === limit ? (activity?require("../services/inboxCursor").encode(last):last.id) : null, chatStorage: serverChatStorageEnabled() ? "server" : "device", canManage: inbox.isAdmin(req) || req.userRole === "branch_manager" });
+  res.json({ success: true, conversations: rows, nextCursor: rows.length === limit ? (activity?require("../services/inboxCursor").encode(last):last.id) : null, chatStorage: serverChatStorageEnabled() ? "server" : "device", canManage: inbox.isAdmin(req) || req.userRole === "branch_manager",canSend:!["read_only","campaign_only"].includes(req.waAccessLevel) });
 }));
 
 router.get("/conversations/:id", handle(async (req,res)=>{
@@ -63,6 +66,13 @@ router.get("/conversations/:id/messages", handle(async (req, res) => {
     media_id AS cloudMediaId, sent_by AS sentBy, ${serverChatStorageEnabled() ? "message_text AS body" : "NULL AS body"}
     FROM wa_message_logs WHERE tenant_id = ? AND conversation_id = ? ORDER BY wa_message_logs.id DESC LIMIT 100`, [req.tenantId, row.id]);
   res.json({ success: true, messages: messages.map(item => ({ ...item, isMe: item.direction === "outbound", timestamp: Math.floor(new Date(item.created_at).getTime() / 1000), contentAvailable: item.body !== null })), chatStorage: serverChatStorageEnabled() ? "server" : "device" });
+}));
+router.get("/conversations/:id/templates",handle(async(req,res)=>res.json({templates:await outbound.catalog(req,req.params.id)})));
+router.post("/conversations/:id/send",messageSendLimiter,attachmentUpload.single("file"),handle(async(req,res)=>{
+  for(const key of ["parameters","headerParameters","buttonParameters"])if(typeof req.body[key]==="string"){
+    try{req.body[key]=JSON.parse(req.body[key]);}catch(_){throw fail(`Invalid ${key}`);}
+  }
+  res.json(await outbound.send(req,req.params.id,req.body,req.file));
 }));
 router.post("/conversations/:id/read", handle(async (req, res) => {
   const row = await inbox.conversation(req, req.params.id);
@@ -132,6 +142,12 @@ router.get("/conversations/:id/notes", handle(async (req, res) => {
   const notes = await inbox.query("SELECT id, author_id, author_name, note_text, created_at FROM wa_internal_notes WHERE conversation_id = ? AND tenant_id = ? ORDER BY id DESC LIMIT 100", [row.id, req.tenantId]);
   res.json({ success: true, notes });
 }));
+router.get("/conversations/:id/assignments", handle(async (req, res) => {
+  const row = await inbox.conversation(req, req.params.id);
+  const before = Number(req.query.before);
+  const rows = await inbox.query(`SELECT id,actor_id,owner_user_id,branch_id,created_at FROM wa_assignment_events WHERE tenant_id=? AND conversation_id=? ${Number.isSafeInteger(before)&&before>0 ? "AND id<?" : ""} ORDER BY id DESC LIMIT 26`, [req.tenantId,row.id,...(Number.isSafeInteger(before)&&before>0 ? [before] : [])]);
+  res.json({ records: rows.slice(0,25), nextCursor: rows.length>25 ? rows[24].id : null });
+}));
 router.post("/conversations/:id/notes", handle(async (req, res) => {
   const row = await inbox.conversation(req, req.params.id);
   const note = String(req.body.text || "").trim();
@@ -142,7 +158,6 @@ router.post("/conversations/:id/notes", handle(async (req, res) => {
 }));
 router.post("/conversations/:id/assign", handle(async (req, res) => {
   const old = await inbox.conversation(req, req.params.id);
-  await require("../services/sharedInboxAssistant").pause(req.tenantId,old.id);
   const row = await inbox.reassign(req, req.params.id, { userId: req.body.userId ? Number(req.body.userId) : null, branchId: req.body.branchId ? Number(req.body.branchId) : null });
   if (old.owner_user_id) req.app.get("io")?.to(`user:${old.owner_user_id}`).emit("inbox_access_changed", { tenantId: req.tenantId, conversationId: old.id });
   await inbox.emit(req.app.get("io"), row, "inbox_changed", {}).catch(() => {});
@@ -150,7 +165,6 @@ router.post("/conversations/:id/assign", handle(async (req, res) => {
 }));
 router.post("/conversations/:id/transfer", handle(async (req, res) => {
   const old = await inbox.conversation(req, req.params.id);
-  await require("../services/sharedInboxAssistant").pause(req.tenantId,old.id);
   const row = await inbox.reassign(req, req.params.id, { userId: req.body.targetUserId ? Number(req.body.targetUserId) : null, branchId: Number(req.body.targetBranchId) });
   if (old.owner_user_id) req.app.get("io")?.to(`user:${old.owner_user_id}`).emit("inbox_access_changed", { tenantId: req.tenantId, conversationId: old.id });
   await inbox.emit(req.app.get("io"), row, "inbox_changed", {}).catch(() => {});
@@ -193,13 +207,49 @@ router.post("/conversations/:id/assistant",handle(async(req,res)=>{
   res.json({success:true});
 }));
 router.get("/routing/employees", handle(async (req, res) => {
-  if (!inbox.isAdmin(req)) throw fail("Organization administrator required", 403);
-  const employees = await inbox.query(`SELECT m.user_id, m.branch_id, m.auto_assign_enabled, m.is_available, m.max_open_chats, u.first_name, u.email, b.name AS branch_name
+  if (!inbox.isAdmin(req) && req.userRole !== "branch_manager") throw fail("Organization administrator required", 403);
+  const employees = await inbox.query(`SELECT m.user_id, m.branch_id, m.auto_assign_enabled, m.is_available, m.max_open_chats,m.max_open_leads, u.first_name, u.email, u.status AS employee_status, b.name AS branch_name,
+    (SELECT COUNT(*) FROM conversations c WHERE c.tenant_id=m.tenant_id AND c.owner_user_id=m.user_id AND c.branch_id=m.branch_id AND c.status<>'closed') AS open_count
     FROM staff_branch_memberships m JOIN users u ON u.id = m.user_id JOIN branches b ON b.id = m.branch_id AND b.tenant_id = m.tenant_id
-    WHERE m.tenant_id = ? ORDER BY m.user_id, m.branch_id`, [req.tenantId]);
+    WHERE m.tenant_id = ? ${inbox.isAdmin(req) ? "" : "AND EXISTS (SELECT 1 FROM staff_branch_memberships manager WHERE manager.tenant_id=m.tenant_id AND manager.user_id=? AND manager.branch_id=m.branch_id)"} ORDER BY m.user_id, m.branch_id`, [req.tenantId, ...(inbox.isAdmin(req) ? [] : [req.user.id])]);
   const assignments = await inbox.query("SELECT user_id, sender_id FROM staff_sender_assignments WHERE tenant_id = ?", [req.tenantId]);
-  const senders = await inbox.query("SELECT id, display_phone, verified_name FROM wa_senders WHERE tenant_id = ? AND status = 'connected' ORDER BY id", [req.tenantId]);
-  res.json({ success: true, employees: employees.map(row => ({ ...row, allowed_sender_ids: assignments.filter(item=>Number(item.user_id)===Number(row.user_id)).map(item=>Number(item.sender_id)) })), senders });
+  const senders = await inbox.query(`SELECT id, display_phone, verified_name FROM wa_senders s WHERE tenant_id = ? AND status = 'connected' ${inbox.isAdmin(req) ? "" : "AND EXISTS (SELECT 1 FROM sender_branch_assignments a JOIN staff_branch_memberships m ON m.tenant_id=a.tenant_id AND m.branch_id=a.branch_id WHERE a.tenant_id=s.tenant_id AND a.sender_id=s.id AND m.user_id=?)"} ORDER BY id`, [req.tenantId, ...(inbox.isAdmin(req) ? [] : [req.user.id])]);
+  const visibleSenders = new Set(senders.map(row=>Number(row.id)));
+  res.json({ success: true, employees: employees.map(row => ({ ...row, allowed_sender_ids: assignments.filter(item=>Number(item.user_id)===Number(row.user_id)&&visibleSenders.has(Number(item.sender_id))).map(item=>Number(item.sender_id)) })), senders });
+}));
+
+router.get("/routing/settings", handle(async (req, res) => {
+  if (!inbox.isAdmin(req)) throw fail("Organization administrator required", 403);
+  const [settings] = await inbox.query("SELECT strategy,required_skill,crm_strategy,crm_required_skill FROM wa_assignment_settings WHERE tenant_id=?", [req.tenantId]);
+  const skills = await inbox.query("SELECT user_id,skill FROM wa_employee_skills WHERE tenant_id=? ORDER BY user_id,skill", [req.tenantId]);
+  res.json({ settings: settings || { strategy: "round_robin", required_skill: null,crm_strategy:"round_robin",crm_required_skill:null }, skills });
+}));
+router.put("/routing/settings", handle(async (req, res) => {
+  if (!inbox.isAdmin(req)) throw fail("Organization administrator required", 403);
+  const { strategy, required_skill } = req.body;
+  const { crm_strategy,crm_required_skill } = req.body;
+  if (crm_strategy!==undefined && !["manual","round_robin","workload"].includes(crm_strategy) || crm_required_skill!==undefined && crm_required_skill!==null && (typeof crm_required_skill!=="string" || crm_required_skill.length>80)) throw fail("Choose a valid CRM assignment strategy and skill");
+  if (!["manual", "round_robin", "workload"].includes(strategy) || (required_skill && (typeof required_skill !== "string" || required_skill.length > 80))) throw fail("Choose manual, round robin or workload and a skill up to 80 characters");
+  await inbox.transaction(async q => {
+    await q("INSERT INTO wa_routing_cursors (tenant_id,last_user_id) VALUES (?,0) ON DUPLICATE KEY UPDATE tenant_id=VALUES(tenant_id)", [req.tenantId]);
+    await q("SELECT tenant_id FROM wa_routing_cursors WHERE tenant_id=? FOR UPDATE", [req.tenantId]);
+    await q("INSERT INTO wa_assignment_settings (tenant_id,strategy,required_skill) VALUES (?,?,?) ON DUPLICATE KEY UPDATE strategy=VALUES(strategy),required_skill=VALUES(required_skill)", [req.tenantId, strategy, required_skill?.trim() || null]);
+    if (crm_strategy!==undefined) await q("UPDATE wa_assignment_settings SET crm_strategy=?,crm_required_skill=? WHERE tenant_id=?",[crm_strategy,crm_required_skill?.trim()||null,req.tenantId]);
+    await q("INSERT INTO wa_workspace_audit (tenant_id,actor_id,action,details) VALUES (?,?,'routing.updated',?)", [req.tenantId, req.user.id, JSON.stringify({ strategy, required_skill: required_skill?.trim() || null,crm_strategy,crm_required_skill })]);
+  });
+  res.json({ success: true });
+}));
+router.put("/routing/employees/:userId/skills", handle(async (req, res) => {
+  if (!inbox.isAdmin(req)) throw fail("Organization administrator required", 403);
+  if (!Array.isArray(req.body.skills) || req.body.skills.length > 20 || req.body.skills.some(skill => typeof skill !== "string" || !skill.trim() || skill.length > 80)) throw fail("Enter up to 20 skills, each 1–80 characters");
+  await inbox.transaction(async q => {
+    const [member] = await q("SELECT user_id FROM organization_memberships WHERE tenant_id=? AND user_id=? AND membership_status='active' FOR UPDATE", [req.tenantId, Number(req.params.userId)]);
+    if (!member) throw fail("Employee not found", 404);
+    await q("DELETE FROM wa_employee_skills WHERE tenant_id=? AND user_id=?", [req.tenantId, Number(req.params.userId)]);
+    for (const skill of new Set(req.body.skills.map(skill => skill.trim()))) await q("INSERT INTO wa_employee_skills (tenant_id,user_id,skill) VALUES (?,?,?)", [req.tenantId, Number(req.params.userId), skill]);
+    await q("INSERT INTO wa_workspace_audit (tenant_id,actor_id,action,subject_user_id,details) VALUES (?,?,'skills.updated',?,?)", [req.tenantId, req.user.id, Number(req.params.userId), JSON.stringify(req.body.skills)]);
+  });
+  res.json({ success: true });
 }));
 router.post("/routing/rebalance", handle(async (req, res) => {
   const assigned = await inbox.retryUnassigned(req);
@@ -208,22 +258,36 @@ router.post("/routing/rebalance", handle(async (req, res) => {
 router.patch("/routing/employees/:userId", handle(async (req, res) => {
   if (!inbox.isAdmin(req)) throw fail("Organization administrator required", 403);
   const { branchId, available, enabled, maxOpenChats, allowedSenderIds = [] } = req.body;
+  const maxOpenLeads = req.body.maxOpenLeads;
+  if (maxOpenLeads!==undefined && (!Number.isInteger(maxOpenLeads) || maxOpenLeads<1 || maxOpenLeads>10000)) throw fail("Lead capacity must be 1–10000");
   if (!Number.isSafeInteger(Number(branchId)) || ![true, false].includes(available) || ![true, false].includes(enabled) || !Number.isInteger(maxOpenChats) || maxOpenChats < 1 || maxOpenChats > 1000) throw fail("Valid branch, availability, eligibility and capacity (1–1000) are required");
   if (!Array.isArray(allowedSenderIds) || allowedSenderIds.length > 100 || allowedSenderIds.some(id=>!Number.isSafeInteger(id)||id<1)) throw fail("Allowed number IDs must be a list of positive integers");
+  const skills = req.body.skills;
+  if (skills !== undefined && (!Array.isArray(skills) || skills.length>20 || skills.some(skill=>typeof skill!=="string" || !skill.trim() || skill.length>80))) throw fail("Enter up to 20 valid skills");
   await inbox.transaction(async q => {
     await q("INSERT INTO wa_routing_cursors (tenant_id,last_user_id) VALUES (?,0) ON DUPLICATE KEY UPDATE tenant_id=VALUES(tenant_id)",[req.tenantId]);
     await q("SELECT tenant_id FROM wa_routing_cursors WHERE tenant_id = ? FOR UPDATE",[req.tenantId]);
     const result = await q("UPDATE staff_branch_memberships SET is_available = ?, auto_assign_enabled = ?, max_open_chats = ? WHERE tenant_id = ? AND user_id = ? AND branch_id = ?", [available ? 1 : 0, enabled ? 1 : 0, maxOpenChats, req.tenantId, Number(req.params.userId), Number(branchId)]);
     if (!result.affectedRows) throw fail("Employee branch membership not found", 404);
+    if (maxOpenLeads!==undefined) await q("UPDATE staff_branch_memberships SET max_open_leads=? WHERE tenant_id=? AND user_id=? AND branch_id=?",[maxOpenLeads,req.tenantId,Number(req.params.userId),Number(branchId)]);
     for (const senderId of allowedSenderIds) {
       const [linked] = await q("SELECT s.sender_id FROM sender_branch_assignments s JOIN staff_branch_memberships m ON m.tenant_id = s.tenant_id AND m.branch_id = s.branch_id WHERE s.tenant_id = ? AND m.user_id = ? AND s.sender_id = ? LIMIT 1",[req.tenantId,Number(req.params.userId),senderId]);
       if (!linked) throw fail("A number is outside this employee's branches");
     }
     await q("DELETE FROM staff_sender_assignments WHERE tenant_id = ? AND user_id = ?",[req.tenantId,Number(req.params.userId)]);
     for (const senderId of new Set(allowedSenderIds)) await q("INSERT INTO staff_sender_assignments (tenant_id,user_id,sender_id) VALUES (?,?,?)",[req.tenantId,Number(req.params.userId),senderId]);
+    if (skills !== undefined) {
+      await q("DELETE FROM wa_employee_skills WHERE tenant_id=? AND user_id=?", [req.tenantId,Number(req.params.userId)]);
+      for (const skill of new Set(skills.map(value=>value.trim()))) await q("INSERT INTO wa_employee_skills (tenant_id,user_id,skill) VALUES (?,?,?)", [req.tenantId,Number(req.params.userId),skill]);
+    }
+    await q("INSERT INTO wa_workspace_audit (tenant_id,actor_id,action,subject_user_id,details) VALUES (?,?,'employee.routing.updated',?,?)", [req.tenantId,req.user.id,Number(req.params.userId),JSON.stringify({branchId,available,enabled,maxOpenChats,allowedSenderIds,skills})]);
   });
   await inbox.retryUnassigned(req);
   res.json({ success: true });
 }));
 
+router.use((error,req,res,next)=>{
+  if(error instanceof multer.MulterError)return res.status(400).json({message:error.code==="LIMIT_FILE_SIZE"?"Attachment exceeds the 8 MB upload limit":"Invalid attachment upload"});
+  next(error);
+});
 module.exports = router;

@@ -21,7 +21,8 @@ function cleanPhoneNumber(phone) {
 
 // Looks up a contact's real CRM record by phone so template/message
 // placeholders can be filled with actual deep data across all modules
-async function lookupCrmDataByPhone(phone) {
+async function lookupCrmDataByPhone(phone, tenantId) {
+  if (!Number.isSafeInteger(Number(tenantId)) || Number(tenantId) < 1) return {};
   const last10 = (phone || "").replace(/\D/g, "").slice(-10);
   const digitsOnly = (phone || "").replace(/\D/g, "");
   if (last10.length < 10) return {};
@@ -42,7 +43,7 @@ async function lookupCrmDataByPhone(phone) {
         ? await db.promise().query(`PRAGMA table_info(${table})`)
         : await db.promise().query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?", [table]);
       const available = new Set(columns.map((c) => c.COLUMN_NAME || c.column_name || c.name));
-      if (!available.has(phoneCol)) continue;
+      if (!available.has(phoneCol) || !available.has("tenant_id")) continue;
       const selectColumn = (preferred, alias, alternatives = []) => {
         const column = [preferred, ...alternatives].find((c) => c && available.has(c));
         return column ? `${column} AS ${alias}` : null;
@@ -60,8 +61,8 @@ async function lookupCrmDataByPhone(phone) {
       ].filter(Boolean).join(", ");
 
       const [rows] = await db.promise().query(
-        `SELECT ${selectFields} FROM ${table} WHERE ${phoneCol} LIKE ? OR ${phoneCol} LIKE ? LIMIT 1`,
-        [`%${last10}`, `%${digitsOnly}`]
+        `SELECT ${selectFields} FROM ${table} WHERE tenant_id=? AND (${phoneCol} LIKE ? OR ${phoneCol} LIKE ?) LIMIT 1`,
+        [tenantId, `%${last10}`, `%${digitsOnly}`]
       );
       if (rows && rows[0]) {
         Object.assign(profile, rows[0]);
@@ -77,9 +78,9 @@ async function lookupCrmDataByPhone(phone) {
       const [invRows] = await db.promise().query(
         `SELECT *
          FROM clientinvoices 
-         WHERE client_company = ?
+         WHERE tenant_id = ? AND client_company = ?
          ORDER BY id DESC LIMIT 1`,
-        [lookupName]
+        [tenantId, lookupName]
       );
       if (invRows && invRows[0]) {
         profile.invoice_no = invRows[0].invoice_no || `INV-${invRows[0].id}`;
@@ -94,9 +95,9 @@ async function lookupCrmDataByPhone(phone) {
       const [amcRows] = await db.promise().query(
         `SELECT *
          FROM contracts 
-         WHERE client_company = ? 
+         WHERE tenant_id = ? AND client_company = ?
          ORDER BY id DESC LIMIT 1`,
-        [lookupName]
+        [tenantId, lookupName]
       );
       if (amcRows && amcRows[0]) {
         profile.contract_title = amcRows[0].contract_title;
@@ -501,6 +502,9 @@ function claimAutomationDedupe(key) {
  * @param {object} [opts] - { dedupeKey } to override the automatic dedupe key
  */
 async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
+  let tenantId = Number(opts.tenantId || eventInfo.tenantId);
+  if (!Number.isSafeInteger(tenantId) || tenantId < 1) tenantId = await require("./waContactTenancy").tenantForSessionKey(opts.sessionKey || eventInfo.sessionKey);
+  if (!tenantId) return { success: false, reason: "organization_required" };
   const { phone, contactName, data = {} } = eventInfo;
   const cleanPhone = cleanPhoneNumber(phone);
   if (!cleanPhone) {
@@ -514,7 +518,7 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
   // the customer the same automation twice. Keyed on rule + contact + trigger
   // with a short TTL, so a genuinely new event still gets through.
   const eventId = eventInfo.eventId ?? data.event_id ?? data.payment_id ?? data.quotation_id ?? data.invoice_id ?? data.lead_id ?? data.reference_id ?? data.invoice_no ?? data.quotation_no ?? data.reference_no;
-  const dedupeKey = opts.dedupeKey || `${triggerType}:${cleanPhone.slice(-10)}${eventId != null ? `:${eventId}` : ""}`;
+  const dedupeKey = `${tenantId}:${opts.dedupeKey || `${triggerType}:${cleanPhone}${eventId != null ? `:${eventId}` : ""}`}`;
   if (!claimAutomationDedupe(dedupeKey)) {
     console.log(`♻️ [WA Automation] Skipped duplicate '${triggerType}' for ${cleanPhone} (already fired recently).`);
     return { success: true, count: 0, reason: "duplicate_suppressed" };
@@ -527,8 +531,8 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
     // like the campaign engine does — an exact match let opted-out people keep
     // receiving automated messages.
     const [optOuts] = await db.promise().query(
-      "SELECT id FROM wa_opt_outs WHERE phone = ? OR phone LIKE ? LIMIT 1",
-      [cleanPhone, `%${cleanPhone.slice(-10)}`]
+      "SELECT id FROM wa_opt_outs WHERE tenant_id=? AND (phone = ? OR phone LIKE ?) LIMIT 1",
+      [tenantId, cleanPhone, `%${cleanPhone.slice(-10)}`]
     );
     if (optOuts.length > 0) {
       console.log(`[WA Automation] Skipped '${triggerType}' for ${cleanPhone}: user opted out`);
@@ -538,8 +542,8 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
     // is_unsubscribed matters as much as is_blocked — the opt-out writers set
     // is_unsubscribed, so checking only is_blocked missed every unsubscribe.
     const [blocked] = await db.promise().query(
-      "SELECT id FROM wa_contacts WHERE (phone = ? OR phone LIKE ?) AND (is_blocked = 1 OR is_unsubscribed = 1) LIMIT 1",
-      [cleanPhone, `%${cleanPhone.slice(-10)}`]
+      "SELECT id FROM wa_contacts WHERE tenant_id=? AND (phone = ? OR phone LIKE ?) AND (is_blocked = 1 OR is_unsubscribed = 1) LIMIT 1",
+      [tenantId, cleanPhone, `%${cleanPhone.slice(-10)}`]
     );
     if (blocked.length > 0) {
       console.log(`[WA Automation] Skipped '${triggerType}' for ${cleanPhone}: contact blocked or unsubscribed`);
@@ -551,10 +555,10 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
       `SELECT a.*, t.name as template_name, t.body as template_body,
               ft.name as followup_template_name, ft.body as followup_template_body
        FROM wa_automations a
-       LEFT JOIN wa_templates t ON a.template_id = t.id
-       LEFT JOIN wa_templates ft ON a.followup_template_id = ft.id
-       WHERE a.is_active = 1 AND a.trigger_type = ?`,
-      [triggerType]
+       LEFT JOIN wa_templates t ON a.template_id = t.id AND t.tenant_id=a.tenant_id
+       LEFT JOIN wa_templates ft ON a.followup_template_id = ft.id AND ft.tenant_id=a.tenant_id
+       WHERE a.tenant_id=? AND a.is_active = 1 AND a.trigger_type = ?`,
+      [tenantId, triggerType]
     );
 
     if (!rules.length) {
@@ -567,7 +571,7 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
     // Fill in anything the triggering event didn't already pass (city, email,
     // company...) from the contact's real CRM record — explicit event data
     // (e.g. invoice_no) always wins over the generic lookup.
-    const crmData = await lookupCrmDataByPhone(cleanPhone).catch(() => ({}));
+    const crmData = await lookupCrmDataByPhone(cleanPhone, tenantId).catch(() => ({}));
     const mergedData = { ...crmData, ...data };
     const resolvedName = contactName || data.name || data.customer_name || crmData.name || null;
 
@@ -946,7 +950,8 @@ async function maybeSendWelcomeReply(targetPhoneOrJid, contactName, sessionKey, 
   }
 
   // ── 7. Resolve CRM Contact Info ───────────────────────────────────────────
-  const crmData = await lookupCrmDataByPhone(cleanPhone).catch(() => ({}));
+  const welcomeTenantId = await require("./waContactTenancy").tenantForSessionKey(sessionKey);
+  const crmData = await lookupCrmDataByPhone(cleanPhone, welcomeTenantId).catch(() => ({}));
   const resolvedName = contactName || crmData.name || crmData.customer_name || "Valued Customer";
 
   // ── 8. Format Welcome Text ────────────────────────────────────────────────
@@ -1063,6 +1068,8 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
   const waLoadBalancer = require("./waLoadBalancer");
   const waService = require("./whatsappService");
   const activeSessionKey = actualSessionKey || rule.created_by || waService.defaultKey;
+  const sessionTenantId = await require("./waContactTenancy").tenantForSessionKey(activeSessionKey);
+  if (!rule.tenant_id || Number(sessionTenantId) !== Number(rule.tenant_id)) throw new Error("Automation sender organization does not match its rule");
 
   let sentResult = null;
   let sendError = null;
@@ -1073,12 +1080,12 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
   try {
     // ── STEP 1: Main Message Send (Template, Rich Media, or Text) ──────────────
     const [optedOut] = await db.promise().query(
-      "SELECT id FROM wa_opt_outs WHERE phone = ? OR phone LIKE ? LIMIT 1",
-      [cleanPhone, `%${cleanPhone.slice(-10)}`]
+      "SELECT id FROM wa_opt_outs WHERE tenant_id=? AND (phone = ? OR phone LIKE ?) LIMIT 1",
+      [rule.tenant_id, cleanPhone, `%${cleanPhone.slice(-10)}`]
     );
     const [blocked] = await db.promise().query(
-      "SELECT id FROM wa_contacts WHERE (phone = ? OR phone LIKE ?) AND (is_blocked = 1 OR is_unsubscribed = 1) LIMIT 1",
-      [cleanPhone, `%${cleanPhone.slice(-10)}`]
+      "SELECT id FROM wa_contacts WHERE tenant_id=? AND (phone = ? OR phone LIKE ?) AND (is_blocked = 1 OR is_unsubscribed = 1) LIMIT 1",
+      [rule.tenant_id, cleanPhone, `%${cleanPhone.slice(-10)}`]
     );
     if (optedOut.length || blocked.length) throw new Error("Contact opted out, unsubscribed, or is blocked.");
     if (rule.template_name) {

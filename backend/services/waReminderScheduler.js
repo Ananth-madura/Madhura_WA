@@ -247,6 +247,7 @@ let appointmentJob = null;
 let paymentJob = null;
 let quoteJob = null;
 let amcJob = null;
+let dueReminderJob = null;
 
 function startInteractiveReminderSchedulers() {
   // Appointment reminders daily at 09:00 AM
@@ -265,8 +266,27 @@ function startInteractiveReminderSchedulers() {
   if (!amcJob) {
     amcJob = schedule.scheduleJob({ rule: "0 12 * * *", tz: process.env.TZ || "Asia/Kolkata" }, runAmcRenewalCheck);
   }
+  // Chat-created scheduled reminders: checked every minute. Each row is claimed
+  // atomically before dispatch, so multiple server instances cannot double-send.
+  if (!dueReminderJob) {
+    dueReminderJob = schedule.scheduleJob(
+      { rule: "* * * * *", tz: process.env.TZ || "Asia/Kolkata" },
+      async () => {
+        try {
+          const summary = await require("./waQuickReminderService").runDueReminderCheck();
+          if (summary?.sent || summary?.failed) {
+            console.log(
+              `⏰ [WA Quick Reminders] sent=${summary.sent} failed=${summary.failed} repeated=${summary.repeated}`
+            );
+          }
+        } catch (err) {
+          console.error("[WA Quick Reminders] Dispatcher error:", err.message);
+        }
+      }
+    );
+  }
 
-  console.log("✅ [WA Reminder Schedulers] Initialized all 4 interactive confirmation schedulers (strict cron schedule)");
+  console.log("✅ [WA Reminder Schedulers] Initialized daily confirmation schedulers + 1-minute quick reminder dispatcher");
 }
 
 module.exports = {

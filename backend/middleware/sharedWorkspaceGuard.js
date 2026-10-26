@@ -9,7 +9,7 @@ function sharedWorkspaceGuard(req, res, next) {
   if (!/^\/(whatsapp|wa(?:\/|-)|v2\/|v1\/|crm\/|teammember|storage|auth\/employees)/.test(req.path)) return next();
   verifyToken(req, res, () => requireTenantContext(req, res, () => {
     if (["organization_owner", "organization_admin"].includes(req.userRole) || req.user.role === "platform_admin") return next();
-    if (req.path.startsWith("/v2/inbox/") || req.path === "/v2/me" || req.path === "/v2/organizations") return next();
+    if (req.path.startsWith("/v2/inbox/") || req.path.startsWith("/v2/workspace/") || req.path === "/v2/me" || req.path === "/v2/organizations") return next();
     return res.status(403).json({ code: "ASSIGNED_INBOX_REQUIRED", message: "Use your assigned inbox. This workspace action requires an organization administrator." });
   }));
 }

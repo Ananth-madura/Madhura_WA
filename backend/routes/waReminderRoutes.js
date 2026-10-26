@@ -5,8 +5,26 @@ const router = express.Router();
 const db = require("../config/database");
 const { verifyToken } = require("../middleware/authMiddleware");
 const waConfirmation = require("../services/waConfirmationService");
+const waQuickReminders = require("../services/waQuickReminderService");
 const waReminderScheduler = require("../services/waReminderScheduler");
 const { checkBlastSize } = require("../services/waBlastGuard");
+
+function sendReminderError(res, err) {
+  const status = Number(err?.status) || 500;
+  if (status >= 500) console.error("[WA Reminders API]", err);
+  res.status(status).json({ success: false, error: err?.message || "Reminder request failed" });
+}
+
+// Self-heal the reminder table on first touch (see ensureReminderSchema) so a
+// restored database missing created_at/updated_at never fails a reminder call.
+router.use(async (_req, _res, next) => {
+  try {
+    await waQuickReminders.ensureReminderSchema();
+  } catch (_) {
+    /* the endpoint reports the real error if the table is truly unusable */
+  }
+  next();
+});
 
 // ── 1. Summary Statistics ──────────────────────────────────────────────────
 router.get("/summary", verifyToken, async (req, res) => {
@@ -181,6 +199,82 @@ router.post("/send-now", verifyToken, async (req, res) => {
     res.json({ success: true, message: "Interactive reminder sent successfully!", result });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── 5a. Create a scheduled chat reminder ────────────────────────────────────
+router.post("/", verifyToken, async (req, res) => {
+  try {
+    const scope = await waQuickReminders.resolveScope(req);
+    const reminder = await waQuickReminders.createReminder(req.body, scope, {
+      sessionKey: req.headers["x-session-key"] || req.user?.id,
+    });
+
+    // "Send now" from the composer creates the row then dispatches immediately,
+    // so a single API round-trip cannot leave a half-created reminder behind.
+    if (req.body?.send_now === true || req.body?.sendNow === true) {
+      const dispatched = await waQuickReminders.sendNow(reminder.id, scope, {
+        sessionKey: req.headers["x-session-key"] || req.user?.id,
+      });
+      return res.status(201).json({ success: true, reminder: dispatched.reminder, result: dispatched.result });
+    }
+
+    res.status(201).json({ success: true, reminder });
+  } catch (err) {
+    sendReminderError(res, err);
+  }
+});
+
+// ── 5b. Upcoming reminders for one conversation ─────────────────────────────
+router.get("/for-chat", verifyToken, async (req, res) => {
+  try {
+    const scope = await waQuickReminders.resolveScope(req);
+    const reminders = await waQuickReminders.listForChat({
+      tenantId: scope.tenantId,
+      phone: req.query.phone,
+      includePast: req.query.include_past === "1" || req.query.include_past === "true",
+      audience: req.query.audience || null,
+    });
+    res.json({ success: true, reminders });
+  } catch (err) {
+    sendReminderError(res, err);
+  }
+});
+
+// ── 5c. Reschedule / edit / cancel a pending reminder ───────────────────────
+router.patch("/:id", verifyToken, async (req, res) => {
+  try {
+    const scope = await waQuickReminders.resolveScope(req);
+    const reminder = await waQuickReminders.updateReminder(req.params.id, req.body, scope);
+    res.json({ success: true, reminder });
+  } catch (err) {
+    sendReminderError(res, err);
+  }
+});
+
+// ── 5d. Dispatch one reminder immediately ───────────────────────────────────
+router.post("/:id/send-now", verifyToken, async (req, res) => {
+  try {
+    const scope = await waQuickReminders.resolveScope(req);
+    const { result, reminder } = await waQuickReminders.sendNow(req.params.id, scope, {
+      sessionKey: req.headers["x-session-key"] || req.user?.id,
+    });
+    res.json({ success: !!result?.success, result, reminder });
+  } catch (err) {
+    sendReminderError(res, err);
+  }
+});
+
+// ── 5e. Run the due dispatcher on demand (admins) ───────────────────────────
+router.post("/run-due", verifyToken, async (req, res) => {
+  try {
+    if (!["admin", "subadmin", "platform_admin"].includes(req.user?.role)) {
+      return res.status(403).json({ success: false, error: "Only admins can run the reminder dispatcher." });
+    }
+    const summary = await waQuickReminders.runDueReminderCheck();
+    res.json({ success: true, summary });
+  } catch (err) {
+    sendReminderError(res, err);
   }
 });
 

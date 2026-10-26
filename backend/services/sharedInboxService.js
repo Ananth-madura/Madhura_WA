@@ -26,14 +26,21 @@ function createInboxService(database) {
     } finally { connection.release(); }
   };
   const isAdmin = req => ADMIN_ROLES.has(req.userRole) || req.user?.role === "platform_admin";
-  async function branches(req) {
+  function principalScope(req,alias){
+    if(req.user?.id===0&&req.user?.role==="system")return {sql:"1=1",params:[]};
+    if(req.user?.isApiKey)return {sql:`${alias}.tenant_id=? AND EXISTS (SELECT 1 FROM tenants principal_tenant WHERE principal_tenant.id=${alias}.tenant_id AND principal_tenant.status='active')`,params:[Number(process.env.WA_API_KEY_TENANT_ID||1)]};
+    if(req.user?.role==="platform_admin")return {sql:"EXISTS (SELECT 1 FROM users principal WHERE principal.id=? AND principal.status='active' AND principal.role='platform_admin' AND COALESCE(principal.whatsapp_access_level,'full')=?)",params:[req.user.id,req.waAccessLevel||"full"]};
+    return {sql:`EXISTS (SELECT 1 FROM organization_memberships principal JOIN users principal_user ON principal_user.id=principal.user_id AND principal_user.status='active' AND COALESCE(principal_user.whatsapp_access_level,'full')=? JOIN tenants principal_tenant ON principal_tenant.id=principal.tenant_id AND principal_tenant.status='active' WHERE principal.tenant_id=${alias}.tenant_id AND principal.user_id=? AND principal.role=? AND principal.membership_status='active')`,params:[req.waAccessLevel||"full",req.user.id,req.userRole]};
+  }
+  async function branches(req,reader=query) {
     if (isAdmin(req)) return null;
-    const rows = await query("SELECT branch_id FROM staff_branch_memberships WHERE tenant_id = ? AND user_id = ?", [req.tenantId, req.user.id]);
+    const rows = await reader("SELECT branch_id FROM staff_branch_memberships WHERE tenant_id = ? AND user_id = ?", [req.tenantId, req.user.id]);
     return rows.map(row => Number(row.branch_id));
   }
-  async function scope(req, alias = "c") {
+  async function scope(req, alias = "c",reader=query) {
     const clauses = [`${alias}.tenant_id = ?`], params = [req.tenantId];
-    const permitted = await branches(req);
+    const principal=principalScope(req,alias);clauses.push(principal.sql);params.push(...principal.params);
+    const permitted = await branches(req,reader);
     if (permitted !== null) {
       if (req.waAccessLevel === "campaign_only") clauses.push("1 = 0");
       clauses.push(`EXISTS (SELECT 1 FROM sender_branch_assignments sba WHERE sba.tenant_id = ${alias}.tenant_id AND sba.sender_id = ${alias}.sender_id AND sba.branch_id = ${alias}.branch_id)`);
@@ -47,9 +54,9 @@ function createInboxService(database) {
     }
     return { sql: clauses.join(" AND "), params };
   }
-  async function conversation(req, id) {
-    const access = await scope(req);
-    const [row] = await query(`SELECT c.*, ct.phone AS contact_phone, ct.name AS contact_name
+  async function conversation(req, id,reader=query) {
+    const access = await scope(req,"c",reader);
+    const [row] = await reader(`SELECT c.*, ct.phone AS contact_phone, ct.name AS contact_name
       FROM conversations c JOIN wa_contacts ct ON ct.id = c.contact_id AND ct.tenant_id = c.tenant_id
       WHERE c.id = ? AND ${access.sql}`, [Number(id), ...access.params]);
     if (!row) throw fail("Conversation not found", 404);
@@ -74,9 +81,20 @@ function createInboxService(database) {
       ORDER BY m.user_id, m.is_primary DESC, m.branch_id`, [senderId, tenantId, ...(branchId ? [branchId] : [])]);
   }
   async function selectOwner(q, tenantId, senderId, branchId) {
+    const [settings] = await q("SELECT strategy,required_skill FROM wa_assignment_settings WHERE tenant_id=?", [tenantId]);
+    if (settings?.strategy === "manual") return null;
     await q("INSERT IGNORE INTO wa_routing_positions (tenant_id, sender_id, branch_id) VALUES (?, ?, ?)", [tenantId,senderId,branchId || 0]);
     const [cursor] = await q("SELECT last_user_id FROM wa_routing_positions WHERE tenant_id = ? AND sender_id = ? AND branch_id = ?", [tenantId,senderId,branchId || 0]);
-    const rows = (await candidates(q, tenantId, senderId, branchId)).filter(row => Number(row.open_count) < Number(row.max_open_chats));
+    let rows = (await candidates(q, tenantId, senderId, branchId)).filter(row => Number(row.open_count) < Number(row.max_open_chats));
+    if (settings?.required_skill) {
+      const skilled = await q("SELECT user_id FROM wa_employee_skills WHERE tenant_id=? AND skill=?", [tenantId, settings.required_skill]);
+      const ids = new Set(skilled.map(row => Number(row.user_id)));
+      rows = rows.filter(row => ids.has(Number(row.user_id)));
+    }
+    if (settings?.strategy === "workload" && rows.length) {
+      const minimum = Math.min(...rows.map(row => Number(row.open_count)));
+      rows = rows.filter(row => Number(row.open_count) === minimum);
+    }
     const chosen = rows.find(row => Number(row.user_id) > Number(cursor.last_user_id)) || rows[0];
     if (chosen) await q("UPDATE wa_routing_positions SET last_user_id = ? WHERE tenant_id = ? AND sender_id = ? AND branch_id = ?", [chosen.user_id, tenantId, senderId, branchId || 0]);
     return chosen;
@@ -86,9 +104,9 @@ function createInboxService(database) {
     return transaction(async q => {
       const [sender] = await q("SELECT id FROM wa_senders WHERE tenant_id = ? AND id = ? AND status = 'connected'", [tenantId, senderId]);
       if (!sender) throw fail("Sender is not connected", 503);
-      await q(`INSERT INTO wa_contacts (tenant_id, phone, name, source) VALUES (?, ?, ?, 'WhatsApp Cloud API')
+      await q(`INSERT INTO wa_contacts (tenant_id, phone, name, source,opt_in_status) VALUES (?, ?, ?, 'WhatsApp Cloud API',0)
         ON DUPLICATE KEY UPDATE phone = VALUES(phone)`, [tenantId, phone, name || `+${phone}`]);
-      const [contact] = await q("SELECT id FROM wa_contacts WHERE tenant_id = ? AND phone = ?", [tenantId, phone]);
+      const [contact] = await q("SELECT id,assigned_agent_id FROM wa_contacts WHERE tenant_id = ? AND phone = ?", [tenantId, phone]);
       const created=await q("INSERT IGNORE INTO conversations (tenant_id, sender_id, contact_id, status) VALUES (?, ?, ?, 'open')", [tenantId, senderId, contact.id]);
       const [current] = await q("SELECT * FROM conversations WHERE tenant_id = ? AND sender_id = ? AND contact_id = ? FOR UPDATE", [tenantId, senderId, contact.id]);
       let owner = current.owner_user_id;
@@ -104,7 +122,9 @@ function createInboxService(database) {
       }
       if (!owner) {
         await lockPool(q, tenantId);
-        const selected = await selectOwner(q, tenantId, senderId, branch);
+        const selected = contact.assigned_agent_id
+          ? (await candidates(q, tenantId, senderId, branch)).find(row => Number(row.user_id) === Number(contact.assigned_agent_id) && Number(row.open_count) < Number(row.max_open_chats))
+          : await selectOwner(q, tenantId, senderId, branch);
         owner = selected?.user_id || null;
         branch = selected?.branch_id || branch;
       }
@@ -114,6 +134,7 @@ function createInboxService(database) {
         service_window_expires_at = GREATEST(COALESCE(service_window_expires_at, ?), ?), updated_at = CURRENT_TIMESTAMP
         WHERE tenant_id = ? AND id = ?`, [owner, branch, at, at, new Date(at.getTime() + 86400000), new Date(at.getTime() + 86400000), tenantId, current.id]);
       if (Number(current.owner_user_id) !== Number(owner)) await q("INSERT INTO wa_assignment_events (tenant_id, conversation_id, actor_id, owner_user_id, branch_id) VALUES (?, ?, NULL, ?, ?)", [tenantId, current.id, owner, branch]);
+      if (owner) await q("UPDATE wa_contacts SET assigned_agent_id=?,branch_id=? WHERE tenant_id=? AND id=? AND assigned_agent_id IS NULL", [owner, branch, tenantId, contact.id]);
       return { ...current, owner_user_id: owner, branch_id: branch, contact_phone: phone, isNew:created.affectedRows>0 };
     });
   }
@@ -124,6 +145,7 @@ function createInboxService(database) {
     if (branchId && allowed !== null && !allowed.includes(Number(branchId))) throw fail("Target branch is not permitted");
     return transaction(async q => {
       await lockPool(q, req.tenantId);
+      await conversation(req,id,q);
       const [row] = await q("SELECT * FROM conversations WHERE tenant_id = ? AND id = ? FOR UPDATE", [req.tenantId, Number(id)]);
       if (!row || (allowed !== null && !allowed.includes(Number(row.branch_id)))) throw fail("Conversation not found", 404);
       const targetBranch = Number(branchId || row.branch_id) || null;
@@ -135,9 +157,10 @@ function createInboxService(database) {
         const [linked] = await q("SELECT branch_id FROM sender_branch_assignments WHERE tenant_id = ? AND sender_id = ? AND branch_id = ?", [req.tenantId, row.sender_id, targetBranch]);
         if (!linked) throw fail("Number is not assigned to the target branch", 400);
       }
-      await q("UPDATE conversations SET owner_user_id = ?, branch_id = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND id = ?", [userId || null, targetBranch, status || row.status, req.tenantId, row.id]);
+      await q("UPDATE conversations SET owner_user_id = ?, branch_id = ?, status = ?, automation_mode='human',automation_version=automation_version+1,updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND id = ?", [userId || null, targetBranch, status || row.status, req.tenantId, row.id]);
+      await q("UPDATE wa_flow_runs SET status='paused_by_agent',ended_at=CURRENT_TIMESTAMP WHERE conversation_id=? AND status='active'", [row.id]);
       await q("INSERT INTO wa_assignment_events (tenant_id, conversation_id, actor_id, owner_user_id, branch_id) VALUES (?, ?, ?, ?, ?)", [req.tenantId, row.id, req.user.id, userId || null, targetBranch]);
-      return { ...row, owner_user_id: userId || null, branch_id: targetBranch };
+      return { ...row, owner_user_id: userId || null, branch_id: targetBranch, automation_mode: "human" };
     });
   }
   async function audience(row) {
@@ -162,13 +185,16 @@ function createInboxService(database) {
     if (!isAdmin(req)) throw fail("Organization administrator required");
     return transaction(async q => {
       await lockPool(q, req.tenantId);
-      const rows = await q("SELECT * FROM conversations WHERE tenant_id = ? AND owner_user_id IS NULL AND status = 'open' ORDER BY id LIMIT 100 FOR UPDATE", [req.tenantId]);
+      const rows = await q("SELECT c.*,ct.assigned_agent_id FROM conversations c JOIN wa_contacts ct ON ct.tenant_id=c.tenant_id AND ct.id=c.contact_id WHERE c.tenant_id = ? AND c.owner_user_id IS NULL AND c.status = 'open' ORDER BY c.id LIMIT 100 FOR UPDATE", [req.tenantId]);
       let assigned = 0;
       for (const row of rows) {
-        const selected = await selectOwner(q, req.tenantId, row.sender_id, row.branch_id);
+        const selected = row.assigned_agent_id
+          ? (await candidates(q, req.tenantId, row.sender_id, row.branch_id)).find(candidate => Number(candidate.user_id) === Number(row.assigned_agent_id) && Number(candidate.open_count) < Number(candidate.max_open_chats))
+          : await selectOwner(q, req.tenantId, row.sender_id, row.branch_id);
         if (!selected) continue;
         await q("UPDATE conversations SET owner_user_id = ?, branch_id = ?, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND id = ?", [selected.user_id, selected.branch_id, req.tenantId, row.id]);
         await q("INSERT INTO wa_assignment_events (tenant_id, conversation_id, actor_id, owner_user_id, branch_id) VALUES (?, ?, ?, ?, ?)", [req.tenantId, row.id, req.user.id, selected.user_id, selected.branch_id]);
+        await q("UPDATE wa_contacts SET assigned_agent_id=?,branch_id=? WHERE tenant_id=? AND id=? AND assigned_agent_id IS NULL", [selected.user_id,selected.branch_id,req.tenantId,row.contact_id]);
         assigned++;
       }
       return assigned;
@@ -181,7 +207,7 @@ function createInboxService(database) {
     const {number_linked,...conversation}=scope.current;
     for (const id of scope.users) io.to(`user:${id}`).emit(event, { ...payload, conversation, tenantId: row.tenant_id, conversationId: row.id, senderId: row.sender_id });
   }
-  return { query, transaction, isAdmin, scope, conversation, inbound, reassign, recipients, emit, retryUnassigned };
+  return { query, transaction, isAdmin, scope, conversation, inbound, reassign, recipients, emit, retryUnassigned, candidates,principalScope };
 }
 
 module.exports = { createInboxService, ADMIN_ROLES };

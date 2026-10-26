@@ -42,6 +42,7 @@ async function migrate(db) {
     try { await q(`CREATE INDEX ${name} ON ${table} (${columns})`); }
     catch (error) { if (!/already exists|Duplicate key name/.test(error.message)) throw error; }
   }
+  await require("./employee_workspace").migrate(db);
 }
 
 module.exports = { migrate };

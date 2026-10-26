@@ -1,0 +1,14 @@
+"use strict";
+const assert=require("node:assert/strict");
+const {validateFile,variableCount,MAX_UPLOAD}=require("../services/inboxOutbound");
+const file={buffer:Buffer.from("%PDF-1.4\nfixture\n%%EOF"),mimetype:"application/pdf",originalname:"../private\nfile.pdf"};
+assert.equal(validateFile(file).kind,"document");
+assert(!/[\r\n/\\]/.test(validateFile(file).filename));
+assert.throws(()=>validateFile({...file,buffer:Buffer.from("forged PDF")}),{status:400});
+assert.throws(()=>validateFile({...file,buffer:Buffer.alloc(MAX_UPLOAD+1)}),{status:400});
+assert.throws(()=>validateFile({...file,mimetype:"text/html"}),{status:400});
+assert.throws(()=>validateFile({...file,buffer:Buffer.alloc(0)}),{status:400});
+assert.equal(variableCount("Hello {{1}}, your order {{2}} is ready. {{1}}"),2);
+assert.equal(variableCount("No variables"),0);
+for(const body of ["Hello {{name}}","Skipped {{2}}","Too many {{999999}}"] )assert.throws(()=>variableCount(body),{status:400});
+console.log("PASS: bounded attachment validation, PDF/signature and unsupported MIME rejection, safe filenames, and contiguous template-variable limits.");

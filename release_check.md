@@ -83,6 +83,18 @@ The old full backend runner remains available as `test:legacy`; it loads develop
 - Configure real app/API domains, TLS, cookie/CORS origins and WhatsApp credentials. Verify approval and delivery with the actual Meta account.
 - Configure and verify live private/public R2 buckets. Passing an SDK transport fixture does not verify Cloudflare credentials or bucket delivery.
 - Verify Linux service/timer/proxy configuration and perform an encrypted backup **restore** drill. These were not executed on the destination VPS.
+
+## Employee workspace verification (2026-10-25)
+
+The ownership/access audit and exact implementation boundary are in [employee_workspace.md](employee_workspace.md). The employee layout permits `/whatsapp/workspace`, and database bootstrap installs its fields, indexes and audit tables before shared-inbox readiness.
+
+- Backend: 23 isolated core/integration suites passed, including real MySQL ownership/transfer tests with three organizations, 6/4/3 employees, 12 concurrent conversations, rollback, concurrent transfers, supervisor scope, module grants, scoped exports/analytics and inactive ownership recovery. Added CRM-only intake/capacity/rollback tests, private multipart uploads and media templates, consent audit, delegated campaign dispatch, revoked/transferred recipient skips and interrupted-send recovery. A connection-guard test verifies that supervisor checks reuse the active transaction connection.
+- Frontend: 71 tests across 24 suites passed, including delayed customer results during organization switching, denied direct customer URLs, attachment composition and delegated campaign controls. New workspace/control components passed targeted ESLint.
+- Browser: built frontend against the actual isolated backend/MySQL, cookie signup/login on localhost and 127.0.0.1, signed webhook/WebSocket delivery, inbox-to-customer navigation, task creation/persistence/refresh, private file upload, campaign draft without delivery followed by explicit worker start, flows, templates, mobile layout and organization switching passed.
+- Production build passed with the API/socket origin set to `https://api.madhuratech.in`; built JavaScript was checked for the production origin and absence of the isolated test API. Existing legacy lint warnings remain.
+- Existing MySQL status enums are extended to support banned/inactive employees without losing custom values. The API and login honor inactive accounts. Deactivation during an upload is tested to prevent the final provider send.
+- Provider transports are local fixtures. These checks do not verify the live VPS, Cloudflare R2 credentials, live Meta sends, real payment capture or requested high-volume capacity.
+- Delegated employee flow/template editing, explicit record sharing, arbitrary assignment-rule scripting and reviewed historical-data mapping remain incomplete. Employees can use approved templates and published bots through the scoped inbox. Delegated campaigns and CRM-only intake now have separate tested authorization paths; legacy management endpoints remain restricted. Permanent R2 archival is not enabled by direct Meta attachment upload.
 - Run staged load/failure testing against the intended host. The full 50-125 million messages/day estimate remains unsuitable for a single 4 GB RAM / 100 GB SSD VPS. Current settings protect a measured single-process pilot; see [capacity_report.md](capacity_report.md).
 
 No production deployment, live customer send, bank-system integration or regulatory certification was performed. The selected privacy model still stores shared CRM records and necessary metadata in MySQL while keeping chat bodies in bounded device caches and bot answers in bounded transient process memory.

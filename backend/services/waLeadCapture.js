@@ -38,6 +38,7 @@ async function ensureLeadTableColumns() {
     ["reference", sqlite ? "TEXT DEFAULT NULL" : "VARCHAR(100) DEFAULT NULL"],
     ["reference_by", sqlite ? "TEXT DEFAULT NULL" : "VARCHAR(150) DEFAULT NULL"],
     ["assigned_to", "INT DEFAULT NULL"],
+    ["tenant_id", "INT DEFAULT NULL"],
     ["updated_at", sqlite ? "TEXT DEFAULT NULL" : "TIMESTAMP NULL DEFAULT NULL"],
     ["followup_notes", "TEXT DEFAULT NULL"],
     ["service_name", sqlite ? "TEXT DEFAULT NULL" : "VARCHAR(255) DEFAULT NULL"],
@@ -97,6 +98,8 @@ async function captureLeadFromWhatsApp(leadData = {}) {
   } = leadData;
 
   const last10 = clean10DigitPhone(phone);
+  const rawPhone = String(phone || "").replace(/\D/g, "");
+  const identityPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
   if (!last10 || last10.length < 10) {
     console.warn(`[WA LeadCapture] Skipped lead creation: invalid phone '${phone}'`);
     return { success: false, reason: "invalid_phone" };
@@ -118,8 +121,8 @@ async function captureLeadFromWhatsApp(leadData = {}) {
   try {
     // 1. Check if lead already exists in telecalls
     const existing = await queryAsync(
-      "SELECT id, customer_name, followup_notes FROM telecalls WHERE mobile_number LIKE ? LIMIT 1",
-      [`%${last10}`]
+      "SELECT id, customer_name, followup_notes FROM telecalls WHERE tenant_id = ? AND mobile_number = ? LIMIT 1",
+      [contactTenantId, identityPhone]
     );
 
     let leadId;
@@ -141,8 +144,8 @@ async function captureLeadFromWhatsApp(leadData = {}) {
              location_city = COALESCE(NULLIF(?, 'Unknown'), location_city),
              followup_notes = ?,
              call_date = CURDATE()
-         WHERE id = ?`,
-        [customerName, companyName, emailAddr, serviceName, locationCity, updatedNotes, leadId]
+         WHERE id = ? AND tenant_id = ?`,
+        [customerName, companyName, emailAddr, serviceName, locationCity, updatedNotes, leadId, contactTenantId]
       );
       console.log(`📋 [WA LeadCapture] Updated existing CRM lead ID ${leadId} for +91${last10} (Source: WhatsApp)`);
     } else {
@@ -162,18 +165,19 @@ async function captureLeadFromWhatsApp(leadData = {}) {
           email,
           followup_notes,
           created_at,
-          assigned_to
-        ) VALUES (?, ?, ?, ?, CURDATE(), ?, 'System', 'WhatsApp Lead', 'WhatsApp', ?, ?, ?, NOW(), ?)`,
+          assigned_to, tenant_id
+        ) VALUES (?, ?, ?, ?, CURDATE(), ?, 'System', 'WhatsApp Lead', 'WhatsApp', ?, ?, ?, NOW(), ?, ?)`,
         [
           customerName,
           companyName,
-          last10,
+          identityPhone,
           locationCity,
           serviceName,
           sourceDetail,
           emailAddr,
           noteText,
           assignedTo || null,
+          contactTenantId,
         ]
       );
       leadId = res.insertId;
@@ -183,14 +187,14 @@ async function captureLeadFromWhatsApp(leadData = {}) {
     // 2. Sync to wa_contacts, under the organization that captured the lead
     await queryAsync(
       `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, crm_ref_type, crm_ref_id, opt_in_status, last_contacted)
-       VALUES (?, ?, ?, '91', 'WhatsApp', 'telecalls', ?, 1, NOW())
+       VALUES (?, ?, ?, '91', 'WhatsApp', 'telecalls', ?, 0, NOW())
        ON DUPLICATE KEY UPDATE 
          name = COALESCE(NULLIF(VALUES(name), 'WhatsApp Lead'), name),
          source = 'WhatsApp',
          crm_ref_type = 'telecalls',
          crm_ref_id = VALUES(crm_ref_id),
          last_contacted = NOW()`,
-      [contactTenantId, customerName, last10, leadId]
+      [contactTenantId, customerName, identityPhone, leadId]
     ).catch(() => {});
 
     // 3. Emit real-time notification to CRM Dashboard & Staff
@@ -199,16 +203,11 @@ async function captureLeadFromWhatsApp(leadData = {}) {
         ? `New Lead from WhatsApp: ${customerName} (+91${last10}) interested in ${serviceName}`
         : `WhatsApp Lead Activity: ${customerName} (+91${last10}) updated inquiry`;
 
-      await queryAsync(
-        `INSERT INTO admin_notifications (type, message, related_type, related_id, priority) 
-         VALUES ('new_lead', ?, 'telecalls', ?, 'high')`,
-        [message, leadId]
-      ).catch(() => {});
-
       const { getNotificationIO } = require("../sockets/notifications");
-      const helpers = getNotificationIO && getNotificationIO();
-      if (helpers) {
-        helpers.sendToAdmin("new_notification", {
+      const helpers = getNotificationIO();
+      const admins = await queryAsync("SELECT user_id FROM organization_memberships WHERE tenant_id=? AND membership_status='active' AND role IN ('organization_owner','organization_admin')", [contactTenantId]);
+      for (const admin of admins) {
+        helpers?.sendToUser(admin.user_id, "new_notification", {
           id: Date.now(),
           type: "new_lead",
           title: isNew ? "🎉 New WhatsApp Lead!" : "WhatsApp Lead Activity",
@@ -229,6 +228,7 @@ async function captureLeadFromWhatsApp(leadData = {}) {
         // first-time contact's welcome/automation fired TWICE.
         const crmEventBus = require("./crmEventBus");
         crmEventBus.emit("new_lead", {
+          tenantId: contactTenantId,
           leadId,
           phone: last10,
           cleanPhone: "91" + last10,

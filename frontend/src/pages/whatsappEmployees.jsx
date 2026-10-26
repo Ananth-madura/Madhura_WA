@@ -1,7 +1,7 @@
 import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
 import InboxRoutingSettings from "../components/InboxRoutingSettings";
 import useWADialog from "../hooks/useWADialog";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Users,
   UserPlus,
@@ -79,6 +79,7 @@ export default function WAEmployees() {
 
   // Employee data & analytics
   const [employees, setEmployees] = useState([]);
+  const employeeRequest = useRef(0);
   const [analytics, setAnalytics] = useState({
     total_employees: 0,
     active_employees: 0,
@@ -129,6 +130,7 @@ export default function WAEmployees() {
   };
 
   const fetchEmployees = useCallback(async () => {
+    const version = ++employeeRequest.current;
     if (user?.role === "employee") return;
     setLoading(true);
     setError("");
@@ -140,6 +142,7 @@ export default function WAEmployees() {
       };
       const params = branchFilter !== "all" ? { branchId: branchFilter } : {};
       const { data } = await axios.get(`${API}/api/auth/employees`, { headers, params });
+      if (version !== employeeRequest.current) return;
 
       if (data?.employees) {
         setEmployees(data.employees);
@@ -148,18 +151,22 @@ export default function WAEmployees() {
         setAnalytics(data.analytics);
       }
     } catch (err) {
+      if (version !== employeeRequest.current) return;
       if (err.response?.status === 403) {
         setError("Access Denied: Only workspace administrators can manage employees.");
       } else {
         setError(err.response?.data?.message || "Failed to load employees list.");
       }
     } finally {
-      setLoading(false);
+      if (version === employeeRequest.current) setLoading(false);
     }
   }, [user, enterpriseHeaders, branchFilter]);
 
   useEffect(() => {
+    setEmployees([]);
     fetchEmployees();
+    const invalidate = () => { employeeRequest.current++; };
+    return invalidate;
   }, [fetchEmployees]);
 
   const handleCopy = async (code, id) => {
@@ -371,7 +378,7 @@ export default function WAEmployees() {
         </div>
       )}
 
-      {!demoMode && <InboxRoutingSettings />}
+      {!demoMode && <InboxRoutingSettings key={activeTenant?.id || "none"} />}
       {/* Page Header */}
       <div className="hl-commandbar p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -1141,6 +1148,7 @@ export default function WAEmployees() {
                     <option value="active">Active (Operational)</option>
                     <option value="pending">Pending Activation (Awaiting Code Login)</option>
                     <option value="banned">Suspended / Deactivated</option>
+                    <option value="inactive">Inactive / Left organization</option>
                   </select>
                 </div>
 

@@ -33,11 +33,18 @@ router.get("/summary", async (req, res) => {
   }
 });
 
+// ── Enquiry types (before /:id so "types" is not read as an id) ──────────────
+router.get("/types", (_req, res) => {
+  res.json({
+    types: svc.ENQUIRY_TYPES.map((value) => ({ value, label: svc.ENQUIRY_TYPE_LABELS[value] })),
+  });
+});
+
 // ── List enquiries ───────────────────────────────────────────────────────────
 router.get("/", async (req, res) => {
   try {
-    const { temperature, status, search, page, limit } = req.query;
-    res.json(await svc.list(req.tenantId, { temperature, status, search, page, limit }));
+    const { temperature, status, search, enquiry_type, page, limit } = req.query;
+    res.json(await svc.list(req.tenantId, { temperature, status, search, enquiry_type, page, limit }));
   } catch (err) {
     fail(res, err);
   }
@@ -59,7 +66,18 @@ router.post("/", async (req, res) => {
   try {
     const name = String(req.body.name || "").trim();
     if (!name) return res.status(400).json({ message: "Name is required" });
-    const row = await svc.create(req.tenantId, { ...req.body, name }, req.user?.id);
+    // Branch defaults to the active branch from the verified tenant context,
+    // never to a branch id guessed by the client.
+    const branchId = req.body.branch_id ?? req.branchId ?? null;
+    const row = await svc.create(
+      req.tenantId,
+      { ...req.body, branch_id: branchId, name },
+      req.user?.id
+    );
+    if(row?.contact_id){
+      const [owners]=await require("../config/database").promise().query("SELECT assigned_agent_id FROM wa_contacts WHERE tenant_id=? AND id=?",[req.tenantId,row.contact_id]);
+      if(owners[0]?.assigned_agent_id)req.app.get("io")?.to(`user:${owners[0].assigned_agent_id}`).emit("customer_access_changed",{tenantId:req.tenantId,contactId:row.contact_id});
+    }
     res.status(201).json(row);
   } catch (err) {
     fail(res, err);

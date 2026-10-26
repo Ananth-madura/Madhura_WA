@@ -44,3 +44,6 @@ scratch/flows-*.log
 scratch/flows-*.png
 scratch/flows-*.sql
 scratch/flow-mysql-init.log
+scratch/employee-workspace-*.log
+scratch/employee-workspace-*.png
+scratch/employee-workspace-browser-upload.pdf

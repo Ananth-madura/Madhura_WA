@@ -9,6 +9,7 @@ CREATE TABLE quotations (id INTEGER PRIMARY KEY, client_company TEXT, reference_
 INSERT INTO clients VALUES (1,'Client A','Company A','a@example.test','1111111111'), (2,'Client B','Company B','b@example.test','2222222222');
 INSERT INTO clientinvoices VALUES (10,'Company A',1200,'2026-10-01','2026-10-20','Unpaid'), (20,'Company B',4000,'2026-10-01','2026-10-20','Paid');
 INSERT INTO quotations VALUES (100,'Company A','QUOTE-100',3500,'2026-10-01','Pending');`);
+storage.exec("ALTER TABLE clients ADD COLUMN tenant_id INT DEFAULT 1; ALTER TABLE clientinvoices ADD COLUMN tenant_id INT DEFAULT 1; ALTER TABLE quotations ADD COLUMN tenant_id INT DEFAULT 1; INSERT INTO clients VALUES (3,'Other organization','Other','other@example.test','3333333333',2); INSERT INTO clientinvoices VALUES (30,'Other',9000,'2026-10-01','2026-10-20','Paid',2)");
 let queries = 0;
 const database = { isSqlite: true, promise: () => ({ query: async (sql, params = []) => {
   queries++;
@@ -22,12 +23,14 @@ const routeModule = { exports: {} };
 vm.runInNewContext(fs.readFileSync(require.resolve('../routes/clientPortalRoutes'), 'utf8'), {
   module: routeModule, console, Buffer,
   require: (name) => name === '../config/database' ? database : name === '../middleware/authMiddleware' ? middleware
+    : name === '../middleware/tenantMiddleware' ? { requireTenantContext: (req, res, next) => { req.tenantId = 1; req.userRole = 'organization_owner'; next(); } }
     : name === '../middleware/waRateLimiter' ? { createRateLimiter: () => (req, res, next) => next() }
     : name === '../services/clientPortalService' ? serviceModule : require(name)
 });
 const app = express(); app.use(express.json()); app.use('/api/client-portal', routeModule.exports);
 const root = '/api/client-portal';
 const staff = jwt.sign({ id: 99, role: 'admin' }, process.env.JWT_SECRET);
+const platformStaff = jwt.sign({ id: 99, role: 'platform_admin' }, process.env.JWT_SECRET);
 const bearer = (token) => ({ Authorization: `Bearer ${token}` });
 const get = (path, token) => request(app).get(root + path).set(bearer(token));
 const post = (path, body, token = staff) => request(app).post(root + path).set(bearer(token)).send(body);
@@ -79,7 +82,12 @@ async function invite(client, email) {
   result = await get(`/requests/${requestId}`, clientA); assert.equal(result.body.messages.length, 2); assert.equal(result.body.messages[1].sender_role, 'staff');
   await request(app).patch(`${root}/admin/clients/1/requests/${requestId}`).set(bearer(staff)).send({ status: 'resolved' });
   assert.equal((await post(`/requests/${requestId}/replies`, { body: 'Blocked reply', idempotency_key: 'another' }, clientA)).status, 409);
-  await request(app).put(`${root}/admin/settings`).set(bearer(staff)).send({ business_name: 'Trading Co', accent_color: '#202C52', show_invoices: false, allow_requests: false });
+  assert.equal((await request(app).put(`${root}/admin/settings`).set(bearer(staff)).send({ business_name: 'Trading Co' })).status,403);
+  assert.equal((await get('/admin/clients/3',staff)).status,404);
+  assert.equal((await post('/admin/clients/3/invitations',{email:'foreign@example.test'})).status,404);
+  assert.equal((await get('/admin/sources/invoice/30',staff)).status,404);
+  assert.equal((await get('/admin/clients',staff)).body.clients.some(client=>client.id===3),false);
+  await request(app).put(`${root}/admin/settings`).set(bearer(platformStaff)).send({ business_name: 'Trading Co', accent_color: '#202C52', show_invoices: false, allow_requests: false });
   assert.equal((await get(`/documents/${invoiceA}/download`, clientA)).status, 404);
   assert.equal((await post('/requests', { ...draft, idempotency_key: 'disabled' }, clientA)).status, 403);
   const claims = jwt.verify(clientA, process.env.JWT_SECRET);

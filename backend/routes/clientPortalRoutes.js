@@ -40,8 +40,34 @@ function createClientPortalRouter(database = db, { staffAuth = verifyToken, admi
   router.post('/requests/:id/replies', portalAuth, writeLimit, handle(async (req, res) => res.json(await service.reply(req.portalAccount.client_id, id(req.params.id), req.body, { role: 'client', id: req.portalAccount.id }))));
 
   const admin = express.Router();
-  admin.use(staffAuth, adminOnly);
-  admin.get('/clients', handle(async (req, res) => res.json(await service.listClients(req.query.q, req.query.page))));
+  admin.use(staffAuth, (req, res, next) => req.user?.role === 'platform_admin' ? next() : adminOnly(req, res, next));
+  admin.use(require('../middleware/tenantMiddleware').requireTenantContext);
+  admin.use(async (req, res, next) => {
+    try {
+      if (!['organization_owner', 'organization_admin'].includes(req.userRole) && req.user.role !== 'platform_admin') return res.status(403).json({ error: 'Organization administrator required' });
+      const client = req.path.match(/^\/clients\/(\d+)(?:\/|$)/);
+      if (client) {
+        const [rows] = await database.promise().query('SELECT id FROM clients WHERE id=? AND tenant_id=?', [Number(client[1]), req.tenantId]);
+        if (!rows.length) return res.status(404).json({ error: 'Client not found' });
+      }
+      const account = req.path.match(/^\/accounts\/(\d+)\/revoke$/);
+      if (account) {
+        const [rows] = await database.promise().query('SELECT a.id FROM client_portal_accounts a JOIN clients c ON c.id=a.client_id WHERE a.id=? AND c.tenant_id=?', [Number(account[1]), req.tenantId]);
+        if (!rows.length) return res.status(404).json({ error: 'Account not found' });
+      }
+      const source = req.path.match(/^\/sources\/(invoice|quotation)\/(\d+)$/);
+      const sourceKind = source?.[1] || (req.method === 'POST' && /\/documents$/.test(req.path) ? req.body.kind : null);
+      if (sourceKind) {
+        const table = { invoice: 'clientinvoices', quotation: 'quotations' }[sourceKind];
+        if (!table) return res.status(400).json({ error: 'Invalid document type' });
+        const [rows] = await database.promise().query(`SELECT id FROM ${table} WHERE id=? AND tenant_id=?`, [Number(source?.[2] || req.body.source_id), req.tenantId]);
+        if (!rows.length) return res.status(404).json({ error: 'Source document not found' });
+      }
+      if (req.path === '/settings' && req.user.role !== 'platform_admin') return res.status(403).json({ error: 'Shared portal settings require a platform administrator' });
+      next();
+    } catch (_) { res.status(503).json({ error: 'Portal organization scope is unavailable' }); }
+  });
+  admin.get('/clients', handle(async (req, res) => res.json(await service.listClients(req.query.q, req.query.page, req.tenantId))));
   admin.get('/clients/:clientId', handle(async (req, res) => res.json(await service.staffClient(id(req.params.clientId)))));
   admin.get('/sources/:kind/:id', handle(async (req, res) => res.json(await service.sourceRecord(req.params.kind, id(req.params.id)))));
   admin.post('/clients/:clientId/invitations', writeLimit, handle(async (req, res) => res.status(201).json(await service.invite(id(req.params.clientId), req.body.email, req.user.id))));

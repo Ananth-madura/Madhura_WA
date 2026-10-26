@@ -16,12 +16,13 @@ const WATemplateCreate = lazy(() => import("./pages/whatsappTemplateCreate"));
 const WAGroups = lazy(() => import("./pages/whatsappGroups"));
 const WACampaigns = lazy(() => import("./pages/whatsappCampaigns"));
 const WAAutomations = lazy(() => import("./pages/whatsappAutomations"));
-const WAReminders = lazy(() => import("./pages/whatsappReminders"));
 const WAFlows = lazy(() => import("./pages/whatsappFlows"));
 const WAAnalytics = lazy(() => import("./pages/whatsappAnalytics"));
 const WAAccounts = lazy(() => import("./pages/whatsappAccounts"));
 const WAEmployees = lazy(() => import("./pages/whatsappEmployees"));
 const SharedTeamInbox = lazy(() => import("./components/SharedTeamInbox"));
+const EmployeeWorkspace = lazy(() => import("./pages/EmployeeWorkspace"));
+const EmployeeCampaigns = lazy(() => import("./pages/EmployeeCampaigns"));
 const WAEnquiries = lazy(() => import("./pages/whatsappEnquiries"));
 const WABilling = lazy(() => import("./pages/whatsappBilling"));
 const BranchList = lazy(() => import("./pages/branches/BranchList"));
@@ -169,6 +170,8 @@ export default function App() {
             >
               <Route index element={<WorkspaceInbox />} />
               <Route path="team-inbox" element={<SharedTeamInbox />} />
+              <Route path="workspace" element={<EmployeeWorkspace />} />
+              <Route path="workspace/campaigns" element={<EmployeeCampaigns />} />
               <Route path="contacts" element={<WAContacts />} />
               <Route path="templates" element={<WATemplates />} />
               <Route path="templates/create" element={<WATemplateCreate />} />
@@ -176,7 +179,7 @@ export default function App() {
               <Route path="groups" element={<WAGroups />} />
               <Route path="campaigns" element={<WACampaigns />} />
               <Route path="automations" element={<WAAutomations />} />
-              <Route path="reminders" element={<WAReminders />} />
+              <Route path="reminders" element={<Navigate to="/whatsapp" replace />} />
               <Route path="flows" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
               <Route path="flows/create" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
               <Route path="flows/build" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
@@ -209,6 +212,7 @@ export default function App() {
               <Route path="client-portal" element={<Suspense fallback={<p className="p-8">Loading portal management…</p>}><ClientPortalManage /></Suspense>} />
             </Route>
             <Route path="/employee" element={<Navigate to="/whatsapp/employees" replace />} />
+            <Route path="/employees" element={<Navigate to="/whatsapp/employees" replace />} />
             <Route path="*" element={<Navigate to="/whatsapp" replace />} />
           </Routes></Suspense>
           {process.env.NODE_ENV === "development" && <Agentation />}

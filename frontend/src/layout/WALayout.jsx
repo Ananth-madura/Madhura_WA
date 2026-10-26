@@ -15,6 +15,7 @@ import {
   Layers,
   Users,
   GitBranch,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useEnterprise } from "../context/EnterpriseContext";
@@ -30,6 +31,7 @@ import OrganizationSwitcher from "../components/OrganizationSwitcher";
 import BranchSwitcher from "../components/BranchSwitcher";
 import "../pages/whatsapp-workspace.css";
 import "../pages/whatsapp-operations.css";
+import "../pages/whatsapp-employee.css";
 
 // Corporate Shell for Whatsapp_CRM — Hallmark Workbench shell (design.md).
 // Deep-navy slab, yellow hairline, quiet type. Routes and logic untouched.
@@ -42,16 +44,56 @@ export default function WALayout() {
 
 function AssignedWorkspace() {
   const { user, logout } = useAuth();
-  const location = useLocation();
+  const { activeTenant, activeBranch, roleInActiveOrg } = useEnterprise();
   const navigate = useNavigate();
-  const allowed = ["/whatsapp", "/whatsapp/", "/whatsapp/team-inbox"].includes(location.pathname);
-  return <div className="min-h-screen flex flex-col">
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-      <Link to="/whatsapp/team-inbox" className="font-semibold">Team inbox</Link>
-      <span>{user?.name || user?.first_name || "Employee"}</span>
-      <button className="hl-btn-secondary" onClick={() => { logout(); navigate("/login"); }}>Log out</button>
+  const location = useLocation();
+  const allowed = ["/whatsapp", "/whatsapp/", "/whatsapp/team-inbox", "/whatsapp/workspace", "/whatsapp/workspace/campaigns"].includes(location.pathname);
+  const roleLabel = {
+    organization_owner: "Owner",
+    organization_admin: "Administrator",
+    branch_manager: "Branch manager",
+    agent: "Agent",
+    employee: "Employee",
+  }[roleInActiveOrg] || "Employee";
+  const orgLine = [activeTenant?.name, activeBranch?.name].filter(Boolean).join(" · ");
+
+  /* Same shell as the administration dashboard: deep-navy header, the shared
+     workspace rail, and the same content surface. Only the controls an
+     assigned employee may use are mounted — branches, employees, billing,
+     account setup, session controls and workspace settings stay admin-only,
+     and the rail itself only lists routes this role can open. */
+  return <div className="crm-layout-shell wa-page-mode wa-dvh flex flex-col overflow-hidden">
+    <header className="hl-shell hl-safe-top flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 shrink-0" style={{ minHeight: 56 }}>
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <Link to="/whatsapp/team-inbox" className="flex items-center gap-2 shrink-0 py-0.5" title="Employee desk">
+          <img src="/Group.png" alt="Madhura WhatsApp CRM" className="h-7 w-auto object-contain" />
+        </Link>
+        <span className="emp-role-chip hidden md:inline-flex shrink-0">
+          <span className="hl-badge hl-badge-info" style={{ height: 32 }}>
+            <ShieldCheck size={13} aria-hidden="true" /> {roleLabel}
+          </span>
+        </span>
+        {orgLine && <span className="emp-shell-org hidden lg:block" title={orgLine}>{orgLine}</span>}
+      </div>
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <span className="emp-shell-user hidden sm:block">{user?.name || user?.first_name || "Employee"}</span>
+        <button
+          type="button"
+          onClick={() => { logout(); navigate("/login", { replace: true }); }}
+          className="hl-logout shrink-0"
+          style={{ height: 38 }}
+          title="Sign out"
+        >
+          Logout
+        </button>
+      </div>
     </header>
-    <main className="flex-1 min-w-0">{allowed ? <Outlet /> : <Navigate to="/whatsapp/team-inbox" replace />}</main>
+    <div className="wa-shell-body">
+      <WhatsAppNav scope="assigned" />
+      <main className="wa-page-workspace flex-1 min-h-0 w-full min-w-0 p-3 sm:p-4 lg:p-5 overflow-y-auto overflow-x-hidden wa-scroll">
+        {allowed ? <Outlet /> : <Navigate to="/whatsapp/team-inbox" replace />}
+      </main>
+    </div>
   </div>;
 }
 

@@ -717,6 +717,28 @@ async function ensureWATables() {
   await addColumnIfNotExists("wa_campaigns", "flow_id", "INT DEFAULT NULL");
   await addColumnIfNotExists("wa_interactive_reminders", "flow_id", "INT DEFAULT NULL");
   await addColumnIfNotExists("wa_interactive_reminders", "template_id", "INT DEFAULT NULL");
+  // Chat-native scheduling: audience, repeat rules and dispatch provenance.
+  await addColumnIfNotExists("wa_interactive_reminders", "audience", "VARCHAR(16) DEFAULT 'customer'");
+  await addColumnIfNotExists("wa_interactive_reminders", "repeat_rule", "VARCHAR(16) DEFAULT 'none'");
+  await addColumnIfNotExists("wa_interactive_reminders", "repeat_until", "DATETIME DEFAULT NULL");
+  await addColumnIfNotExists("wa_interactive_reminders", "parent_id", "INT DEFAULT NULL");
+  await addColumnIfNotExists("wa_interactive_reminders", "created_by", "INT DEFAULT NULL");
+  await addColumnIfNotExists("wa_interactive_reminders", "branch_id", "INT DEFAULT NULL");
+  await addColumnIfNotExists("wa_interactive_reminders", "source", "VARCHAR(32) DEFAULT 'automation'");
+  await addColumnIfNotExists("wa_interactive_reminders", "assigned_user_id", "INT DEFAULT NULL");
+  // Older/restored databases may predate the timestamp columns. `CREATE TABLE
+  // IF NOT EXISTS` never adds columns, so update statements that write
+  // updated_at failed with "Unknown column 'updated_at' in 'field list'".
+  await addColumnIfNotExists("wa_interactive_reminders", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+  await addColumnIfNotExists("wa_interactive_reminders", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+  try {
+    await queryAsync(
+      "ALTER TABLE wa_interactive_reminders MODIFY COLUMN status ENUM('pending','sending','sent','confirmed','rescheduled','cancelled','paid','expired','failed') DEFAULT 'pending'"
+    );
+  } catch (_) {}
+  try {
+    await queryAsync("ALTER TABLE wa_interactive_reminders ADD INDEX idx_reminder_due (status, scheduled_for)");
+  } catch (_) {}
   try {
     await queryAsync("ALTER TABLE wa_campaigns MODIFY COLUMN status ENUM('draft','scheduled','running','completed','paused','failed','cancelled') DEFAULT 'draft'");
   } catch (_) {}

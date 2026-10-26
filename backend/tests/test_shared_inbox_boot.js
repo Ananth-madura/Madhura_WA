@@ -24,6 +24,7 @@ async function main() {
       RAZORPAY_API_BASE:signupProvider.url,RAZORPAY_KEY_ID:"rzp_test_signupfixture",RAZORPAY_KEY_SECRET:"signup-fixture-key-secret",RAZORPAY_WEBHOOK_SECRET:"signup-fixture-webhook",RAZORPAY_CHECKOUT_ENABLED:"1",BILLING_ALLOW_DEV_PAYMENTS:"0",
       DB_USER: "root", DB_PASS: "", DB_NAME: database, JWT_SECRET: secret, SMTP_ENCRYPTION_KEY: "a".repeat(32), ALLOW_START_WITHOUT_DB: "0",
       WA_ENABLE_WEB_ENGINE: "0", WA_ACCESS_TOKEN: "", WA_PHONE_NUMBER_ID: "", WA_APP_SECRET: "fixture-app-secret", REDIS_URL: "", REQUIRE_HARD_CONFIG: "0",
+      WA_EMPLOYEE_CAMPAIGN_POLL_MS:"1000",
       WA_DATA_DIR: path.resolve(__dirname, "../../scratch/shared-inbox-runtime"), ADMIN_SEED_PASSWORD: "isolated-admin-only", WA_SERVER_CHAT_STORAGE: "0", PUBLIC_BASE_URL: "http://127.0.0.1:15317",
       ALLOWED_ORIGINS:"http://127.0.0.1:15317,http://127.0.0.1:15318,http://localhost:15318", WA_LEGACY_PUBLIC_UPLOADS:"0", R2_REQUIRED:"0",OPS_METRICS_TOKEN:"isolated-metrics-fixture-over-32-characters",WA_ENABLE_CRM_SWEEP:"0",
     },
@@ -125,6 +126,8 @@ async function main() {
     assert.equal((await fetch(`${base}/api/wa/analytics/dashboard`,{headers:{Authorization:`Bearer ${employeeToken}`}})).status,403);
     assert.equal((await fetch(`${base}/api/v2/me`,{headers:{Authorization:`Bearer ${employeeToken}`,"x-tenant-id":String(secondId)}})).status,403);
     await require("./helpers/sharedFlows").verify({base,headers,secondHeaders,employeeToken,connection,sender,meta});
+    await require("./helpers/employeeOutreach").verify({base,headers,secondHeaders,employeeToken,connection,sender,meta});
+    if(process.env.INBOX_TEST_REAL_BROWSER==="1")await require("./helpers/employeeOutreachBrowser").verify({query:(...args)=>connection.query(...args),meta});
     if(process.env.INBOX_TEST_REAL_BROWSER==="1")await require("./helpers/flowBrowser").verify({email:admin.email,secondId});
     await connection.query("DELETE FROM staff_branch_memberships WHERE tenant_id=1 AND user_id=?",[employee.employee.id]);
     const noBranch=await fetch(`${base}/api/v2/me`,{headers:{Authorization:`Bearer ${employeeToken}`}}).then(response=>response.json());

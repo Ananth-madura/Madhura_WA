@@ -31,6 +31,8 @@ import {
   updateEnquiry,
   deleteEnquiry,
   convertEnquiry,
+  ENQUIRY_TYPES,
+  enquiryTypeLabel,
 } from "../api/enquiries";
 import { useAuth } from "../auth/AuthContext";
 
@@ -83,6 +85,7 @@ const EMPTY_FORM = {
   email: "",
   company: "",
   source: "manual",
+  enquiry_type: "general",
   message: "",
   notes: "",
   temperature: "new",
@@ -210,6 +213,7 @@ export default function WAEnquiries() {
       email: row.email || "",
       company: row.company || "",
       source: row.source || "manual",
+      enquiry_type: row.enquiry_type || "general",
       message: row.message || "",
       notes: row.notes || "",
       temperature: row.temperature || "new",
@@ -526,6 +530,9 @@ export default function WAEnquiries() {
                   >
                     <td style={{ padding: "12px 14px" }}>
                       <div className="font-semibold text-[13px] text-gray-900">{row.name}</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-ink-2,#64748b)] mt-0.5">
+                        {enquiryTypeLabel(row.enquiry_type)}
+                      </div>
                       {row.message && (
                         <div className="text-[11px] text-gray-500 mt-0.5 max-w-[260px] truncate" title={row.message}>
                           {row.message}
@@ -757,6 +764,22 @@ export default function WAEnquiries() {
                       />
                     </div>
                   </div>
+                </div>
+
+                <div>
+                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                    Enquiry type
+                  </label>
+                  <select
+                    value={formData.enquiry_type || "general"}
+                    onChange={(e) => setFormData({ ...formData, enquiry_type: e.target.value })}
+                    className="hl-select w-full"
+                    style={{ height: 40, fontSize: 13 }}
+                  >
+                    {ENQUIRY_TYPES.map((type) => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -1,10 +1,18 @@
 const { Server } = require("socket.io");
 const db = require("../config/database");
-const { sendPushToUser, sendPushToAdmins } = require("../backendutil/pushSender");
+const { sendPushToUser } = require("../backendutil/pushSender");
 const { authenticateSocket, socketIsAdmin, canJoinUserRoom } = require("./socketAuth");
 
 let notificationIO = null;
 let notificationHelpers = null;
+function scopedAdmins(event, data) {
+  const tenantId = Number(data?.tenantId || data?.tenant_id || data?.data?.tenantId);
+  if (!Number.isSafeInteger(tenantId) || tenantId < 1) return;
+  db.query("SELECT m.user_id FROM organization_memberships m JOIN users u ON u.id=m.user_id AND u.status='active' JOIN tenants t ON t.id=m.tenant_id AND t.status='active' WHERE m.tenant_id=? AND m.membership_status='active' AND m.role IN ('organization_owner','organization_admin')", [tenantId], (error, rows) => {
+    if (error) return;
+    for (const row of rows) notificationIO.to(`notifications:${row.user_id}`).emit(event, data);
+  });
+}
 
 function getNotificationIO() {
   return notificationHelpers;
@@ -60,8 +68,8 @@ function initNotificationsSocket(io, corsOrigin = "*") {
       // Scoping the UPDATE (rather than trusting the client) is what stops one
       // user marking another's notification read.
       if (socketIsAdmin(socket)) {
-        db.query("UPDATE admin_notifications SET is_read = 1 WHERE id = ?", [notificationId], () => {
-          notificationIO.emit("notification_read", { notificationId });
+        db.query("UPDATE admin_notifications n JOIN organization_memberships m ON m.tenant_id=n.tenant_id AND m.user_id=? AND m.membership_status='active' AND m.role IN ('organization_owner','organization_admin') SET n.is_read=1 WHERE n.id=?", [me.id, notificationId], (error, result) => {
+          if (!error && result.affectedRows) notificationIO.to(`notifications:${me.id}`).emit("notification_read", { notificationId });
         });
         return;
       }
@@ -69,7 +77,7 @@ function initNotificationsSocket(io, corsOrigin = "*") {
         "UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?",
         [notificationId, me.id],
         (err) => {
-          if (!err) notificationIO.emit("notification_read", { notificationId, userId: me.id });
+          if (!err) notificationIO.to(`notifications:${me.id}`).emit("notification_read", { notificationId, userId: me.id });
         }
       );
     });
@@ -127,12 +135,14 @@ function initNotificationsSocket(io, corsOrigin = "*") {
       emitToEmployee();
       return;
     }
+    const tenantId = Number(data.tenantId || data.tenant_id);
+    if (!Number.isSafeInteger(tenantId) || tenantId < 1) { emitToEmployee(); return; }
 
     const relatedId = data.taskId || data.leadId || data.targetId || data.id || 0;
 
     db.query(
-      "INSERT INTO admin_notifications (type, message, user_id, related_id, related_type, created_by, priority) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [type, message, data.userId || null, relatedId, data.type || null, data.userId || null, priority],
+      "INSERT INTO admin_notifications (type, message, user_id, related_id, related_type, created_by, priority,tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [type, message, data.userId || null, relatedId, data.type || null, data.userId || null, priority, tenantId],
       (err, result) => {
         if (err) {
           console.error("[Notification Sockets] Admin DB insert error:", err.message);
@@ -140,11 +150,9 @@ function initNotificationsSocket(io, corsOrigin = "*") {
         }
 
         // Trigger Admin Desktop Web Push
-        sendPushToAdmins(data.title || "Admin CRM Alert", message, "/dashboard/notifications");
-
         notification.dbId = result.insertId;
         if (shouldEmit) {
-          notificationIO.to("admin_notifications").emit("new_notification", notification);
+          scopedAdmins("new_notification", { ...notification, tenantId });
         }
         emitToEmployee();
       }
@@ -210,19 +218,19 @@ function initNotificationsSocket(io, corsOrigin = "*") {
     namespace: notificationIO,
     emitNotification,
     emit: (event, data) => {
-      notificationIO.emit(event, data);
+      scopedAdmins(event, data);
     },
     sendToUser: (userId, event, data) => {
       notificationIO.to(`notifications:${userId}`).emit(event, data);
     },
     sendToAdmin: (event, data) => {
-      notificationIO.to("admin_notifications").emit(event, data);
+      scopedAdmins(event, data);
     },
     emitToEmployee: (userId, event, data) => {
       notificationIO.to(`notifications:${userId}`).emit(event, data);
     },
     emitToAdmins: (event, data) => {
-      notificationIO.to("admin_notifications").emit(event, data);
+      scopedAdmins(event, data);
     }
   };
 

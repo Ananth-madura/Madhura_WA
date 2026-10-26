@@ -419,6 +419,7 @@ router.post("/login", loginLimiter, (req, res) => {
       const user = rows[0];
       if (user.status === "pending") return res.status(403).json({ message: "Account waiting for admin approval" });
       if (user.status === "banned") return res.status(403).json({ message: "Account has been banned" });
+      if (user.status !== "active") return res.status(403).json({ message: "Account is not active" });
 
       const sendAuthResponse = async () => {
         const tid = user.tenant_id || 1;
@@ -844,7 +845,7 @@ router.put("/employees/:id", verifyToken, isAdmin, async (req, res) => {
       if (!employee || employee.role === 'organization_owner') throw new Error("Employee not found or owner cannot be edited here");
       const fields = [], params = [];
       for (const field of ['first_name','last_name']) if (req.body[field] !== undefined) { fields.push(field+' = ?'); params.push(String(req.body[field]).trim().slice(0,100)); }
-      for (const [field, allowed] of [['role',['admin','employee','agent']],['status',['active','pending','banned']],['whatsapp_access_level',['full','chat_only','read_only','campaign_only']]]) {
+      for (const [field, allowed] of [['role',['admin','employee','agent']],['status',['active','pending','banned','inactive']],['whatsapp_access_level',['full','chat_only','read_only','campaign_only']]]) {
         if (req.body[field] !== undefined) { if (!allowed.includes(req.body[field])) throw new Error('Invalid '+field); fields.push(field+' = ?'); params.push(req.body[field]); }
       }
       if (fields.length) await q('UPDATE users SET '+fields.join(', ')+' WHERE id = ? AND tenant_id = ?', [...params,targetId,tenantId]);

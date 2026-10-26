@@ -14,6 +14,34 @@ const q = (sql, params = []) =>
 const TEMPERATURES = ["new", "cold", "warm", "hot"];
 const STATUSES = ["open", "converted", "lost"];
 
+// What the enquiry is *about*. `source` stays provenance (manual, whatsapp_chat),
+// so a type never has to be smuggled into the provenance column.
+const ENQUIRY_TYPES = ["general", "product", "pricing", "support", "appointment", "partnership"];
+const ENQUIRY_TYPE_LABELS = {
+  general: "General enquiry",
+  product: "Product / service",
+  pricing: "Pricing / quote",
+  support: "Support",
+  appointment: "Appointment",
+  partnership: "Partnership",
+};
+
+function normaliseEnquiryType(value, fallback = "general") {
+  const raw = String(value || "").trim().toLowerCase().replace(/[\s/-]+/g, "_");
+  if (!raw) return fallback;
+  const alias = {
+    general_enquiry: "general",
+    product_service: "product",
+    product_or_service: "product",
+    pricing_quote: "pricing",
+    quote: "pricing",
+    appointment_booking: "appointment",
+    partner: "partnership",
+  };
+  const mapped = alias[raw] || raw;
+  return ENQUIRY_TYPES.includes(mapped) ? mapped : fallback;
+}
+
 let ensured = false;
 
 function stamp(date = new Date()) {
@@ -36,12 +64,14 @@ async function ensureEnquiryTables() {
   await q(`CREATE TABLE IF NOT EXISTS wa_enquiries (
     id ${id},
     tenant_id INT NOT NULL,
+    contact_id INT DEFAULT NULL,
     branch_id INT DEFAULT NULL,
     name VARCHAR(150) NOT NULL,
     phone VARCHAR(40) DEFAULT NULL,
     email VARCHAR(180) DEFAULT NULL,
     company VARCHAR(150) DEFAULT NULL,
     source VARCHAR(60) DEFAULT 'manual',
+    enquiry_type VARCHAR(24) DEFAULT 'general',
     message TEXT,
     temperature VARCHAR(12) DEFAULT 'new',
     status VARCHAR(16) DEFAULT 'open',
@@ -64,8 +94,10 @@ async function ensureEnquiryTables() {
 
   // Reconcile columns added after the table first shipped.
   const wanted = [
+    ["contact_id", "INT DEFAULT NULL"],
     ["branch_id", "INT DEFAULT NULL"],
     ["source", "VARCHAR(60) DEFAULT 'manual'"],
+    ["enquiry_type", "VARCHAR(24) DEFAULT 'general'"],
     ["message", "TEXT"],
     ["notes", "TEXT"],
     ["converted_client_id", "INT DEFAULT NULL"],
@@ -73,7 +105,8 @@ async function ensureEnquiryTables() {
     ["converted_at", sqlite ? "TEXT" : "DATETIME"],
     ["converted_by", "INT DEFAULT NULL"],
     ["created_by", "INT DEFAULT NULL"],
-    ["updated_at", ts],
+    ["created_at", sqlite ? "TEXT" : ts],
+    ["updated_at", sqlite ? "TEXT" : ts],
   ];
 
   let existing = [];
@@ -114,6 +147,51 @@ async function tableColumns(table) {
   }
 }
 
+// A branch id is only accepted when it belongs to the caller's organization.
+// Older installs may not have `branches` at all, in which case the value is
+// kept untouched rather than silently dropped.
+async function resolveBranchId(tenantId, requested) {
+  const branchId = Number(requested);
+  if (!Number.isFinite(branchId) || branchId <= 0) return null;
+  try {
+    const cols = await tableColumns("branches");
+    // Cannot verify ownership (no branches table) → refuse the id rather than
+    // storing a branch that may belong to another organization.
+    if (!cols.size) return null;
+    const rows = cols.has("tenant_id")
+      ? await q("SELECT id FROM branches WHERE id = ? AND tenant_id = ? LIMIT 1", [branchId, tenantId])
+      : await q("SELECT id FROM branches WHERE id = ? LIMIT 1", [branchId]);
+    return rows.length ? branchId : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// List rows carry the creator's display name so the UI can show who logged the
+// enquiry. Missing users / older schemas simply leave the field empty.
+async function attachCreatorNames(rows) {
+  const list = (Array.isArray(rows) ? rows : []).filter(Boolean);
+  if (list.length === 0) return list;
+  const ids = [...new Set(list.map((r) => Number(r.created_by)).filter((id) => id > 0))];
+  if (!ids.length) return list;
+  try {
+    const placeholders = ids.map(() => "?").join(", ");
+    const users = await q(
+      `SELECT id, first_name, last_name FROM users WHERE id IN (${placeholders})`,
+      ids
+    );
+    const byId = new Map(
+      users.map((u) => [Number(u.id), `${u.first_name || ""} ${u.last_name || ""}`.trim()])
+    );
+    return list.map((r) => ({
+      ...r,
+      created_by_name: byId.get(Number(r.created_by)) || null,
+    }));
+  } catch (_) {
+    return list;
+  }
+}
+
 // Provenance columns on `clients` exist on the production MySQL clone but not
 // on the embedded SQLite schema. Add what is missing so a converted enquiry can
 // stamp the CRM lead it came from and the CRM client list can show it.
@@ -123,6 +201,7 @@ async function ensureClientBridgeColumns() {
   if (bridgeEnsured) return;
   const sqlite = Boolean(db.isSqlite);
   const wanted = [
+    ["tenant_id", "INT DEFAULT NULL"],
     ["source", sqlite ? "TEXT DEFAULT NULL" : "VARCHAR(100) DEFAULT NULL"],
     ["original_lead_id", "INT DEFAULT NULL"],
     ["original_lead_type", sqlite ? "TEXT DEFAULT NULL" : "ENUM('telecall','walkin','field') DEFAULT NULL"],
@@ -194,11 +273,11 @@ async function ensureCrmLead(enquiry, tenantId) {
 }
 
 // Mirror the pipeline stage onto the CRM lead (cold/warm/hot/converted).
-async function setLeadOutcome(leadId, temperature) {
+async function setLeadOutcome(leadId, temperature, tenantId) {
   const outcome = OUTCOME_BY_TEMPERATURE[String(temperature || "").toLowerCase()];
   if (!leadId || !outcome) return;
   try {
-    await q("UPDATE telecalls SET call_outcome = ? WHERE id = ?", [outcome, leadId]);
+    await q("UPDATE telecalls SET call_outcome = ? WHERE id = ? AND tenant_id=?", [outcome, leadId, tenantId]);
   } catch (_) { /* older schemas without call_outcome: non-fatal */ }
 }
 
@@ -208,7 +287,7 @@ async function syncEnquiryLead(enquiry, tenantId) {
   const temperature = String(enquiry.temperature || "").toLowerCase();
   if (!LEAD_TEMPERATURES.includes(temperature)) return Number(enquiry.crm_lead_id) || null;
   const leadId = await ensureCrmLead(enquiry, tenantId);
-  if (leadId) await setLeadOutcome(leadId, temperature);
+  if (leadId) await setLeadOutcome(leadId, temperature, tenantId);
   return leadId;
 }
 
@@ -233,7 +312,7 @@ async function stats(tenantId) {
 
 async function list(tenantId, opts = {}) {
   await ensureEnquiryTables();
-  const { temperature, status, search, page = 1, limit = 50 } = opts;
+  const { temperature, status, search, enquiry_type, page = 1, limit = 50 } = opts;
   const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
   const offset = (Math.max(1, parseInt(page) || 1) - 1) * limitNum;
 
@@ -248,10 +327,15 @@ async function list(tenantId, opts = {}) {
     where.push("status = ?");
     params.push(status);
   }
+  const type = normaliseEnquiryType(enquiry_type, null);
+  if (type) {
+    where.push("enquiry_type = ?");
+    params.push(type);
+  }
   if (search) {
-    where.push("(name LIKE ? OR phone LIKE ? OR email LIKE ? OR company LIKE ?)");
+    where.push("(name LIKE ? OR phone LIKE ? OR email LIKE ? OR company LIKE ? OR message LIKE ?)");
     const like = `%${String(search).trim()}%`;
-    params.push(like, like, like, like);
+    params.push(like, like, like, like, like);
   }
 
   const whereSql = where.join(" AND ");
@@ -263,7 +347,7 @@ async function list(tenantId, opts = {}) {
   const total = Number(countRows[0]?.total) || 0;
 
   return {
-    enquiries: rows,
+    enquiries: await attachCreatorNames(rows),
     total,
     page: Math.max(1, parseInt(page) || 1),
     totalPages: Math.max(1, Math.ceil(total / limitNum)),
@@ -284,20 +368,32 @@ async function create(tenantId, payload, userId) {
   const email = String(payload.email || "").trim() || null;
   const company = String(payload.company || "").trim() || null;
   const source = String(payload.source || "manual").trim().slice(0, 60) || "manual";
+  const enquiryType = normaliseEnquiryType(payload.enquiry_type);
   const message = payload.message ? String(payload.message).trim() : null;
   const notes = payload.notes ? String(payload.notes).trim() : null;
-
-  const res = await q(
-    `INSERT INTO wa_enquiries (tenant_id, branch_id, name, phone, email, company, source, message, temperature, status, notes, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)`,
+  const branchId = await resolveBranchId(tenantId, payload.branch_id);
+  const phoneDigits = digits(phone);
+  const canonicalPhone = phoneDigits.length === 10 ? `91${phoneDigits}` : phoneDigits;
+  const write = async query => {
+    let contactId = null;
+    if (/^\d{10,15}$/.test(canonicalPhone)) {
+      await query(`INSERT INTO wa_contacts (tenant_id,name,phone,email,source,branch_id,opt_in_status) VALUES (?,?,?,?,?,?,0) ON DUPLICATE KEY UPDATE phone=VALUES(phone)`,[tenantId,name,canonicalPhone,email,source,branchId]);
+      const [contact] = await query("SELECT id FROM wa_contacts WHERE tenant_id=? AND phone=?",[tenantId,canonicalPhone]);
+      contactId = contact?.id || null;
+    }
+    const result = await query(
+    `INSERT INTO wa_enquiries (tenant_id, contact_id, branch_id, name, phone, email, company, source, enquiry_type, message, temperature, status, notes, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)`,
     [
       tenantId,
-      payload.branch_id || null,
+      contactId,
+      branchId,
       name,
       phone,
       email,
       company,
       source,
+      enquiryType,
       message,
       temperature,
       notes,
@@ -306,15 +402,20 @@ async function create(tenantId, payload, userId) {
       stamp(),
     ]
   );
+    if (contactId && !db.isSqlite) await require("./crmIntake").createCrmIntake(db).assign(query,{tenantId,contactId,branchId,actorId:userId||0});
+    return result;
+  };
+  const res = db.isSqlite ? await write(q) : await require("./sharedInboxService").createInboxService(db).transaction(write);
   const created = await getById(res.insertId, tenantId);
 
   // Creating an enquiry that is already qualified also creates its CRM lead.
   if (created && LEAD_TEMPERATURES.includes(String(created.temperature || "").toLowerCase())) {
     await syncEnquiryLead(created, tenantId);
-    return getById(res.insertId, tenantId);
+    const qualified = await getById(res.insertId, tenantId);
+    return (await attachCreatorNames([qualified]))[0];
   }
 
-  return created;
+  return (await attachCreatorNames([created]))[0];
 }
 
 async function update(id, tenantId, payload) {
@@ -341,6 +442,16 @@ async function update(id, tenantId, payload) {
     sets.push("temperature = ?");
     params.push(payload.temperature);
   }
+  if (payload.enquiry_type !== undefined && payload.enquiry_type !== null && payload.enquiry_type !== "") {
+    const type = normaliseEnquiryType(payload.enquiry_type, null);
+    if (!type) {
+      const err = new Error(`enquiry_type must be one of: ${ENQUIRY_TYPES.join(", ")}`);
+      err.status = 400;
+      throw err;
+    }
+    sets.push("enquiry_type = ?");
+    params.push(type);
+  }
   if (payload.status !== undefined) {
     if (!STATUSES.includes(payload.status)) {
       const err = new Error("status must be one of: open, converted, lost");
@@ -358,8 +469,9 @@ async function update(id, tenantId, payload) {
     params.push(payload.status);
   }
   if (payload.branch_id !== undefined) {
+    const branchId = await resolveBranchId(tenantId, payload.branch_id);
     sets.push("branch_id = ?");
-    params.push(payload.branch_id || null);
+    params.push(branchId);
   }
 
   if (!sets.length) return current;
@@ -419,11 +531,11 @@ async function stampClientProvenance(client, enquiry, leadId) {
 
   if (!sets.length) return client;
   sets.push("updated_at = ?");
-  params.push(stamp(), client.id);
+  params.push(stamp(), client.id, enquiry.tenant_id);
 
   try {
-    await q(`UPDATE clients SET ${sets.join(", ")} WHERE id = ?`, params);
-    const refreshed = await q("SELECT * FROM clients WHERE id = ?", [client.id]);
+    await q(`UPDATE clients SET ${sets.join(", ")} WHERE id = ? AND tenant_id=?`, params);
+    const refreshed = await q("SELECT * FROM clients WHERE id = ? AND tenant_id=?", [client.id, enquiry.tenant_id]);
     return refreshed[0] || client;
   } catch (_) {
     return client;
@@ -449,7 +561,7 @@ async function convert(id, tenantId, userId) {
     throw err;
   }
   if (enquiry.status === "converted" && enquiry.converted_client_id) {
-    const existing = await q("SELECT * FROM clients WHERE id = ?", [enquiry.converted_client_id]);
+    const existing = await q("SELECT * FROM clients WHERE id = ? AND tenant_id=?", [enquiry.converted_client_id, tenantId]);
     return { enquiry: await getById(id, tenantId), client: existing[0] || null, deduped: true };
   }
 
@@ -484,7 +596,7 @@ async function convert(id, tenantId, userId) {
   let client = null;
   let linkedExisting = false;
   try {
-    const dups = await q(`SELECT * FROM clients WHERE ${dupWhere.join(" OR ")} LIMIT 1`, dupParams);
+    const dups = await q(`SELECT * FROM clients WHERE tenant_id=? AND (${dupWhere.join(" OR ")}) LIMIT 1`, [tenantId, ...dupParams]);
     client = dups[0] || null;
     linkedExisting = Boolean(client);
   } catch (_) {
@@ -501,17 +613,17 @@ async function convert(id, tenantId, userId) {
     if (!client.company_name && enquiry.company) { sets.push("company_name = ?"); params.push(enquiry.company); }
     if (sets.length) {
       sets.push("updated_at = ?");
-      params.push(stamp(), client.id);
-      try { await q(`UPDATE clients SET ${sets.join(", ")} WHERE id = ?`, params); } catch (_) { /* non-fatal */ }
+      params.push(stamp(), client.id, tenantId);
+      try { await q(`UPDATE clients SET ${sets.join(", ")} WHERE id = ? AND tenant_id=?`, params); } catch (_) { /* non-fatal */ }
     }
     try {
-      const refreshed = await q("SELECT * FROM clients WHERE id = ?", [client.id]);
+      const refreshed = await q("SELECT * FROM clients WHERE id = ? AND tenant_id=?", [client.id, tenantId]);
       client = refreshed[0] || client;
     } catch (_) { /* keep original row */ }
   } else {
     const res = await q(
-      `INSERT INTO clients (name, company_name, email, phone, notes, client_status, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
+      `INSERT INTO clients (name, company_name, email, phone, notes, client_status, created_by, created_at, updated_at,tenant_id)
+       VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
       [
         name,
         enquiry.company || null,
@@ -521,9 +633,10 @@ async function convert(id, tenantId, userId) {
         userId || null,
         stamp(),
         stamp(),
+        tenantId,
       ]
     );
-    const created = await q("SELECT * FROM clients WHERE id = ?", [res.insertId]);
+    const created = await q("SELECT * FROM clients WHERE id = ? AND tenant_id=?", [res.insertId, tenantId]);
     client = created[0] || { id: res.insertId, name };
   }
 
@@ -538,7 +651,7 @@ async function convert(id, tenantId, userId) {
   //   • CRM lead row  → call_outcome = Converted
   //   • client row    → original lead id / reference / converted_at
   //   • wa_contacts   → now points at the CRM client instead of the lead
-  if (leadId) await setLeadOutcome(leadId, "converted");
+  if (leadId) await setLeadOutcome(leadId, "converted", tenantId);
   client = await stampClientProvenance(client, enquiry, leadId);
 
   const contactLast10 = (digits(phone) || "").slice(-10);
@@ -570,6 +683,9 @@ async function convert(id, tenantId, userId) {
 module.exports = {
   ensureEnquiryTables,
   TEMPERATURES,
+  ENQUIRY_TYPES,
+  ENQUIRY_TYPE_LABELS,
+  normaliseEnquiryType,
   stats,
   list,
   getById,

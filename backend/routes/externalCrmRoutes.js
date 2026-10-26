@@ -325,12 +325,13 @@ router.post(["/events", "/events/trigger"], async (req, res) => {
     const { triggerAutomation } = require("../services/waAutomationService");
 
     // 1. Emit on CRM Event Bus
-    crmEventBus.emit(eventType, { ...data, phone: resolvedPhone, contactName: resolvedName, customerName: resolvedName });
+    crmEventBus.emit(eventType, { ...data, tenantId: req.tenantId, phone: resolvedPhone, contactName: resolvedName, customerName: resolvedName });
 
     // 2. Trigger WhatsApp Automations engine
     let autoResult = null;
     if (resolvedPhone) {
       autoResult = await triggerAutomation(eventType, {
+        tenantId: req.tenantId,
         phone: resolvedPhone,
         contactName: resolvedName,
         data,
@@ -343,7 +344,7 @@ router.post(["/events", "/events/trigger"], async (req, res) => {
     if (requestedFlowId && resolvedPhone) {
       const waFlowEngine = require("../services/waFlowEngine");
       const cleanPhone = String(resolvedPhone).replace(/\D/g, "");
-      const [fRows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? LIMIT 1", [requestedFlowId]);
+      const [fRows] = await db.promise().query("SELECT * FROM wa_flows WHERE tenant_id=? AND id = ? LIMIT 1", [req.tenantId, requestedFlowId]);
       if (fRows.length > 0) {
         flowResult = await waFlowEngine.startFlowRun(fRows[0], cleanPhone, req.body?.sessionKey || null);
       }
@@ -375,6 +376,7 @@ router.post("/lead", async (req, res) => {
       req.headers["x-session-key"] || req.query?.sessionKey || req.body?.sessionKey || req.user?.id || mgr.defaultKey;
 
     const result = await waLeadCapture.captureLeadFromWhatsApp({
+      tenantId: req.tenantId,
       phone,
       sessionKey,
       name,
@@ -403,7 +405,7 @@ router.post("/flow/trigger", async (req, res) => {
     let clean = String(phone).replace(/\D/g, "");
     if (clean.length === 10) clean = "91" + clean;
 
-    const [fRows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? LIMIT 1", [targetId]);
+    const [fRows] = await db.promise().query("SELECT * FROM wa_flows WHERE tenant_id=? AND id = ? LIMIT 1", [req.tenantId, targetId]);
     if (!fRows.length) return res.status(404).json({ success: false, error: "Flow not found" });
 
     const waFlowEngine = require("../services/waFlowEngine");
@@ -423,7 +425,7 @@ router.post("/automation/trigger", async (req, res) => {
     if (!trig || !phone) return res.status(400).json({ success: false, error: "triggerType and phone are required" });
 
     const { triggerAutomation } = require("../services/waAutomationService");
-    const result = await triggerAutomation(trig, { phone, contactName, data });
+    const result = await triggerAutomation(trig, { tenantId: req.tenantId, phone, contactName, data });
     res.json({ success: true, trigger: trig, result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

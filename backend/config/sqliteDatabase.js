@@ -216,9 +216,18 @@ class SQLiteDatabaseAdapter {
     this.sqlite.exec("PRAGMA temp_store = MEMORY;");
     this.sqlite.exec("PRAGMA mmap_size = 268435456;");
 
-    // 3. Register MySQL-compatible user-defined SQL functions
-    this.sqlite.function("now", () => new Date().toISOString().replace("T", " ").substring(0, 19));
-    this.sqlite.function("curdate", () => new Date().toISOString().split("T")[0]);
+    // 3. Register MySQL-compatible user-defined SQL functions.
+    // MySQL's NOW()/CURDATE() are server-local, and every reminder/automation
+    // timestamp is written with JS local components (toSqlDateTime). Returning
+    // UTC here silently shifted SQLite due-checks by the server offset.
+    const localStamp = (date = new Date()) => {
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
+        date.getHours()
+      )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    };
+    this.sqlite.function("now", () => localStamp());
+    this.sqlite.function("curdate", () => localStamp().slice(0, 10));
     this.sqlite.function("concat", (...args) => args.map((a) => (a === null || a === undefined ? "" : a)).join(""));
     this.sqlite.function("ifnull", (a, b) => (a !== null && a !== undefined ? a : b));
     this.sqlite.function("if", (cond, valTrue, valFalse) => cond ? valTrue : valFalse);
@@ -1051,11 +1060,26 @@ class SQLiteDatabaseAdapter {
         reference_id INTEGER DEFAULT NULL,
         title TEXT NOT NULL,
         message_text TEXT NOT NULL,
+        options_payload TEXT DEFAULT NULL,
         status TEXT DEFAULT 'pending',
         scheduled_for TEXT DEFAULT NULL,
         sent_at TEXT DEFAULT NULL,
         response_received_at TEXT DEFAULT NULL,
         response_text TEXT DEFAULT NULL,
+        response_action TEXT DEFAULT NULL,
+        assigned_staff_name TEXT DEFAULT NULL,
+        notes TEXT DEFAULT NULL,
+        flow_id INTEGER DEFAULT NULL,
+        template_id INTEGER DEFAULT NULL,
+        tenant_id INTEGER DEFAULT 1,
+        audience TEXT DEFAULT 'customer',
+        repeat_rule TEXT DEFAULT 'none',
+        repeat_until TEXT DEFAULT NULL,
+        parent_id INTEGER DEFAULT NULL,
+        created_by INTEGER DEFAULT NULL,
+        branch_id INTEGER DEFAULT NULL,
+        source TEXT DEFAULT 'automation',
+        assigned_user_id INTEGER DEFAULT NULL,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )`,

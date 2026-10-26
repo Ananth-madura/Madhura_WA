@@ -22,8 +22,333 @@ function cleanPhone(phone) {
   return cleaned.length === 10 ? "91" + cleaned : cleaned;
 }
 
+const DEFAULT_OPTIONS_MAP = {
+  appointment_reminder: [
+    { id: "btn_confirm", label: "✅ Confirm Visit", action: "confirm_appointment" },
+    { id: "btn_reschedule", label: "🔄 Reschedule", action: "reschedule_appointment" },
+    { id: "btn_cancel", label: "❌ Cancel", action: "cancel_appointment" },
+  ],
+  payment_due: [
+    { id: "btn_paid", label: "💳 Already Paid", action: "confirm_payment" },
+    { id: "btn_invoice", label: "📄 Send Invoice", action: "send_invoice_copy" },
+    { id: "btn_call_acc", label: "📞 Speak to Accounts", action: "request_callback" },
+  ],
+  quotation_followup: [
+    { id: "btn_approve_quote", label: "👍 Approve & Proceed", action: "approve_quotation" },
+    { id: "btn_modify_quote", label: "💬 Need Changes", action: "request_callback" },
+    { id: "btn_reject_quote", label: "❌ Not Interested", action: "reject_quotation" },
+  ],
+  amc_renewal: [
+    { id: "btn_renew_amc", label: "🛡️ Renew AMC", action: "renew_amc" },
+    { id: "btn_call_amc", label: "📞 Speak to Engineer", action: "request_callback" },
+  ],
+  lead_followup: [
+    { id: "btn_interested", label: "👍 Interested", action: "confirm_lead_interest" },
+    { id: "btn_demo", label: "📅 Book Demo", action: "reschedule_appointment" },
+    { id: "btn_not_now", label: "❌ Not Now", action: "cancel_appointment" },
+  ],
+};
+
+function parseOptionsPayload(payload) {
+  if (!payload) return [];
+  try {
+    const parsed = typeof payload === "string" ? JSON.parse(payload) : payload;
+    return Array.isArray(parsed) ? parsed.filter((o) => o && o.label) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function resolveSessionKey(sessionKey) {
+  if (sessionKey) return sessionKey;
+  try {
+    return require("./whatsappService").defaultKey;
+  } catch (_) {
+    return null;
+  }
+}
+
+function broadcastReminderUpdate(reminderId, status, phone) {
+  try {
+    const { getIO } = require("../sockets/chatsockets");
+    const io = getIO();
+    if (!io) return;
+    io.emit("wa_reminder_updated", {
+      reminderId,
+      id: reminderId,
+      status,
+      phone,
+      at: new Date().toISOString(),
+    });
+    io.emit("data_changed", { resource: "reminders", action: "update", id: reminderId });
+  } catch (_) {}
+}
+
+/**
+ * Inserts a reminder row without sending it. Message text is stored raw so
+ * placeholders can be resolved against fresh CRM data at dispatch time.
+ */
+async function createReminderRow({
+  phone,
+  contactName = null,
+  reminderType = "custom_reminder",
+  title = "Reminder",
+  messageText = "",
+  options = [],
+  refTable = null,
+  refId = null,
+  staffName = null,
+  flowId = null,
+  templateId = null,
+  scheduledFor = null,
+  status = "pending",
+  tenantId = null,
+  branchId = null,
+  createdBy = null,
+  source = "automation",
+  audience = "customer",
+  repeatRule = "none",
+  repeatUntil = null,
+  parentId = null,
+  assignedUserId = null,
+}) {
+  const normalizedPhone = cleanPhone(phone);
+  if (!normalizedPhone) throw new Error("A valid phone number is required for a reminder.");
+
+  const [insertRes] = await db.promise().query(
+    `INSERT INTO wa_interactive_reminders (
+      phone, contact_name, reminder_type, reference_table, reference_id,
+      title, message_text, options_payload, status, scheduled_for, sent_at, assigned_staff_name,
+      flow_id, template_id, tenant_id, branch_id, created_by, source, audience,
+      repeat_rule, repeat_until, parent_id, assigned_user_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      normalizedPhone,
+      contactName || null,
+      reminderType || "custom_reminder",
+      refTable || null,
+      refId || null,
+      title || "Reminder",
+      messageText || "",
+      JSON.stringify(Array.isArray(options) ? options : []),
+      status,
+      scheduledFor || null,
+      staffName || null,
+      flowId || null,
+      templateId || null,
+      tenantId || null,
+      branchId || null,
+      createdBy || null,
+      source || "automation",
+      audience === "staff" ? "staff" : "customer",
+      repeatRule || "none",
+      repeatUntil || null,
+      parentId || null,
+      assignedUserId || null,
+    ]
+  );
+  return insertRes.insertId;
+}
+
+async function getReminderRowById(reminderId) {
+  const [rows] = await db.promise().query(
+    "SELECT * FROM wa_interactive_reminders WHERE id = ? LIMIT 1",
+    [reminderId]
+  );
+  return rows && rows.length ? rows[0] : null;
+}
+
+async function formatReminderRowText(row, extraData = {}) {
+  const { formatMessagePlaceholders, lookupCrmDataByPhone } = require("./waAutomationService");
+  const normalizedPhone = cleanPhone(row.phone);
+  const crmData = await lookupCrmDataByPhone(normalizedPhone).catch(() => ({}));
+  return formatMessagePlaceholders(row.message_text || "", row.contact_name || "Customer", {
+    ...crmData,
+    ...extraData,
+    phone: normalizedPhone,
+    contact_name: row.contact_name || "Customer",
+    title: row.title,
+    ref_table: row.reference_table,
+    ref_id: row.reference_id,
+    staff_name: row.assigned_staff_name,
+  });
+}
+
+async function notifyStaffReminder(row) {
+  const normalizedPhone = cleanPhone(row.phone);
+  const label = row.contact_name || (normalizedPhone ? `+${normalizedPhone}` : "contact");
+  const data = {
+    title: row.title || "Reminder due",
+    message: `⏰ ${row.title || "Reminder"}: ${label}${row.message_text ? ` — ${row.message_text}` : ""}`,
+    customerName: row.contact_name,
+    mobileNumber: normalizedPhone,
+    phone: normalizedPhone,
+    reminderId: row.id,
+    priority: "high",
+    type: "whatsapp_reminder",
+  };
+
+  try {
+    const helpers = require("../sockets/notifications").getNotificationIO();
+    if (helpers) {
+      const targetUserId = Number(row.assigned_user_id) || null;
+      helpers.emitNotification("reminder_due", data, targetUserId, !targetUserId);
+    }
+  } catch (err) {
+    console.warn("[WA Reminder] Staff notification failed:", err.message);
+  }
+
+  try {
+    const { getIO } = require("../sockets/chatsockets");
+    const io = getIO();
+    if (io) {
+      const payload = {
+        id: row.id,
+        reminderId: row.id,
+        phone: normalizedPhone,
+        contactName: row.contact_name,
+        title: row.title,
+        assignedUserId: row.assigned_user_id || null,
+        dueAt: row.scheduled_for,
+        audience: "staff",
+      };
+      if (row.assigned_user_id) io.to(`user:${row.assigned_user_id}`).emit("wa_reminder_due", payload);
+      else io.emit("wa_reminder_due", payload);
+    }
+  } catch (_) {}
+}
+
+/**
+ * Sends one already-persisted reminder row. Callers are responsible for
+ * claiming the row (status pending -> sending) when dispatching concurrently.
+ */
+async function dispatchReminderRow(row, { sessionKey = null } = {}) {
+  if (!row || !row.id) return { success: false, error: "Reminder row is required." };
+  const reminderId = row.id;
+  const normalizedPhone = cleanPhone(row.phone);
+  const audience = row.audience === "staff" ? "staff" : "customer";
+
+  if (audience === "staff") {
+    try {
+      await notifyStaffReminder(row);
+      await queryAsync(
+        "UPDATE wa_interactive_reminders SET status = 'sent', sent_at = NOW() WHERE id = ?",
+        [reminderId]
+      );
+      broadcastReminderUpdate(reminderId, "sent", normalizedPhone);
+      return { success: true, reminderId, phone: normalizedPhone, staff: true };
+    } catch (err) {
+      await queryAsync(
+        "UPDATE wa_interactive_reminders SET status = 'failed', notes = ? WHERE id = ?",
+        [err.message, reminderId]
+      ).catch(() => {});
+      broadcastReminderUpdate(reminderId, "failed", normalizedPhone);
+      return { success: false, reminderId, error: err.message, staff: true };
+    }
+  }
+
+  if (!normalizedPhone) {
+    await queryAsync(
+      "UPDATE wa_interactive_reminders SET status = 'failed', notes = ? WHERE id = ?",
+      ["Missing phone number", reminderId]
+    ).catch(() => {});
+    broadcastReminderUpdate(reminderId, "failed", normalizedPhone);
+    return { success: false, reminderId, error: "Missing phone number" };
+  }
+
+  const [optedOut] = await db.promise().query(
+    "SELECT id FROM wa_opt_outs WHERE phone = ? OR phone LIKE ? LIMIT 1",
+    [normalizedPhone, `%${normalizedPhone.slice(-10)}`]
+  );
+  const [blocked] = await db.promise().query(
+    "SELECT id FROM wa_contacts WHERE (phone = ? OR phone LIKE ?) AND (is_blocked = 1 OR is_unsubscribed = 1) LIMIT 1",
+    [normalizedPhone, `%${normalizedPhone.slice(-10)}`]
+  );
+  if (optedOut.length || blocked.length) {
+    const message = "Contact opted out, unsubscribed, or is blocked.";
+    await queryAsync(
+      "UPDATE wa_interactive_reminders SET status = 'failed', notes = ? WHERE id = ?",
+      [message, reminderId]
+    ).catch(() => {});
+    broadcastReminderUpdate(reminderId, "failed", normalizedPhone);
+    return { success: false, reminderId, error: message };
+  }
+
+  const options = parseOptionsPayload(row.options_payload);
+  const activeSessionKey = resolveSessionKey(sessionKey);
+  const waLoadBalancer = require("./waLoadBalancer");
+  const waInteractive = require("./waInteractive");
+
+  try {
+    const formattedText = await formatReminderRowText(row);
+    let res;
+    let payload;
+
+    if (options.length > 0) {
+      const items = options.map((o) => ({ id: o.id, title: o.label }));
+      const opts = { phone: normalizedPhone, body: formattedText, sessionKey: activeSessionKey };
+      res = items.length <= waInteractive.LIMITS.maxButtons
+        ? await waLoadBalancer.sendInteractiveButtons({ ...opts, buttons: items })
+        : await waLoadBalancer.sendInteractiveList({
+            ...opts,
+            sections: items,
+            buttonText: "Choose Option",
+          });
+      payload = items.length <= waInteractive.LIMITS.maxButtons
+        ? { type: "buttons", buttons: waInteractive.normalizeButtons(items) }
+        : {
+            type: "list",
+            sections: waInteractive.normalizeSections(items),
+            button_text: "Choose option",
+          };
+    } else {
+      const mdToWa = require("./mdToWa");
+      res = await waLoadBalancer.sendTextMessage(
+        normalizedPhone,
+        mdToWa.toWhatsApp(formattedText),
+        activeSessionKey
+      );
+      payload = { type: "text", text: formattedText };
+    }
+
+    await queryAsync(
+      "UPDATE wa_interactive_reminders SET status = 'sent', sent_at = NOW() WHERE id = ?",
+      [reminderId]
+    );
+
+    await require("./waFlowEngine")
+      .recordAndEmitBotMessage(
+        normalizedPhone,
+        formattedText,
+        options.length > 0 ? "interactive_reminder" : "reminder",
+        { ...payload, text: formattedText, native: !!res?.native },
+        activeSessionKey,
+        null,
+        { id: waInteractive.deliveryMessageId(res), status: "sent" }
+      )
+      .catch(() => {});
+
+    console.log(
+      `🔔 [WA Reminder] #${reminderId} -> +${normalizedPhone} via ${res?.engineUsed || "WA"} (${
+        options.length > 0 ? "interactive" : "text"
+      })`
+    );
+    broadcastReminderUpdate(reminderId, "sent", normalizedPhone);
+    return { success: true, reminderId, phone: normalizedPhone, options };
+  } catch (err) {
+    console.error(`❌ [WA Reminder] Send failed to +${normalizedPhone}:`, err.message);
+    await queryAsync(
+      "UPDATE wa_interactive_reminders SET status = 'failed', notes = ? WHERE id = ?",
+      [err.message, reminderId]
+    ).catch(() => {});
+    broadcastReminderUpdate(reminderId, "failed", normalizedPhone);
+    return { success: false, reminderId, error: err.message };
+  }
+}
+
 /**
  * Sends an interactive reminder with 2-way confirmation buttons/options.
+ * Creates the row then delegates the transport work to dispatchReminderRow.
  */
 async function sendInteractiveReminder({
   phone,
@@ -40,52 +365,28 @@ async function sendInteractiveReminder({
   flowId = null,
   template_id = null,
   templateId = null,
+  tenantId = null,
+  branchId = null,
+  createdBy = null,
+  source = "automation",
+  audience = "customer",
   data = {},
 }) {
   const normalizedPhone = cleanPhone(phone);
   if (!normalizedPhone) throw new Error("A valid phone number is required to send a WhatsApp reminder.");
 
-  const linkedFlowId = flow_id || flowId || null;
-  const linkedTemplateId = template_id || templateId || null;
-
-  const [optedOut] = await db.promise().query("SELECT id FROM wa_opt_outs WHERE phone = ? OR phone LIKE ? LIMIT 1", [normalizedPhone, `%${normalizedPhone.slice(-10)}`]);
-  const [blocked] = await db.promise().query("SELECT id FROM wa_contacts WHERE (phone = ? OR phone LIKE ?) AND (is_blocked = 1 OR is_unsubscribed = 1) LIMIT 1", [normalizedPhone, `%${normalizedPhone.slice(-10)}`]);
-  if (optedOut.length || blocked.length) return { success: false, error: "Contact opted out, unsubscribed, or is blocked." };
-
-  const defaultOptionsMap = {
-    appointment_reminder: [
-      { id: "btn_confirm", label: "✅ Confirm Visit", action: "confirm_appointment" },
-      { id: "btn_reschedule", label: "🔄 Reschedule", action: "reschedule_appointment" },
-      { id: "btn_cancel", label: "❌ Cancel", action: "cancel_appointment" },
-    ],
-    payment_due: [
-      { id: "btn_paid", label: "💳 Already Paid", action: "confirm_payment" },
-      { id: "btn_invoice", label: "📄 Send Invoice", action: "send_invoice_copy" },
-      { id: "btn_call_acc", label: "📞 Speak to Accounts", action: "request_callback" },
-    ],
-    quotation_followup: [
-      { id: "btn_approve_quote", label: "👍 Approve & Proceed", action: "approve_quotation" },
-      { id: "btn_modify_quote", label: "💬 Need Changes", action: "request_callback" },
-      { id: "btn_reject_quote", label: "❌ Not Interested", action: "reject_quotation" },
-    ],
-    amc_renewal: [
-      { id: "btn_renew_amc", label: "🛡️ Renew AMC", action: "renew_amc" },
-      { id: "btn_call_amc", label: "📞 Speak to Engineer", action: "request_callback" },
-    ],
-    lead_followup: [
-      { id: "btn_interested", label: "👍 Interested", action: "confirm_lead_interest" },
-      { id: "btn_demo", label: "📅 Book Demo", action: "reschedule_appointment" },
-      { id: "btn_not_now", label: "❌ Not Now", action: "cancel_appointment" },
-    ],
-  };
-
-  const finalOptions = options && options.length > 0
-    ? options
-    : (defaultOptionsMap[reminderType] || defaultOptionsMap.appointment_reminder);
+  const finalOptions =
+    audience === "staff"
+      ? []
+      : options && options.length > 0
+      ? options
+      : DEFAULT_OPTIONS_MAP[reminderType] || DEFAULT_OPTIONS_MAP.appointment_reminder;
 
   const { formatMessagePlaceholders, lookupCrmDataByPhone } = require("./waAutomationService");
   const crmData = await lookupCrmDataByPhone(normalizedPhone).catch(() => ({}));
-  const rawText = messageText || `Hello {name}! This is a reminder regarding your scheduled service with us. Please confirm your availability:`;
+  const rawText =
+    messageText ||
+    `Hello {name}! This is a reminder regarding your scheduled service with us. Please confirm your availability:`;
   const formattedText = formatMessagePlaceholders(rawText, contactName, {
     ...crmData,
     ...data,
@@ -97,59 +398,41 @@ async function sendInteractiveReminder({
     staff_name: staffName,
   });
 
-  // 1. Record in wa_interactive_reminders
-  const [insertRes] = await db.promise().query(
-    `INSERT INTO wa_interactive_reminders (
-      phone, contact_name, reminder_type, reference_table, reference_id,
-      title, message_text, options_payload, status, scheduled_for, sent_at, assigned_staff_name, flow_id, template_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NULL, ?, ?, ?)`,
-    [
-      normalizedPhone,
-      contactName,
-      reminderType,
-      refTable,
-      refId,
-      title,
-      formattedText,
-      JSON.stringify(finalOptions),
-      staffName,
-      linkedFlowId,
-      linkedTemplateId,
-    ]
-  );
-  const reminderId = insertRes.insertId;
+  const reminderId = await createReminderRow({
+    phone: normalizedPhone,
+    contactName,
+    reminderType,
+    title,
+    messageText: formattedText,
+    options: finalOptions,
+    refTable,
+    refId,
+    staffName,
+    flowId: flow_id || flowId || null,
+    templateId: template_id || templateId || null,
+    scheduledFor: require("./waQuickReminderRules").toSqlDateTime(new Date()),
+    tenantId,
+    branchId,
+    createdBy,
+    source,
+    audience,
+  });
 
-  // 2. Dispatch as native interactive; waLoadBalancer degrades to numbered text
-  //    when no Cloud API sender can deliver (previously a Cloud API throw here
-  //    dropped the reminder entirely instead of falling back).
-  const waLoadBalancer = require("./waLoadBalancer");
-  const waInteractive = require("./waInteractive");
-
-  try {
-    const items = finalOptions.map((o) => ({ id: o.id, title: o.label }));
-    const opts = { phone: normalizedPhone, body: formattedText, sessionKey };
-    const res =
-      items.length <= waInteractive.LIMITS.maxButtons
-        ? await waLoadBalancer.sendInteractiveButtons({ ...opts, buttons: items })
-        : await waLoadBalancer.sendInteractiveList({ ...opts, sections: items, buttonText: "Choose Option" });
-    await queryAsync("UPDATE wa_interactive_reminders SET status = 'sent', sent_at = NOW() WHERE id = ?", [reminderId]);
-    console.log(
-      `🔔 [WA Interactive Reminder] #${reminderId} -> +${normalizedPhone} via ${res?.engineUsed || "WA"} (${res?.native ? "native interactive" : "text fallback"})`
-    );
-
-    const payload = items.length <= waInteractive.LIMITS.maxButtons
-      ? { type: "buttons", buttons: waInteractive.normalizeButtons(items) }
-      : { type: "list", sections: waInteractive.normalizeSections(items), button_text: "Choose option" };
-    await require("./waFlowEngine").recordAndEmitBotMessage(normalizedPhone, formattedText, "interactive_reminder", { ...payload, text: formattedText, native: !!res.native }, sessionKey, null,
-      { id: waInteractive.deliveryMessageId(res), status: "sent" }).catch(() => {});
-
-    console.log(`🔔 [WA Interactive Reminder] Sent reminder #${reminderId} (${reminderType}) to +${normalizedPhone}`);
-    return { success: true, reminderId, phone: normalizedPhone, options: finalOptions };
-  } catch (err) {
-    console.error(`❌ [WA Interactive Reminder] Send failed to +${normalizedPhone}:`, err.message);
-    await queryAsync("UPDATE wa_interactive_reminders SET status = 'failed', notes = ? WHERE id = ?", [err.message, reminderId]).catch(() => {});
-    return { success: false, reminderId, error: err.message };
+  const row = await getReminderRowById(reminderId);
+  const dispatch = await dispatchReminderRow(row, { sessionKey });
+  if (!dispatch.success) {
+    return { success: false, reminderId, error: dispatch.error };
   }
+  console.log(
+    `🔔 [WA Interactive Reminder] Sent reminder #${reminderId} (${reminderType}) to +${normalizedPhone}`
+  );
+  return {
+    success: true,
+    reminderId,
+    phone: normalizedPhone,
+    options: finalOptions,
+    staff: !!dispatch.staff,
+  };
 }
 
 /**
@@ -166,6 +449,7 @@ async function handleInboundConfirmation(phone, messageText, interactiveReplyId 
   const [rows] = await db.promise().query(
     `SELECT * FROM wa_interactive_reminders 
      WHERE phone LIKE ? AND status IN ('sent', 'pending') 
+       AND COALESCE(audience, 'customer') = 'customer'
        AND sent_at >= DATE_SUB(NOW(), INTERVAL 48 HOUR)
      ORDER BY id DESC LIMIT 1`,
     [`%${last10}`]
@@ -448,6 +732,9 @@ async function getConfirmationSummary() {
 
 module.exports = {
   sendInteractiveReminder,
+  createReminderRow,
+  dispatchReminderRow,
+  getReminderRowById,
   handleInboundConfirmation,
   getConfirmationSummary,
 };

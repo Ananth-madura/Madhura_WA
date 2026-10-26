@@ -8,6 +8,12 @@ const required={
   billing_orders:["id","tenant_id","plan_id","interval","amount_minor","currency","provider_order_id","payment_id","status"],
   browser_sessions:["id","user_id","refresh_hash","expires_at","revoked_at"],
   conversations:["id","tenant_id","sender_id","owner_user_id","automation_mode"],
+  wa_contacts:["id","tenant_id","assigned_agent_id","lifecycle_stage"],
+  wa_enquiries:["id","tenant_id","contact_id"],
+  wa_customer_tasks:["id","tenant_id","contact_id","completed_by"],
+  wa_customer_deals:["id","tenant_id","contact_id","stage"],
+  wa_customer_activities:["id","tenant_id","contact_id"],
+  wa_customer_transfers:["id","tenant_id","contact_id","previous_owner_user_id","owner_user_id"],
 };
 async function assertReady(db){
   if(db.isSqlite)return;

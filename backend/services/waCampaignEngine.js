@@ -184,6 +184,10 @@ async function getSentTodayCount(campaignId) {
 // ── Core message sender ───────────────────────────────────────────────────────
 
 async function sendOneCampaignMessage(msgRow, sessionKey, poolId = null, routingStrategy = "round_robin", spintaxEnabled = true, tenantId = 1) {
+  if(msgRow.campaign_id){
+    const [rows]=await db.promise().query("SELECT audience_policy FROM wa_campaigns WHERE id=? AND tenant_id=?",[msgRow.campaign_id,tenantId]);
+    if(rows[0]?.audience_policy==="assigned_customers")return require("./employeeCampaigns").createEmployeeCampaigns(db).dispatch({...msgRow,tenant_id:tenantId});
+  }
   const {
     id: msgId, campaign_id, phone, contact_name, message_text, template_name, template_components, attempts,
     media_type, media_url,
@@ -208,7 +212,7 @@ if (!claim.affectedRows) {
 
   try {
     const { formatMessagePlaceholders, buildTemplateBodyComponent, lookupCrmDataByPhone } = require("./waAutomationService");
-    const crmData = await lookupCrmDataByPhone(phone).catch(() => ({}));
+    const crmData = await lookupCrmDataByPhone(phone,tenantId).catch(() => ({}));
     const mergedData = { ...crmData, phone };
 
     // Apply Spintax variation followed by placeholder formatting
@@ -385,6 +389,7 @@ async function runCampaign(campaignId) {
     if (!campaign) break;
 
     if (campaign.status === "paused") {
+      if(campaign.audience_policy==="assigned_customers")break;
       console.log(`⏸️ Campaign ${campaignId}: Paused — checking again in 10s`);
       await sleep(10000);
       continue;
@@ -397,6 +402,7 @@ async function runCampaign(campaignId) {
 
     // Working hours check
     if (!isWithinWorkingHours(campaign.start_time || start_time, campaign.end_time || end_time, campaign.timezone || timezone)) {
+      if(campaign.audience_policy==="assigned_customers")break;
       console.log(`🕐 Campaign ${campaignId}: Outside configured working hours — sleeping 5 min`);
       await interruptibleSleep(5 * 60 * 1000, campaignId);
       continue;
@@ -646,7 +652,31 @@ async function getQueueStats(tenantId) {
   }
 }
 
+let employeeCampaignTimer,employeeCampaignPolling=false,lastEmployeeCampaign=0;
+async function pollEmployeeCampaigns(){
+  if(employeeCampaignPolling||db.isSqlite)return;
+  employeeCampaignPolling=true;
+  try{
+    await db.promise().query("UPDATE wa_campaign_messages m JOIN wa_campaigns c ON c.id=m.campaign_id AND c.tenant_id=m.tenant_id SET m.status='unknown',m.error='Delivery unknown after worker interruption; do not retry automatically' WHERE c.audience_policy='assigned_customers' AND m.status='sending' AND (m.claimed_at IS NULL OR m.claimed_at<DATE_SUB(NOW(),INTERVAL 5 MINUTE))");
+    const [rows]=await db.promise().query("SELECT id,tenant_id,status,start_time,end_time,timezone FROM wa_campaigns WHERE id>? AND audience_policy='assigned_customers' AND (status='running' OR (status='scheduled' AND scheduled_at<=NOW())) ORDER BY id LIMIT 100",[lastEmployeeCampaign]);
+    if(!rows.length)lastEmployeeCampaign=0;
+    for(const row of rows){
+      if(runningCampaigns.size>=2)break;
+      lastEmployeeCampaign=Number(row.id);
+      if(runningCampaigns.has(String(row.id)))continue;
+      if(!isWithinWorkingHours(row.start_time,row.end_time,row.timezone))continue;
+      if(row.status==="scheduled")await db.promise().query("UPDATE wa_campaigns SET status='running' WHERE tenant_id=? AND id=? AND status='scheduled' AND scheduled_at<=NOW()",[row.tenant_id,row.id]);
+      await startCampaignEngine(row.id,row.tenant_id);
+    }
+  }finally{employeeCampaignPolling=false;}
+}
 async function startWorker() {
+  if(!employeeCampaignTimer&&process.env.WA_EMPLOYEE_CAMPAIGN_WORKER!=="0"){
+    const interval=require("../config/capacity").integer(process.env.WA_EMPLOYEE_CAMPAIGN_POLL_MS,5000,1000,60000);
+    employeeCampaignTimer=setInterval(()=>pollEmployeeCampaigns().catch(error=>console.error("[EmployeeCampaign] Worker poll failed",error.code||"DB_ERROR")),interval);
+    employeeCampaignTimer.unref();
+    await pollEmployeeCampaigns();
+  }
   console.log("✅ Multi-Tenant WhatsApp Campaign Engine ready (Anti-Ban & Load-Balancing Active)");
 }
 
@@ -718,6 +748,7 @@ async function checkAndRecordCampaignReply(phone, messageText = "", tenantId = n
 }
 
 module.exports = {
+  pollEmployeeCampaigns,
   startCampaignEngine,
   runCampaign,
   addBulkMessages,

@@ -65,7 +65,7 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
-import { getEnquiries, getEnquirySummary, createEnquiry, updateEnquiry, convertEnquiry } from "../api/enquiries";
+import { getEnquiries, getEnquirySummary, createEnquiry, updateEnquiry, convertEnquiry, ENQUIRY_TYPES, enquiryTypeLabel } from "../api/enquiries";
 import { useAuth } from "../auth/AuthContext";
 import { useEnterprise } from "../context/EnterpriseContext";
 import { DEMO_STATUS, DEMO_CHATS, DEMO_MESSAGES_MAP } from "../auth/demoData";
@@ -73,12 +73,14 @@ import socket from "../socket/socket";
 import RichMessageContent from "../components/RichMessageContent";
 import { readLocalMessages, writeLocalMessages, mergeLocalMessages, readLocalMedia, writeLocalMedia, localMediaUrl, localCacheOwner, mediaFromFile } from "../utils/waLocalCache";
 import WAStorageAndSenders from "../components/WAStorageAndSenders";
-import WAEnquiriesMenu from "../components/WAEnquiriesMenu";
 import WAInteractiveOptions from "../components/WAInteractiveOptions";
 import { getInteractiveMessage } from "../utils/waInteractiveMessage";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 import WAConfigPrompt from "../components/WAConfigPrompt";
 import WAContactAvatar from "../components/WAContactAvatar";
+import WAReminderSheet, { reminderPhoneForChat } from "../components/WAReminderSheet";
+import ChatReminderBar from "../components/ChatReminderBar";
+import { formatReminderTime, parseReminderCommand } from "../utils/reminderTime";
 import "./whatsapp-inbox.css";
 
 function formatChatTime(timestamp) {
@@ -536,7 +538,7 @@ export default function WhatsAppPage() {
   const location = useLocation();
   // Offline demo sessions have no token and no reachable API, so every fetch
   // below would fail (and fetchStatus's 3 fallbacks burn ~30s before giving up).
-  const { demoMode } = useAuth();
+  const { demoMode, user } = useAuth();
   const { activeTenant, activeBranch, branches, enterpriseHeaders } = useEnterprise();
   const [showTransferBranchModal, setShowTransferBranchModal] = useState(false);
   const [transferTargetBranchId, setTransferTargetBranchId] = useState("");
@@ -758,6 +760,8 @@ export default function WhatsAppPage() {
   const [enquiryBusyId, setEnquiryBusyId] = useState(null);
   const [enquiryError, setEnquiryError] = useState("");
   const [enquiryNotice, setEnquiryNotice] = useState("");
+  // In-panel "new enquiry" composer: type + message, contact prefilled from the chat.
+  const [enquiryDraft, setEnquiryDraft] = useState({ enquiry_type: "general", message: "", name: "", phone: "" });
   const [assignedAgentName, setAssignedAgentName] = useState("");
   const [showNotesDrawer, setShowNotesDrawer] = useState(false);
   const [internalNotes, setInternalNotes] = useState([]);
@@ -779,18 +783,15 @@ export default function WhatsAppPage() {
   const [enrollingDrip, setEnrollingDrip] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
 
-  // Interactive Reminders state
-  const [showReminderModal, setShowReminderModal] = useState(false);
-  const [reminderType, setReminderType] = useState("appointment_reminder");
-  const [reminderTitle, setReminderTitle] = useState("Service Appointment Confirmation");
-  const [reminderText, setReminderText] = useState("Hello {name}! This is a reminder regarding your scheduled service with Madhura Tech tomorrow. Please confirm your availability:");
-  const [reminderOptions, setReminderOptions] = useState([
-    { id: "btn_confirm", label: "✅ Confirm Visit", action: "confirm_appointment" },
-    { id: "btn_reschedule", label: "🔄 Reschedule", action: "reschedule_appointment" },
-    { id: "btn_cancel", label: "📞 Call Support", action: "request_callback" },
-  ]);
-  const [reminderFlowId, setReminderFlowId] = useState("");
-  const [sendingReminder, setSendingReminder] = useState(false);
+  // Chat-native reminders (created from the composer, not a separate page)
+  const [reminderSheetOpen, setReminderSheetOpen] = useState(false);
+  const [reminderSheetSeed, setReminderSheetSeed] = useState(null);
+  const [editingReminder, setEditingReminder] = useState(null);
+  const [chatReminders, setChatReminders] = useState([]);
+  const [chatRemindersLoading, setChatRemindersLoading] = useState(false);
+  const [reminderBusyId, setReminderBusyId] = useState(null);
+  const [dueReminderAlert, setDueReminderAlert] = useState(null);
+  const [reminderToast, setReminderToast] = useState(null);
 
   // Campaign Groups enrollment state
   const [showAddToGroupModal, setShowAddToGroupModal] = useState(false);
@@ -955,7 +956,7 @@ export default function WhatsAppPage() {
       setShowContactInfoDrawer(false);
       setShowNewChatModal(false);
       setShowFlowModal(false);
-      setShowReminderModal(false);
+      setReminderSheetOpen(false);
       setShowTransferBranchModal(false);
       setContextMenu(null);
     };
@@ -1561,6 +1562,21 @@ export default function WhatsAppPage() {
 
   const handleSend = async () => {
     if (!messageInput.trim() || !selectedChat) return;
+
+    // `/remind <when> <what>` schedules a reminder instead of sending a message.
+    if (/^\/remind\b/i.test(messageInput.trim())) {
+      const raw = messageInput.trim().replace(/^\/remind\b/i, "").trim();
+      const parsed = raw ? parseReminderCommand(raw) : { date: null, note: "", matchedText: "" };
+      setMessageInput("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      openReminderSheet({
+        timeText: parsed.date ? parsed.matchedText : "",
+        date: parsed.date,
+        note: parsed.note,
+      });
+      return;
+    }
+
     // Hard stop on a second send while one is open or rapid hardware click bouncing (<250ms)
     if (sendInFlightRef.current) return;
     const now = Date.now();
@@ -2325,6 +2341,23 @@ export default function WhatsAppPage() {
     if (showContactInfoDrawer && selectedChat?.id) loadEnquiries();
   }, [showContactInfoDrawer, selectedChat?.id, loadEnquiries]);
 
+  // Prefill the enquiry composer's contact fields from the open conversation.
+  // Type and message stay as typed, so switching chats never wipes a draft.
+  useEffect(() => {
+    if (!selectedChat || selectedChat.isGroup) return;
+    const rawName = String(selectedChat.name || "");
+    const looksLikePhone = rawName.replace(/\D/g, "").length >= 10 || rawName.includes("@lid");
+    const displayName = !looksLikePhone && rawName
+      ? rawName
+      : selectedChat.formattedPhone || formatPhoneNumber(selectedChat.phoneNumber) || rawName || "";
+    setEnquiryDraft((prev) => ({
+      ...prev,
+      name: displayName,
+      phone: String(selectedChat.id || ""),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChat?.id]);
+
   const handleUpdateEnquiryTemperature = async (enquiry, temperature) => {
     if (!enquiry?.id || enquiryBusyId) return;
     setEnquiryBusyId(enquiry.id);
@@ -2375,38 +2408,62 @@ export default function WhatsAppPage() {
     }
   };
 
-  const handleCreateEnquiryFromChat = async () => {
-    if (!selectedChat || selectedChat.isGroup || enquiryBusyId) return;
-    const chatDigits = String(selectedChat.id || "").replace(/\D/g, "");
-    const alreadyListed = enquiries.some((item) => {
-      const leadDigits = String(item.phone || "").replace(/\D/g, "");
-      return leadDigits && chatDigits && (leadDigits === chatDigits || leadDigits.slice(-10) === chatDigits.slice(-10));
-    });
-    if (alreadyListed) {
-      setEnquiryNotice("This conversation is already in your open enquiries.");
+  const handleCreateEnquiry = async (event) => {
+    event?.preventDefault?.();
+    if (enquiryBusyId) return;
+    const draftName = String(enquiryDraft.name || "").trim();
+    const fallbackName = selectedChat && !selectedChat.isGroup
+      ? (selectedChat.name && !selectedChat.name.startsWith("+")
+        ? selectedChat.name
+        : formatPhoneNumber(selectedChat.phoneNumber) || String(selectedChat.id || "").replace(/\D/g, ""))
+      : "";
+    const name = draftName || fallbackName;
+    if (!name) {
+      setEnquiryError("Add a contact name (or open a chat) before saving the enquiry.");
       return;
     }
+
+    const phone = String(enquiryDraft.phone || "").trim() || (selectedChat && !selectedChat.isGroup ? String(selectedChat.id || "") : "");
+    const enquiryType = enquiryDraft.enquiry_type || "general";
+    const message = String(enquiryDraft.message || "").trim()
+      || (selectedChat?.lastMessage?.body ? String(selectedChat.lastMessage.body) : "");
+
+    // Same chat + same enquiry type already open → don't create a duplicate,
+    // but different types on one chat are legitimate (support vs pricing).
+    const phoneDigits = phone.replace(/\D/g, "");
+    const duplicate = enquiries.find((item) => {
+      if (item.status !== "open") return false;
+      if ((item.enquiry_type || "general") !== enquiryType) return false;
+      const itemDigits = String(item.phone || "").replace(/\D/g, "");
+      return itemDigits && phoneDigits
+        && (itemDigits === phoneDigits || itemDigits.slice(-10) === phoneDigits.slice(-10));
+    });
+    if (duplicate) {
+      setEnquiryView("enquiries");
+      setEnquiryNotice(`An open ${enquiryTypeLabel(enquiryType).toLowerCase()} already exists for this contact.`);
+      return;
+    }
+
     setEnquiryBusyId("new");
     setEnquiryError("");
     try {
-      const name = selectedChat.name && !selectedChat.name.startsWith("+")
-        ? selectedChat.name
-        : selectedChat.formattedPhone || formatPhoneNumber(selectedChat.phoneNumber) || selectedChat.id;
       const created = await createEnquiry({
         name,
-        phone: selectedChat.id,
-        source: "whatsapp",
-        message: selectedChat.lastMessage?.body || `WhatsApp conversation with ${name}`,
-        branch_id: selectedChat.branch_id || activeBranch?.id || undefined,
+        phone: phone || undefined,
+        enquiry_type: enquiryType,
+        source: "whatsapp_chat",
+        message: message || `WhatsApp conversation with ${name}`,
+        branch_id: selectedChat?.branch_id || activeBranch?.id || undefined,
         temperature: "new",
       });
       if (created) setEnquiries((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
       setEnquiryOpenTotal((total) => total + 1);
       setEnquiryView("enquiries");
-      setEnquiryNotice(`${name} added to enquiries as a new lead.`);
+      setEnquiryDraft((prev) => ({ ...prev, message: "" }));
+      setEnquiryNotice(`${name} added as ${enquiryTypeLabel(enquiryType).toLowerCase()}.`);
       refreshEnquirySummary();
     } catch (err) {
-      setEnquiryError(err.response?.data?.message || "Could not add this conversation to enquiries.");
+      setEnquiryError(err.response?.data?.message || "Could not add this enquiry.");
     } finally {
       setEnquiryBusyId(null);
     }
@@ -2517,84 +2574,213 @@ export default function WhatsAppPage() {
     }
   };
 
-  const REMINDER_PRESETS = {
-    appointment_reminder: {
-      title: "Service Appointment Confirmation",
-      text: "Hello {name}! This is a reminder regarding your scheduled visit with Madhura Tech tomorrow. Please confirm your availability:",
-      options: [
-        { id: "btn_confirm", label: "✅ Confirm Visit", action: "confirm_appointment" },
-        { id: "btn_reschedule", label: "🔄 Reschedule", action: "reschedule_appointment" },
-        { id: "btn_cancel", label: "📞 Call Support", action: "request_callback" },
-      ]
-    },
-    payment_due: {
-      title: "Payment Due & Invoice Notice",
-      text: "Hello {name}! A friendly reminder regarding your pending invoice from Madhura Tech. Total amount due: ₹{amount}. Please choose an option below:",
-      options: [
-        { id: "btn_paid", label: "💳 Already Paid", action: "confirm_payment" },
-        { id: "btn_invoice", label: "📄 Send Invoice", action: "send_invoice_copy" },
-        { id: "btn_call_acc", label: "📞 Speak to Accounts", action: "request_callback" },
-      ]
-    },
-    quotation_followup: {
-      title: "Quotation & Proposal Follow-up",
-      text: "Hello {name}! We wanted to follow up on the commercial quotation {quotation_no} we prepared for you. Would you like to proceed or discuss changes?",
-      options: [
-        { id: "btn_approve_quote", label: "👍 Approve & Proceed", action: "approve_quotation" },
-        { id: "btn_modify_quote", label: "💬 Need Changes", action: "request_callback" },
-        { id: "btn_reject_quote", label: "❌ Not Interested", action: "reject_quotation" },
-      ]
-    },
-    amc_renewal: {
-      title: "AMC Contract Expiry & Renewal",
-      text: "Hello {name}! Your comprehensive AMC service maintenance contract is due for renewal soon. Ensure continuous coverage and prioritized support:",
-      options: [
-        { id: "btn_renew_amc", label: "🛡️ Renew AMC", action: "renew_amc" },
-        { id: "btn_inspect", label: "📋 Schedule Inspection", action: "reschedule_appointment" },
-        { id: "btn_call_amc", label: "📞 Speak to Engineer", action: "request_callback" },
-      ]
-    },
+  const reminderApiHeaders = () => {
+    const token = waUiStorage.getItem("token");
+    return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
-  const handleReminderTypeChange = (type) => {
-    setReminderType(type);
-    const p = REMINDER_PRESETS[type] || REMINDER_PRESETS.appointment_reminder;
-    setReminderTitle(p.title);
-    setReminderText(p.text);
-    setReminderOptions([...p.options]);
-  };
+  const showReminderToast = useCallback((message, type = "success") => {
+    setReminderToast({ message, type, id: Date.now() });
+  }, []);
 
-  const handleSendReminderNow = async () => {
-    if (!selectedChat) return;
-    setSendingReminder(true);
+  useEffect(() => {
+    if (!reminderToast) return undefined;
+    const timer = setTimeout(() => setReminderToast(null), 4500);
+    return () => clearTimeout(timer);
+  }, [reminderToast]);
+
+  const loadChatReminders = useCallback(async (chatArg = null) => {
+    if (demoMode) {
+      setChatReminders([]);
+      return;
+    }
+    const chat = chatArg || selectedChatRef.current;
+    const phone = reminderPhoneForChat(chat);
+    if (!phone) {
+      setChatReminders([]);
+      return;
+    }
+    setChatRemindersLoading(true);
     try {
-      const token = waUiStorage.getItem("token");
-      let phone = selectedChat.id.replace(/\D/g, "");
-      if (phone.length === 10) phone = "91" + phone;
+      const { data } = await axios.get(`${API}/api/wa/reminders/for-chat`, {
+        params: { phone },
+        headers: reminderApiHeaders(),
+      });
+      if (reminderPhoneForChat(selectedChatRef.current) === phone) {
+        setChatReminders(Array.isArray(data?.reminders) ? data.reminders : []);
+      }
+    } catch (err) {
+      if (err.response?.status !== 403) {
+        console.warn("Could not load chat reminders:", err.message);
+      }
+    } finally {
+      setChatRemindersLoading(false);
+    }
+  }, [demoMode]);
 
+  useEffect(() => {
+    if (!selectedChat) {
+      setChatReminders([]);
+      setDueReminderAlert(null);
+      return;
+    }
+    setDueReminderAlert(null);
+    loadChatReminders(selectedChat);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChat?.id]);
+
+  const openReminderSheet = useCallback((seed = null) => {
+    const chat = selectedChatRef.current;
+    if (!chat) return;
+    if (demoMode) {
+      showReminderToast("Reminders are disabled in the demo workspace.", "info");
+      return;
+    }
+    if (chat.isGroup || String(chat.id || "").includes("@g.us")) {
+      showReminderToast("Reminders are for 1-to-1 chats. Open a customer conversation first.", "error");
+      return;
+    }
+    if (!reminderPhoneForChat(chat)) {
+      showReminderToast("This chat has no phone number, so a reminder cannot be linked to it.", "error");
+      return;
+    }
+    setEditingReminder(null);
+    setReminderSheetSeed(seed);
+    setReminderSheetOpen(true);
+  }, [demoMode, showReminderToast]);
+
+  const editReminder = useCallback((reminder) => {
+    if (!reminder) return;
+    setEditingReminder(reminder);
+    setReminderSheetSeed({
+      timeText: "",
+      date: reminder.scheduled_for ? new Date(reminder.scheduled_for) : null,
+      note: reminder.message_text || "",
+    });
+    setReminderSheetOpen(true);
+  }, []);
+
+  const handleReminderSaved = useCallback(async (reminder, meta = {}) => {
+    if (meta.sentNow && meta.result && meta.result.success === false) {
+      showReminderToast(meta.result.error || "Reminder could not be delivered.", "error");
+    } else if (meta.sentNow) {
+      showReminderToast(`Reminder sent to ${selectedChatRef.current?.name || "the chat"}.`, "success");
+    } else if (meta.edited) {
+      showReminderToast(`Reminder updated for ${formatReminderTime(reminder?.scheduled_for)}.`, "success");
+    } else {
+      showReminderToast(`Reminder scheduled for ${formatReminderTime(reminder?.scheduled_for)}.`, "success");
+    }
+    setEditingReminder(null);
+    setReminderSheetSeed(null);
+    await loadChatReminders();
+    if (meta.sentNow) {
+      const chat = selectedChatRef.current;
+      if (chat?.id) fetchMessages(chat.id, 15);
+    }
+  }, [fetchMessages, loadChatReminders, showReminderToast]);
+
+  const cancelChatReminder = useCallback(async (reminder) => {
+    if (!reminder?.id) return;
+    setReminderBusyId(reminder.id);
+    try {
+      await axios.patch(
+        `${API}/api/wa/reminders/${reminder.id}`,
+        { status: "cancelled" },
+        { headers: reminderApiHeaders() }
+      );
+      showReminderToast("Reminder cancelled.", "info");
+      await loadChatReminders();
+    } catch (err) {
+      showReminderToast(err.response?.data?.error || "Could not cancel the reminder.", "error");
+    } finally {
+      setReminderBusyId(null);
+    }
+  }, [loadChatReminders, showReminderToast]);
+
+  const sendChatReminderNow = useCallback(async (reminder) => {
+    if (!reminder?.id) return;
+    setReminderBusyId(reminder.id);
+    try {
+      const { data } = await axios.post(
+        `${API}/api/wa/reminders/${reminder.id}/send-now`,
+        {},
+        { headers: reminderApiHeaders() }
+      );
+      if (data?.result?.success === false) {
+        showReminderToast(data.result.error || "Reminder could not be delivered.", "error");
+      } else {
+        showReminderToast(reminder.audience === "staff" ? "Staff reminder sent." : "Reminder delivered.", "success");
+        const chat = selectedChatRef.current;
+        if (chat?.id) fetchMessages(chat.id, 15);
+      }
+      await loadChatReminders();
+    } catch (err) {
+      showReminderToast(err.response?.data?.error || "Could not send the reminder.", "error");
+    } finally {
+      setReminderBusyId(null);
+    }
+  }, [fetchMessages, loadChatReminders, showReminderToast]);
+
+  const snoozeDueReminder = useCallback(async (due) => {
+    const chat = selectedChatRef.current;
+    const phone = due?.phone || reminderPhoneForChat(chat);
+    if (!phone) {
+      setDueReminderAlert(null);
+      return;
+    }
+    try {
       await axios.post(
-        `${API}/api/wa/reminders/send-now`,
+        `${API}/api/wa/reminders`,
         {
           phone,
-          contact_name: selectedChat.name,
-          reminder_type: reminderType,
-          title: reminderTitle,
-          message_text: reminderText,
-          options: reminderOptions,
-          flow_id: reminderFlowId || null,
+          contact_name: due?.contactName || chat?.name || null,
+          reminder_type: "custom_reminder",
+          title: due?.title || "Snoozed reminder",
+          message_text: `Snoozed: ${due?.title || "follow up with this contact"}`,
+          scheduled_for: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+          audience: "staff",
+          repeat_rule: "none",
+          assigned_user_id: due?.assignedUserId || null,
+          source: "chat",
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: reminderApiHeaders() }
       );
-
-      setShowReminderModal(false);
-      await fetchMessages(selectedChat.id, 15);
-      alert(`✅ Interactive reminder sent to ${selectedChat.name}!`);
+      showReminderToast("Snoozed for 15 minutes.", "info");
+      setDueReminderAlert(null);
+      await loadChatReminders();
     } catch (err) {
-      alert("Failed to send reminder: " + (err.response?.data?.error || err.message));
-    } finally {
-      setSendingReminder(false);
+      showReminderToast(err.response?.data?.error || "Could not snooze the reminder.", "error");
     }
-  };
+  }, [loadChatReminders, showReminderToast]);
+
+  useEffect(() => {
+    const handleReminderUpdated = (payload) => {
+      const active = selectedChatRef.current;
+      if (!active) return;
+      const activePhone = reminderPhoneForChat(active);
+      const eventPhone = String(payload?.phone || "").replace(/\D/g, "");
+      if (eventPhone && activePhone && eventPhone.slice(-10) !== activePhone.slice(-10)) return;
+      loadChatReminders(active);
+    };
+
+    const handleReminderDue = (payload) => {
+      const active = selectedChatRef.current;
+      if (!active) return;
+      if (payload?.assignedUserId && user?.id && Number(payload.assignedUserId) !== Number(user.id)) return;
+      const activePhone = reminderPhoneForChat(active);
+      const eventPhone = String(payload?.phone || "").replace(/\D/g, "");
+      if (eventPhone && activePhone && eventPhone.slice(-10) !== activePhone.slice(-10)) return;
+      setDueReminderAlert(payload);
+      showReminderToast(`Reminder due: ${payload?.title || "follow up"}`, "info");
+    };
+
+    socket.on("wa_reminder_updated", handleReminderUpdated);
+    socket.on("wa_reminder_due", handleReminderDue);
+    return () => {
+      socket.off("wa_reminder_updated", handleReminderUpdated);
+      socket.off("wa_reminder_due", handleReminderDue);
+    };
+  }, [loadChatReminders, showReminderToast, user?.id]);
 
   const fetchCampaignGroups = useCallback(async () => {
     try {
@@ -4419,11 +4605,14 @@ export default function WhatsAppPage() {
               </button>
 
               <button
-                onClick={() => navigate("/whatsapp/reminders")}
+                onClick={() => {
+                  setShowContactInfoDrawer(false);
+                  openReminderSheet();
+                }}
                 className="hl-btn-secondary flex items-center gap-2 p-2 bg-[var(--color-paper)] hover:bg-[var(--color-paper)] text-[var(--color-ink)] rounded-xl transition text-xs font-semibold text-left border border-[var(--color-rule)]"
               >
                 <Bell size={14} className="text-[var(--color-ink)] shrink-0" />
-                <span className="truncate">Reminders</span>
+                <span className="truncate">Set reminder</span>
               </button>
             </div>
           </div>
@@ -4619,19 +4808,6 @@ export default function WhatsAppPage() {
                 : "w-full md:w-80 lg:w-[21rem] xl:w-[360px]"
             } ${showMobileChat ? "hidden md:flex" : "flex"}`}
         >
-          {sidebarMode !== "compact" && (
-            <div className="wa-conversations-heading">
-              <div><h2>Conversations <span>{allChatsList.length}</span></h2><p>Every customer. One place.</p></div>
-              <WAEnquiriesMenu />
-              <div className="flex items-center gap-1.5">
-                <details className="wa-storage-details is-icon">
-                  <summary title="Sender & storage" aria-label="Sender and storage"><Database size={15} /><ChevronDown size={13} /></summary>
-                  <div className="wa-storage-popover"><WAStorageAndSenders compact /></div>
-                </details>
-                <button type="button" className="hl-btn-primary" onClick={() => setShowNewChatModal(true)} title="Start new conversation" aria-label="Start new conversation"><Plus size={18} /></button>
-              </div>
-            </div>
-          )}
           {/* Search Bar & Action Buttons */}
           <div className="wa-inbox-search p-2.5 border-b border-[var(--color-rule)] flex items-center gap-1.5 shrink-0 bg-[var(--color-paper-2)]">
             {sidebarMode === "compact" ? (
@@ -4690,8 +4866,9 @@ export default function WhatsAppPage() {
                 <button
                   type="button"
                   onClick={() => setShowNewChatModal(true)}
-                  className="hl-btn-secondary p-1.5 rounded-lg shrink-0"
-                  title="Start new chat"
+                  className="hl-btn-primary p-1.5 rounded-lg shrink-0"
+                  title="Start new conversation"
+                  aria-label="Start new conversation"
                 >
                   <Plus size={16} />
                 </button>
@@ -5023,7 +5200,7 @@ export default function WhatsAppPage() {
                           ) : activeEnquiryRows.length === 0 ? (
                             <p className="wa-enquiries-state">
                               {enquiryView === "enquiries"
-                                ? "No new enquiries. Add this chat as an enquiry to start the pipeline."
+                                ? "No open enquiries yet. Pick a type and write the enquiry below."
                                 : enquiryView === "leads"
                                   ? "No qualified leads yet. Qualify an enquiry as cold, warm or hot."
                                   : "No clients converted from enquiries yet."}
@@ -5042,6 +5219,13 @@ export default function WhatsAppPage() {
                                   <span className={`wa-enquiry-temperature is-${isClient ? "client" : temperature}`}>
                                     {isClient ? "client" : temperature === "new" ? "enquiry" : temperature}
                                   </span>
+                                  <span className="wa-enquiry-type">{enquiryTypeLabel(enquiry.enquiry_type)}</span>
+                                  {enquiry.message && (
+                                    <p className="wa-enquiry-message" title={enquiry.message}>{enquiry.message}</p>
+                                  )}
+                                  {enquiry.created_by_name && (
+                                    <p className="wa-enquiry-creator">Logged by {enquiry.created_by_name}</p>
+                                  )}
                                   {isClient ? (
                                     <p className="wa-enquiry-client-note">
                                       <CheckCircle2 size={13} />
@@ -5057,6 +5241,10 @@ export default function WhatsAppPage() {
                                           </button>
                                         ))}
                                       </div>
+                                      <button type="button" className="wa-enquiry-convert is-quiet" onClick={() => handleConvertEnquiry(enquiry)} disabled={busy}>
+                                        {busy ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}
+                                        <span>{busy ? "Converting…" : "Convert to client"}</span>
+                                      </button>
                                     </>
                                   ) : (
                                     <>
@@ -5097,11 +5285,50 @@ export default function WhatsAppPage() {
                             })
                           )}
                         </div>
-                        <div className="wa-enquiries-panel-foot">
-                          <button type="button" onClick={handleCreateEnquiryFromChat} disabled={!selectedChat || selectedChat.isGroup || enquiryBusyId === "new"}>
-                            {enquiryBusyId === "new" ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                            {selectedChat?.isGroup ? "Enquiries are for 1-to-1 chats" : "Add this chat as enquiry"}
-                          </button>
+                        <div className="wa-enquiries-compose-wrap">
+                          <form className="wa-enquiries-compose" onSubmit={handleCreateEnquiry}>
+                            <div className="wa-enquiries-compose-row">
+                              <label className="wa-enquiries-compose-type">
+                                <span>Type</span>
+                                <select
+                                  value={enquiryDraft.enquiry_type}
+                                  onChange={(event) => setEnquiryDraft((prev) => ({ ...prev, enquiry_type: event.target.value }))}
+                                  aria-label="Enquiry type"
+                                >
+                                  {ENQUIRY_TYPES.map((type) => (
+                                    <option key={type.value} value={type.value}>{type.label}</option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="wa-enquiries-compose-name">
+                                <span>Contact</span>
+                                <input
+                                  type="text"
+                                  value={enquiryDraft.name}
+                                  onChange={(event) => setEnquiryDraft((prev) => ({ ...prev, name: event.target.value }))}
+                                  placeholder="Contact name"
+                                  aria-label="Enquiry contact name"
+                                />
+                              </label>
+                            </div>
+                            <textarea
+                              className="wa-enquiries-compose-message"
+                              rows={2}
+                              value={enquiryDraft.message}
+                              onChange={(event) => setEnquiryDraft((prev) => ({ ...prev, message: event.target.value }))}
+                              placeholder={selectedChat?.isGroup ? "Enquiries are for 1-to-1 chats" : "What is this enquiry about? e.g. Needs a quote for 10 seats"}
+                              aria-label="Enquiry message"
+                              disabled={Boolean(selectedChat?.isGroup)}
+                            />
+                            <button
+                              type="submit"
+                              className="wa-enquiries-compose-submit"
+                              disabled={Boolean(selectedChat?.isGroup) || enquiryBusyId === "new"}
+                            >
+                              {enquiryBusyId === "new" ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                              <span>{enquiryBusyId === "new" ? "Adding…" : "Add enquiry"}</span>
+                            </button>
+                          </form>
                         </div>
                       </div>
                     </details>
@@ -5118,7 +5345,7 @@ export default function WhatsAppPage() {
                       <button type="button" onClick={openSpeedPinModal}><MessageSquare size={16} /> Manage saved replies</button>
                       <button type="button" onClick={() => { const bid = selectedChat.branch_id || activeBranch?.id || branches?.[0]?.id || ""; setTransferTargetBranchId(bid); setTransferTargetUserId(selectedChat.owner_user_id || ""); setTransferNote(""); if (bid) fetchBranchEmployees(bid); setShowTransferBranchModal(true); }}><Forward size={16} /> Transfer conversation</button>
                       <button type="button" onClick={() => setShowFlowModal(true)}><GitBranch size={16} /> Launch chatbot flow</button>
-                      <button type="button" onClick={() => setShowReminderModal(true)}><Bell size={16} /> Send reminder</button>
+                      <button type="button" onClick={() => openReminderSheet()}><Bell size={16} /> Remind me about this</button>
                       {!crmDetails?.client && <button type="button" onClick={() => { setAddClientData({ name: selectedChat.name && !selectedChat.name.startsWith("+") ? selectedChat.name : "", company_name: "", email: "", city: "", service: "", notes: "" }); setShowAddClientForm(true); setShowNotesDrawer(false); fetchContactCrmDetails(selectedChat.id); setShowContactInfoDrawer(true); }}><UserPlus size={16} /> Add to CRM</button>}
                     </div>
                   </details>
@@ -5434,6 +5661,20 @@ export default function WhatsAppPage() {
                 ))}
               </div>
 
+              {/* Reminders scheduled inside this conversation */}
+              <ChatReminderBar
+                reminders={chatReminders}
+                loading={chatRemindersLoading}
+                dueAlert={dueReminderAlert}
+                busyId={reminderBusyId}
+                onSet={() => openReminderSheet()}
+                onManage={editReminder}
+                onSendNow={sendChatReminderNow}
+                onCancel={cancelChatReminder}
+                onDismissDue={() => setDueReminderAlert(null)}
+                onSnoozeDue={snoozeDueReminder}
+              />
+
               {/* Input Area & Tool Suite — wraps to two rows on narrow screens so the
                   textarea always keeps a usable width */}
               <div className="relative wa-composer flex flex-wrap items-center gap-2 p-2 sm:p-3 border-t border-[var(--color-rule)] bg-[var(--color-paper-2)] shrink-0 wa-composer-safe">
@@ -5595,7 +5836,7 @@ export default function WhatsAppPage() {
                         <button
                           onClick={() => {
                             setShowAttachMenu(false);
-                            setShowReminderModal(true);
+                            openReminderSheet();
                           }}
                           className="w-full text-left flex items-center gap-3 p-2.5 hover:bg-[var(--color-paper)] rounded-xl transition text-xs font-medium text-[var(--color-ink)] group"
                         >
@@ -5603,8 +5844,8 @@ export default function WhatsAppPage() {
                             <Bell size={16} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Send Interactive Reminder</p>
-                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">2-way buttons: Confirm, Reschedule, Call</p>
+                            <p className="font-bold text-[var(--color-ink)] group-hover:text-[var(--color-ink)]">Set a reminder</p>
+                            <p className="text-[10px] text-[var(--color-ink-2)] truncate">WhatsApp the customer or alert staff later</p>
                           </div>
                         </button>
 
@@ -5721,6 +5962,24 @@ export default function WhatsAppPage() {
                 {messageInput.startsWith("/") && (
                   <div className="hl-card absolute bottom-full left-0 right-0 sm:left-3 sm:right-auto mb-2 w-full sm:w-80 sm:max-w-[calc(100vw-1.5rem)] max-h-60 overflow-y-auto z-30 p-2 space-y-1">
                     <div className="hl-section-label px-2 py-1 text-[10px] uppercase font-bold text-[var(--color-ink)]">Quick Replies (Click to insert)</div>
+                    {("remind".startsWith(messageInput.slice(1).toLowerCase().split(/\s/)[0]) ||
+                      messageInput.slice(1).toLowerCase().startsWith("remind")) && (
+                      <div
+                        onClick={() => {
+                          setMessageInput("/remind ");
+                          textareaRef.current?.focus();
+                        }}
+                        className="p-2 hover:bg-[var(--color-paper)] rounded-xl cursor-pointer transition"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-[var(--color-ink)]">/remind</span>
+                          <span className="text-[10px] text-[var(--color-ink-2)] font-semibold">Set a reminder</span>
+                        </div>
+                        <p className="text-[11px] text-[var(--color-ink-2)] truncate mt-0.5">
+                          /remind tomorrow 10am call about the invoice
+                        </p>
+                      </div>
+                    )}
                     {quickReplies
                       .filter((qr) => qr.shortcut?.toLowerCase().includes(messageInput.slice(1).toLowerCase()) || qr.title?.toLowerCase().includes(messageInput.slice(1).toLowerCase()))
                       .map((qr) => (
@@ -5816,6 +6075,22 @@ export default function WhatsAppPage() {
                   title="Share document, photo, video, audio, trigger flows or inquiry menu"
                 >
                   {mediaSending ? <Loader2 size={18} className="animate-spin text-[var(--color-ink)]" /> : <Paperclip size={18} />}
+                </button>
+
+                {/* Reminder Button (schedule from the composer) */}
+                <button
+                  type="button"
+                  onClick={() => openReminderSheet()}
+                  className="hl-btn-secondary wa-composer-tool p-2.5 rounded-full transition shrink-0 relative"
+                  title="Set a reminder for this chat (or type /remind)"
+                  aria-label="Set a reminder"
+                >
+                  <Bell size={18} />
+                  {chatReminders.filter((reminder) => reminder.status === "pending").length > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 min-w-4 h-4 px-1 rounded-full bg-[var(--color-accent)] text-[var(--color-accent-ink)] text-[9px] font-bold flex items-center justify-center">
+                      {chatReminders.filter((reminder) => reminder.status === "pending").length}
+                    </span>
+                  )}
                 </button>
 
                 {/* Emoji Picker Button */}
@@ -6787,138 +7062,46 @@ export default function WhatsAppPage() {
         </div>
       )}
 
-      {/* Send Interactive Reminder Modal */}
-      {showReminderModal && selectedChat && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setShowReminderModal(false)}>
-          <div className="hl-card w-full max-w-lg p-4 sm:p-6 relative max-h-[92dvh] overflow-y-auto wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowReminderModal(false)} className="absolute top-4 right-4 text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
-              <X size={20} />
+      {/* Chat-native reminder composer sheet */}
+      <WAReminderSheet
+        open={reminderSheetOpen}
+        onClose={() => {
+          setReminderSheetOpen(false);
+          setEditingReminder(null);
+          setReminderSheetSeed(null);
+        }}
+        chat={selectedChat}
+        flows={flows}
+        teamMembers={teamMembers}
+        reminder={editingReminder}
+        initial={reminderSheetSeed}
+        onSaved={handleReminderSaved}
+      />
+
+      {/* Reminder toast */}
+      {reminderToast && (
+        <div
+          className="fixed bottom-4 left-1/2 z-[80] -translate-x-1/2 max-w-[92vw]"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className={`hl-card flex items-center gap-2 px-3.5 py-2 text-xs font-semibold shadow-lg ${
+              reminderToast.type === "error"
+                ? "border-[var(--color-error)] text-[var(--color-error)]"
+                : ""
+            }`}
+          >
+            <Bell size={14} className="shrink-0" />
+            <span className="min-w-0">{reminderToast.message}</span>
+            <button
+              type="button"
+              onClick={() => setReminderToast(null)}
+              className="p-0.5 rounded text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+              aria-label="Dismiss message"
+            >
+              <X size={13} />
             </button>
-
-            <div className="flex items-center gap-3 mb-4 border-b border-[var(--color-rule)] pb-3">
-              <div className="p-3 rounded-xl bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]">
-                <Bell size={24} />
-              </div>
-              <div>
-                <h3 className="hl-title">Send Interactive Reminder</h3>
-                <p className="text-xs text-[var(--color-ink-2)]">
-                  Deliver 2-way confirmation notice to <span className="text-[var(--color-ink)] font-semibold">{selectedChat.name}</span> (+{selectedChat.id.replace(/\D/g, "")})
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4 max-h-[72dvh] overflow-y-auto pr-1">
-              <div>
-                <label className="hl-section-label block text-xs font-bold text-[var(--color-ink-2)] uppercase mb-1.5">Reminder Category</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: "appointment_reminder", label: "📅 Service Visit / Appointment" },
-                    { id: "payment_due", label: "💰 Payment Due Notice" },
-                    { id: "quotation_followup", label: "💼 Quotation Follow-up" },
-                    { id: "amc_renewal", label: "🛡️ AMC Renewal Due" },
-                  ].map((cat) => (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => handleReminderTypeChange(cat.id)}
-                      className={`hl-card p-2.5 text-xs font-semibold text-left transition ${reminderType === cat.id
-                          ? "border-[var(--color-accent)]"
-                          : ""
-                        }`}
-                    >
-                      {cat.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="hl-section-label block text-xs font-bold text-[var(--color-ink-2)] uppercase mb-1">Title / Notification Tag</label>
-                <input
-                  type="text"
-                  value={reminderTitle}
-                  onChange={(e) => setReminderTitle(e.target.value)}
-                  className="hl-input w-full px-3 py-2 text-xs"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="hl-section-label block text-xs font-bold text-[var(--color-ink-2)] uppercase">Message Body</label>
-                  <span className="hl-id text-[10px] text-[var(--color-ink)]">Placeholders Supported</span>
-                </div>
-                <textarea
-                  value={reminderText}
-                  onChange={(e) => setReminderText(e.target.value)}
-                  rows={3}
-                  className="hl-input w-full px-3 py-2 text-xs resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="hl-section-label block text-xs font-bold text-[var(--color-ink-2)] uppercase mb-1.5">
-                  Interactive Response Buttons (Customer taps on WhatsApp)
-                </label>
-                <div className="space-y-1.5">
-                  {reminderOptions.map((opt, idx) => (
-                    <div key={opt.id || idx} className="flex items-center gap-2">
-                      <span className="hl-id text-xs text-[var(--color-ink-2)] w-5 text-right">{idx + 1}.</span>
-                      <input
-                        type="text"
-                        value={opt.label}
-                        onChange={(e) => {
-                          const updated = [...reminderOptions];
-                          updated[idx] = { ...updated[idx], label: e.target.value };
-                          setReminderOptions(updated);
-                        }}
-                        className="hl-input flex-1 px-3 py-1.5 text-xs"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="hl-card p-3 bg-[var(--color-paper)] border border-[var(--color-rule)] rounded-xl">
-                <label className="block text-xs font-bold text-[var(--color-ink)] uppercase mb-1 flex items-center gap-1.5">
-                  <Zap size={13} className="text-[var(--color-ink)]" />
-                  Auto-Launch Flow Bot on Response (Optional)
-                </label>
-                <select
-                  value={reminderFlowId}
-                  onChange={(e) => setReminderFlowId(e.target.value)}
-                  className="hl-input w-full px-3 py-2 text-xs"
-                >
-                  <option value="">None (Standard Confirmation Acknowledgment)</option>
-                  {flows.map((fl) => (
-                    <option key={fl.id} value={fl.id}>
-                      🤖 {fl.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-[var(--color-ink)] mt-1 leading-relaxed">
-                  When the customer responds to this reminder, our bot engine will automatically engage them in this conversational flow!
-                </p>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4 border-t border-[var(--color-rule)] mt-4">
-              <button
-                type="button"
-                onClick={() => setShowReminderModal(false)}
-                className="hl-btn-secondary px-4 py-2 bg-[var(--color-paper-2)] hover:bg-[var(--color-paper-2)] rounded-xl text-xs text-[var(--color-ink-2)] font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={sendingReminder || !reminderText.trim()}
-                onClick={handleSendReminderNow}
-                className="hl-btn-primary px-5 py-2 text-[var(--color-paper-2)] rounded-xl text-xs font-bold  disabled:opacity-50 transition shadow-lg flex items-center gap-1.5"
-              >
-                {sendingReminder ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                <span>{sendingReminder ? "Sending..." : "Send Reminder Now"}</span>
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -7282,6 +7465,21 @@ export default function WhatsAppPage() {
               <span>Copy Text</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              const quoted = contextMenu.message?.body
+                ? `Follow up: "${String(contextMenu.message.body).slice(0, 180)}"`
+                : "";
+              setContextMenu(null);
+              openReminderSheet({ note: quoted });
+            }}
+            className="w-full text-left px-3 py-2 hover:bg-[var(--color-paper)] flex items-center gap-2.5 transition text-[var(--color-ink)]"
+          >
+            <Bell size={14} />
+            <span>Remind me about this</span>
+          </button>
 
           <button
             type="button"

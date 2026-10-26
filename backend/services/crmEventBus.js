@@ -29,13 +29,17 @@ function cleanPhone(phone) {
   return cleaned.length === 10 ? "91" + cleaned : cleaned;
 }
 
-function emitSocketEvent(eventName, payload) {
+async function emitSocketEvent(eventName, payload) {
   try {
-    const app = require("../server");
-    const io = app.get && app.get("io");
+    const tenantId = Number(payload?.tenantId || payload?.tenant_id);
+    if (!Number.isSafeInteger(tenantId) || tenantId < 1) return;
+    const io = require("../sockets/chatsockets").getIO();
     if (io) {
-      io.emit("crm_event", { event: eventName, payload, timestamp: new Date().toISOString() });
-      io.emit(eventName, payload);
+      const members = await queryAsync("SELECT user_id FROM organization_memberships WHERE tenant_id=? AND membership_status='active' AND role IN ('organization_owner','organization_admin')", [tenantId]);
+      for (const member of members) {
+        io.to(`user:${member.user_id}`).emit("crm_event", { event: eventName, payload, timestamp: new Date().toISOString() });
+        io.to(`user:${member.user_id}`).emit(eventName, payload);
+      }
     }
   } catch (_) {}
 }
@@ -310,6 +314,7 @@ crmEventBus.on("new_lead", async (lead) => {
 
     const { triggerAutomation } = require("./waAutomationService");
     await triggerAutomation("new_lead", {
+      tenantId: lead.tenantId,
       phone: normPhone,
       contactName: resolvedName,
       data: {
@@ -323,7 +328,7 @@ crmEventBus.on("new_lead", async (lead) => {
       },
     }).catch((e) => console.warn("[CRM Event Bus] new_lead error:", e.message));
 
-    emitSocketEvent("new_lead", { phone: normPhone, name: resolvedName, service: resolvedService, leadId });
+    emitSocketEvent("new_lead", { tenantId: lead.tenantId, phone: normPhone, name: resolvedName, service: resolvedService, leadId });
     console.log(`✅ [CRM Event Bus] New lead automation executed for ${resolvedName} (+${normPhone})`);
   } catch (err) {
     console.error("[CRM Event Bus] Error in new_lead listener:", err.message);

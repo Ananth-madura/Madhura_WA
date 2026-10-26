@@ -65,6 +65,22 @@ async function verify({ deliverLive, query }) {
     await page.setViewport({ width: 390, height: 844 });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     await page.screenshot({ path: path.resolve(__dirname, "../../../scratch/shared-inbox-real-browser.png"), fullPage: true });
+    await page.evaluate(() => [...document.querySelectorAll("a")].find(link => link.textContent.includes("Open customer, leads")).click());
+    try { await page.waitForFunction(() => document.querySelector('[aria-label="Employee workspace"]') && [...document.querySelectorAll("textarea")].some(element => element.parentElement.textContent.includes("Task title"))); }
+    catch (error) { await page.screenshot({ path: path.resolve(__dirname, "../../../scratch/employee-workspace-browser-failure.png"), fullPage: true }); console.error("Workspace browser diagnostics", await page.evaluate(() => ({ path: location.pathname, text: document.body.innerText.slice(-4000) }))); throw error; }
+    await page.evaluate(() => [...document.querySelectorAll("textarea")].find(element => element.parentElement.textContent.includes("Task title")).focus());
+    await page.keyboard.type("Follow-up persisted from employee workspace");
+    const taskSaved = page.waitForResponse(response => response.request().method() === "POST" && /\/customers\/\d+\/tasks$/.test(new URL(response.url()).pathname));
+    await page.evaluate(() => [...document.querySelectorAll("button")].find(button => button.textContent === "Add record").click());
+    assert.equal((await taskSaved).status(), 201);
+    await page.waitForFunction(() => [...document.querySelectorAll("article")].some(row => row.textContent.includes("Follow-up persisted from employee workspace")));
+    await page.reload({ waitUntil: "networkidle2" });
+    await page.waitForFunction(() => [...document.querySelectorAll("article")].some(row => row.textContent.includes("Follow-up persisted from employee workspace")));
+    const [[task]] = await query("SELECT COUNT(*) AS count FROM wa_customer_tasks WHERE title=?", ["Follow-up persisted from employee workspace"]);
+    assert.equal(task.count, 1);
+    assert.deepEqual(failures, []);
+    await page.screenshot({ path: path.resolve(__dirname, "../../../scratch/employee-workspace-browser.png"), fullPage: true });
+    console.log("PASS: employee opens linked customer from real inbox, creates a task through the built frontend, persists to MySQL and sees it after refresh.");
     console.log("PASS: built frontend -> actual backend -> isolated MySQL; real cookie login/CORS, scoped requests, durable notes, signed webhook -> real WebSocket -> device cache, reload and mobile layout. No API fixture responses.");
   } finally { if (browser) await browser.close();await new Promise(resolve => server.close(resolve)); }
 }

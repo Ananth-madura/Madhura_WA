@@ -102,11 +102,12 @@ function createClientPortalService(db, { secret = () => process.env.JWT_SECRET, 
   };
   const revoke = async (accountId) => { await query("UPDATE client_portal_accounts SET status='disabled', session_version=session_version+1 WHERE id=?", [accountId]); };
   const logout = async (account) => { await query('UPDATE client_portal_accounts SET session_version=session_version+1 WHERE id=?', [account.id]); };
-  const listClients = async (searchValue = '', pageValue = 1) => {
+  const listClients = async (searchValue = '', pageValue = 1, tenantId = null) => {
     const search = '%' + text(searchValue, 100) + '%', page = Math.max(1, Number(pageValue) || 1);
-    const where = 'WHERE name LIKE ? OR company_name LIKE ? OR email LIKE ?';
-    const total = (await one(`SELECT COUNT(*) AS total FROM clients ${where}`, [search, search, search])).total;
-    const rows = await query(`SELECT id, name, company_name, email, phone FROM clients ${where} ORDER BY name, id LIMIT 50 OFFSET ?`, [search, search, search, (page - 1) * 50]);
+    const where = `WHERE ${tenantId ? 'tenant_id=? AND ' : ''}(name LIKE ? OR company_name LIKE ? OR email LIKE ?)`;
+    const values = [...(tenantId ? [tenantId] : []), search, search, search];
+    const total = (await one(`SELECT COUNT(*) AS total FROM clients ${where}`, values)).total;
+    const rows = await query(`SELECT id, name, company_name, email, phone FROM clients ${where} ORDER BY name, id LIMIT 50 OFFSET ?`, [...values, (page - 1) * 50]);
     return { clients: rows, total, page };
   };
   const publish = async (clientId, input, staffId) => {

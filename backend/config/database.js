@@ -559,7 +559,7 @@ async function ensureTablesAndColumns() {
     { table: "lead_reminders", column: "notification_sent", definition: "notification_sent TINYINT(1) DEFAULT 0" },
     { table: "lead_reminders", column: "employee_id", definition: "employee_id INT DEFAULT NULL" },
     { table: "lead_escalations", column: "missed_count", definition: "missed_count INT DEFAULT 0" },
-    { table: "users", column: "status", definition: "status ENUM('pending','active','rejected') DEFAULT 'pending'", expectedType: "enum" },
+    { table: "users", column: "status", definition: "status ENUM('pending','active','rejected','banned','inactive') DEFAULT 'pending'", expectedType: "enum" },
     { table: "users", column: "emp_id", definition: "emp_id VARCHAR(50) DEFAULT NULL" },
     { table: "admin_notifications", column: "related_id", definition: "related_id INT DEFAULT NULL" },
     { table: "admin_notifications", column: "related_type", definition: "related_type VARCHAR(50) DEFAULT NULL" },
@@ -942,7 +942,7 @@ function queryAsync(sql, params = []) {
 async function seedDefaultEmployees() {
   try {
     await new Promise((resolve) => {
-      db.query("ALTER TABLE users MODIFY COLUMN role ENUM('admin','subadmin','employee','user') DEFAULT 'employee'", (err) => {
+      db.query("ALTER TABLE users MODIFY COLUMN role VARCHAR(50) DEFAULT 'employee'", (err) => {
         if (err) console.log("Alter users role:", err.message);
         else console.log("Users role column updated");
         resolve();

@@ -769,3 +769,9 @@ These are servicing/intake capabilities. Bank-system authentication, transaction
 
 `npm.cmd --prefix backend test` runs the safe core allowlist without loading development database settings. `verify:integration` and `verify:browser` additionally require an explicitly configured isolated MySQL port. The legacy runner is separate and is not part of these default release checks. Live Meta/R2, Linux recovery and realistic hosting capacity remain release gates.
 
+## 26. Employee ownership and customer workspace
+
+See [employee_workspace.md](employee_workspace.md) for the architecture audit, permission model, transfer contract, data flow, acceptance evidence and remaining scope. The new `/whatsapp/workspace` connects assigned customers to persisted leads, tasks, deals and activities. `/employees` opens existing employee management, now with routing, skills, workload, module permissions and access audits. Customer transfers preserve IDs and related work inside a MySQL transaction and revoke previous ownership. Employee route protection and API checks both recognize the new workspace.
+
+Automatic WhatsApp and CRM-only intake now have separate manual, round-robin and workload strategies with availability, eligibility, capacity and optional skill filters. Inactive ownership recovery runs in bounded batches. Delegated employee campaigns reuse the existing MySQL queue with permission and ownership checks at dispatch; private attachments and approved/media templates can be sent through the inbox. Marketing consent changes are recorded and audited. Delegated template/flow editing, full response-time accounting, historical data mapping and live-provider/VPS acceptance remain work. Device-only message text is still not available as transferable historical data from Meta.
+

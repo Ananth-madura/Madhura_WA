@@ -18,7 +18,6 @@ import {
   OctagonMinus,
   CreditCard,
   RefreshCw,
-  Bell,
   GitBranch,
   Inbox,
 } from "lucide-react";
@@ -27,7 +26,11 @@ import axios from "axios";
 import { API } from "../config/api";
 import socket from "../socket/socket";
 
-export default function WhatsAppNav() {
+export default function WhatsAppNav({ scope = "workspace" }) {
+  // "assigned" is the employee shell: the same rail, reduced to the routes an
+  // assigned employee can open. Administration-only network calls (session
+  // status, unread totals) are skipped rather than fired and rejected.
+  const assigned = scope === "assigned";
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -79,6 +82,7 @@ export default function WhatsAppNav() {
   }, []);
 
   useEffect(() => {
+    if (assigned) return undefined;
     fetchStatus();
     fetchUnreadCount();
     const interval = setInterval(() => {
@@ -105,7 +109,7 @@ export default function WhatsAppNav() {
       socket.off("wa_ready", handleRealtime);
       socket.off("wa_disconnected", handleRealtime);
     };
-  }, [fetchStatus, fetchUnreadCount]);
+  }, [assigned, fetchStatus, fetchUnreadCount]);
 
   const handleTestSend = async (e) => {
     e.preventDefault();
@@ -154,6 +158,8 @@ export default function WhatsAppNav() {
 
   const tabs = [
     { id: "team-inbox", label: "Team Inbox", title: "Assigned conversations and shared notes", path: "/whatsapp/team-inbox", icon: Inbox },
+    { id: "workspace", label: "My workspace", title: "Customers, leads, pipeline and follow-ups", path: "/whatsapp/workspace", icon: Users, exact: true },
+    { id: "employee-campaigns", label: "My campaigns", title: "Campaigns for authorized assigned customers", path: "/whatsapp/workspace/campaigns", icon: Send },
     {
       id: "chats",
       label: "Live Chats",
@@ -207,13 +213,6 @@ export default function WhatsAppNav() {
       title: "Automation Rules & Auto-Replies",
       path: "/whatsapp/automations",
       icon: Zap,
-    },
-    {
-      id: "reminders",
-      label: "Reminders",
-      title: "Scheduled Task & Message Reminders",
-      path: "/whatsapp/reminders",
-      icon: Bell,
     },
     {
       id: "flows",
@@ -280,12 +279,18 @@ export default function WhatsAppNav() {
     activeTabRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [location.pathname]);
 
+  // Employee shell: the employee routes only. Administration shell: every tab
+  // this account's role may open.
+  const visibleTabs = assigned
+    ? tabs.filter(tab => ["team-inbox", "workspace", "employee-campaigns"].includes(tab.id))
+    : tabs.filter(tab => ["admin", "subadmin", "platform_admin"].includes(user?.role) || ["team-inbox", "workspace", "employee-campaigns"].includes(tab.id));
+
   return (
     <div className="hl-card hl-reveal w-full min-w-0 wa-workspace-nav">
       <div className="flex items-center min-w-0 w-full overflow-hidden">
         {/* Top Tabs — responsive full-width strip with zero horizontal scroll on desktop */}
         <div className="wa-nav-tabs-bar">
-          {tabs.filter(tab => ["admin", "subadmin", "platform_admin"].includes(user?.role) || tab.id === "team-inbox").map((tab) => {
+          {visibleTabs.map((tab) => {
             const Icon = tab.icon;
             const active = isTabActive(tab);
             return (
@@ -307,7 +312,7 @@ export default function WhatsAppNav() {
                     {tab.label}
                   </span>
                 </span>
-                {tab.id === "chats" && totalUnread > 0 && (
+                {!assigned && tab.id === "chats" && totalUnread > 0 && (
                   <span
                     className="hl-badge shrink-0"
                     style={
