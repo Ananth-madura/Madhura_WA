@@ -13,7 +13,7 @@ The project is structured as a unified monorepo locally, with dedicated standalo
 | **Monorepo (Primary)** | `.` (Root) | `https://github.com/Ananth-madura/Madhura_WA.git` | `main` | Full codebase (Backend + Frontend + Landing + Docs) |
 | **Frontend Workspace** | `frontend/` | `https://github.com/madhuratech/Madhura-wa-frontend.git` | `main` | Port `3001` (Authenticated React CRM App) |
 | **Backend API** | `backend/` | `https://github.com/madhuratech/Madhura-wa-backend.git` | `main` | Port `5001` (Node/Express API & Baileys Engine) |
-| **Landing Page** | `landing_page/` | `https://github.com/Ananth-madura/whatsapp_landing.git` | `main` | Port `3002` (Vite + Tailwind Public Marketing Site) |
+| **Landing Page** | `landing_page/` | `https://github.com/madhuratech/wa-landing_page-.git` | `main` | Port `3002` (Vite + Tailwind Public Marketing Site) |
 
 ---
 
@@ -32,8 +32,13 @@ git remote add frontend-repo https://github.com/madhuratech/Madhura-wa-frontend.
 git remote add backend-repo https://github.com/madhuratech/Madhura-wa-backend.git
 
 # 4. Standalone Landing Page
-git remote add landing-repo https://github.com/Ananth-madura/whatsapp_landing.git
+git remote add landing-repo https://github.com/madhuratech/wa-landing_page-.git
 ```
+
+> **Note:** `landing-repo` must point at `madhuratech/wa-landing_page-.git`. Older copies of this document listed `Ananth-madura/whatsapp_landing.git`; that repository is not the push target used by the sync script. If your remote is stale, repoint it with:
+> ```bash
+> git remote set-url landing-repo https://github.com/madhuratech/wa-landing_page-.git
+> ```
 
 To verify your remotes at any time:
 ```bash
@@ -49,12 +54,16 @@ git remote -v
 To push all changes (including backend, frontend, landing page, and documentation) to the primary monorepo:
 
 ```bash
-# Push current working branch to remote main
-git push monorepo feature/enterprise-multi-tenant-multi-branch:main
+# Push the current working branch to remote main (fast-forward only)
+git push monorepo "$(git branch --show-current):main"
 
-# Push feature branch for pull request tracking
-git push monorepo feature/enterprise-multi-tenant-multi-branch
+# Push the branch under its own name for pull-request tracking
+git push monorepo "$(git branch --show-current)"
 ```
+
+The commands are branch-agnostic on purpose: use whatever branch you are on (`feature/shared-number-assignment`, `feature/enterprise-multi-tenant-multi-branch`, etc.) instead of hardcoding a name. PowerShell equivalent: `git push monorepo "$(git branch --show-current):main"`.
+
+> Never use `--force` when publishing to monorepo `main`. A rejected push means the remote moved ahead — pull or rebase first.
 
 ---
 
@@ -68,7 +77,7 @@ Using `git subtree split` extracts the directory history into a lightweight bran
 
 ```powershell
 # ─────────────────────────────────────────────────────────────
-# 1. PUSH LANDING PAGE (Port 3002 -> whatsapp_landing)
+# 1. PUSH LANDING PAGE (Port 3002 -> wa-landing_page-)
 # ─────────────────────────────────────────────────────────────
 git branch -D split-landing 2>$null
 git subtree split --prefix=landing_page -b split-landing
@@ -123,8 +132,8 @@ Remove-Item landing.tar -Force
 
 # 3. Commit and push back to monorepo
 git add landing_page/
-git commit -m "sync(landing): pull latest changes from whatsapp_landing"
-git push monorepo feature/enterprise-multi-tenant-multi-branch:main
+git commit -m "sync(landing): pull latest changes from wa-landing_page-"
+git push monorepo "$(git branch --show-current):main"
 ```
 
 Or run the dedicated pull helper:
@@ -142,16 +151,20 @@ To synchronize all 4 repositories in a single command, you can run the automated
 
 ### Running the sync script:
 ```powershell
-.\scripts\sync-all-git-repos.ps1
+.\scripts\sync-all-git-repos.ps1              # validate -> push -> verify
+.\scripts\sync-all-git-repos.ps1 -Force       # push committed history despite a dirty tree
+.\scripts\sync-all-git-repos.ps1 -SkipVerify  # skip the remote SHA report
 ```
 
 The script performs:
-1. Working tree validation (verifies clean status).
-2. Push to Primary Monorepo (`Ananth-madura/Madhura_WA`).
-3. Subtree split & push to Landing Page (`Ananth-madura/whatsapp_landing`).
+1. Working tree validation — aborts on uncommitted tracked changes unless `-Force` is passed; untracked files are reported but never pushed.
+2. Push to Primary Monorepo (`Ananth-madura/Madhura_WA`) — current branch to `main`, then the branch under its own name.
+3. Subtree split & push to Landing Page (`madhuratech/wa-landing_page-`).
 4. Subtree split & push to Frontend (`madhuratech/Madhura-wa-frontend`).
 5. Subtree split & push to Backend (`madhuratech/Madhura-wa-backend`).
-6. Verification report of all published commit SHAs.
+6. Verification report — fetches each remote's `main` and compares it against the local commit/split SHA, exiting non-zero on any mismatch.
+
+Exit codes: `0` on a fully verified sync, `1` on a dirty tree (without `-Force`), a git failure, or a SHA mismatch. Git's own stderr notices (`To <url> ...`, subtree split progress, CRLF warnings) are captured instead of being re-emitted, so a successful sync no longer looks like a PowerShell failure.
 
 ---
 
