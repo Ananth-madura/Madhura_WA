@@ -5,7 +5,7 @@ const store=require("../services/flowStore").createFlowStore(db);
 const {verifyToken}=require("../middleware/authMiddleware");
 const {requireTenantContext}=require("../middleware/tenantMiddleware");
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
-router.use(verifyToken,requireTenantContext,require("../middleware/organizationAdmin"));
+router.use(verifyToken,requireTenantContext,require("../middleware/workspaceModule").workspaceModule("templates"));
 router.use((req,res,next)=>{res.set("Cache-Control","private, no-store");next();});
 const route=work=>async(req,res)=>{try{await work(req,res);}catch(error){res.status(error.status&&error.status<500?error.status:503).json({error:error.status&&error.status<500?error.message:"Template operation failed. Check the sender connection and retry."});}};
 async function get(req){const [row]=await store.query("SELECT * FROM wa_templates WHERE tenant_id=? AND id=?",[req.tenantId,req.params.id]);if(!row)throw fail("Template not found",404);return row;}

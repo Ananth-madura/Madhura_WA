@@ -15,7 +15,7 @@ const { campaignLaunchLimiter } = require("../middleware/waRateLimiter");
 
 // Apply authentication, fail-closed tenant validation, and branch scoping to all campaign routes
 router.use(auth, requireTenantContext, requireBranchScope);
-router.use(require("../middleware/organizationAdmin"));
+router.use(require("../middleware/workspaceModule").workspaceModule("campaigns"));
 router.use(async(req,res,next)=>{
   try{
     const templateId=req.body?.template_id||req.body?.message?.template_id;

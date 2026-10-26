@@ -7,6 +7,7 @@ const svc = require("../services/enquiryService");
 // Enforce authentication & strict tenant isolation on all enquiry endpoints
 router.use(auth);
 router.use(requireTenantContext);
+router.use(require("../middleware/workspaceModule").workspaceModule("enquiries"));
 
 // Self-ensuring table — safe to call on every request (no-op after first).
 router.use(async (req, res, next) => {

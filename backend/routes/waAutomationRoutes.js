@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../config/database");
 const { verifyToken: auth } = require("../middleware/authMiddleware");
+const { requireTenantContext } = require("../middleware/tenantMiddleware");
 
 const TRIGGER_LABELS = {
   welcome_message: "👋 First Inbound → Welcome Auto-Reply",
@@ -22,6 +23,7 @@ const TRIGGER_LABELS = {
 };
 
 // ── List automations ──────────────────────────────────────────────────────────
+router.use(auth, requireTenantContext, require("../middleware/workspaceModule").workspaceModule("automations"));
 router.get("/", auth, async (req, res) => {
   try {
     const [rows] = await db.promise().query(`

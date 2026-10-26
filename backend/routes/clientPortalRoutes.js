@@ -40,11 +40,11 @@ function createClientPortalRouter(database = db, { staffAuth = verifyToken, admi
   router.post('/requests/:id/replies', portalAuth, writeLimit, handle(async (req, res) => res.json(await service.reply(req.portalAccount.client_id, id(req.params.id), req.body, { role: 'client', id: req.portalAccount.id }))));
 
   const admin = express.Router();
-  admin.use(staffAuth, (req, res, next) => req.user?.role === 'platform_admin' ? next() : adminOnly(req, res, next));
+  admin.use(staffAuth);
   admin.use(require('../middleware/tenantMiddleware').requireTenantContext);
+  admin.use(require('../middleware/workspaceModule').workspaceModule('client_portal'));
   admin.use(async (req, res, next) => {
     try {
-      if (!['organization_owner', 'organization_admin'].includes(req.userRole) && req.user.role !== 'platform_admin') return res.status(403).json({ error: 'Organization administrator required' });
       const client = req.path.match(/^\/clients\/(\d+)(?:\/|$)/);
       if (client) {
         const [rows] = await database.promise().query('SELECT id FROM clients WHERE id=? AND tenant_id=?', [Number(client[1]), req.tenantId]);

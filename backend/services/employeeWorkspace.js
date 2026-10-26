@@ -1,5 +1,6 @@
 "use strict";
 const { createInboxService } = require("./sharedInboxService");
+const { MODULES, DEFAULT_EDIT } = require("../middleware/workspaceModule");
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const positiveId = value => {
   const id = Number(value);
@@ -18,12 +19,31 @@ function createEmployeeWorkspace(db) {
   async function columns(query, table) {
     return new Set((await query("SELECT COLUMN_NAME AS name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=?", [table])).map(row => row.name));
   }
-  const modules = ["customers", "tasks", "leads", "deals", "activities", "transfers", "exports", "campaigns"];
+  const modules = MODULES;
   async function permission(req, module, edit = false,reader=q) {
     if (!modules.includes(module)) throw fail(400, "Unknown workspace module");
     if (inbox.isAdmin(req)) return true;
     const [grant] = await reader("SELECT can_view,can_edit FROM wa_employee_workspace_permissions WHERE tenant_id=? AND user_id=? AND module=?", [req.tenantId, req.user.id, module]);
-    return grant ? Boolean(grant.can_view && (!edit || grant.can_edit)) : module!=="campaigns";
+    if (grant) return Boolean(grant.can_view && (!edit || grant.can_edit));
+    return edit ? DEFAULT_EDIT.has(module) : true;
+  }
+  // Resolved view/edit map for the signed-in member. The dashboard rail uses
+  // this to show only the modules an administrator has granted.
+  async function permissionsFor(req) {
+    const resolved = {};
+    if (inbox.isAdmin(req)) {
+      for (const module of modules) resolved[module] = { view: true, edit: true };
+      return resolved;
+    }
+    const rows = await q("SELECT module,can_view,can_edit FROM wa_employee_workspace_permissions WHERE tenant_id=? AND user_id=?", [req.tenantId, req.user.id]);
+    const saved = Object.fromEntries(rows.map(row => [row.module, row]));
+    for (const module of modules) {
+      const row = saved[module];
+      resolved[module] = row
+        ? { view: Boolean(row.can_view), edit: Boolean(row.can_view && row.can_edit) }
+        : { view: true, edit: DEFAULT_EDIT.has(module) };
+    }
+    return resolved;
   }
   async function requireModule(req, module, edit = false,reader=q) {
     if (!await permission(req, module, edit,reader)) throw fail(403, "This module action is not permitted");
@@ -220,6 +240,6 @@ function createEmployeeWorkspace(db) {
     }
     return results;
   }
-  return { scope, customer, list, history, mutate, activity, createRecord, updateRecord, transfer, analytics, inbox, permission, requireModule, modules, reassignInactive };
+  return { scope, customer, list, history, mutate, activity, createRecord, updateRecord, transfer, analytics, inbox, permission, permissionsFor, requireModule, modules, reassignInactive };
 }
 module.exports = { createEmployeeWorkspace, positiveId, text };

@@ -1,12 +1,11 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
+import useWorkspaceAccess from "../hooks/useWorkspaceAccess";
 import {
   MessageCircle,
   FileText,
   Users,
   Send,
   BarChart3,
-  Settings,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -15,9 +14,6 @@ import {
   Zap as AutomationIcon,
   Smartphone,
   UserCheck,
-  OctagonMinus,
-  CreditCard,
-  RefreshCw,
   GitBranch,
   Inbox,
 } from "lucide-react";
@@ -26,14 +22,13 @@ import axios from "axios";
 import { API } from "../config/api";
 import socket from "../socket/socket";
 
-export default function WhatsAppNav({ scope = "workspace" }) {
-  // "assigned" is the employee shell: the same rail, reduced to the routes an
-  // assigned employee can open. Administration-only network calls (session
-  // status, unread totals) are skipped rather than fired and rejected.
-  const assigned = scope === "assigned";
-  const { user } = useAuth();
+export default function WhatsAppNav() {
+  // The rail is shared by every role. Which tabs appear is resolved from the
+  // administrator's per-module grants, so a member only ever sees routes the
+  // backend will actually serve them.
   const navigate = useNavigate();
   const location = useLocation();
+  const { admin, canView } = useWorkspaceAccess();
   const [showTestModal, setShowTestModal] = useState(false);
   const [status, setStatus] = useState(null);
   const [totalUnread, setTotalUnread] = useState(0);
@@ -82,7 +77,10 @@ export default function WhatsAppNav({ scope = "workspace" }) {
   }, []);
 
   useEffect(() => {
-    if (assigned) return undefined;
+    // Session status and organization-wide unread totals are administrator
+    // signals: the backend refuses them for members, and their unread lives on
+    // the shared inbox rather than on the session engine.
+    if (!admin) return undefined;
     fetchStatus();
     fetchUnreadCount();
     const interval = setInterval(() => {
@@ -109,7 +107,7 @@ export default function WhatsAppNav({ scope = "workspace" }) {
       socket.off("wa_ready", handleRealtime);
       socket.off("wa_disconnected", handleRealtime);
     };
-  }, [assigned, fetchStatus, fetchUnreadCount]);
+  }, [admin, fetchStatus, fetchUnreadCount]);
 
   const handleTestSend = async (e) => {
     e.preventDefault();
@@ -158,8 +156,7 @@ export default function WhatsAppNav({ scope = "workspace" }) {
 
   const tabs = [
     { id: "team-inbox", label: "Team Inbox", title: "Assigned conversations and shared notes", path: "/whatsapp/team-inbox", icon: Inbox },
-    { id: "workspace", label: "My workspace", title: "Customers, leads, pipeline and follow-ups", path: "/whatsapp/workspace", icon: Users, exact: true },
-    { id: "employee-campaigns", label: "My campaigns", title: "Campaigns for authorized assigned customers", path: "/whatsapp/workspace/campaigns", icon: Send },
+    { id: "workspace", label: "My workspace", title: "Customers, leads, pipeline and follow-ups", path: "/whatsapp/workspace", icon: Users, exact: true, module: "customers" },
     {
       id: "chats",
       label: "Live Chats",
@@ -167,6 +164,7 @@ export default function WhatsAppNav({ scope = "workspace" }) {
       path: "/whatsapp",
       icon: MessageCircle,
       exact: true,
+      adminOnly: true,
     },
     {
       id: "contacts",
@@ -174,15 +172,15 @@ export default function WhatsAppNav({ scope = "workspace" }) {
       title: "WhatsApp Contacts Directory",
       path: "/whatsapp/contacts",
       icon: UserCheck,
+      module: "contacts",
     },
     {
-      // Visible to every role — employees triage and convert leads too.
-      // Delete stays admin/sub-admin only (backend enforced).
       id: "enquiries",
       label: "Enquiries",
       title: "Enquiry Pipeline: cold, warm & hot leads",
       path: "/whatsapp/enquiries",
       icon: Inbox,
+      module: "enquiries",
     },
     {
       id: "templates",
@@ -190,6 +188,7 @@ export default function WhatsAppNav({ scope = "workspace" }) {
       title: "Message & Media Templates",
       path: "/whatsapp/templates",
       icon: FileText,
+      module: "templates",
     },
     {
       id: "groups",
@@ -198,6 +197,7 @@ export default function WhatsAppNav({ scope = "workspace" }) {
       title: "Contact Groups & Segments",
       path: "/whatsapp/groups",
       icon: Users,
+      module: "groups",
     },
     {
       id: "campaigns",
@@ -206,6 +206,7 @@ export default function WhatsAppNav({ scope = "workspace" }) {
       title: "Bulk Broadcast Campaigns",
       path: "/whatsapp/campaigns",
       icon: Send,
+      module: "campaigns",
     },
     {
       id: "automations",
@@ -213,6 +214,7 @@ export default function WhatsAppNav({ scope = "workspace" }) {
       title: "Automation Rules & Auto-Replies",
       path: "/whatsapp/automations",
       icon: Zap,
+      module: "automations",
     },
     {
       id: "flows",
@@ -221,6 +223,7 @@ export default function WhatsAppNav({ scope = "workspace" }) {
       title: "Visual Chatbot Conversation Flows",
       path: "/whatsapp/flows",
       icon: AutomationIcon,
+      module: "flows",
     },
     {
       id: "analytics",
@@ -228,6 +231,15 @@ export default function WhatsAppNav({ scope = "workspace" }) {
       title: "Campaign & Message Analytics",
       path: "/whatsapp/analytics",
       icon: BarChart3,
+      module: "analytics",
+    },
+    {
+      id: "client-portal",
+      label: "Client portal",
+      title: "Client access, documents and service requests",
+      path: "/whatsapp/client-portal",
+      icon: UserCheck,
+      module: "client_portal",
     },
     {
       id: "branches",
@@ -235,6 +247,7 @@ export default function WhatsAppNav({ scope = "workspace" }) {
       title: "Multi-Branch Operating System & Workspaces",
       path: "/whatsapp/branches",
       icon: GitBranch,
+      adminOnly: true,
     },
     {
       id: "accounts",
@@ -242,25 +255,16 @@ export default function WhatsAppNav({ scope = "workspace" }) {
       title: "WhatsApp Accounts & Cloud Setup",
       path: "/whatsapp/accounts",
       icon: Smartphone,
+      adminOnly: true,
     },
-    ...(user?.role === "admin" || user?.role === "subadmin"
-      ? [
-          {
-            id: "employees",
-            label: "Employees",
-            title: "Manage Employees, Access Codes & Staff Activity Analytics",
-            path: "/whatsapp/employees",
-            icon: Users,
-          },
-          {
-            id: "client-portal",
-            label: "Client portal",
-            title: "Client access, documents and service requests",
-            path: "/whatsapp/client-portal",
-            icon: UserCheck,
-          },
-        ]
-      : []),
+    {
+      id: "employees",
+      label: "Employees",
+      title: "Manage Employees, Access Codes & Staff Activity Analytics",
+      path: "/whatsapp/employees",
+      icon: Users,
+      adminOnly: true,
+    },
   ];
 
   const isTabActive = (tab) => {
@@ -279,11 +283,13 @@ export default function WhatsAppNav({ scope = "workspace" }) {
     activeTabRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [location.pathname]);
 
-  // Employee shell: the employee routes only. Administration shell: every tab
-  // this account's role may open.
-  const visibleTabs = assigned
-    ? tabs.filter(tab => ["team-inbox", "workspace", "employee-campaigns"].includes(tab.id))
-    : tabs.filter(tab => ["admin", "subadmin", "platform_admin"].includes(user?.role) || ["team-inbox", "workspace", "employee-campaigns"].includes(tab.id));
+  // Administrators see every tab. Members see their inbox plus each module an
+  // administrator has granted them view access to.
+  const visibleTabs = tabs.filter(tab => {
+    if (tab.adminOnly) return admin;
+    if (!tab.module) return true;
+    return canView(tab.module);
+  });
 
   return (
     <div className="hl-card hl-reveal w-full min-w-0 wa-workspace-nav">
@@ -312,7 +318,7 @@ export default function WhatsAppNav({ scope = "workspace" }) {
                     {tab.label}
                   </span>
                 </span>
-                {!assigned && tab.id === "chats" && totalUnread > 0 && (
+                {tab.id === (admin ? "chats" : "team-inbox") && totalUnread > 0 && (
                   <span
                     className="hl-badge shrink-0"
                     style={

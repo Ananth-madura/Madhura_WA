@@ -792,6 +792,11 @@ router.get("/employees", verifyToken, isAdmin, async (req, res) => {
 router.post("/employees", verifyToken, isAdmin, async (req, res) => {
   try {
     const tenantId = req.tenantId || resolveTenantId(req);
+    // Delegated managers can staff their branch but cannot mint peers or
+    // administrators — otherwise a sub-admin could escalate through a new login.
+    if (req.user.role === "subadmin" && ["admin", "subadmin"].includes(req.body.role)) {
+      return res.status(403).json({ message: "Only an administrator can create administrator accounts" });
+    }
     if (!tenantId) return res.status(403).json({ message: "Organization context required" });
     const branchId = Number(req.body.branch_id);
     if (!Number.isSafeInteger(branchId) || branchId < 1) return res.status(400).json({ message: "Select a branch for this employee" });
@@ -845,11 +850,13 @@ router.put("/employees/:id", verifyToken, isAdmin, async (req, res) => {
       if (!employee || employee.role === 'organization_owner') throw new Error("Employee not found or owner cannot be edited here");
       const fields = [], params = [];
       for (const field of ['first_name','last_name']) if (req.body[field] !== undefined) { fields.push(field+' = ?'); params.push(String(req.body[field]).trim().slice(0,100)); }
-      for (const [field, allowed] of [['role',['admin','employee','agent']],['status',['active','pending','banned','inactive']],['whatsapp_access_level',['full','chat_only','read_only','campaign_only']]]) {
+      for (const [field, allowed] of [['role',['admin','subadmin','employee','agent']],['status',['active','pending','banned','inactive']],['whatsapp_access_level',['full','chat_only','read_only','campaign_only']]]) {
         if (req.body[field] !== undefined) { if (!allowed.includes(req.body[field])) throw new Error('Invalid '+field); fields.push(field+' = ?'); params.push(req.body[field]); }
       }
       if (fields.length) await q('UPDATE users SET '+fields.join(', ')+' WHERE id = ? AND tenant_id = ?', [...params,targetId,tenantId]);
-      if (req.body.role !== undefined) await q("UPDATE organization_memberships SET role = ? WHERE tenant_id = ? AND user_id = ?", [req.body.role==='admin'?'organization_admin':'agent',tenantId,targetId]);
+      // Delegated managers ("sub-admin") act as organization administrators, but
+      // role changes stay owner/admin-only via isAdminOnly on /change-role.
+      if (req.body.role !== undefined) await q("UPDATE organization_memberships SET role = ? WHERE tenant_id = ? AND user_id = ?", [['admin','subadmin'].includes(req.body.role)?'organization_admin':'agent',tenantId,targetId]);
       const branchId = Number(req.body.branch_id || req.body.branchId);
       if (branchId) {
         const [branch] = await q("SELECT id FROM branches WHERE id = ? AND tenant_id = ? AND status = 'active'", [branchId,tenantId]);

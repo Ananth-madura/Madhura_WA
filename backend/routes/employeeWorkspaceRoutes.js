@@ -13,6 +13,11 @@ const handle = work => async (req, res) => {
   }
 };
 router.use(verifyToken, requireTenantContext, (req, res, next) => { res.set("Cache-Control", "no-store"); next(); });
+// Resolved grants for the signed-in member. Readable by every member because
+// the dashboard rail needs it to decide which modules to show.
+router.get("/me/permissions", handle(async (req, res) => {
+  res.json({ permissions: await workspace.permissionsFor(req), admin: workspace.inbox.isAdmin(req) });
+}));
 router.use("/campaigns",require("./employeeCampaignRoutes"));
 router.get("/customers", handle(async (req, res) => res.json(await workspace.list(req, req.query))));
 router.post("/customers", handle(async (req, res) => {

@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Login from "./auth/login";
 import { EnterpriseProvider, useEnterprise } from "./context/EnterpriseContext";
 import { BranchProvider } from "./context/BranchContext";
+import { isWorkspaceAdmin } from "./auth/workspaceAccess";
 const Signup = lazy(() => import("./auth/signup"));
 const WALayout = lazy(() => import("./layout/WALayout"));
 const WhatsAppPage = lazy(() => import("./pages/whatsapp"));
@@ -103,11 +104,19 @@ function FlowParamRedirect() {
   return <Navigate to={flowId ? `/whatsapp/flows/build/${flowId}` : "/whatsapp/flows/build"} replace />;
 }
 
+// `/whatsapp` is the organization-wide Live Chats board for administrators and
+// the assigned inbox for everyone else. This is a pure role decision, so it
+// resolves locally instead of paying for a permissions round-trip.
 function WorkspaceInbox() {
   const { user, demoMode } = useAuth();
-  const {isOwnerOrAdmin}=useEnterprise();
-  return !demoMode && !isOwnerOrAdmin && user?.role!=="platform_admin"
-    ? <SharedTeamInbox /> : <WhatsAppPage />;
+  const { isOwnerOrAdmin, roleInActiveOrg } = useEnterprise();
+  const admin = isWorkspaceAdmin({
+    demoMode,
+    isOwnerOrAdmin,
+    orgRole: roleInActiveOrg,
+    globalRole: user?.role,
+  });
+  return admin ? <WhatsAppPage /> : <SharedTeamInbox />;
 }
 
 export default function App() {

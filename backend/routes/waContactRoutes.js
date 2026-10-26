@@ -7,6 +7,7 @@ const { requireTenantContext } = require("../middleware/tenantMiddleware");
 // Enforce authentication & strict tenant isolation on all contact endpoints
 router.use(auth);
 router.use(requireTenantContext);
+router.use(require("../middleware/workspaceModule").workspaceModule("contacts"));
 
 const q = (sql, params = []) =>
   new Promise((resolve, reject) => {

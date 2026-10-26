@@ -12,7 +12,6 @@ import {
   CreditCard,
   RefreshCw,
   Settings,
-  Layers,
   Users,
   GitBranch,
   ShieldCheck,
@@ -20,12 +19,13 @@ import {
 import { useAuth } from "../auth/AuthContext";
 import { useEnterprise } from "../context/EnterpriseContext";
 import useWALocalInbox from "../hooks/useWALocalInbox";
+import useWorkspaceAccess from "../hooks/useWorkspaceAccess";
+import { canOpenWorkspacePath, workspaceModuleForPath } from "../auth/workspaceAccess";
 import { describeDemoReason } from "../auth/demoSession";
 import { API } from "../config/api";
 import socket from "../socket/socket";
 import WAConfigPrompt from "../components/WAConfigPrompt";
 import WAAccountBalanceModal from "../components/WAAccountBalanceModal";
-import WAPlanModal from "../components/WAPlanModal";
 import WhatsAppNav from "../components/WhatsAppNav";
 import OrganizationSwitcher from "../components/OrganizationSwitcher";
 import BranchSwitcher from "../components/BranchSwitcher";
@@ -33,72 +33,28 @@ import "../pages/whatsapp-workspace.css";
 import "../pages/whatsapp-operations.css";
 import "../pages/whatsapp-employee.css";
 
-// Corporate Shell for Whatsapp_CRM — Hallmark Workbench shell (design.md).
-// Deep-navy slab, yellow hairline, quiet type. Routes and logic untouched.
+// One dashboard for every role. What differs is the rail and the routes a
+// person may open — resolved from their organization role plus per-module
+// grants the administrator sets. Route and logic stay in one place.
 export default function WALayout() {
-  const { user, demoMode } = useAuth();
-  const {isOwnerOrAdmin,loading}=useEnterprise();
-  if(loading&&!demoMode)return <p className="p-4">Loading workspace…</p>;
-  return !demoMode && !isOwnerOrAdmin && user?.role!=="platform_admin" ? <AssignedWorkspace /> : <LegacyWALayout />;
+  const { loading } = useEnterprise();
+  if (loading) return <p className="p-4">Loading workspace…</p>;
+  return <WorkspaceShell />;
 }
 
-function AssignedWorkspace() {
-  const { user, logout } = useAuth();
+function WorkspaceShell() {
+  const { user, logout, demoMode } = useAuth();
   const { activeTenant, activeBranch, roleInActiveOrg } = useEnterprise();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const allowed = ["/whatsapp", "/whatsapp/", "/whatsapp/team-inbox", "/whatsapp/workspace", "/whatsapp/workspace/campaigns"].includes(location.pathname);
+  const { admin, canView, ready } = useWorkspaceAccess();
+  const member = !admin;
   const roleLabel = {
     organization_owner: "Owner",
     organization_admin: "Administrator",
     branch_manager: "Branch manager",
     agent: "Agent",
     employee: "Employee",
-  }[roleInActiveOrg] || "Employee";
+  }[roleInActiveOrg] || "Member";
   const orgLine = [activeTenant?.name, activeBranch?.name].filter(Boolean).join(" · ");
-
-  /* Same shell as the administration dashboard: deep-navy header, the shared
-     workspace rail, and the same content surface. Only the controls an
-     assigned employee may use are mounted — branches, employees, billing,
-     account setup, session controls and workspace settings stay admin-only,
-     and the rail itself only lists routes this role can open. */
-  return <div className="crm-layout-shell wa-page-mode wa-dvh flex flex-col overflow-hidden">
-    <header className="hl-shell hl-safe-top flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 shrink-0" style={{ minHeight: 56 }}>
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-        <Link to="/whatsapp/team-inbox" className="flex items-center gap-2 shrink-0 py-0.5" title="Employee desk">
-          <img src="/Group.png" alt="Madhura WhatsApp CRM" className="h-7 w-auto object-contain" />
-        </Link>
-        <span className="emp-role-chip hidden md:inline-flex shrink-0">
-          <span className="hl-badge hl-badge-info" style={{ height: 32 }}>
-            <ShieldCheck size={13} aria-hidden="true" /> {roleLabel}
-          </span>
-        </span>
-        {orgLine && <span className="emp-shell-org hidden lg:block" title={orgLine}>{orgLine}</span>}
-      </div>
-      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-        <span className="emp-shell-user hidden sm:block">{user?.name || user?.first_name || "Employee"}</span>
-        <button
-          type="button"
-          onClick={() => { logout(); navigate("/login", { replace: true }); }}
-          className="hl-logout shrink-0"
-          style={{ height: 38 }}
-          title="Sign out"
-        >
-          Logout
-        </button>
-      </div>
-    </header>
-    <div className="wa-shell-body">
-      <WhatsAppNav scope="assigned" />
-      <main className="wa-page-workspace flex-1 min-h-0 w-full min-w-0 p-3 sm:p-4 lg:p-5 overflow-y-auto overflow-x-hidden wa-scroll">
-        {allowed ? <Outlet /> : <Navigate to="/whatsapp/team-inbox" replace />}
-      </main>
-    </div>
-  </div>;
-}
-
-function LegacyWALayout() {
-  const { user, logout, demoMode } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -110,7 +66,6 @@ function LegacyWALayout() {
   const [status, setStatus] = useState(null);
   const [showConfig, setShowConfig] = useState(false);
   const [showBalance, setShowBalance] = useState(false);
-  const [showPlanModal, setShowPlanModal] = useState(false);
   const [balanceData, setBalanceData] = useState(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -209,7 +164,9 @@ function LegacyWALayout() {
     };
   }, [autoHideTopbar]);
 
-  const isChatView = location.pathname === "/whatsapp" || location.pathname === "/whatsapp/";
+  const isChatView = admin && (location.pathname === "/whatsapp" || location.pathname === "/whatsapp/");
+  const requiredModule = workspaceModuleForPath(location.pathname);
+  const canOpen = canOpenWorkspacePath(location.pathname, admin) && (!requiredModule || canView(requiredModule));
   const localCacheWarning = useWALocalInbox();
 
   useEffect(() => {
@@ -249,6 +206,9 @@ function LegacyWALayout() {
   }, []);
 
   useEffect(() => {
+    // Only administrators can read WhatsApp session state; asking as a member
+    // would 403 on every tick and paint a false "Offline" badge.
+    if (member) return undefined;
     fetchStatus();
     const interval = setInterval(()=>{if(!document.hidden)fetchStatus();},120000+Math.floor(Math.random()*15000));
     const handleRealtime = () => fetchStatus();
@@ -266,7 +226,7 @@ function LegacyWALayout() {
       window.removeEventListener("wa_session_disconnected", handleRealtime);
       window.removeEventListener("wa_sync_completed", handleRealtime);
     };
-  }, [fetchStatus]);
+  }, [fetchStatus, member]);
 
   const onSyncWhatsApp = async () => {
     if (syncing) return;
@@ -417,24 +377,39 @@ function LegacyWALayout() {
           <Link to="/whatsapp" className="flex items-center gap-2 shrink-0 py-0.5" title="Madhura WhatsApp CRM">
             <img src="/Group.png" alt="Madhura WhatsApp CRM" className="h-7 w-auto object-contain" />
           </Link>
-          <OrganizationSwitcher />
-          <BranchSwitcher />
+          {member ? (
+            <>
+              <span className="emp-role-chip hidden md:inline-flex shrink-0">
+                <span className="hl-badge hl-badge-info" style={{ height: 32 }}>
+                  <ShieldCheck size={13} aria-hidden="true" /> {roleLabel}
+                </span>
+              </span>
+              {orgLine && <span className="emp-shell-org hidden lg:block" title={orgLine}>{orgLine}</span>}
+            </>
+          ) : (
+            <>
+              <OrganizationSwitcher />
+              <BranchSwitcher />
+            </>
+          )}
         </div>
 
         {/* Global Action Controls: Dashboard, Status, Quota, Sync, Config, Disconnect, Logout */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap">
-          <button
-            onClick={() => window.location.assign("https://crm.madhuratech.com")}
-            className="hl-shell-link shrink-0"
-            style={{ height: 38, padding: "0 0.75rem", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
-            title="Return to CRM Dashboard"
-          >
-            <ChevronLeft size={14} />
-            <span className="hidden xl:inline whitespace-nowrap">CRM Dashboard</span>
-          </button>
+          {!member && (
+            <button
+              onClick={() => window.location.assign("https://crm.madhuratech.com")}
+              className="hl-shell-link shrink-0"
+              style={{ height: 38, padding: "0 0.75rem", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+              title="Return to CRM Dashboard"
+            >
+              <ChevronLeft size={14} />
+              <span className="hidden xl:inline whitespace-nowrap">CRM Dashboard</span>
+            </button>
+          )}
 
-          {/* Status Badge */}
-          {status?.cloud?.configured || status?.isCloud ? (
+          {/* Status Badge — session state is an administrator signal */}
+          {!member && (status?.cloud?.configured || status?.isCloud ? (
             <span className="hl-badge hl-badge-info hidden md:inline-flex" style={{ height: 32 }}>
               <span>Meta API: {status?.phone ? `+${status.phone}` : "Active"}</span>
             </span>
@@ -446,8 +421,9 @@ function LegacyWALayout() {
             <span className="hl-badge hidden md:inline-flex" style={{ height: 32 }}>
               <span>Offline</span>
             </span>
-          )}
+          ))}
 
+          {!member && (<>
           {/* Manage Branches */}
           <button
             onClick={() => navigate("/whatsapp/branches")}
@@ -459,18 +435,16 @@ function LegacyWALayout() {
             <span className="hidden md:inline whitespace-nowrap">Branches</span>
           </button>
 
-          {/* Manage Employees (Admin only) */}
-          {(user?.role === "admin" || user?.role === "subadmin") && (
-            <button
-              onClick={() => navigate("/whatsapp/employees")}
-              className={`hl-btn-secondary shrink-0 ${location.pathname === "/whatsapp/employees" ? "border-emerald-600 bg-emerald-950/60 text-emerald-300 font-semibold" : ""}`}
-              style={{ height: 38, padding: "0 0.65rem", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
-              title="Manage Employees, Access Codes & Staff Activity Analytics"
-            >
-              <Users size={14} className="text-emerald-400" />
-              <span className="hidden sm:inline whitespace-nowrap">Employees</span>
-            </button>
-          )}
+          {/* Manage Employees */}
+          <button
+            onClick={() => navigate("/whatsapp/employees")}
+            className={`hl-btn-secondary shrink-0 ${location.pathname === "/whatsapp/employees" ? "border-emerald-600 bg-emerald-950/60 text-emerald-300 font-semibold" : ""}`}
+            style={{ height: 38, padding: "0 0.65rem", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+            title="Manage Employees, Access Codes & Staff Activity Analytics"
+          >
+            <Users size={14} className="text-emerald-400" />
+            <span className="hidden sm:inline whitespace-nowrap">Employees</span>
+          </button>
 
           {/* Billing & Subscriptions */}
           <button
@@ -535,6 +509,7 @@ function LegacyWALayout() {
               {disconnecting ? "Disconnecting…" : "Disconnect"}
             </span>
           </button>
+          </>)}
 
           {/* Sign out */}
           <button onClick={onLogout} className="hl-logout shrink-0" style={{ height: 38 }} title="Sign out of CRM">
@@ -597,7 +572,9 @@ function LegacyWALayout() {
               : "wa-page-workspace flex-1 min-h-0 w-full min-w-0 p-3 sm:p-4 lg:p-5 overflow-y-auto overflow-x-hidden wa-scroll"
           }
         >
-          <Outlet />
+          {!ready
+            ? <p className="p-4">Checking workspace access…</p>
+            : canOpen ? <Outlet /> : <Navigate to="/whatsapp" replace />}
         </main>
       </div>
     </div>

@@ -1042,7 +1042,7 @@ async function createBranchEmployee(tenantId, branchId, employeeData, actorUserI
   const cleanFirst = (first_name || "").trim();
   const cleanLast = (last_name || "").trim();
   const cleanEmail = (email || "").trim().toLowerCase();
-  const cleanRole = role === "admin" ? "admin" : (role === "agent" ? "agent" : "employee");
+  const cleanRole = ["admin", "subadmin", "agent"].includes(role) ? role : "employee";
   const cleanAccessLevel = ["full", "chat_only", "read_only", "campaign_only"].includes(whatsapp_access_level) ? whatsapp_access_level : "full";
   const cleanJob = (job_title || "").trim() || (cleanRole === "admin" ? "Branch Administrator" : "WhatsApp Support Executive");
   const cleanMobile = (mobile || "").trim();
@@ -1080,7 +1080,7 @@ async function createBranchEmployee(tenantId, branchId, employeeData, actorUserI
   await q(
     `INSERT INTO organization_memberships (tenant_id, user_id, role, membership_status)
      VALUES (?, ?, ?, 'active')`,
-    [tid, newUserId, cleanRole === "admin" ? "organization_admin" : "agent"]
+    [tid, newUserId, ["admin", "subadmin"].includes(cleanRole) ? "organization_admin" : "agent"]
   );
 
   // Insert staff branch membership

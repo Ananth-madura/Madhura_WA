@@ -9,6 +9,7 @@ const { requireTenantContext } = require("../middleware/tenantMiddleware");
 // list, edit or delete another organization's group and add its members to
 // their own campaign.
 router.use(auth, requireTenantContext);
+router.use(require("../middleware/workspaceModule").workspaceModule("groups"));
 
 router.get("/", auth, async (req, res) => {
   try {

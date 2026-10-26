@@ -7,6 +7,10 @@ import { useEnterprise } from "../context/EnterpriseContext";
 let mockParams;
 jest.mock("react-router-dom", () => ({ Link: ({ children }) => <span>{children}</span>, useSearchParams: () => [mockParams, jest.fn()] }));
 jest.mock("../context/EnterpriseContext", () => ({ useEnterprise: jest.fn() }));
+jest.mock("../hooks/useWorkspaceAccess", () => ({
+  __esModule: true,
+  default: () => ({ admin: true, ready: true, permissions: null, canView: () => true, canEdit: () => true }),
+}));
 jest.mock("../config/axios", () => ({ get: jest.fn(), post: jest.fn(), patch: jest.fn() }));
 jest.mock("../socket/socket", () => ({ on: jest.fn(), off: jest.fn() }));
 

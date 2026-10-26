@@ -5,7 +5,7 @@ const store=require("../services/flowStore").createFlowStore(db);
 const definition=require("../services/flowDefinition");
 const {verifyToken}=require("../middleware/authMiddleware");
 const {requireTenantContext}=require("../middleware/tenantMiddleware");
-router.use(verifyToken,requireTenantContext,require("../middleware/organizationAdmin"));
+router.use(verifyToken,requireTenantContext,require("../middleware/workspaceModule").workspaceModule("flows"));
 router.use((req,res,next)=>{res.set("Cache-Control","private, no-store");next();});
 const route=work=>async(req,res)=>{try{await work(req,res);}catch(error){res.status(error.status||503).json({error:error.status?error.message:"Flow operation failed; retry or contact your administrator"});}};
 router.get("/",route(async(req,res)=>res.json(await store.query(`SELECT f.*,

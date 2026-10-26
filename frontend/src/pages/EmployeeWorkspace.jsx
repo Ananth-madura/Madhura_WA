@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import api from "../config/axios";
 import { useEnterprise } from "../context/EnterpriseContext";
 import useWADialog from "../hooks/useWADialog";
+import useWorkspaceAccess from "../hooks/useWorkspaceAccess";
 import socket from "../socket/socket";
 import {
   AlertCircle,
@@ -14,6 +15,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Send,
   ShieldCheck,
   UserRound,
   Users,
@@ -83,6 +85,7 @@ const temperaturePill = value => (["hot", "warm", "cold"].includes(value) ? `emp
 
 export default function EmployeeWorkspace() {
   const { activeTenant } = useEnterprise();
+  const { canView } = useWorkspaceAccess();
   const [params, setParams] = useSearchParams();
   const id = params.get("customer");
   const [customers, setCustomers] = useState([]), [cursor, setCursor] = useState(null);
@@ -194,6 +197,9 @@ export default function EmployeeWorkspace() {
         <p className="emp-sub">Customers and linked work are restricted to your organization, ownership and authorized team scope. Follow-ups, leads and deals you record here stay attached to the customer record.</p>
       </div>
       <div className="emp-head-actions">
+        {canView("campaigns") && <Link className="emp-btn" to="/whatsapp/workspace/campaigns">
+          <Send size={14} aria-hidden="true" /> My campaigns
+        </Link>}
         <button type="button" className="emp-btn" onClick={exportCustomers} disabled={busy}>
           <Download size={14} aria-hidden="true" /> Export
         </button>

@@ -687,7 +687,9 @@ export default function WAEmployees() {
                           className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold capitalize ${
                             emp.role === "admin"
                               ? "bg-purple-100 text-purple-800"
-                              : "bg-blue-50 text-blue-800 border border-blue-200"
+                              : emp.role === "subadmin"
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-blue-50 text-blue-800 border border-blue-200"
                           }`}
                         >
                           {emp.role || "employee"}
@@ -943,7 +945,12 @@ export default function WAEmployees() {
                     >
                       <option value="employee">Employee</option>
                       <option value="agent">Support Agent</option>
-                      <option value="admin">Admin</option>
+                      {/* A sub-admin is an organization administrator server-side,
+                          so only administrators may hand that role out. The
+                          current value stays selectable so an edit form never
+                          renders blank. */}
+                      <option value="subadmin" disabled={user?.role === "subadmin" && formData.role !== "subadmin"}>Sub-admin (manager)</option>
+                      <option value="admin" disabled={user?.role === "subadmin" && formData.role !== "admin"}>Admin</option>
                     </select>
                   </div>
                 </div>

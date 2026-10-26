@@ -7,10 +7,7 @@ const {serverChatStorageEnabled}=require("../services/waChatPrivacy");
 const bounded=(value,fallback,max)=>Math.min(max,Math.max(1,Number.parseInt(value,10)||fallback));
 const query=async(sql,params=[])=>(await db.promise().query(sql,params))[0];
 const route=work=>async(req,res)=>{try{res.json(await work(req));}catch(_){res.status(503).json({error:"Organization analytics are temporarily unavailable"});}};
-router.use(auth,requireTenantContext,(req,res,next)=>{
-  if(["organization_owner","organization_admin"].includes(req.userRole)||req.user.role==="platform_admin")return next();
-  res.status(403).json({error:"Organization administrator required"});
-});
+router.use(auth,requireTenantContext,require("../middleware/workspaceModule").workspaceModule("analytics",{level:"view"}));
 router.use((req,res,next)=>{res.set("Cache-Control","private, no-store");next();});
 
 router.get("/dashboard",route(req=>require("../services/tenantAnalytics").dashboard(req.tenantId)));
