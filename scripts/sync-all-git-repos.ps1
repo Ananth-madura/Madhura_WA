@@ -138,7 +138,7 @@ Write-Host "Local HEAD:           $LocalHead`n" -ForegroundColor Yellow
 # ------------------------------------------------------------------------------
 # 1. Validate working tree
 # ------------------------------------------------------------------------------
-Write-Host "[1/5] Validating working tree..." -ForegroundColor Cyan
+Write-Host "[1/6] Validating working tree..." -ForegroundColor Cyan
 
 $status = @(Invoke-Git -Arguments @("status", "--porcelain"))
 $modified = @($status | Where-Object { $_ -and $_.Trim() -and -not $_.StartsWith("??") })
@@ -167,7 +167,7 @@ if ($modified.Count -eq 0) {
 # ------------------------------------------------------------------------------
 # 2. Push monorepo
 # ------------------------------------------------------------------------------
-Write-Host "`n[2/5] Pushing to Monorepo (Ananth-madura/Madhura_WA)..." -ForegroundColor Cyan
+Write-Host "`n[2/6] Pushing to Monorepo (Ananth-madura/Madhura_WA)..." -ForegroundColor Cyan
 Ensure-Remote -Name $Monorepo.Remote -Url $Monorepo.Url
 
 Write-GitOutput -Lines @(Invoke-Git -Arguments @("push", $Monorepo.Remote, "${CurrentBranch}:main"))
@@ -180,7 +180,7 @@ Write-Host "  [OK] Monorepo synced." -ForegroundColor Green
 $index = 3
 foreach ($target in $Subtrees) {
     $label = "{0} -> {1}" -f $target.Prefix, $target.Remote
-    Write-Host "`n[$index/5] Splitting and pushing $label..." -ForegroundColor Cyan
+    Write-Host "`n[$index/6] Splitting and pushing $label..." -ForegroundColor Cyan
     Ensure-Remote -Name $target.Remote -Url $target.Url
 
     Remove-GitBranchSafe -Branch $target.Split
