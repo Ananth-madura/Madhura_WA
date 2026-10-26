@@ -24,7 +24,7 @@ module.exports = (req, res, next) => {
       return res.status(403).json({ message: "Organization administrator required" });
     }
     try {
-      const [[actor]] = await db.promise().query("SELECT role FROM users WHERE id = ? AND tenant_id = ?", [req.user.id, req.tenantId]);
+      const [[actor]] = await db.promise().query("SELECT role FROM users WHERE id = ? AND status = 'active'", [req.user.id]);
       if (!actor) return res.status(403).json({ message: "Organization administrator required" });
       const actorRole = rolePolicy.effectiveRole({
         globalRole: req.user.role,

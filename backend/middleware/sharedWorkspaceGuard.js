@@ -14,7 +14,8 @@ const rolePolicy = require("../services/rolePolicy");
  *   • Any other active member may use the operational workspaces — inbox,
  *     contacts, enquiries, templates, groups, campaigns, automations, flows,
  *     analytics and the client portal — subject to the per-module grants
- *     enforced by `middleware/workspaceModule.js`.
+ *     enforced by `middleware/workspaceModule.js`. Members also get the Live
+ *     Chats page, scoped to the conversations assigned to them.
  *   • A short list of administration surfaces stays administrator-only:
  *     employees, WhatsApp accounts, branches, billing, Meta/API configuration
  *     and WhatsApp session control.
@@ -47,23 +48,72 @@ function isAdmin(req) {
 
 /**
  * `/whatsapp/*` is the WhatsApp session engine: QR pairing, the account-wide
- * chat list, direct sends and session teardown. Members get their conversations
- * through the assigned shared inbox (`/v2/inbox/*`) instead, so the engine is
- * closed to them — otherwise a member could read every organization
- * conversation and send as the business, bypassing assignment entirely.
+ * chat list, direct sends and session teardown.
  *
- * The contacts workspace legitimately needs these two sync actions, so they are
- * the only openings; everything else under the prefix fails closed.
+ * Members now get the full Live Chats page, so the conversation plane is open
+ * to them while the session plane stays administrator-only. Ownership is not
+ * decided here — `routes/whatsappRoutes.js` and `services/memberChat.js` refuse
+ * any chat that is not assigned to the caller. This list only answers "may a
+ * member reach this route at all", and it fails closed for everything else:
+ *
+ *   • session control — QR, pairing, logout, reconnect, reset, diagnostics,
+ *     account list/switching, chat sync — stays administrator-only.
+ *   • Account-wide analytics (`account-balance`, `unread-count`) and the test
+ *     send tool stay administrator-only.
+ *   • Assignment/transfer (`assign-agent`, `chat/:id/assign`, ticket status)
+ *     stays administrator-only.
  */
-const MEMBER_ENGINE_PATHS = [
+const MEMBER_CHAT_READ_EXACT = new Set([
+  "/whatsapp/status",
+  "/whatsapp/unified-status",
+  "/whatsapp/account",
+  "/whatsapp/chats",
+  "/whatsapp/contact-balance",
+  "/whatsapp/quick-replies",
+]);
+
+const MEMBER_CHAT_WRITE_EXACT = new Set([
+  "/whatsapp/send",
+  "/whatsapp/send-media",
+  "/whatsapp/send-media-upload",
+  "/whatsapp/send-location",
+  "/whatsapp/send-interactive",
+  "/whatsapp/upload-media",
+  "/whatsapp/seen",
+  "/whatsapp/react",
+  "/whatsapp/add-to-crm-client",
   "/whatsapp/sync-contacts",
   "/whatsapp/sync-profile-pics",
-];
+]);
 
-function isMemberAllowedEnginePath(path) {
-  return MEMBER_ENGINE_PATHS.some(
-    prefix => path === prefix || path.startsWith(`${prefix}/`)
-  );
+/** Chat sub-resources a member may read (GET). */
+const MEMBER_CHAT_READ_ACTIONS = new Set(["messages", "media", "profile-pic", "bot-status", "notes"]);
+/** Chat sub-resources a member may act on (POST). */
+const MEMBER_CHAT_WRITE_ACTIONS = new Set(["read", "seen", "typing", "react", "delete-message", "notes", "profile-pic"]);
+
+const CHAT_PATH = /^\/whatsapp\/chat\/[^/]+\/(?:(media)\/[^/]+|([^/]+))$/;
+
+function isReadMethod(method) {
+  return ["GET", "HEAD", "OPTIONS"].includes(String(method || "GET").toUpperCase());
+}
+
+function isMemberAllowedEnginePath(path, method = "GET") {
+  const read = isReadMethod(method);
+  if (MEMBER_CHAT_READ_EXACT.has(path)) return read;
+  if (MEMBER_CHAT_WRITE_EXACT.has(path)) return !read;
+
+  // Contact-scoped read models used by the chat sidebar.
+  if (path.startsWith("/whatsapp/contact-crm-details/")) return read;
+  if (/^\/whatsapp\/contact\/[^/]+\/profile-pic$/.test(path)) {
+    return read || String(method).toUpperCase() === "POST";
+  }
+
+  const chat = CHAT_PATH.exec(path);
+  if (!chat) return false;
+  // `media/<messageId>` means "download this attachment" (read only).
+  const action = chat[1] ? "media" : chat[2];
+  if (read) return MEMBER_CHAT_READ_ACTIONS.has(action);
+  return MEMBER_CHAT_WRITE_ACTIONS.has(action);
 }
 
 function isAdminOnly(path) {
@@ -105,11 +155,11 @@ function sharedWorkspaceGuard(req, res, next) {
     }
     if (
       (req.path === "/whatsapp" || req.path.startsWith("/whatsapp/")) &&
-      !isMemberAllowedEnginePath(req.path)
+      !isMemberAllowedEnginePath(req.path, req.method)
     ) {
       return deny(
         res,
-        "Live chat and WhatsApp session controls require an organization administrator. Use your assigned inbox for conversations."
+        "WhatsApp session controls require an organization administrator. Members can read and reply to their assigned conversations."
       );
     }
     return next();
@@ -121,5 +171,6 @@ module.exports.isAdmin = isAdmin;
 module.exports.isAdminOnly = isAdminOnly;
 module.exports.isMemberAllowedEnginePath = isMemberAllowedEnginePath;
 module.exports.ADMIN_ONLY = ADMIN_ONLY;
-module.exports.MEMBER_ENGINE_PATHS = MEMBER_ENGINE_PATHS;
+module.exports.MEMBER_CHAT_READ_EXACT = MEMBER_CHAT_READ_EXACT;
+module.exports.MEMBER_CHAT_WRITE_EXACT = MEMBER_CHAT_WRITE_EXACT;
 

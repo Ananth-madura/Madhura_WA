@@ -54,9 +54,9 @@ async function main() {
       if(!cookieMode)localStorage.setItem("token", "fixture");localStorage.setItem("active_tenant_id", "1");
     },cookieMode);
     await page.goto("http://127.0.0.1:15318/whatsapp/team-inbox", {waitUntil:"networkidle2"});
-    try { await page.waitForSelector('button[aria-pressed="false"]', {timeout:10000}); }
+    try { await page.waitForSelector('.emp-conv[aria-pressed="false"]', {timeout:10000}); }
     catch (error) { console.error({failures,apiRequests,body:await page.evaluate(()=>document.body.innerText.slice(0,3000))});await page.screenshot({path:path.resolve(__dirname,"../../scratch/shared-inbox-failure.png"),fullPage:true});throw error; }
-    await page.click('button[aria-pressed="false"]');
+    await page.click('.emp-conv[aria-pressed="false"]');
     await page.waitForFunction(() => document.body.textContent.includes("Message content unavailable on this device"));
     const typeByLabel = async (label, value) => {
       await page.evaluate((label) => { const el=[...document.querySelectorAll('label')].find(el=>el.textContent.startsWith(label));el.querySelector('textarea,input').focus(); }, label);

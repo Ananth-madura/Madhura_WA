@@ -5,10 +5,11 @@ import { useEnterprise } from "../context/EnterpriseContext";
 import useWADialog from "../hooks/useWADialog";
 import useWorkspaceAccess from "../hooks/useWorkspaceAccess";
 import socket from "../socket/socket";
+import "./customer-operations.css";
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowUpRight,
-  Briefcase,
   CheckCircle2,
   Download,
   Inbox,
@@ -91,6 +92,8 @@ export default function EmployeeWorkspace() {
   const [customers, setCustomers] = useState([]), [cursor, setCursor] = useState(null);
   const [search, setSearch] = useState(""), [query, setQuery] = useState("");
   const [detail, setDetail] = useState(null), [stats, setStats] = useState(null);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const customerSearch = useRef(null);
   const [kind, setKind] = useState("tasks"), [records, setRecords] = useState([]), [recordCursor, setRecordCursor] = useState(null);
   const [error, setError] = useState(""), [saved, setSaved] = useState(""), [busy, setBusy] = useState(false), [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState(""), [due, setDue] = useState(""), [amount, setAmount] = useState("");
@@ -115,12 +118,20 @@ export default function EmployeeWorkspace() {
   const loadRecords = useCallback(async () => {
     const version = ++recordRevision.current;
     setRecords([]); setRecordCursor(null);
-    if (!id || !detailId || detail?.permissions?.[kind]?.view === false) return;
+    if (!id || !detailId || detail?.permissions?.[kind]?.view === false) { setRecordsLoading(false); return; }
+    setRecordsLoading(true);
     try {
       const { data } = await api.get(`${root}/customers/${id}/${kind}`);
       if (version === recordRevision.current) { setRecords(data.records); setRecordCursor(data.nextCursor); }
     } catch (err) { if (version === recordRevision.current) setError(message(err)); }
+    finally { if (version === recordRevision.current) setRecordsLoading(false); }
   }, [id, kind, detailId, detail?.permissions]);
+  useEffect(() => {
+    if (detail?.permissions?.[kind]?.view === false) {
+      const available = kinds.find(value => detail.permissions?.[value]?.view !== false);
+      if (available) setKind(available);
+    }
+  }, [detail, kind]);
   useEffect(() => { const timer = setTimeout(() => setQuery(search), 300); return () => clearTimeout(timer); }, [search]);
   useEffect(() => {
     if (!saved) return undefined;
@@ -189,12 +200,16 @@ export default function EmployeeWorkspace() {
   const visibleStats = stats ? PRIMARY_STATS.filter(key => key in stats) : [];
   const secondaryStats = stats ? SECONDARY_STATS.filter(key => key in stats) : [];
 
-  return <section className="emp-surface emp-page" aria-label="Employee workspace">
+  const backToCustomers = () => {
+    setParams(previous => { const next = new URLSearchParams(previous); next.delete("customer"); return next; });
+    requestAnimationFrame(() => customerSearch.current?.focus());
+  };
+
+  return <section className="emp-surface emp-page crm-ops crm-workspace-page" aria-label="Employee workspace">
     <header className="emp-head">
       <div className="emp-head-copy">
-        <p className="emp-eyebrow"><Briefcase size={12} aria-hidden="true" /> Customer workspace</p>
         <h1 className="emp-title">My workspace</h1>
-        <p className="emp-sub">Customers and linked work are restricted to your organization, ownership and authorized team scope. Follow-ups, leads and deals you record here stay attached to the customer record.</p>
+        <p className="emp-sub">Keep customers, follow-ups and deals moving in one place.</p>
       </div>
       <div className="emp-head-actions">
         {canView("campaigns") && <Link className="emp-btn" to="/whatsapp/workspace/campaigns">
@@ -224,17 +239,17 @@ export default function EmployeeWorkspace() {
         <dd>{statValue(key, stats[key])}</dd>
       </div>)}
     </dl>}
-    {secondaryStats.length > 0 && <p className="emp-statline">
+    {secondaryStats.length > 0 && <details className="crm-metrics-details"><summary>More workspace metrics</summary><p className="emp-statline">
       {secondaryStats.map(key => <span key={key}><b>{STAT_LABELS[key]}</b> {statValue(key, stats[key])}</span>)}
-    </p>}
-    {stats && <p className="emp-hint">Response statistics use the first customer message and first employee reply found per conversation in the last {stats.response_window_days || 7} days of retained metadata. They do not measure every reply or reconstruct deleted chat history.</p>}
+    </p><p className="emp-hint">First-response statistics use retained conversation metadata from the last {stats.response_window_days || 7} days.</p></details>}
 
-    <div className="emp-work">
+    <div className={`emp-work ${id ? "crm-has-selection" : ""}`}>
       <aside className="emp-work-list" aria-label="Authorized customers">
         <div className="emp-list-head">
+          <div className="crm-panel-heading"><h2>Customers</h2><span>{customers.length} loaded</span></div>
           <div className="emp-search">
             <Search size={14} aria-hidden="true" />
-            <input className="emp-field" aria-label="Search customers" placeholder="Search name, phone or email" value={search} onChange={event => setSearch(event.target.value)} maxLength={100} />
+            <input ref={customerSearch} className="emp-field" aria-label="Search customers" placeholder="Search name, phone or email" value={search} onChange={event => setSearch(event.target.value)} maxLength={100} />
           </div>
           <details className="emp-details emp-add">
             <summary><Plus size={12} aria-hidden="true" /> Add customer</summary>
@@ -254,7 +269,7 @@ export default function EmployeeWorkspace() {
         </div>
         <div className="emp-list-scroll">
           {loading && <p className="emp-list-state" role="status">Loading workspace…</p>}
-          {!loading && !customers.length && <p className="emp-list-state">No customers assigned in this view.</p>}
+          {!loading && !customers.length && <div className="emp-list-state"><p>{search ? "No customers match your search." : "No customers assigned in this view."}</p>{search && <button type="button" className="emp-btn" onClick={() => setSearch("")}>Clear search</button>}</div>}
           {customers.map(row => <button
             key={row.id}
             type="button"
@@ -277,6 +292,7 @@ export default function EmployeeWorkspace() {
       </aside>
 
       {detail ? <main className="emp-work-main">
+        <button type="button" className="emp-btn crm-mobile-back" onClick={backToCustomers}><ArrowLeft size={16} aria-hidden="true" /> All customers</button>
         <section className="emp-profile">
           <div className="emp-profile-id">
             <span className="emp-avatar emp-avatar-lg" aria-hidden="true">{initials(detail.customer.name)}</span>
@@ -299,8 +315,8 @@ export default function EmployeeWorkspace() {
           </div>
         </section>
 
-        {detail.canEdit && <section className="emp-card">
-          <h3 className="emp-card-title">Profile</h3>
+        {detail.canEdit && <details className="emp-card crm-profile-edit">
+          <summary>Edit customer profile</summary>
           <form className="emp-form" onSubmit={event => { event.preventDefault(); perform(() => api.patch(`${root}/customers/${id}`, detail.customer)); }}>
             <div className="emp-form-row">
               <label className="emp-label">Name
@@ -320,10 +336,10 @@ export default function EmployeeWorkspace() {
               <button type="submit" disabled={busy} className="emp-btn emp-btn-sm emp-btn-primary">Save profile</button>
             </div>
           </form>
-        </section>}
+        </details>}
 
-        {detail.canEdit && <section className="emp-card">
-          <h3 className="emp-card-title">Marketing consent</h3>
+        {detail.canEdit && <details className="emp-card crm-profile-edit">
+          <summary>Manage marketing consent</summary>
           <form className="emp-form" onSubmit={event=>{event.preventDefault();if(!window.confirm("Record verified customer consent for marketing messages? This action is audited with your evidence."))return;perform(async()=>{await api.patch(`${root}/customers/${id}/consent`,{optIn:true,proof:consentProof});setConsentProof("");});}}>
             <div className="emp-form-row">
               <label className="emp-label">Consent evidence or reference
@@ -336,15 +352,14 @@ export default function EmployeeWorkspace() {
             </div>
             <p className="emp-hint">Consent events are audited. Campaigns skip customers without recorded consent.</p>
           </form>
-        </section>}
+        </details>}
 
         <section className="emp-card emp-card-flush">
-          <div className="emp-tabs" role="tablist" aria-label="Customer modules">
+          <div className="emp-tabs" role="group" aria-label="Customer modules">
             {kinds.filter(value => detail.permissions?.[value]?.view !== false).map(value => <button
               key={value}
               type="button"
-              role="tab"
-              aria-selected={kind === value}
+              aria-pressed={kind === value}
               className="emp-tab"
               onClick={() => { setKind(value); setDraft(""); }}
             >
@@ -352,8 +367,9 @@ export default function EmployeeWorkspace() {
               {kind === value && records.length > 0 && <span className="emp-count">{records.length}</span>}
             </button>)}
           </div>
-          <div className="emp-records">
-            {records.length === 0 && <p className="emp-hint">No {kind} recorded for this customer yet.</p>}
+          <div className="emp-records" aria-busy={recordsLoading}>
+            {recordsLoading && <p className="emp-list-state" role="status">Loading {kind}…</p>}
+            {!recordsLoading && records.length === 0 && <div className="crm-record-empty"><strong>No {kind} yet</strong><p className="emp-hint">{kind === "transfers" ? "Ownership changes will appear here." : `Add the first ${emptyKind} for this customer below.`}</p></div>}
             {records.map(row => <article key={row.id} className="emp-record">
               <div className="emp-record-head">
                 <p>{row.title || row.message || row.body || row.reason}</p>
@@ -410,8 +426,9 @@ export default function EmployeeWorkspace() {
           </div>
         </section>
       </main> : <div className="emp-empty">
+        {id && <button type="button" className="emp-btn crm-mobile-back" onClick={backToCustomers}><ArrowLeft size={16} aria-hidden="true" /> All customers</button>}
         <UserRound size={22} aria-hidden="true" />
-        <strong>Select an assigned customer</strong>
+        <strong>{loading && id ? "Loading customer…" : id ? "Customer unavailable" : "Select an assigned customer"}</strong>
         <span>Their profile, tasks, leads, deals, notes and transfer history open here. Conversations live in the team inbox.</span>
         <Link className="emp-link" to="/whatsapp/team-inbox">Open team inbox <ArrowUpRight size={12} aria-hidden="true" /></Link>
       </div>}

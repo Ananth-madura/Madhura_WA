@@ -479,6 +479,7 @@ function startServer() {
       await require("./services/tenantPlanService").ensureTenantsTable();
       await require("./services/enquiryService").ensureEnquiryTables();
       await require("./migrations/shared_number_inbox").migrate(require("./config/database"));
+      await require("./migrations/legacy_employee_memberships").migrate(db);
       await require("./migrations/shared_flows").migrate(require("./config/database"));
       await require("./services/schemaReadiness").assertReady(db);
       await require("./services/sharedFlowRuntime").recover();

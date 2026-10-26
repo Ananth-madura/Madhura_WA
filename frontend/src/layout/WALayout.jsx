@@ -167,7 +167,10 @@ function WorkspaceShell() {
     };
   }, [autoHideTopbar]);
 
-  const isChatView = admin && (location.pathname === "/whatsapp" || location.pathname === "/whatsapp/");
+  // The Live Chats board is a full-height, internally-scrolling view for every
+  // role. Members now use the same page (scoped to their assigned chats), so it
+  // must get the chat layout rather than the padded page wrapper.
+  const isChatView = location.pathname === "/whatsapp" || location.pathname === "/whatsapp/";
   const requiredModule = workspaceModuleForPath(location.pathname);
   const canOpen = canOpenWorkspacePath(location.pathname, admin) && (!requiredModule || canView(requiredModule));
   const localCacheWarning = useWALocalInbox();

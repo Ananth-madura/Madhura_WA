@@ -35,6 +35,7 @@ import {
   enquiryTypeLabel,
 } from "../api/enquiries";
 import useWorkspaceAccess from "../hooks/useWorkspaceAccess";
+import "./customer-operations.css";
 
 const TEMP_META = {
   new: {
@@ -56,7 +57,7 @@ const TEMP_META = {
   warm: {
     label: "Warm",
     badge: "hl-badge-warn",
-    color: "#d97706",
+    color: "#925000",
     bg: "rgba(217, 119, 6, 0.12)",
     icon: Sun,
     desc: "Showing real interest",
@@ -95,8 +96,9 @@ export default function WAEnquiries() {
   // Deleting an enquiry is an administrator action on the API (it also clears
   // linked intake), so mirror that here instead of guessing from a stale
   // session role.
-  const { admin } = useWorkspaceAccess();
+  const { admin, canEdit } = useWorkspaceAccess();
   const canDelete = admin;
+  const editable = canEdit("enquiries");
 
   const [enquiries, setEnquiries] = useState([]);
   const [summary, setSummary] = useState({ total: 0, new: 0, cold: 0, warm: 0, hot: 0, converted: 0 });
@@ -109,6 +111,8 @@ export default function WAEnquiries() {
   const [toast, setToast] = useState(null);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const fetchRevision = useRef(0);
   // Deep-link support: /whatsapp/enquiries?temp=hot (used by the sidebar dropdown)
   const [searchParams, setSearchParams] = useSearchParams();
   const linkedTemp = searchParams.get("temp");
@@ -126,14 +130,15 @@ export default function WAEnquiries() {
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
+  const [busyId, setBusyId] = useState(null);
   const formDialog = useWADialog(showCreateModal || Boolean(editEnquiry), () => {
     setShowCreateModal(false);
     setEditEnquiry(null);
   }, formLoading);
-  const convertDialog = useWADialog(Boolean(convertTarget), () => setConvertTarget(null), false);
-  const deleteDialog = useWADialog(Boolean(confirmDelete), () => setConfirmDelete(null), false);
+  const convertDialog = useWADialog(Boolean(convertTarget), () => setConvertTarget(null), busyId !== null);
+  const deleteDialog = useWADialog(Boolean(confirmDelete), () => setConfirmDelete(null), busyId !== null);
+  const resultDialog = useWADialog(Boolean(convertResult), () => setConvertResult(null));
 
-  const [busyId, setBusyId] = useState(null);
 
   // A dialog that changes the list underneath it must not trigger a refetch —
   // refetch while the row is being edited/converted would swap it out mid-action.
@@ -146,29 +151,57 @@ export default function WAEnquiries() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  useEffect(() => {
+    const timer = setTimeout(() => { setPage(1); setDebouncedSearch(searchQuery); }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setTempFilter(TEMP_ORDER.includes(linkedTemp) ? linkedTemp : "all");
+    setPage(1);
+  }, [linkedTemp]);
+
+  const changeTemperatureFilter = value => {
+    setPage(1);
+    setTempFilter(value);
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous);
+      if (value === "all") next.delete("temp");
+      else next.set("temp", value);
+      return next;
+    });
+  };
+
+  const resetFilters = () => { setSearchQuery(""); setStatusFilter("all"); changeTemperatureFilter("all"); };
+
   const fetchEnquiries = useCallback(async (silent = false) => {
+    const version = ++fetchRevision.current;
     if (!silent) setLoading(true);
     setError("");
     try {
       const params = { page, limit: 50 };
       if (tempFilter !== "all") params.temperature = tempFilter;
       if (statusFilter !== "all") params.status = statusFilter;
-      if (searchQuery.trim()) params.search = searchQuery.trim();
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
 
       const [data, sum] = await Promise.all([getEnquiries(params), getEnquirySummary()]);
+      if (version !== fetchRevision.current) return;
+      if (page > Math.max(1, data.totalPages || 1)) { setPage(Math.max(1, data.totalPages || 1)); return; }
       setEnquiries(data.enquiries || []);
       setTotal(data.total || 0);
       setTotalPages(data.totalPages || 1);
       setSummary(sum || {});
     } catch (err) {
-      setError(err.response?.data?.message || err.friendlyMessage || "Failed to load enquiries.");
+      if (version === fetchRevision.current) setError(err.response?.data?.message || err.friendlyMessage || "Failed to load enquiries.");
     } finally {
-      if (!silent) setLoading(false);
+      if (version === fetchRevision.current) setLoading(false);
     }
-  }, [page, tempFilter, statusFilter, searchQuery]);
+  }, [page, tempFilter, statusFilter, debouncedSearch]);
 
   useEffect(() => {
     fetchEnquiries();
+    const revision = fetchRevision;
+    return () => { revision.current++; };
   }, [fetchEnquiries]);
 
   // Any successful write anywhere in the app emits `data_changed`; refresh the
@@ -188,20 +221,6 @@ export default function WAEnquiries() {
       socket.off("data_changed", handleChange);
     };
   }, [fetchEnquiries]);
-
-  useEffect(() => {
-    setPage(1);
-    // Keep the URL in sync so a filtered view can be shared or bookmarked.
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (tempFilter === "all") next.delete("temp");
-        else next.set("temp", tempFilter);
-        return next;
-      },
-      { replace: true }
-    );
-  }, [tempFilter, statusFilter, searchQuery, setSearchParams]);
 
   const openCreate = () => {
     setFormData(EMPTY_FORM);
@@ -227,6 +246,7 @@ export default function WAEnquiries() {
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+    if (formLoading || !editable) return;
     if (!formData.name.trim()) {
       setFormError("Name is required.");
       return;
@@ -252,7 +272,7 @@ export default function WAEnquiries() {
   };
 
   const handleTempChange = async (row, temperature) => {
-    if (row.temperature === temperature || busyId) return;
+    if (row.temperature === temperature || busyId !== null || !editable) return;
     setBusyId(row.id);
     try {
       await updateEnquiry(row.id, { temperature });
@@ -268,7 +288,7 @@ export default function WAEnquiries() {
 
   const handleConvert = async () => {
     const target = convertTarget;
-    if (!target) return;
+    if (!target || busyId !== null || !editable) return;
     setBusyId(target.id);
     try {
       const result = await convertEnquiry(target.id);
@@ -290,7 +310,7 @@ export default function WAEnquiries() {
 
   const handleDelete = async () => {
     const target = confirmDelete;
-    if (!target) return;
+    if (!target || busyId !== null || !canDelete) return;
     setBusyId(target.id);
     try {
       await deleteEnquiry(target.id);
@@ -305,19 +325,19 @@ export default function WAEnquiries() {
   };
 
   const kpis = [
-    { key: "total", label: "Total Enquiries", value: summary.total, icon: Inbox, color: "#059669" },
-    { key: "new", label: "New / Unrated", value: summary.new, icon: CircleDot, color: "#64748b" },
-    { key: "cold", label: "Cold", value: summary.cold, icon: Snowflake, color: "#2563eb" },
-    { key: "warm", label: "Warm", value: summary.warm, icon: Sun, color: "#d97706" },
-    { key: "hot", label: "Hot", value: summary.hot, icon: Flame, color: "#dc2626" },
-    { key: "converted", label: "Converted", value: summary.converted, icon: UserCheck, color: "#059669" },
+    { key: "total", label: "Total enquiries", value: summary.total },
+    { key: "new", label: "New / Unrated", value: summary.new },
+    { key: "cold", label: "Cold", value: summary.cold },
+    { key: "warm", label: "Warm", value: summary.warm },
+    { key: "hot", label: "Hot", value: summary.hot },
+    { key: "converted", label: "Converted", value: summary.converted },
   ];
 
   return (
-    <div className="hl-page wa-enquiries-page crm-layout-content p-3 sm:p-6 w-full max-w-7xl mx-auto space-y-4">
+    <div className="emp-surface emp-page crm-ops crm-enquiries-page" aria-label="Enquiries">
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-5 right-5 z-[9999] animate-bounce-short">
+        <div className="crm-toast" role={toast.type === "error" ? "alert" : "status"}>
           <div
             className={`hl-card flex items-center gap-3 px-4 py-3 shadow-xl ${
               toast.type === "error"
@@ -332,7 +352,7 @@ export default function WAEnquiries() {
               <CheckCircle2 size={18} className="text-emerald-600" />
             )}
             <span className="text-xs font-semibold">{toast.message}</span>
-            <button onClick={() => setToast(null)} className="ml-2 text-gray-500 hover:text-gray-800">
+            <button onClick={() => setToast(null)} aria-label="Dismiss notification" className="emp-btn emp-btn-ghost">
               <X size={14} />
             </button>
           </div>
@@ -342,136 +362,112 @@ export default function WAEnquiries() {
       <WAWorkspaceGuide section="enquiries" />
 
       {/* Page header */}
-      <div className="hl-commandbar p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center font-bold"
-              style={{ background: "rgba(217, 119, 6, 0.15)", color: "#d97706" }}
-            >
-              <Inbox size={18} />
-            </div>
-            <h1 className="hl-title text-xl sm:text-2xl" style={{ margin: 0 }}>
-              Enquiries &amp; lead triage
-            </h1>
-          </div>
-          <p className="text-xs sm:text-sm" style={{ color: "var(--color-ink-2)", margin: 0 }}>
-            Rate every enquiry cold, warm or hot — then convert the ready ones straight into CRM clients.
-          </p>
+      <header className="emp-head">
+        <div className="emp-head-copy">
+          <h1 className="emp-title">Enquiries</h1>
+          <p className="emp-sub">Triage incoming interest. Turn ready leads into clients.</p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="emp-head-actions">
           <button
             onClick={() => fetchEnquiries()}
             disabled={loading}
-            className="hl-btn-secondary"
-            style={{ fontSize: 13, height: 38 }}
+            className="emp-btn"
             title="Refresh enquiries"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-            <span className="hidden sm:inline">Refresh</span>
+            <span>Refresh</span>
           </button>
           <button
             onClick={openCreate}
-            className="hl-btn-primary"
-            style={{
-              fontSize: 13,
-              height: 38,
-              background: "linear-gradient(135deg, #d97706 0%, #ea580c 100%)",
-              borderColor: "#b45309",
-            }}
+            disabled={!editable}
+            title={!editable ? "You have read-only enquiry access" : "Add a new enquiry"}
+            className="emp-btn emp-btn-primary"
           >
             <Plus size={15} />
-            <span>+ Add Enquiry</span>
+            <span>Add enquiry</span>
           </button>
         </div>
-      </div>
+      </header>
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      <div className="emp-kpis crm-enquiry-stats" role="group" aria-label="Enquiry overview filters">
         {kpis.map((k) => {
-          const Icon = k.icon;
           return (
-            <div key={k.key} className="hl-card p-4 flex flex-col justify-between">
-              <div
-                className="flex items-center justify-between text-xs font-semibold"
-                style={{ color: "var(--color-ink-2)" }}
-              >
-                <span>{k.label}</span>
-                <Icon size={15} style={{ color: k.color }} />
-              </div>
-              <div className="mt-2">
-                <span className="text-2xl font-bold" style={{ color: "var(--color-ink)" }}>
-                  {Number(k.value || 0)}
-                </span>
-              </div>
-            </div>
+            <button type="button" key={k.key} className="emp-kpi"
+              aria-pressed={k.key === "converted" ? statusFilter === "converted" : statusFilter === "all" && tempFilter === (k.key === "total" ? "all" : k.key)}
+              onClick={() => { setStatusFilter(k.key === "converted" ? "converted" : "all"); changeTemperatureFilter(TEMP_ORDER.includes(k.key) ? k.key : "all"); }}>
+              <span>{k.label}</span><strong>{loading ? "…" : Number(k.value || 0).toLocaleString("en-IN")}</strong>
+            </button>
           );
         })}
       </div>
 
       {/* Search + temperature filter */}
-      <div className="hl-card p-3 flex flex-col sm:flex-row items-center gap-3">
-        <div className="relative flex-1 w-full">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+      <div className="crm-enquiry-filters">
+        <label className="crm-enquiry-search">Search enquiries
+        <div className="crm-search-wrap">
+          <Search size={15} aria-hidden="true" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by name, phone, email or company..."
-            className="hl-input w-full pl-9"
-            style={{ height: 38, fontSize: 13 }}
+            className="emp-field"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              aria-label="Clear search"
             >
               <X size={14} />
             </button>
           )}
         </div>
+        </label>
 
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <div className="crm-filter-selects">
           {/* Temperature filter — the cold / warm / hot dropdown */}
-          <select
+          <label>Temperature<select
             value={tempFilter}
-            onChange={(e) => setTempFilter(e.target.value)}
-            className="hl-input w-full sm:w-auto"
-            style={{ height: 38, fontSize: 13, minWidth: 170 }}
+            onChange={(e) => changeTemperatureFilter(e.target.value)}
+            className="emp-field"
             aria-label="Filter by lead temperature"
           >
-            <option value="all">🌡️ All Temperatures</option>
-            <option value="new">⬜ New / Unrated</option>
-            <option value="cold">❄️ Cold</option>
-            <option value="warm">☀️ Warm</option>
-            <option value="hot">🔥 Hot</option>
-          </select>
+            <option value="all">All temperatures</option>
+            <option value="new">New / Unrated</option>
+            <option value="cold">Cold</option>
+            <option value="warm">Warm</option>
+            <option value="hot">Hot</option>
+          </select></label>
 
-          <select
+          <label>Status<select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="hl-input w-full sm:w-auto"
-            style={{ height: 38, fontSize: 13, minWidth: 140 }}
+            onChange={(e) => { setPage(1); setStatusFilter(e.target.value); }}
+            className="emp-field"
             aria-label="Filter by status"
           >
             <option value="all">All Statuses</option>
             <option value="open">Open Only</option>
             <option value="converted">Converted</option>
             <option value="lost">Lost</option>
-          </select>
+          </select></label>
         </div>
       </div>
 
       {error && (
-        <div className="hl-card p-4 border-red-300 bg-red-50 text-red-800 text-sm flex items-center gap-2">
+        <div className="emp-banner emp-banner-error" role="alert">
           <AlertCircle size={16} className="text-red-600 shrink-0" />
           <span>{error}</span>
+          <button type="button" className="emp-btn" onClick={() => fetchEnquiries()}>Retry</button>
         </div>
       )}
 
       {/* Enquiries table */}
-      <div className="hl-card overflow-hidden">
+      <div className="crm-enquiry-table" aria-busy={loading}>
+        <div className="crm-enquiry-summary"><div><h2>Lead pipeline</h2><p role="status">{loading ? "Updating enquiries…" : `${total.toLocaleString("en-IN")} ${total === 1 ? "enquiry" : "enquiries"} in this view`}</p></div>
+          {(tempFilter !== "all" || statusFilter !== "all" || searchQuery) && <button type="button" className="emp-btn" onClick={resetFilters}>Reset filters</button>}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs" style={{ borderCollapse: "collapse" }}>
             <thead>
@@ -503,20 +499,17 @@ export default function WAEnquiries() {
                 </tr>
               )}
 
-              {!loading && enquiries.length === 0 && (
+              {!loading && !error && enquiries.length === 0 && (
                 <tr>
                   <td colSpan={7} style={{ padding: "44px 14px", textAlign: "center" }}>
                     <Inbox size={26} className="mx-auto text-gray-300 mb-2" />
                     <p className="text-sm font-semibold text-gray-600 m-0">
-                      {tempFilter !== "all"
-                        ? `No ${TEMP_META[tempFilter]?.label.toLowerCase()} enquiries`
-                        : "No enquiries yet"}
+                      {tempFilter !== "all" || statusFilter !== "all" || debouncedSearch ? "No enquiries match your filters" : "No enquiries yet"}
                     </p>
                     <p className="text-[11px] text-gray-500 mt-1 mb-0">
-                      {tempFilter !== "all"
-                        ? "Try another temperature, or add a new enquiry."
-                        : "Add your first enquiry to start triaging leads."}
+                      {tempFilter !== "all" || statusFilter !== "all" || debouncedSearch ? "Reset the filters or try a different search." : "New enquiries will appear here for triage."}
                     </p>
+                    {(tempFilter !== "all" || statusFilter !== "all" || debouncedSearch) && <button type="button" className="emp-btn mt-3" onClick={resetFilters}>Clear filters</button>}
                   </td>
                 </tr>
               )}
@@ -531,7 +524,7 @@ export default function WAEnquiries() {
                     style={{ borderBottom: "1px solid var(--color-rule, #eef2f7)" }}
                     className="hover:bg-slate-50/60 transition"
                   >
-                    <td style={{ padding: "12px 14px" }}>
+                    <td data-label="Enquiry" style={{ padding: "12px 14px" }}>
                       <div className="font-semibold text-[13px] text-gray-900">{row.name}</div>
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-ink-2,#64748b)] mt-0.5">
                         {enquiryTypeLabel(row.enquiry_type)}
@@ -542,7 +535,7 @@ export default function WAEnquiries() {
                         </div>
                       )}
                     </td>
-                    <td style={{ padding: "12px 14px" }}>
+                    <td data-label="Contact" style={{ padding: "12px 14px" }}>
                       {row.phone && (
                         <div className="flex items-center gap-1.5 text-[12px] text-gray-700">
                           <Phone size={12} className="text-gray-400 shrink-0" />
@@ -556,7 +549,7 @@ export default function WAEnquiries() {
                         </div>
                       )}
                     </td>
-                    <td style={{ padding: "12px 14px" }}>
+                    <td data-label="Company" style={{ padding: "12px 14px" }}>
                       {row.company ? (
                         <div className="flex items-center gap-1.5 text-[12px] text-gray-700">
                           <Building size={12} className="text-gray-400 shrink-0" />
@@ -566,13 +559,13 @@ export default function WAEnquiries() {
                         <span className="text-gray-300">—</span>
                       )}
                     </td>
-                    <td style={{ padding: "12px 14px" }}>
+                    <td data-label="Temperature" style={{ padding: "12px 14px" }}>
                       <div className="flex items-center gap-1.5">
                         <TempIcon size={13} style={{ color: temp.color }} />
                         <select
                           value={row.temperature}
                           onChange={(e) => handleTempChange(row, e.target.value)}
-                          disabled={busyId === row.id || row.status === "converted"}
+                          disabled={busyId !== null || row.status === "converted" || !editable}
                           className={`${temp.badge} cursor-pointer`}
                           style={{ height: 26, fontSize: 11, color: temp.color, background: temp.bg, border: "none" }}
                           aria-label={`Temperature for ${row.name}`}
@@ -585,26 +578,27 @@ export default function WAEnquiries() {
                         </select>
                       </div>
                     </td>
-                    <td style={{ padding: "12px 14px" }}>
+                    <td data-label="Status" style={{ padding: "12px 14px" }}>
                       <span className={status.badge} style={{ fontSize: 11 }}>
                         {status.label}
                       </span>
                     </td>
-                    <td style={{ padding: "12px 14px", color: "var(--color-ink-2)" }}>
+                    <td data-label="Added" style={{ padding: "12px 14px", color: "var(--color-ink-2)" }}>
                       {row.created_at ? String(row.created_at).slice(0, 10) : "—"}
                     </td>
-                    <td style={{ padding: "12px 14px" }}>
-                      <div className="flex items-center justify-end gap-1.5">
-                        {row.status !== "converted" && (
+                    <td data-label="Actions" style={{ padding: "12px 14px" }}>
+                      <div className="crm-row-actions flex items-center justify-end gap-1.5">
+                        {editable && row.status !== "converted" && (
                           <button
                             onClick={() => setConvertTarget(row)}
                             disabled={busyId === row.id}
                             className="hl-badge hl-badge-success cursor-pointer"
                             style={{ fontSize: 11 }}
                             title="Add this lead to the CRM clients list"
+                            aria-label={`Convert ${row.name} to client`}
                           >
                             <UserCheck size={12} />
-                            <span className="hidden md:inline">Convert to Client</span>
+                            <span>Convert</span>
                           </button>
                         )}
                         {row.status === "converted" && row.converted_client_id && (
@@ -619,20 +613,24 @@ export default function WAEnquiries() {
                             <ExternalLink size={10} />
                           </Link>
                         )}
-                        <button
+                        {editable && <button
                           onClick={() => openEdit(row)}
                           className="hl-badge cursor-pointer"
                           style={{ fontSize: 11 }}
                           title="Edit enquiry"
+                          aria-label={`Edit ${row.name}`}
+                          disabled={busyId !== null}
                         >
                           <Edit2 size={12} />
-                        </button>
+                        </button>}
                         {canDelete && (
                           <button
                             onClick={() => setConfirmDelete(row)}
                             className="hl-badge hl-badge-error cursor-pointer"
                             style={{ fontSize: 11 }}
                             title="Delete enquiry"
+                            aria-label={`Delete ${row.name}`}
+                            disabled={busyId !== null}
                           >
                             <Trash2 size={12} />
                           </button>
@@ -649,12 +647,12 @@ export default function WAEnquiries() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
             <span className="text-[11px]" style={{ color: "var(--color-ink-2)" }}>
-              {total} enquiry{total === 1 ? "" : "ies"} · page {page} of {totalPages}
+              {total} {total === 1 ? "enquiry" : "enquiries"} · page {page} of {totalPages}
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
+                disabled={page <= 1 || loading}
                 className="hl-btn-secondary"
                 style={{ fontSize: 12, height: 30 }}
               >
@@ -662,7 +660,7 @@ export default function WAEnquiries() {
               </button>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
+                disabled={page >= totalPages || loading}
                 className="hl-btn-secondary"
                 style={{ fontSize: 12, height: 30 }}
               >
@@ -700,6 +698,8 @@ export default function WAEnquiries() {
               </div>
               <button
                 type="button"
+                aria-label="Close enquiry form"
+                disabled={formLoading}
                 onClick={() => {
                   setShowCreateModal(false);
                   setEditEnquiry(null);
@@ -713,19 +713,21 @@ export default function WAEnquiries() {
             <form onSubmit={handleFormSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="p-5 space-y-4 flex-1 overflow-y-auto wa-custom-scrollbar overscroll-contain">
                 {formError && (
-                  <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
+                  <div role="alert" className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
                     <AlertCircle size={15} className="shrink-0 text-red-700" />
                     <span>{formError}</span>
                   </div>
                 )}
 
                 <div>
-                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Name *</label>
+                  <label htmlFor="enquiry-name" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Name *</label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                       <Users size={15} />
                     </div>
                     <input
+                      id="enquiry-name"
+                      maxLength={255}
                       type="text"
                       required
                       value={formData.name}
@@ -738,12 +740,14 @@ export default function WAEnquiries() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Phone</label>
+                    <label htmlFor="enquiry-phone" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Phone</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                         <Phone size={15} />
                       </div>
                       <input
+                        id="enquiry-phone"
+                        maxLength={30}
                         type="tel"
                         value={formData.phone}
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -753,12 +757,14 @@ export default function WAEnquiries() {
                     </div>
                   </div>
                   <div>
-                    <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Email</label>
+                    <label htmlFor="enquiry-email" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Email</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                         <Mail size={15} />
                       </div>
                       <input
+                        id="enquiry-email"
+                        maxLength={255}
                         type="email"
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -770,10 +776,11 @@ export default function WAEnquiries() {
                 </div>
 
                 <div>
-                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                  <label htmlFor="enquiry-type" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
                     Enquiry type
                   </label>
                   <select
+                    id="enquiry-type"
                     value={formData.enquiry_type || "general"}
                     onChange={(e) => setFormData({ ...formData, enquiry_type: e.target.value })}
                     className="hl-select w-full"
@@ -787,12 +794,14 @@ export default function WAEnquiries() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Company</label>
+                    <label htmlFor="enquiry-company" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Company</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                         <Building size={15} />
                       </div>
                       <input
+                        id="enquiry-company"
+                        maxLength={255}
                         type="text"
                         value={formData.company}
                         onChange={(e) => setFormData({ ...formData, company: e.target.value })}
@@ -802,10 +811,11 @@ export default function WAEnquiries() {
                     </div>
                   </div>
                   <div>
-                    <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                    <label htmlFor="enquiry-temperature" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
                       Lead Temperature
                     </label>
                     <select
+                      id="enquiry-temperature"
                       value={formData.temperature}
                       onChange={(e) => setFormData({ ...formData, temperature: e.target.value })}
                       className="hl-select w-full"
@@ -821,10 +831,12 @@ export default function WAEnquiries() {
                 </div>
 
                 <div>
-                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
+                  <label htmlFor="enquiry-message" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
                     What did they ask for?
                   </label>
                   <textarea
+                    id="enquiry-message"
+                    maxLength={10000}
                     value={formData.message}
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                     className="hl-input w-full p-3 text-sm"
@@ -834,8 +846,10 @@ export default function WAEnquiries() {
                 </div>
 
                 <div>
-                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Notes</label>
+                  <label htmlFor="enquiry-notes" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Notes</label>
                   <textarea
+                    id="enquiry-notes"
+                    maxLength={10000}
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                     className="hl-input w-full p-3 text-sm"
@@ -848,6 +862,7 @@ export default function WAEnquiries() {
               <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-end gap-2 shrink-0 bg-slate-50/60">
                 <button
                   type="button"
+                  disabled={formLoading}
                   onClick={() => {
                     setShowCreateModal(false);
                     setEditEnquiry(null);
@@ -905,7 +920,7 @@ export default function WAEnquiries() {
             </div>
 
             <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-end gap-2 bg-slate-50/60">
-              <button onClick={() => setConvertTarget(null)} className="hl-btn-secondary" style={{ fontSize: 13, height: 38 }}>
+              <button disabled={busyId !== null} onClick={() => setConvertTarget(null)} className="hl-btn-secondary" style={{ fontSize: 13, height: 38 }}>
                 Cancel
               </button>
               <button
@@ -925,6 +940,7 @@ export default function WAEnquiries() {
       {convertResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm">
           <div
+            ref={resultDialog}
             role="dialog"
             aria-modal="true"
             aria-label="Conversion result"
@@ -988,7 +1004,7 @@ export default function WAEnquiries() {
               </p>
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-end gap-2 bg-slate-50/60">
-              <button onClick={() => setConfirmDelete(null)} className="hl-btn-secondary" style={{ fontSize: 13, height: 38 }}>
+              <button disabled={busyId !== null} onClick={() => setConfirmDelete(null)} className="hl-btn-secondary" style={{ fontSize: 13, height: 38 }}>
                 Cancel
               </button>
               <button
@@ -1004,15 +1020,6 @@ export default function WAEnquiries() {
         </div>
       )}
 
-      {/* Floating mobile add button */}
-      <button
-        onClick={openCreate}
-        className="md:hidden fixed bottom-20 right-4 z-40 w-12 h-12 rounded-full shadow-xl flex items-center justify-center text-white"
-        style={{ background: "linear-gradient(135deg, #d97706 0%, #ea580c 100%)" }}
-        aria-label="Add enquiry"
-      >
-        <Plus size={22} />
-      </button>
     </div>
   );
 }

@@ -4,13 +4,14 @@ import axios from "axios";
 import Signup from "./signup";
 import {confirmBrowserSession} from "./browserSession";
 const mockLogin=jest.fn(),mockNavigate=jest.fn();
+let mockSearch = "?plan=growth";
 jest.mock("axios",()=>({get:jest.fn(),post:jest.fn()}));
 jest.mock("./AuthContext",()=>({useAuth:()=>({login:mockLogin})}));
 jest.mock("./demoSession",()=>({startDirectDemoSession:jest.fn()}));
 jest.mock("./browserSession",()=>({confirmBrowserSession:jest.fn(async data=>data)}));
-jest.mock("react-router-dom",()=>({Link:({to,children,...props})=><a href={to} {...props}>{children}</a>,useNavigate:()=>mockNavigate,useLocation:()=>({search:"?plan=growth"})}));
+jest.mock("react-router-dom",()=>({Link:({to,children,...props})=><a href={to} {...props}>{children}</a>,useNavigate:()=>mockNavigate,useLocation:()=>({search:mockSearch})}));
 const catalog=[{id:"free",name:"Free",price_inr:0,max_senders:1,max_branches:1,max_seats:2,features:[]},{id:"growth",name:"Growth",price_inr:3999,max_senders:3,max_branches:3,max_seats:15,features:["Verified paid feature"]}];
-beforeEach(()=>{jest.clearAllMocks();confirmBrowserSession.mockReset().mockImplementation(async data=>data);axios.get.mockImplementation(async url=>({data:url.endsWith("/health")?{ok:true,sharedInboxReady:true,dbEngine:"mysql"}:{success:true,plans:catalog}}));});
+beforeEach(()=>{jest.clearAllMocks();mockSearch="?plan=growth";confirmBrowserSession.mockReset().mockImplementation(async data=>data);axios.get.mockImplementation(async url=>({data:url.endsWith("/health")?{ok:true,sharedInboxReady:true,dbEngine:"mysql"}:{success:true,plans:catalog}}));});
 function identity(){
   fireEvent.change(screen.getByLabelText(/Organization Legal Name/),{target:{value:"New workspace"}});
   fireEvent.change(screen.getByLabelText(/First Name/),{target:{value:"New owner"}});
@@ -49,4 +50,43 @@ test("blocked cookie sessions do not publish a logged-in profile or redirect",as
   confirmBrowserSession.mockRejectedValueOnce(Object.assign(new Error("Session could not be saved"),{friendlyMessage:"Session could not be saved"}));
   render(<Signup/>);identity();const submit=await screen.findByRole("button",{name:/Create account.*continue to payment/});await waitFor(()=>expect(submit.disabled).toBe(false));fireEvent.click(submit);
   await screen.findByText("Session could not be saved");expect(mockLogin).not.toHaveBeenCalled();expect(mockNavigate).not.toHaveBeenCalled();
+});
+
+test("an invited employee activates inside the organization and branch verified from the code", async () => {
+  mockSearch = "?tab=access_code&code=WA-FIXTURE";
+  const user = { id: 14, role: "employee", tenant_id: 7, branch_id: 9 };
+  axios.post.mockImplementation(async url => ({ data: url.endsWith("verify-access-code")
+    ? { valid: true, email: "staff@fixture.test", first_name: "Staff", role: "employee", tenant_name: "Inviting company", branch_name: "Regional office", requires_activation: true }
+    : { cookieSession: true, user, nextPath: "/whatsapp" } }));
+  render(<Signup />);
+  await screen.findByText("Valid Access Code for Inviting company");
+  fireEvent.change(screen.getByLabelText("Set Personal Password *"), { target: { value: "employee-password" } });
+  fireEvent.change(screen.getByLabelText("Confirm Password *"), { target: { value: "employee-password" } });
+  fireEvent.click(screen.getByRole("button", { name: "Activate account & open workspace" }));
+  await waitFor(() => expect(mockLogin).toHaveBeenCalledWith(expect.objectContaining({ ...user, active_tenant_id: 7, active_branch_id: 9 })));
+  expect(mockNavigate).toHaveBeenCalledWith("/whatsapp", { replace: true });
+  expect(axios.post).toHaveBeenCalledWith(expect.stringMatching(/join-with-access-code$/), expect.objectContaining({ access_code: "WA-FIXTURE", email: "staff@fixture.test", password: "employee-password" }), expect.anything());
+});
+
+test("active employees sign in with their existing password without a password-reset form", async () => {
+  mockSearch = "?tab=access_code&code=WA-ACTIVE";
+  axios.post.mockImplementation(async url => ({ data: url.endsWith("verify-access-code")
+    ? { valid: true, email: "staff@fixture.test", first_name: "Staff", role: "employee", tenant_name: "Inviting company", branch_name: "Regional office", requires_activation: false }
+    : { cookieSession: true, user: { id: 14, role: "employee", tenant_id: 7, branch_id: 9 }, nextPath: "/whatsapp" } }));
+  render(<Signup />);
+  await screen.findByLabelText("Your Existing Password *");
+  expect(screen.queryByLabelText("Confirm Password *")).toBeNull();
+  fireEvent.change(screen.getByLabelText("Your Existing Password *"), { target: { value: "existing-password" } });
+  fireEvent.click(screen.getByRole("button", { name: "Sign in to your organization" }));
+  await waitFor(() => expect(mockLogin).toHaveBeenCalled());
+  expect(mockLogin.mock.calls[0][0].role).toBe("employee");
+});
+
+test("invalid invitations explain the failure and cannot submit employee activation", async () => {
+  mockSearch = "?tab=access_code&code=WA-REVOKED";
+  axios.post.mockRejectedValue({ response: { status: 403, data: { message: "Your organization membership is not active." } } });
+  render(<Signup />);
+  await screen.findByText("Your organization membership is not active.");
+  expect(screen.getByRole("button", { name: "Activate account & open workspace" }).disabled).toBe(true);
+  expect(mockLogin).not.toHaveBeenCalled();
 });

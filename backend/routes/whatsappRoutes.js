@@ -15,6 +15,63 @@ router.use(async (req, res, next) => {
   } catch (_) { res.status(503).json({ error: "Session access could not be verified" }); }
 });
 const { messageSendLimiter, qrRefreshLimiter, sessionResetThrottle } = require("../middleware/waRateLimiter");
+const memberChat = require("../services/memberChat");
+
+/**
+ * Assigned-chat boundary for organization members.
+ *
+ * Administrators are untouched. A member reaches the Live Chats page with the
+ * engine answering as their organization's business session, but every request
+ * that names a chat must resolve to a conversation the member owns. The check
+ * runs here, once, so a new route cannot forget it: `chatTarget` reads the id
+ * from params/body/query and a missing assignment fails closed.
+ */
+router.use(async (req, res, next) => {
+  if (memberChat.isWorkspaceAdmin(req)) return next();
+
+  const level = memberChat.chatLevel(req);
+  if (!level) {
+    return res.status(403).json({
+      code: "CHAT_FORBIDDEN",
+      error: "Your organization has not granted you inbox access.",
+    });
+  }
+  if (level === "read" && !["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+    return res.status(403).json({
+      code: "CHAT_READ_ONLY",
+      error: "Your organization granted read-only inbox access, so nothing was sent.",
+    });
+  }
+
+  const target = memberChat.chatTarget(req);
+  if (!target) return next();
+
+  try {
+    const access = await memberChat.assertChat(req, target);
+    req.memberChat = {
+      ...access,
+      sessionKey: await memberChat.sessionKeyForPhone(req, target),
+    };
+    next();
+  } catch (err) {
+    res.status(err.status || 403).json({ code: err.code, error: err.message });
+  }
+});
+
+/**
+ * The multipart send route parses its body inside the handler, after the
+ * router-level check above has already run with an empty body. This repeats
+ * the assignment check once `chatId` exists, so a member cannot attach a file
+ * to a conversation that is not theirs.
+ */
+async function assertMemberChatBody(req, chatId) {
+  if (memberChat.isWorkspaceAdmin(req)) return;
+  const access = await memberChat.assertChat(req, chatId);
+  req.memberChat = {
+    ...access,
+    sessionKey: await memberChat.sessionKeyForPhone(req, chatId),
+  };
+}
 
 const toDataUrl = async (qr) => {
   if (!qr) return null;
@@ -42,10 +99,23 @@ const upload = multer({
 // own session was not ready. That is how a message typed by one user went out
 // from another user's WhatsApp number with no warning. There is now no
 // substitution: you send from your own number or the send fails.
+//
+// Members have no number of their own. Their chat is already proven to belong
+// to them, so the session that carries it is the business number's session,
+// resolved by name from the chat's own history in `memberChat`.
 const s = (req) => {
+  if (req.memberChat?.sessionKey) return mgr.get(req.memberChat.sessionKey);
   const reqKey = req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id;
   if (reqKey) return mgr.get(reqKey);
   return mgr.default();
+};
+
+// The key that owns the outbound log row. Administrators record under their own
+// session; a member's reply is recorded under the business session so the whole
+// team sees it in the shared history.
+const logSessionKey = (req) => {
+  if (req.memberChat?.sessionKey) return String(req.memberChat.sessionKey);
+  return String(req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || mgr.defaultKey);
 };
 
 // Same rule for auth/lifecycle routes (QR, pairing, logout, reset): never hand
@@ -75,10 +145,54 @@ const requireReadySession = (req, res) => {
 
 const { configureForUser } = require("../services/waConfigHelper");
 
+/**
+ * Members read the organization's chat readiness, never its session controls.
+ *
+ * `connected` is true whenever the member has assigned conversations to read;
+ * it does not claim a live socket. If nothing can carry a reply, the send
+ * endpoint answers with its own explicit "not connected" error instead of the
+ * page locking the member out of their own history.
+ */
+async function memberChatStatus(req) {
+  const key = await memberChat.orgSessionKey(req);
+  const session = key ? mgr.get(key) : null;
+  const web = Boolean(session?.ready);
+  let cloudConfigured = false;
+  try {
+    const cloud = await require("../services/waConfigHelper").cloudClientForUser(req.user.id);
+    cloudConfigured = cloud.isConfigured();
+  } catch (_) {
+    cloudConfigured = false;
+  }
+  return {
+    session,
+    web,
+    cloudConfigured,
+    status: {
+      connected: true,
+      isCloud: cloudConfigured,
+      isWeb: web,
+      phone: session?.phone || null,
+      activeEngine:
+        cloudConfigured && web
+          ? "Dual (Cloud API + Web)"
+          : cloudConfigured
+          ? "Meta Cloud API"
+          : web
+          ? "WhatsApp Web Session"
+          : "Assigned conversations",
+      memberView: true,
+      canManageSession: false,
+      senderSessionKey: session ? String(session.key) : null,
+      sendingAsAnotherUser: false,
+    },
+  };
+}
+
 // Cloud sends must appear in the same conversation history as Web sends.
 // Recording errors never turn a confirmed provider send into a retryable failure.
 async function recordCloudSend(req, chatId, phone, messageId, body, type = "text", extra = {}) {
-  const sessionKey = String(req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || mgr.defaultKey);
+  const sessionKey = logSessionKey(req);
   await db.promise().query(
     `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
      VALUES (?, ?, 'outbound', ?, ?, ?, 'sent', NOW())`,
@@ -103,6 +217,10 @@ async function recordCloudSend(req, chatId, phone, messageId, body, type = "text
 }
 
 router.get("/status", async (req, res) => {
+  if (!memberChat.isWorkspaceAdmin(req)) {
+    const { status } = await memberChatStatus(req);
+    return res.json(status);
+  }
   const waCloud = await require("../services/waConfigHelper").cloudClientForUser(req.user.id);
   if (req.user?.id) {
     await configureForUser(req.user.id).catch(() => {});
@@ -135,6 +253,14 @@ router.get("/status", async (req, res) => {
 });
 
 router.get("/unified-status", async (req, res) => {
+  if (!memberChat.isWorkspaceAdmin(req)) {
+    const { status, web, cloudConfigured } = await memberChatStatus(req);
+    return res.json({
+      ...status,
+      web: { connected: web, hasQr: false, qr: null, initializing: false, phone: status.phone },
+      cloud: { configured: cloudConfigured },
+    });
+  }
   if (req.user?.id) {
     await configureForUser(req.user.id).catch(() => {});
   }
@@ -197,6 +323,19 @@ router.get("/diagnostics", async (req, res) => {
 
 router.get("/account", async (req, res) => {
   try {
+    if (!memberChat.isWorkspaceAdmin(req)) {
+      const { session, web, cloudConfigured } = await memberChatStatus(req);
+      const details = session?.ready ? await session.getAccountDetails().catch(() => null) : null;
+      return res.json({
+        ...(details || {}),
+        connected: Boolean(web || cloudConfigured),
+        isCloud: cloudConfigured,
+        isWeb: web,
+        phone: details?.phone || session?.phone || null,
+        memberView: true,
+        canManageSession: false,
+      });
+    }
     const waCloud = await require("../services/waConfigHelper").cloudClientForUser(req.user.id);
     if (req.user?.id) {
       await configureForUser(req.user.id).catch(() => {});
@@ -397,6 +536,13 @@ router.get("/pairing-code", async (req, res) => {
 
 router.get("/chats", async (req, res) => {
   try {
+    if (!memberChat.isWorkspaceAdmin(req)) {
+      // The live cache belongs to the business session and is only read here;
+      // the assigned rows themselves always come from the database.
+      const key = await memberChat.orgSessionKey(req);
+      const liveChats = key ? mgr.get(key).chatsCache || [] : [];
+      return res.json(await memberChat.listChats(req, liveChats));
+    }
     const chats = await s(req).getChats(req.query.refresh === "true");
     res.json(chats);
   } catch (err) {
@@ -407,6 +553,11 @@ router.get("/chats", async (req, res) => {
 router.get("/chat/:chatId/messages", async (req, res) => {
   try {
     const limit = req.query.limit || 10;
+    if (!memberChat.isWorkspaceAdmin(req) && !req.memberChat?.sessionKey) {
+      // No business session has ever logged this chat, so serve the stored
+      // history directly instead of the member's (empty) personal session.
+      return res.json(await memberChat.messages(req, req.params.chatId, req.memberChat?.conversationId, limit));
+    }
     const messages = await s(req).getMessages(req.params.chatId, req.query.refresh === "true", limit);
     res.json(messages);
   } catch (err) {
@@ -616,7 +767,7 @@ router.post("/send-interactive", messageSendLimiter, async (req, res) => {
     if (items.some((item) => item.type === "url" && !/^https?:\/\//i.test(item.url || "") || item.type === "call" && !/^\+?[\d\s()-]{7,20}$/.test(item.phone || ""))) {
       return res.status(400).json({ error: "Link and call options need a valid HTTP(S) URL or phone number." });
     }
-    const sessionKey = String(req.headers["x-session-key"] || req.query?.sessionKey || req.user?.id || mgr.defaultKey);
+    const sessionKey = logSessionKey(req);
     let phone = String(chatId).replace(/\D/g, "");
     if (String(chatId).endsWith("@lid")) {
       phone = await s(req).resolveLidToPhone(chatId).catch(() => null);
@@ -1025,6 +1176,11 @@ const privateAttachmentUpload = multer({ storage: multer.memoryStorage(), limits
 router.post("/send-media-upload", messageSendLimiter, privateAttachmentUpload.single("file"), async (req, res) => {
   try {
     if (!req.file || !req.body.chatId) return res.status(400).json({ error: "A file and chat are required." });
+    try {
+      await assertMemberChatBody(req, req.body.chatId);
+    } catch (accessError) {
+      return res.status(accessError.status || 403).json({ code: accessError.code, error: accessError.message });
+    }
     const { chatId, idempotencyKey } = req.body;
     const type = req.body.mediaType || (req.file.mimetype.startsWith("image/") ? "image" : req.file.mimetype.startsWith("video/") ? "video" : req.file.mimetype.startsWith("audio/") ? "audio" : "document");
     const session = s(req);
@@ -1249,6 +1405,13 @@ router.post("/chat/:chatId/ticket-status", async (req, res) => {
 router.get("/chat/:chatId/notes", async (req, res) => {
   try {
     const phone = req.params.chatId.replace(/\D/g, "");
+    if (!memberChat.isWorkspaceAdmin(req)) {
+      const [notes] = await db.promise().query(
+        "SELECT * FROM wa_internal_notes WHERE phone = ? AND (tenant_id = ? OR tenant_id IS NULL) ORDER BY created_at ASC",
+        [phone, req.tenantId]
+      );
+      return res.json(notes);
+    }
     const [notes] = await db.promise().query(
       "SELECT * FROM wa_internal_notes WHERE phone = ? ORDER BY created_at ASC",
       [phone]
@@ -1265,10 +1428,15 @@ router.post("/chat/:chatId/notes", async (req, res) => {
     const phone = req.params.chatId.replace(/\D/g, "");
     if (!note) return res.status(400).json({ error: "Note text required" });
 
-    const [result] = await db.promise().query(
-      "INSERT INTO wa_internal_notes (phone, author_id, author_name, note_text) VALUES (?, ?, ?, ?)",
-      [phone, req.user?.id || 1, authorName, note]
-    );
+    const [result] = memberChat.isWorkspaceAdmin(req)
+      ? await db.promise().query(
+          "INSERT INTO wa_internal_notes (phone, author_id, author_name, note_text) VALUES (?, ?, ?, ?)",
+          [phone, req.user?.id || 1, authorName, note]
+        )
+      : await db.promise().query(
+          "INSERT INTO wa_internal_notes (phone, author_id, author_name, note_text, tenant_id) VALUES (?, ?, ?, ?, ?)",
+          [phone, req.user?.id || 1, authorName, note, req.tenantId]
+        );
 
     res.json({ success: true, noteId: result.insertId, message: "Internal note saved" });
   } catch (err) {

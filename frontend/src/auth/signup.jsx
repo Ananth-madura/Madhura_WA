@@ -92,6 +92,8 @@ export default function Signup() {
   // Access-code join state
   const [accessCode, setAccessCode] = useState("");
   const [verifiedCodeData, setVerifiedCodeData] = useState(null);
+  const [codeError, setCodeError] = useState("");
+  const joiningExisting = verifiedCodeData?.requires_activation === false;
   const [verifyingCode, setVerifyingCode] = useState(false);
 
   // Request Access state
@@ -141,30 +143,36 @@ export default function Signup() {
   // Real-time verification of Access Code
   useEffect(() => {
     const cleanCode = accessCode.trim().toUpperCase();
+    setCodeError("");
     if (cleanCode.length >= 6) {
       let cancelled = false;
+      setVerifiedCodeData(null);
       setVerifyingCode(true);
-      axios
-        .post(`${API}/api/auth/verify-access-code`, { access_code: cleanCode }, { timeout: 6000 })
-        .then((res) => {
-          if (!cancelled && res.data?.valid) {
-            setVerifiedCodeData(res.data);
-            if (res.data.email) setEmail(current=>current||res.data.email);
-            if (res.data.first_name) setFirstName(current=>current||res.data.first_name);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) setVerifiedCodeData(null);
-        })
-        .finally(() => {
-          if (!cancelled) setVerifyingCode(false);
-        });
+      const timer = setTimeout(() => {
+        axios
+          .post(`${API}/api/auth/verify-access-code`, { access_code: cleanCode }, { timeout: 6000 })
+          .then((res) => {
+            if (!cancelled && res.data?.valid) {
+              setVerifiedCodeData(res.data);
+              if (res.data.email) setEmail(res.data.email);
+              if (res.data.first_name) setFirstName(res.data.first_name);
+            }
+          })
+          .catch(error => {
+            if (!cancelled) { setVerifiedCodeData(null); setCodeError(error.response?.data?.message || "The access code could not be verified. Check the code and try again."); }
+          })
+          .finally(() => {
+            if (!cancelled) setVerifyingCode(false);
+          });
+      }, 300);
 
       return () => {
         cancelled = true;
+        clearTimeout(timer);
       };
     } else {
       setVerifiedCodeData(null);
+      setVerifyingCode(false);
     }
   }, [accessCode]);
 
@@ -259,6 +267,7 @@ export default function Signup() {
   // Submit Employee Activation with Access Code
   const handleJoinWithAccessCode = async (e) => {
     e?.preventDefault?.();
+    if (loading) return;
     setError("");
 
     const cleanCode = accessCode.trim().toUpperCase();
@@ -269,7 +278,7 @@ export default function Signup() {
     if (!cleanEmail) return setError("Please enter your Work Email.");
     if (!password) return setError("Please set a password for your employee account.");
     if (password.length < 6) return setError("Password must be at least 6 characters long.");
-    if (password !== confirmPassword) return setError("Passwords do not match.");
+    if (!joiningExisting && password !== confirmPassword) return setError("Passwords do not match.");
 
     setLoading(true);
     try {
@@ -295,7 +304,7 @@ export default function Signup() {
           active_branch_id: data.user.branch_id,
           demoMode: false,
         });
-        navigate("/whatsapp", { replace: true });
+        navigate(loginDestination(data), { replace: true });
         return;
       }
 
@@ -954,6 +963,9 @@ export default function Signup() {
                     </div>
                     <input
                       id="join-access-code"
+                      maxLength={100}
+                      aria-invalid={Boolean(codeError)}
+                      aria-describedby={codeError ? "join-code-error" : "join-code-help"}
                       type="text"
                       value={accessCode}
                       onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
@@ -963,9 +975,10 @@ export default function Signup() {
                       autoFocus
                     />
                   </div>
-                  <span className="text-[11px] text-gray-500 block mt-1">
-                    Format: 10-character code provided in your employee onboarding note.
+                  <span id="join-code-help" className="text-[11px] text-gray-500 block mt-1">
+                    Use the code shared by your organization administrator.
                   </span>
+                  {codeError && <p id="join-code-error" role="alert" className="text-sm text-red-700 mt-2">{codeError}</p>}
                 </div>
 
                 <div className="mb-4">
@@ -998,6 +1011,7 @@ export default function Signup() {
                     </div>
                     <input
                       id="join-name"
+                        disabled={joiningExisting}
                       type="text"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
@@ -1010,7 +1024,7 @@ export default function Signup() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-5">
                   <div>
                     <label htmlFor="join-pass" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
-                      Set Personal Password *
+                      {joiningExisting ? "Your Existing Password *" : "Set Personal Password *"}
                     </label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
@@ -1018,6 +1032,7 @@ export default function Signup() {
                       </div>
                       <input
                         id="join-pass"
+                        autoComplete={joiningExisting ? "current-password" : "new-password"}
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -1035,7 +1050,7 @@ export default function Signup() {
                     </div>
                   </div>
 
-                  <div>
+                  {!joiningExisting && <div>
                     <label htmlFor="join-pass-confirm" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
                       Confirm Password *
                     </label>
@@ -1060,12 +1075,12 @@ export default function Signup() {
                         {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                     </div>
-                  </div>
+                  </div>}
                 </div>
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || verifyingCode || !verifiedCodeData}
                   className="hl-btn-primary w-full py-3 px-4 text-sm font-bold flex items-center justify-center gap-2 rounded-xl shadow-sm transition hover:shadow cursor-pointer"
                   style={{
                     background: "linear-gradient(135deg, #059669 0%, #0d9488 100%)",
@@ -1073,11 +1088,11 @@ export default function Signup() {
                   }}
                 >
                   {loading ? (
-                    <span>Activating Employee Account…</span>
+                    <span>{joiningExisting ? "Signing in…" : "Activating employee account…"}</span>
                   ) : (
                     <>
                       <KeyRound size={16} />
-                      <span>Activate Account &amp; Launch WhatsApp</span>
+                      <span>{joiningExisting ? "Sign in to your organization" : "Activate account & open workspace"}</span>
                     </>
                   )}
                 </button>

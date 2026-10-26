@@ -9,9 +9,11 @@ import { createInboxRefreshScheduler } from "../utils/inboxRefreshScheduler";
 import { cachedRecords, requireRecords } from "../utils/apiPayload";
 import { Link } from "react-router-dom";
 import InboxComposeExtras from "./InboxComposeExtras";
+import "../pages/customer-operations.css";
 import { requestKey as newRequestKey } from "../utils/requestKey";
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowUpRight,
   Bot,
   CheckCircle2,
@@ -22,6 +24,7 @@ import {
   Search,
   Send,
   UserPlus,
+  PanelRight,
 } from "lucide-react";
 
 const root = "/api/v2/inbox";
@@ -69,6 +72,11 @@ export default function SharedTeamInbox({ branchId }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [showRecord, setShowRecord] = useState(false);
+  const messagePane = useRef(null);
+  const followMessages = useRef(true);
+  const searchInput = useRef(null);
   const [canManage, setCanManage] = useState(false);
   const [canSend,setCanSend]=useState(false);
   const [employees, setEmployees] = useState([]);
@@ -108,14 +116,15 @@ export default function SharedTeamInbox({ branchId }) {
       }
       else if(active.current){const current=data.conversations.find(row=>row.id===active.current.id);if(current){active.current=current;setSelected(current);}}
     } catch (err) {
+      if (version !== context.current) return;
       setError(errorText(err));
       if ([401,403].includes(err.response?.status)) { active.current=null;setSelected(null);setConversations([]);setMessages([]);setNotes([]);setContact(null);setAssignments([]);clearLocalCache().catch(()=>{}); }
     }
-    finally { setLoading(false); }
+    finally { if (version === context.current) setLoading(false); }
   }, [branchId, filter, query]);
   useEffect(() => { const timer=setTimeout(()=>setQuery(search),300);return()=>clearTimeout(timer); },[search]);
   useEffect(() => {
-    const version = ++context.current; setSelected(null); active.current = null; setMessages([]); setNotes([]); setConversations([]); setContact(null); setAssignments([]);
+    const version = ++context.current; setLoading(true); setCanSend(false); setShowRecord(false); setSelected(null); active.current = null; setMessages([]); setNotes([]); setConversations([]); setContact(null); setAssignments([]);
     const scheduler=createInboxRefreshScheduler({run:refresh,visible:()=>!document.hidden,connected:()=>socket.connected});
     refreshScheduler.current=scheduler;scheduler.request(true);
     const wake=()=>{if(!document.hidden)scheduler.request(true);};
@@ -128,6 +137,7 @@ export default function SharedTeamInbox({ branchId }) {
   }, [canManage, activeTenant?.id]);
   const load = useCallback(async row => {
     const version = context.current;
+    setThreadLoading(true);
     try {
       const [{ data }, noteResult, cached, contactResult, assignmentResult] = await Promise.all([
         api.get(`${root}/conversations/${row.id}/messages`),
@@ -149,8 +159,13 @@ export default function SharedTeamInbox({ branchId }) {
       setAssignments(assignmentResult);
       setAiQuestion((cached||[]).find(message=>!message.isMe&&message.body)?.body||"");
       api.post(`${root}/conversations/${row.id}/read`).catch(() => {});
-    } catch (err) { if (active.current?.id === row.id) { setError(errorText(err)); setMessages([]); setNotes([]); } }
+    } catch (err) { if (version === context.current && active.current?.id === row.id) { setError(errorText(err)); setMessages([]); setNotes([]); } }
+    finally { if (version === context.current && active.current?.id === row.id) setThreadLoading(false); }
   }, []);
+  useEffect(() => {
+    const pane = messagePane.current;
+    if (pane && followMessages.current) pane.scrollTop = pane.scrollHeight;
+  }, [messages]);
   useEffect(() => {
     const receive = event => {
       if (Number(event.tenantId) !== Number(localStorage.getItem("active_tenant_id"))) return;
@@ -176,7 +191,8 @@ export default function SharedTeamInbox({ branchId }) {
     socket.on("inbox_message", receive); socket.on("inbox_changed", receive); socket.on("inbox_access_changed", revoke); socket.on("connect", reconnect);
     return () => { socket.off("inbox_message", receive); socket.off("inbox_changed", receive); socket.off("inbox_access_changed", revoke); socket.off("connect", reconnect); };
   }, [refresh, load, filter]);
-  const select = row => { active.current = row; setSelected(row); setMessages([]); setNotes([]); setContact(null); setAssignments([]); setText(""); load(row); };
+  const select = row => { followMessages.current = true; active.current = row; setSelected(row); setShowRecord(false); setMessages([]); setNotes([]); setContact(null); setAssignments([]); setText(""); setNote(""); setAiQuestion(""); setAssignee(""); load(row); };
+  const backToList = () => { active.current = null; setSelected(null); setShowRecord(false); requestAnimationFrame(() => searchInput.current?.focus()); };
   const download = async message => {
     try {
       const { data } = await api.get(`${root}/conversations/${selected.id}/media/${message.cloudMediaId}`);
@@ -185,7 +201,7 @@ export default function SharedTeamInbox({ branchId }) {
     } catch (err) { setError(errorText(err)); }
   };
   const send = async event => {
-    event.preventDefault(); if (!text.trim() || !selected || busy) return;
+    event.preventDefault(); if (!text.trim() || !selected || busy || !canSend || threadLoading) return;
     const row = selected; setBusy(true); setError("");
     let requestKey;
     try {
@@ -256,15 +272,14 @@ export default function SharedTeamInbox({ branchId }) {
     ? (asDate(selected.service_window_expires_at) > new Date() ? "open" : "closed")
     : null;
 
-  return <section className="emp-surface emp-page" aria-label="Shared team inbox">
+  return <section className="emp-surface emp-page crm-ops crm-inbox-page" aria-label="Shared team inbox">
     <header className="emp-head">
       <div className="emp-head-copy">
-        <p className="emp-eyebrow"><Inbox size={12} aria-hidden="true" /> Shared inbox</p>
         <h1 className="emp-title">Team inbox</h1>
-        <p className="emp-sub">One business number can serve your team. You see the conversations your assignment and role permit. Chat text is cached on this device; customer details, assignments and internal notes are shared.</p>
+        <p className="emp-sub">Reply to assigned conversations and keep your team up to date.</p>
       </div>
       <div className="emp-head-actions">
-        <button type="button" className="emp-btn" onClick={refresh} disabled={loading}>
+        <button type="button" className="emp-btn" onClick={() => { setLoading(true); refresh(); }} disabled={loading}>
           <RefreshCw size={14} className={loading ? "emp-spin" : ""} aria-hidden="true" /> Refresh
         </button>
       </div>
@@ -283,12 +298,14 @@ export default function SharedTeamInbox({ branchId }) {
       <div className="emp-kpi"><dt>Bot managed</dt><dd>{counts.bot}</dd><small>Assistant or flow</small></div>
     </dl>
 
-    <div className="emp-inbox">
+    <div className={`emp-inbox ${selected ? "crm-has-selection" : ""} ${showRecord ? "crm-show-record" : ""}`}>
       <aside className="emp-pane-list" aria-label="Conversations">
         <div className="emp-list-head">
+          <div className="crm-panel-heading"><h2>Conversations</h2><span>{conversations.length} loaded</span></div>
           <div className="emp-search">
             <Search size={14} aria-hidden="true" />
             <input
+              ref={searchInput}
               type="text"
               className="emp-field"
               placeholder="Search contacts"
@@ -297,10 +314,10 @@ export default function SharedTeamInbox({ branchId }) {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <div className="emp-segment" role="tablist" aria-label="Conversation status">
-            <button type="button" role="tab" aria-selected={filter === "open"} onClick={() => setFilter("open")}>Open</button>
-            <button type="button" role="tab" aria-selected={filter === "closed"} onClick={() => setFilter("closed")}>Closed</button>
-            <button type="button" role="tab" aria-selected={filter === "all"} onClick={() => setFilter("all")}>All</button>
+          <div className="emp-segment" role="group" aria-label="Conversation status">
+            <button type="button" aria-pressed={filter === "open"} onClick={() => setFilter("open")}>Open</button>
+            <button type="button" aria-pressed={filter === "closed"} onClick={() => setFilter("closed")}>Closed</button>
+            <button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>All</button>
           </div>
           {canManage && <button type="button" className="emp-btn emp-btn-sm" onClick={rebalance}>
             <UserPlus size={13} aria-hidden="true" /> Assign waiting chats
@@ -335,12 +352,14 @@ export default function SharedTeamInbox({ branchId }) {
       <section className="emp-pane-thread" aria-label="Conversation">
         {selected ? <>
           <header className="emp-thread-head">
+            <button type="button" className="emp-btn crm-mobile-back" onClick={backToList} aria-label="Back to conversations"><ArrowLeft size={18} aria-hidden="true" /></button>
             <span className="emp-avatar" aria-hidden="true">{initials(selected.contact_name || selected.contact_phone)}</span>
             <div className="emp-thread-title">
               <strong>{selected.contact_name || selected.contact_phone}</strong>
               <span>{selected.contact_phone} · via {selected.sender_phone} · {selected.owner_user_id ? `Owner agent ${selected.owner_user_id}` : "Unassigned"}</span>
             </div>
             <div className="emp-thread-actions">
+              <button type="button" className="emp-btn emp-btn-sm crm-record-toggle" aria-expanded={showRecord} aria-controls="inbox-customer-record" onClick={() => setShowRecord(value => !value)}><PanelRight size={15} aria-hidden="true" /> Customer details</button>
               {windowState && <span className={`emp-pill ${windowState === "open" ? "emp-pill-ok" : "emp-pill-warm"}`} title="WhatsApp customer service window">
                 {windowState === "open" ? "Window open" : "Template may be required"}
               </span>}
@@ -353,8 +372,9 @@ export default function SharedTeamInbox({ branchId }) {
           {selected.automation_error && <div className="emp-banner emp-banner-info emp-thread-alert" role="status">
             <Bot size={14} aria-hidden="true" /> <span>Bot paused: {selected.automation_error}</span>
           </div>}
-          <div className="emp-messages">
-            {!messages.length && <p className="emp-list-state">No retained messages on this device yet.</p>}
+          <div className="emp-messages" ref={messagePane} aria-busy={threadLoading} onScroll={event => { const pane = event.currentTarget; followMessages.current = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 100; }}>
+            {threadLoading && <p className="emp-list-state" role="status">Loading conversation…</p>}
+            {!threadLoading && !messages.length && <p className="emp-list-state">No retained messages on this device yet.</p>}
             {[...messages].reverse().map(message => <article className={`emp-msg ${message.isMe ? "emp-msg-out" : "emp-msg-in"}`} key={message.id}>
               <p>{message.body || "Message content unavailable on this device"}</p>
               <span className="emp-msg-meta">
@@ -370,9 +390,9 @@ export default function SharedTeamInbox({ branchId }) {
           <div className="emp-composer">
             <form onSubmit={send} className="emp-compose-row">
               <label className="emp-label emp-grow">Reply
-                <textarea className="emp-field" maxLength={4096} value={text} onChange={e => setText(e.target.value)} placeholder="Write a reply to the customer" />
+                <textarea className="emp-field" disabled={!canSend || threadLoading} maxLength={4096} value={text} onChange={e => setText(e.target.value)} placeholder={canSend ? "Write a reply to the customer" : "Read-only conversation access"} />
               </label>
-              <button type="submit" className="emp-btn emp-btn-primary" disabled={busy || !text.trim()}>
+              <button type="submit" className="emp-btn emp-btn-primary" disabled={busy || !text.trim() || !canSend || threadLoading}>
                 <Send size={13} aria-hidden="true" /> Send reply
               </button>
             </form>
@@ -391,12 +411,16 @@ export default function SharedTeamInbox({ branchId }) {
             </details>
           </div>
         </> : <div className="emp-thread-empty">
-          <span>Select a conversation to read messages, reply, and record what the team knows.</span>
+          <Inbox size={32} aria-hidden="true" />
+          <h2>Your next conversation starts here</h2>
+          <span>Select a conversation to read messages, reply, and add shared notes.</span>
+          <p className="emp-hint">You see conversations allowed by your assignment and role.</p>
         </div>}
       </section>
 
-      <aside className="emp-pane-meta" aria-label="Customer record">
+      <aside id="inbox-customer-record" className="emp-pane-meta" aria-label="Customer record">
         {selected ? <>
+          <button type="button" className="emp-btn crm-record-toggle crm-record-back" onClick={() => setShowRecord(false)}><ArrowLeft size={16} aria-hidden="true" /> Back to conversation</button>
           <p className="emp-meta-head">Customer record</p>
           <div className="emp-meta-body">
             <section className="emp-meta-section">
@@ -411,7 +435,7 @@ export default function SharedTeamInbox({ branchId }) {
                 <div className="emp-form-actions">
                   <button type="submit" className="emp-btn emp-btn-sm">Save customer details</button>
                 </div>
-              </form> : <p className="emp-hint">Loading customer…</p>}
+              </form> : <p className="emp-hint">{threadLoading ? "Loading customer…" : "Customer details are unavailable. Try refreshing the inbox."}</p>}
               <Link className="emp-link" to={`/whatsapp/workspace?customer=${selected.contact_id}`}>
                 Open customer, leads, deals and follow-ups <ArrowUpRight size={12} aria-hidden="true" />
               </Link>

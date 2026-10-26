@@ -1038,6 +1038,7 @@ async function createBranchEmployee(tenantId, branchId, employeeData, actorUserI
   const tid = Number(tenantId);
   const bid = Number(branchId);
   const { first_name, last_name, email, role = "employee", whatsapp_access_level = "full", mobile, job_title } = employeeData;
+  if (!Number.isSafeInteger(tid) || tid < 1 || !Number.isSafeInteger(bid) || bid < 1) throw new Error("A valid organization and branch are required");
 
   const cleanFirst = (first_name || "").trim();
   const cleanLast = (last_name || "").trim();
@@ -1057,17 +1058,17 @@ async function createBranchEmployee(tenantId, branchId, employeeData, actorUserI
   if (!cleanFirst || !cleanEmail) throw new Error("Employee first name and email address are required");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) throw new Error("Please enter a valid work email address");
 
-  const [branch] = await q("SELECT id, name FROM branches WHERE id = ? AND tenant_id = ? LIMIT 1", [bid, tid]);
+  const [branch] = await q("SELECT id, name FROM branches WHERE id = ? AND tenant_id = ? AND status = 'active' LIMIT 1", [bid, tid]);
   if (!branch) throw new Error("Branch not found in this organization");
 
-  const [tenant] = await q("SELECT max_seats FROM tenants WHERE id = ? FOR UPDATE", [tid]);
+  const [tenant] = await q("SELECT max_seats FROM tenants WHERE id = ? AND status='active' FOR UPDATE", [tid]);
   const [seatCount] = await q("SELECT COUNT(*) AS count FROM organization_memberships WHERE tenant_id = ? AND membership_status = 'active'", [tid]);
   if (!tenant || Number(seatCount.count) >= Number(tenant.max_seats)) throw new Error("Organization seat limit reached");
   const [existing] = await q("SELECT id FROM users WHERE email = ? LIMIT 1", [cleanEmail]);
   if (existing) throw new Error("An account with this email address already exists.");
 
-  const accessCode = "WA-" + crypto.randomBytes(3).toString("hex").toUpperCase();
-  const empId = `EMP-${Math.floor(1000 + Math.random() * 9000)}`;
+  const accessCode = "WA-" + crypto.randomBytes(8).toString("hex").toUpperCase();
+  const empId = `EMP-${crypto.randomBytes(8).toString("hex").toUpperCase()}`;
 
   const userRes = await q(
     `INSERT INTO users (first_name, last_name, email, role, status, emp_id, tenant_id, access_code, whatsapp_access_level)

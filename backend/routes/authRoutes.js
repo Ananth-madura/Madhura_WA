@@ -1,6 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("node:crypto");
 const nodemailer = require("nodemailer");
 const db = require("../config/database");
 const { encrypt, decrypt } = require("../backendutil/cryptoHelper");
@@ -13,6 +14,8 @@ const tenantPlanService = require("../services/tenantPlanService");
 const organizationService = require("../services/organizationService");
 const rolePolicy = require("../services/rolePolicy");
 const { resolveTenantId } = require("../middleware/tenantMiddleware");
+const resolveWorkspaceSession = require("../services/workspaceSession").createWorkspaceSessionService(db);
+const employeeAccess = require("../services/employeeAccess").createEmployeeAccessService(db);
 
 const queryAsync = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -23,6 +26,19 @@ const queryAsync = (sql, params = []) =>
   });
 
 const router = express.Router();
+
+function respondWithWorkspaceSession(res, session) {
+  const secret = requireJwtSecret(res);
+  if (!secret) return;
+  const user = session.user;
+  const token = jwt.sign({ id: user.id, role: user.role, name: user.name, email: user.email, tenant_id: user.tenant_id, branch_id: user.branch_id, whatsapp_access_level: user.whatsapp_access_level, plan: user.plan }, secret, { expiresIn: "14d" });
+  return res.json({ ...session, token });
+}
+
+async function sendWorkspaceSession(res, user) {
+  try { return respondWithWorkspaceSession(res, await resolveWorkspaceSession(user)); }
+  catch (error) { return res.status(error.status || 503).json({ message: error.status ? error.message : "Organization access could not be verified. Please try again." }); }
+}
 
 /**
  * Resolve the account an administrator is acting on, scoped to their own
@@ -334,7 +350,7 @@ router.post("/admin-login", (req, res) => {
   const emailLower = email.trim().toLowerCase();
 
   db.query(
-    `SELECT id, first_name, last_name, email, role, status, user_password, two_factor_enabled FROM users WHERE email=? OR emp_id=?`,
+    `SELECT id, first_name, last_name, email, role, status, user_password, two_factor_enabled, tenant_id, whatsapp_access_level FROM users WHERE email=? OR emp_id=?`,
     [emailLower, emailLower],
     (err, rows) => {
       if (err || !rows.length) {
@@ -373,8 +389,7 @@ router.post("/admin-login", (req, res) => {
             }
           );
         } else {
-          const token = jwt.sign({ id: user.id, role: user.role, name: user.first_name }, process.env.JWT_SECRET, { expiresIn: "14d" });
-          return res.json({ token, user: { id: user.id, name: user.first_name, email: user.email, role: user.role } });
+          return sendWorkspaceSession(res, user);
         }
       });
     }
@@ -480,110 +495,7 @@ router.post("/login", loginLimiter, (req, res) => {
       if (user.status !== "active") return res.status(403).json({ message: "Account is not active" });
 
       const sendAuthResponse = async () => {
-        const tid = user.tenant_id || 1;
-        let tInfo = null;
-        try {
-          tInfo = await organizationService.getOrganizationDetails(tid);
-        } catch (_) {}
-        if (!tInfo) {
-          tInfo = (typeof tenantPlanService !== "undefined" && tenantPlanService?.getTenantById)
-            ? await tenantPlanService.getTenantById(tid).catch(() => ({ id: tid, name: "Workspace", plan: "starter" }))
-            : { id: tid, name: "Workspace", plan: "starter" };
-        }
-
-        let orgs = await organizationService.getUserOrganizations(user.id).catch(() => []);
-        if (!orgs || orgs.length === 0) {
-          try {
-            await queryAsync(
-              `INSERT IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active')`,
-              [tid, user.id, rolePolicy.membershipRoleFor(user.role)]
-            );
-            orgs = await organizationService.getUserOrganizations(user.id).catch(() => []);
-          } catch (_) {}
-        }
-
-        const activeOrg = (orgs && orgs.find(o => o.id === tid)) || (orgs && orgs[0]) || {
-          id: tid,
-          name: tInfo.name || "Workspace",
-          plan: tInfo.plan || "starter",
-        };
-        const activeTenantId = activeOrg.id;
-
-        let branchList = await organizationService.getBranches(activeTenantId).catch(() => []);
-        if (!branchList || branchList.length === 0) {
-          try {
-            await queryAsync(
-              `INSERT IGNORE INTO branches (tenant_id, code, name, timezone, is_head_office, status) VALUES (?, 'HEADOFFICE', 'Head Office (Main)', 'Asia/Kolkata', 1, 'active')`,
-              [activeTenantId]
-            );
-            branchList = await organizationService.getBranches(activeTenantId).catch(() => []);
-          } catch (_) {}
-        }
-
-        const staffBranches = await queryAsync(
-          `SELECT sbm.branch_id, sbm.is_primary, b.name, b.code, b.is_head_office
-           FROM staff_branch_memberships sbm
-           JOIN branches b ON sbm.branch_id = b.id
-           WHERE sbm.user_id = ? AND sbm.tenant_id = ?
-           ORDER BY sbm.is_primary DESC`,
-          [user.id, activeTenantId]
-        ).catch(() => []);
-
-        let activeBranch = null;
-        if (staffBranches && staffBranches.length > 0) {
-          activeBranch = branchList.find(b => b.id === staffBranches[0].branch_id) || staffBranches[0];
-        } else {
-          activeBranch = branchList.find(b => b.is_head_office) || branchList[0] || null;
-          if (activeBranch) {
-            try {
-              await queryAsync(
-                `INSERT IGNORE INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary) VALUES (?, ?, ?, 1)`,
-                [activeTenantId, user.id, activeBranch.id]
-              );
-            } catch (_) {}
-          }
-        }
-
-        const secret = requireJwtSecret(res);
-        if (!secret) return;
-        const token = jwt.sign(
-          {
-            id: user.id,
-            role: user.role,
-            name: user.first_name,
-            email: user.email,
-            tenant_id: activeTenantId,
-            branch_id: activeBranch?.id || null,
-            whatsapp_access_level: user.whatsapp_access_level || "full",
-            plan: activeOrg.plan || "starter",
-          },
-          secret,
-          { expiresIn: "14d" }
-        );
-
-        return res.json({
-          nextPath:activeOrg.pending_plan_id && activeOrg.role === "organization_owner" ? "/whatsapp/billing?onboarding=1&plan="+encodeURIComponent(activeOrg.pending_plan_id):"/whatsapp",
-          token,
-          user: {
-            id: user.id,
-            name: user.first_name,
-            email: user.email,
-            role: user.role,
-            tenant_id: activeTenantId,
-            tenant_name: activeOrg.name || "Workspace",
-            branch_id: activeBranch?.id || null,
-            branch_name: activeBranch?.name || "Head Office (Main)",
-            branch_code: activeBranch?.code || "HQ-01",
-            whatsapp_access_level: user.whatsapp_access_level || "full",
-            plan: activeOrg.plan || "starter",
-          },
-          activeOrganization: activeOrg,
-          organizations: orgs,
-          activeBranch,
-          branches: branchList,
-          permittedBranchIds: ["organization_owner", "organization_admin"].includes(activeOrg.role) ? branchList.map(b => b.id) : (staffBranches.map(s => s.branch_id)),
-          tenant: tInfo,
-        });
+        return sendWorkspaceSession(res, user);
       };
 
       if (password) {
@@ -720,7 +632,7 @@ router.post("/create-user", verifyToken, isAdmin, (req, res) => {
     if (err) return res.status(500).json({ message: "Password hash failed" });
 
     db.query(`INSERT INTO users (first_name, last_name, email, user_password, role, status, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [first_name, last_name || "", email.toLowerCase(), hash, role, "active", tenantId], (err2, result) => {
+      [first_name, last_name || "", email.toLowerCase(), hash, role, "active", tenantId], async (err2, result) => {
         if (err2) {
           if (err2.code === "ER_DUP_ENTRY") return res.status(400).json({ message: "Email already exists" });
           return res.status(500).json({ message: "User creation failed" });
@@ -739,10 +651,15 @@ router.post("/create-user", verifyToken, isAdmin, (req, res) => {
 
         // The membership row is what authorization actually reads, so it must
         // be written with the same role the user row carries.
-        db.query(
-          `INSERT IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active')`,
-          [tenantId, newUserId, rolePolicy.membershipRoleFor(role)]
-        );
+        try {
+          await queryAsync(
+            `INSERT IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active')`,
+            [tenantId, newUserId, rolePolicy.membershipRoleFor(role)]
+          );
+        } catch (error) {
+          console.error("Organization membership creation failed:", error.code || "DATABASE_ERROR");
+          return res.status(500).json({ message: "Account created, but organization membership could not be saved. Ask an administrator to repair the account before signing in." });
+        }
 
         res.json({ message: "User created successfully", userId: newUserId });
       });
@@ -753,13 +670,7 @@ router.post("/create-user", verifyToken, isAdmin, (req, res) => {
 
 // Generate secure random access code e.g. AC-X9B2-4821
 function generateEmployeeAccessCode() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let part1 = "";
-  for (let i = 0; i < 4; i++) {
-    part1 += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  const part2 = Math.floor(1000 + Math.random() * 9000);
-  return `AC-${part1}-${part2}`;
+  return "AC-" + crypto.randomBytes(8).toString("hex").toUpperCase();
 }
 
 // 1. GET /api/auth/employees — Admin only. Strictly scoped to current tenant.
@@ -986,179 +897,19 @@ router.delete("/employees/:id", verifyToken, isAdmin, async (req, res) => {
 });
 
 // 6. POST /api/auth/verify-access-code — Public code preview for employee signup/activation
-router.post("/verify-access-code", (req, res) => {
-  const code = (req.body?.access_code || "").trim().toUpperCase();
-  if (!code) return res.status(400).json({ valid: false, message: "Access code is required" });
-
-  db.query(
-    `SELECT u.id, u.first_name, u.email, u.role, u.whatsapp_access_level, u.tenant_id,
-            t.name as tenant_name,
-            b.id as branch_id, b.name as branch_name, b.code as branch_code
-     FROM users u
-     LEFT JOIN tenants t ON t.id = u.tenant_id
-     LEFT JOIN staff_branch_memberships sbm ON sbm.user_id = u.id AND sbm.tenant_id = u.tenant_id
-     LEFT JOIN branches b ON b.id = sbm.branch_id
-     WHERE UPPER(u.access_code) = ?
-     ORDER BY sbm.is_primary DESC LIMIT 1`,
-    [code],
-    (err, rows) => {
-      if (err || !rows || !rows.length) {
-        return res.status(404).json({ valid: false, message: "Invalid access code. Please check with your administrator." });
-      }
-
-      const u = rows[0];
-      res.json({
-        valid: true,
-        email: u.email,
-        first_name: u.first_name,
-        role: u.role,
-        whatsapp_access_level: u.whatsapp_access_level || "full",
-        tenant_name: u.tenant_name || "Workspace",
-        tenant_id: u.tenant_id,
-        branch_id: u.branch_id || null,
-        branch_name: u.branch_name || "Head Office (Main)",
-        branch_code: u.branch_code || "HQ-01",
-      });
-    }
-  );
+const accessCodePreviewLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxRequests: 60, category: "access_code_preview" });
+router.post("/verify-access-code", accessCodePreviewLimiter, async (req, res) => {
+  try { res.json(await employeeAccess.preview(req.body?.access_code)); }
+  catch (error) { res.status(error.status || 503).json({ valid: false, message: error.status ? error.message : "Access code verification is unavailable. Please try again." }); }
 });
 
 // 7. POST /api/auth/join-with-access-code — Employee logs in & activates account with admin Access Code
-router.post("/join-with-access-code", async (req, res) => {
+router.post("/join-with-access-code", loginLimiter, async (req, res) => {
+  if (!requireJwtSecret(res)) return;
   try {
-    const { access_code, email, password, full_name } = req.body || {};
-    const code = (access_code || "").trim().toUpperCase();
-    const cleanEmail = (email || "").trim().toLowerCase();
-    const cleanPass = password || "";
-    const cleanName = (full_name || "").trim();
-
-    if (!code) return res.status(400).json({ message: "Access code is required" });
-    if (!cleanEmail) return res.status(400).json({ message: "Email address is required" });
-    if (!cleanPass || cleanPass.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters long" });
-    }
-
-    db.query(
-      `SELECT u.id, u.first_name, u.email, u.role, u.status, u.user_password, u.tenant_id, u.whatsapp_access_level, u.emp_id, t.name as tenant_name, t.plan
-       FROM users u
-       LEFT JOIN tenants t ON t.id = u.tenant_id
-       WHERE UPPER(u.access_code) = ? LIMIT 1`,
-      [code],
-      async (err, rows) => {
-        if (err || !rows || !rows.length) {
-          return res.status(404).json({ message: "Invalid access code. Please obtain a valid code from your workspace admin." });
-        }
-
-        const user = rows[0];
-
-        // Check if email matches the assigned invitation email
-        if (user.email && user.email.toLowerCase() !== cleanEmail) {
-          return res.status(400).json({
-            message: `This access code was issued for ${user.email}. Please use that email to activate.`,
-          });
-        }
-
-        const hash = await bcrypt.hash(cleanPass, 10);
-        const displayName = cleanName || user.first_name || "Employee";
-
-        db.query(
-          `UPDATE users SET user_password = ?, status = 'active', first_name = ? WHERE id = ?`,
-          [hash, displayName, user.id],
-          async (upErr) => {
-            if (upErr) {
-              console.error("join-with-access-code update error:", upErr.message);
-              return res.status(500).json({ message: "Failed to activate employee account" });
-            }
-
-            try {
-              db.query(`UPDATE teammember SET first_name = ? WHERE user_id = ?`, [displayName, user.id]);
-            } catch (_) {}
-
-            const tid = user.tenant_id || 1;
-
-            // Ensure organization membership exists
-            try {
-              await queryAsync(
-                `INSERT IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active')`,
-                [tid, user.id, rolePolicy.membershipRoleFor(user.role)]
-              );
-            } catch (_) {}
-
-            // Ensure branches and staff branch membership exist
-            let branchList = await organizationService.getBranches(tid).catch(() => []);
-            const staffBranches = await queryAsync(
-              `SELECT sbm.branch_id, b.name, b.code, b.is_head_office
-               FROM staff_branch_memberships sbm
-               JOIN branches b ON sbm.branch_id = b.id
-               WHERE sbm.user_id = ? AND sbm.tenant_id = ?
-               ORDER BY sbm.is_primary DESC`,
-              [user.id, tid]
-            ).catch(() => []);
-
-            let activeBranch = null;
-            if (staffBranches && staffBranches.length > 0) {
-              activeBranch = branchList.find((b) => b.id === staffBranches[0].branch_id) || staffBranches[0];
-            } else {
-              activeBranch = branchList.find((b) => b.is_head_office) || branchList[0] || null;
-              if (activeBranch) {
-                try {
-                  await queryAsync(
-                    `INSERT IGNORE INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary) VALUES (?, ?, ?, 1)`,
-                    [tid, user.id, activeBranch.id]
-                  );
-                } catch (_) {}
-              }
-            }
-
-            const orgs = await organizationService.getUserOrganizations(user.id).catch(() => []);
-            const activeOrg = (orgs && orgs.find((o) => o.id === tid)) || { id: tid, name: user.tenant_name || "Workspace", plan: user.plan || "starter" };
-
-            const secret = requireJwtSecret(res);
-            if (!secret) return;
-            const token = jwt.sign(
-              {
-                id: user.id,
-                role: user.role || "employee",
-                name: displayName,
-                email: cleanEmail,
-                tenant_id: tid,
-                branch_id: activeBranch?.id || null,
-                whatsapp_access_level: user.whatsapp_access_level || "full",
-                plan: user.plan || "starter",
-              },
-              secret,
-              { expiresIn: "14d" }
-            );
-
-            res.status(200).json({
-              token,
-              user: {
-                id: user.id,
-                name: displayName,
-                email: cleanEmail,
-                role: user.role || "employee",
-                tenant_id: tid,
-                tenant_name: activeOrg.name,
-                branch_id: activeBranch?.id || null,
-                branch_name: activeBranch?.name || "Head Office (Main)",
-                branch_code: activeBranch?.code || "HQ-01",
-                whatsapp_access_level: user.whatsapp_access_level || "full",
-                plan: user.plan || "starter",
-              },
-              activeOrganization: activeOrg,
-              organizations: orgs.length ? orgs : [activeOrg],
-              activeBranch,
-              branches: branchList,
-              permittedBranchIds: rolePolicy.isAdminRole(user.role) ? branchList.map((b) => b.id) : (activeBranch ? [activeBranch.id] : []),
-              message: "Access code verified! Your employee account is activated.",
-            });
-          }
-        );
-      }
-    );
-  } catch (err) {
-    console.error("join-with-access-code exception:", err);
-    res.status(500).json({ message: "Server error during employee activation" });
+    return respondWithWorkspaceSession(res, await employeeAccess.join(req.body || {}));
+  } catch (error) {
+    res.status(error.status || 503).json({ message: error.status ? error.message : "Employee sign-in is unavailable. Please try again." });
   }
 });
 
@@ -2084,7 +1835,7 @@ router.post("/verify-2fa", (req, res) => {
 
       // Fetch user profile and issue token
       db.query(
-        "SELECT id, first_name, email, role, status FROM users WHERE email=?",
+        "SELECT id, first_name, email, role, status, tenant_id, whatsapp_access_level FROM users WHERE email=?",
         [emailLower],
         (err2, userRows) => {
           if (err2 || !userRows.length) {
@@ -2096,11 +1847,7 @@ router.post("/verify-2fa", (req, res) => {
             return res.status(403).json({ message: "Account is not active" });
           }
 
-          const token = jwt.sign({ id: user.id, role: user.role, name: user.first_name }, process.env.JWT_SECRET, { expiresIn: "14d" });
-          res.json({
-            token,
-            user: { id: user.id, name: user.first_name, email: user.email, role: user.role }
-          });
+          return sendWorkspaceSession(res, user);
         }
       );
     }

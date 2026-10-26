@@ -68,6 +68,7 @@ import { API } from "../config/api";
 import { getEnquiries, getEnquirySummary, createEnquiry, updateEnquiry, convertEnquiry, ENQUIRY_TYPES, enquiryTypeLabel } from "../api/enquiries";
 import { useAuth } from "../auth/AuthContext";
 import { useEnterprise } from "../context/EnterpriseContext";
+import useWorkspaceAccess from "../hooks/useWorkspaceAccess";
 import { DEMO_STATUS, DEMO_CHATS, DEMO_MESSAGES_MAP } from "../auth/demoData";
 import socket from "../socket/socket";
 import RichMessageContent from "../components/RichMessageContent";
@@ -540,6 +541,14 @@ export default function WhatsAppPage() {
   // below would fail (and fetchStatus's 3 fallbacks burn ~30s before giving up).
   const { demoMode, user } = useAuth();
   const { activeTenant, activeBranch, branches, enterpriseHeaders } = useEnterprise();
+  // One page, two scopes. An administrator sees the organization-wide board and
+  // owns the session controls. A member sees the same board, but the server
+  // returns only the conversations assigned to them and refuses every control
+  // that belongs to the account: QR pairing, session teardown, assignment,
+  // account switching and organization-wide analytics.
+  const { admin: isAdminView, canEdit } = useWorkspaceAccess();
+  const canComposeTemplates = canEdit("templates");
+  const canLaunchFlows = canEdit("flows");
   const [showTransferBranchModal, setShowTransferBranchModal] = useState(false);
   const [transferTargetBranchId, setTransferTargetBranchId] = useState("");
   const [transferTargetUserId, setTransferTargetUserId] = useState("");
@@ -3152,7 +3161,7 @@ export default function WhatsAppPage() {
 
   // Auto-fetch QR code once when entering QR mode and disconnected
   useEffect(() => {
-    if (status.connected) {
+    if (status.connected || !isAdminView) {
       hasTriggeredQrFetch.current = false;
       return;
     }
@@ -3161,7 +3170,7 @@ export default function WhatsAppPage() {
       hasTriggeredQrFetch.current = true;
       fetchQr();
     }
-  }, [status.connected, qrCode, qrLoading, connectMode, fetchQr]);
+  }, [status.connected, qrCode, qrLoading, connectMode, fetchQr, isAdminView]);
 
   const handleRequestPairingCode = async (e) => {
     e.preventDefault();
@@ -3240,6 +3249,17 @@ export default function WhatsAppPage() {
         (activeSelected?.id && (activeSelected.id === targetChatId || activeSelected.id === chatId)) ||
         (sel10 && msg10 && sel10 === msg10)
       );
+
+      // The socket fans out every message in the organization. A member may
+      // only see their assigned conversations, so drop events for chats that
+      // are not on their board instead of appending a stranger's message.
+      if (!isAdminView && !isCurrentChat) {
+        const known = (chatsRef.current || []).some((chat) => {
+          const chatDigits = (chat.phoneNumber || chat.id || chat.phone || "").replace(/\D/g, "");
+          return chat.id === targetChatId || Boolean(msg10 && chatDigits.slice(-10) === msg10);
+        });
+        if (!known) return;
+      }
 
       const msgObj = message || {
         id: data?.id || `ws_${Date.now()}`,
@@ -3595,7 +3615,7 @@ export default function WhatsAppPage() {
       socket.off("wa_flow_advanced", handleFlowAdvanced);
       socket.off("wa_flow_status", handleFlowAdvanced);
     };
-  }, [fetchChats, fetchMessages, fetchStatus, fetchAccountDetails]);
+  }, [fetchChats, fetchMessages, fetchStatus, fetchAccountDetails, isAdminView]);
 
   // Refs for sound/notification toggles (accessed inside socket callbacks)
   const soundEnabledRef = useRef(soundEnabled);
@@ -3850,7 +3870,11 @@ export default function WhatsAppPage() {
     );
   }
 
-  if (!status.connected && !workspaceMode) {
+  // Pairing is an administrator action. A member has no session to link, and
+  // the server answers their status as connected with `memberView`, so this
+  // screen must never be their landing page even if a stale cache says the
+  // account is offline.
+  if (!status.connected && !workspaceMode && isAdminView) {
     return (
       <div className="hl-page w-full flex-1 flex flex-col min-h-0 overflow-y-auto wa-scroll bg-[var(--color-paper)] text-[var(--color-ink)]">        {syncing && <p className="px-3 py-2 text-xs" role="status">Syncing WhatsApp: {syncProgress?.completedChats || 0} / {syncProgress?.totalChats || "?"} chats. Contacts are available across this workspace.</p>}
         {showConfigModal && (
@@ -4820,14 +4844,16 @@ export default function WhatsAppPage() {
                 >
                   <PanelLeftOpen size={16} />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowNewChatModal(true)}
-                  className="hl-btn-primary p-2 rounded-lg"
-                  title="Start new chat"
-                >
-                  <Plus size={16} />
-                </button>
+                {isAdminView && (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewChatModal(true)}
+                    className="hl-btn-primary p-2 rounded-lg"
+                    title="Start new chat"
+                  >
+                    <Plus size={16} />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => fetchChats(true)}
@@ -4836,10 +4862,12 @@ export default function WhatsAppPage() {
                 >
                   <RefreshCw size={14} className={chatsLoading ? "animate-spin text-[var(--color-ink)]" : ""} />
                 </button>
-                <details className="wa-storage-details is-icon">
-                  <summary title="Sender & storage" aria-label="Sender and storage"><Database size={15} /><ChevronDown size={13} /></summary>
-                  <div className="wa-storage-popover"><WAStorageAndSenders compact /></div>
-                </details>
+                {isAdminView && (
+                  <details className="wa-storage-details is-icon">
+                    <summary title="Sender & storage" aria-label="Sender and storage"><Database size={15} /><ChevronDown size={13} /></summary>
+                    <div className="wa-storage-popover"><WAStorageAndSenders compact /></div>
+                  </details>
+                )}
               </div>
             ) : (
               <>
@@ -4863,15 +4891,17 @@ export default function WhatsAppPage() {
                     </button>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowNewChatModal(true)}
-                  className="hl-btn-primary p-1.5 rounded-lg shrink-0"
-                  title="Start new conversation"
-                  aria-label="Start new conversation"
-                >
-                  <Plus size={16} />
-                </button>
+                {isAdminView && (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewChatModal(true)}
+                    className="hl-btn-primary p-1.5 rounded-lg shrink-0"
+                    title="Start new conversation"
+                    aria-label="Start new conversation"
+                  >
+                    <Plus size={16} />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => fetchChats(true)}
@@ -4983,15 +5013,19 @@ export default function WhatsAppPage() {
                 <p className="hl-subtitle mb-4 max-w-xs">
                   {searchTerm
                     ? "Try searching with a different name, phone number, or message"
-                    : "Start a conversation directly with any contact or phone number"}
+                    : isAdminView
+                      ? "Start a conversation directly with any contact or phone number"
+                      : "A conversation appears here once an administrator assigns it to you"}
                 </p>
-                <button
-                  onClick={() => setShowNewChatModal(true)}
-                  className="hl-btn-primary text-xs flex items-center gap-1.5"
-                >
-                  <UserPlus size={14} />
-                  <span>Start New Chat</span>
-                </button>
+                {isAdminView && (
+                  <button
+                    onClick={() => setShowNewChatModal(true)}
+                    className="hl-btn-primary text-xs flex items-center gap-1.5"
+                  >
+                    <UserPlus size={14} />
+                    <span>Start New Chat</span>
+                  </button>
+                )}
               </div>
             ) : (
               displayChats.map((chat) => {
@@ -5142,7 +5176,7 @@ export default function WhatsAppPage() {
                 </div>
 
                 <div className="wa-inbox-welcome-actions">
-                  <button type="button" className="hl-btn-primary" onClick={() => setShowNewChatModal(true)}><Plus size={16} /> New conversation</button>
+                  {isAdminView && <button type="button" className="hl-btn-primary" onClick={() => setShowNewChatModal(true)}><Plus size={16} /> New conversation</button>}
                   <button type="button" className="hl-btn-secondary" onClick={() => navigate("/whatsapp/contacts")}><Users size={16} /> View contacts</button>
                 </div>
               </div>
@@ -5160,7 +5194,8 @@ export default function WhatsAppPage() {
                 </button>
                 <div className="wa-header-actions">
                   <div className="wa-header-tickets">
-                    <label className="wa-ticket-field"><span>Status</span><select aria-label="Conversation status" id="wa-ticket-status-select" value={ticketStatus} onChange={event => handleUpdateTicketStatus(event.target.value)}><option value="open">Open</option><option value="pending">Pending</option><option value="resolved">Resolved</option><option value="spam">Spam</option></select></label>
+                    {/* Ticket state and assignment are administrator routing actions. */}
+                    {isAdminView && <label className="wa-ticket-field"><span>Status</span><select aria-label="Conversation status" id="wa-ticket-status-select" value={ticketStatus} onChange={event => handleUpdateTicketStatus(event.target.value)}><option value="open">Open</option><option value="pending">Pending</option><option value="resolved">Resolved</option><option value="spam">Spam</option></select></label>}
                     <details className="wa-enquiries-menu" onToggle={event => { if (event.currentTarget.open) loadEnquiries(); }}>
                       <summary className="wa-enquiries-button" aria-label="Enquiries and leads" title="Enquiries and leads">
                         <span className="wa-enquiries-label">Enquiries</span>
@@ -5332,7 +5367,7 @@ export default function WhatsAppPage() {
                         </div>
                       </div>
                     </details>
-                    <label className="wa-ticket-field wa-assignee-field"><Users size={14} /><select aria-label="Assign conversation" value={assignedAgentName} onChange={event => { const member = teamMembers.find(m => `${m.first_name} ${m.last_name || ""}`.trim() === event.target.value); handleAssignAgent(member?.id || null, event.target.value); }}><option value="">Unassigned</option>{teamMembers.map(m => { const name = `${m.first_name} ${m.last_name || ""}`.trim(); return <option key={m.id} value={name}>{name}</option>; })}</select></label>
+                    {isAdminView && <label className="wa-ticket-field wa-assignee-field"><Users size={14} /><select aria-label="Assign conversation" value={assignedAgentName} onChange={event => { const member = teamMembers.find(m => `${m.first_name} ${m.last_name || ""}`.trim() === event.target.value); handleAssignAgent(member?.id || null, event.target.value); }}><option value="">Unassigned</option>{teamMembers.map(m => { const name = `${m.first_name} ${m.last_name || ""}`.trim(); return <option key={m.id} value={name}>{name}</option>; })}</select></label>}
                     <span className="wa-conversation-branch" title="Assigned branch"><GitBranch size={13} />{selectedChat.branch_name || activeBranch?.name || "Head Office"}</span>
                   </div>
                   <button type="button" className={`wa-header-action ${showNotesDrawer ? "is-active" : ""}`} onClick={() => { setShowContactInfoDrawer(false); if (!showNotesDrawer) fetchInternalNotes(selectedChat.id); setShowNotesDrawer(v => !v); }} aria-pressed={showNotesDrawer} title="Team notes"><FileText size={16} /><span>Notes</span>{internalNotes.length > 0 && <span className="wa-note-count">{internalNotes.length}</span>}</button>
@@ -5342,9 +5377,9 @@ export default function WhatsAppPage() {
                     <div className="wa-conversation-menu-panel" onClick={event => { if (event.target.closest("button")) event.currentTarget.closest("details").removeAttribute("open"); }}>
                       <p>Conversation actions</p>
                       <button type="button" onClick={() => setShowTemplatePicker(v => !v)}><FileText size={16} /> Message templates</button>
-                      <button type="button" onClick={openSpeedPinModal}><MessageSquare size={16} /> Manage saved replies</button>
-                      <button type="button" onClick={() => { const bid = selectedChat.branch_id || activeBranch?.id || branches?.[0]?.id || ""; setTransferTargetBranchId(bid); setTransferTargetUserId(selectedChat.owner_user_id || ""); setTransferNote(""); if (bid) fetchBranchEmployees(bid); setShowTransferBranchModal(true); }}><Forward size={16} /> Transfer conversation</button>
-                      <button type="button" onClick={() => setShowFlowModal(true)}><GitBranch size={16} /> Launch chatbot flow</button>
+                      {isAdminView && <button type="button" onClick={openSpeedPinModal}><MessageSquare size={16} /> Manage saved replies</button>}
+                      {isAdminView && <button type="button" onClick={() => { const bid = selectedChat.branch_id || activeBranch?.id || branches?.[0]?.id || ""; setTransferTargetBranchId(bid); setTransferTargetUserId(selectedChat.owner_user_id || ""); setTransferNote(""); if (bid) fetchBranchEmployees(bid); setShowTransferBranchModal(true); }}><Forward size={16} /> Transfer conversation</button>}
+                      {canLaunchFlows && <button type="button" onClick={() => setShowFlowModal(true)}><GitBranch size={16} /> Launch chatbot flow</button>}
                       <button type="button" onClick={() => openReminderSheet()}><Bell size={16} /> Remind me about this</button>
                       {!crmDetails?.client && <button type="button" onClick={() => { setAddClientData({ name: selectedChat.name && !selectedChat.name.startsWith("+") ? selectedChat.name : "", company_name: "", email: "", city: "", service: "", notes: "" }); setShowAddClientForm(true); setShowNotesDrawer(false); fetchContactCrmDetails(selectedChat.id); setShowContactInfoDrawer(true); }}><UserPlus size={16} /> Add to CRM</button>}
                     </div>
@@ -6028,22 +6063,26 @@ export default function WhatsAppPage() {
                       <div className="hl-empty p-4 text-xs text-[var(--color-ink-2)] text-center space-y-2">
                         <p>No templates loaded yet</p>
                         <div className="flex justify-center gap-2 pt-1">
-                          <button
-                            onClick={handleSeedTemplates}
-                            disabled={tmplLoading}
-                            className="hl-btn-primary px-3 py-1 bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded text-xs font-bold hover:bg-[var(--color-ink)]"
-                          >
-                            {tmplLoading ? "Seeding..." : "Seed 8 Default Templates"}
-                          </button>
+                          {canComposeTemplates && (
+                            <button
+                              onClick={handleSeedTemplates}
+                              disabled={tmplLoading}
+                              className="hl-btn-primary px-3 py-1 bg-[var(--color-ink)] text-[var(--color-paper-2)] rounded text-xs font-bold hover:bg-[var(--color-ink)]"
+                            >
+                              {tmplLoading ? "Seeding..." : "Seed 8 Default Templates"}
+                            </button>
+                          )}
                         </div>
                       </div>
                     ) : (
                       <div className="divide-y divide-[var(--color-rule)]">
                         <div className="hl-id p-2 flex justify-between items-center bg-[var(--color-paper-2)] border-t border-[var(--color-rule)]">
                           <span className="text-[var(--color-ink-2)]">{templates.length} templates available</span>
-                          <button onClick={() => { setShowTemplatePicker(false); setShowCreateTemplateModal(true); }} className="text-[var(--color-ink)] font-bold hover:underline">
-                            + New Template
-                          </button>
+                          {canComposeTemplates && (
+                            <button onClick={() => { setShowTemplatePicker(false); setShowCreateTemplateModal(true); }} className="text-[var(--color-ink)] font-bold hover:underline">
+                              + New Template
+                            </button>
+                          )}
                         </div>
                         {templates.map((t) => (
                           <button

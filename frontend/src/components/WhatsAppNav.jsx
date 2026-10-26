@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import useWorkspaceAccess from "../hooks/useWorkspaceAccess";
+import { useAuth } from "../auth/AuthContext";
 import {
   MessageCircle,
   FileText,
@@ -29,6 +30,10 @@ export default function WhatsAppNav() {
   const navigate = useNavigate();
   const location = useLocation();
   const { admin, canView } = useWorkspaceAccess();
+  const { user } = useAuth();
+  // A campaigns-only employee has no inbox at all — the backend refuses their
+  // chat requests, so do not offer a tab that can only fail.
+  const inboxBlocked = !admin && (user?.whatsapp_access_level || "full") === "campaign_only";
   const [showTestModal, setShowTestModal] = useState(false);
   const [status, setStatus] = useState(null);
   const [totalUnread, setTotalUnread] = useState(0);
@@ -159,12 +164,14 @@ export default function WhatsAppNav() {
     { id: "workspace", label: "My workspace", title: "Customers, leads, pipeline and follow-ups", path: "/whatsapp/workspace", icon: Users, exact: true, module: "customers" },
     {
       id: "chats",
+      // Administrators get the organization-wide board and session controls;
+      // members get the same page restricted to the chats assigned to them.
       label: "Live Chats",
-      title: "Live Chats & QR Scan",
+      title: "Live chats, assigned conversations and QR scan",
       path: "/whatsapp",
       icon: MessageCircle,
       exact: true,
-      adminOnly: true,
+      inbox: true,
     },
     {
       id: "contacts",
@@ -286,6 +293,7 @@ export default function WhatsAppNav() {
   // Administrators see every tab. Members see their inbox plus each module an
   // administrator has granted them view access to.
   const visibleTabs = tabs.filter(tab => {
+    if (tab.inbox) return !inboxBlocked;
     if (tab.adminOnly) return admin;
     if (!tab.module) return true;
     return canView(tab.module);

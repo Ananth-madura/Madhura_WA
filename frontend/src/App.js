@@ -5,9 +5,8 @@ import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from "
 import { Agentation } from "agentation";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Login from "./auth/login";
-import { EnterpriseProvider, useEnterprise } from "./context/EnterpriseContext";
+import { EnterpriseProvider } from "./context/EnterpriseContext";
 import { BranchProvider } from "./context/BranchContext";
-import { isWorkspaceAdmin } from "./auth/workspaceAccess";
 const Signup = lazy(() => import("./auth/signup"));
 const WALayout = lazy(() => import("./layout/WALayout"));
 const WhatsAppPage = lazy(() => import("./pages/whatsapp"));
@@ -104,19 +103,12 @@ function FlowParamRedirect() {
   return <Navigate to={flowId ? `/whatsapp/flows/build/${flowId}` : "/whatsapp/flows/build"} replace />;
 }
 
-// `/whatsapp` is the organization-wide Live Chats board for administrators and
-// the assigned inbox for everyone else. This is a pure role decision, so it
-// resolves locally instead of paying for a permissions round-trip.
+// `/whatsapp` is the Live Chats board for every role. The page itself adapts:
+// an administrator gets the organization-wide board and session controls, while
+// a member gets the same board restricted by the server to the conversations
+// assigned to them. The assigned inbox lives at `/whatsapp/team-inbox`.
 function WorkspaceInbox() {
-  const { user, demoMode } = useAuth();
-  const { isOwnerOrAdmin, roleInActiveOrg } = useEnterprise();
-  const admin = isWorkspaceAdmin({
-    demoMode,
-    isOwnerOrAdmin,
-    orgRole: roleInActiveOrg,
-    globalRole: user?.role,
-  });
-  return admin ? <WhatsAppPage /> : <SharedTeamInbox />;
+  return <WhatsAppPage />;
 }
 
 export default function App() {

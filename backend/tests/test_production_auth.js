@@ -60,7 +60,14 @@ const tenantPlanService = {
   getAvailablePlans: () => [],
 };
 
-vm.runInNewContext(source.slice(sliceStart, sliceEnd), {
+const helperStart = source.indexOf("function respondWithWorkspaceSession");
+const helperEnd = source.indexOf("/**", helperStart);
+const resolveWorkspaceSession = require("../services/workspaceSession").createWorkspaceSessionService({ promise: () => ({ query: async sql => {
+  if (sql.includes("FROM tenants t")) return [[{ id: 1, name: "Fixture organization", plan: "free", role: "agent", status: "active", membership_status: "active" }]];
+  if (sql.includes("FROM branches b")) return [[{ id: 1, tenant_id: 1, name: "Assigned branch", code: "HQ", status: "active" }]];
+  throw new Error("Unexpected session query in auth fixture");
+} }) });
+vm.runInNewContext(source.slice(helperStart, helperEnd) + source.slice(sliceStart, sliceEnd), {
   router: {
     post: (path, ...callbacks) => handlers.set(path, callbacks.at(-1)),
     get: (path, ...callbacks) => handlers.set(path, callbacks.at(-1)),
@@ -68,6 +75,8 @@ vm.runInNewContext(source.slice(sliceStart, sliceEnd), {
   verifyToken: (req, res, next) => next && next(),
   isAdmin: (req, res, next) => next && next(),
   loginLimiter: () => {}, process, jwt, console,
+  resolveWorkspaceSession,
+  createRateLimiter: () => () => {},
   bcrypt: { compare: (password, hash, callback) => callback(null, password === 'actual-user-password') },
   db: { query: (sql, values, callback) => callback(null, [{ id: 42, first_name: 'User', email: 'fixture@example.test', status: 'active', role: 'employee', two_factor_enabled: false, tenant_id: 1 }]) },
   organizationService,
