@@ -1033,7 +1033,7 @@ async function transferBranchContact(tenantId, contactId, targetBranchId, actorU
 /**
  * Create a new employee directly assigned to a branch.
  */
-async function createBranchEmployee(tenantId, branchId, employeeData, actorUserId = null) {
+async function createBranchEmployee(tenantId, branchId, employeeData, actorUserId = null, options = {}) {
   return require("./sharedInboxService").createInboxService(db).transaction(async q => {
   const tid = Number(tenantId);
   const bid = Number(branchId);
@@ -1042,10 +1042,17 @@ async function createBranchEmployee(tenantId, branchId, employeeData, actorUserI
   const cleanFirst = (first_name || "").trim();
   const cleanLast = (last_name || "").trim();
   const cleanEmail = (email || "").trim().toLowerCase();
-  const cleanRole = ["admin", "subadmin", "agent"].includes(role) ? role : "employee";
+  const cleanRole = ["admin", "subadmin", "employee", "agent"].includes(role) ? role : "employee";
   const cleanAccessLevel = ["full", "chat_only", "read_only", "campaign_only"].includes(whatsapp_access_level) ? whatsapp_access_level : "full";
   const cleanJob = (job_title || "").trim() || (cleanRole === "admin" ? "Branch Administrator" : "WhatsApp Support Executive");
   const cleanMobile = (mobile || "").trim();
+
+  // This is the second door into account creation (the branch API), so it
+  // carries the same escalation rule as /auth/create-user: only a full
+  // administrator hands out an administrator role.
+  if (options.actorRole && !require("./rolePolicy").canCreateRole(options.actorRole, cleanRole)) {
+    throw new Error("Only an administrator can create administrator accounts");
+  }
 
   if (!cleanFirst || !cleanEmail) throw new Error("Employee first name and email address are required");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) throw new Error("Please enter a valid work email address");
@@ -1073,7 +1080,7 @@ async function createBranchEmployee(tenantId, branchId, employeeData, actorUserI
   await q(
     `INSERT INTO teammember (first_name, last_name, emp_email, mobile, job_title, emp_role, emp_id, user_id, tenant_id, access_code, whatsapp_access_level, branch_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [cleanFirst, cleanLast || null, cleanEmail, cleanMobile || null, cleanJob, cleanRole === "admin" ? "Admin" : "Sales", empId, newUserId, tid, accessCode, cleanAccessLevel, bid]
+    [cleanFirst, cleanLast || null, cleanEmail, cleanMobile || null, cleanJob, ["admin", "subadmin"].includes(cleanRole) ? "Admin" : "Sales", empId, newUserId, tid, accessCode, cleanAccessLevel, bid]
   );
 
   // Insert organization membership

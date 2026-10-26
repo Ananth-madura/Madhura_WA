@@ -44,16 +44,19 @@ export default function WALayout() {
 
 function WorkspaceShell() {
   const { user, logout, demoMode } = useAuth();
-  const { activeTenant, activeBranch, roleInActiveOrg } = useEnterprise();
+  const { activeTenant, activeBranch, roleInActiveOrg, actorRole } = useEnterprise();
   const { admin, canView, ready } = useWorkspaceAccess();
   const member = !admin;
-  const roleLabel = {
-    organization_owner: "Owner",
-    organization_admin: "Administrator",
-    branch_manager: "Branch manager",
-    agent: "Agent",
-    employee: "Employee",
-  }[roleInActiveOrg] || "Member";
+  const subadmin = actorRole === "subadmin" || user?.role === "subadmin";
+  const roleLabel = subadmin
+    ? "Sub-admin"
+    : ({
+      organization_owner: "Owner",
+      organization_admin: "Administrator",
+      branch_manager: "Branch manager",
+      agent: "Agent",
+      employee: "Employee",
+    }[roleInActiveOrg] || "Member");
   const orgLine = [activeTenant?.name, activeBranch?.name].filter(Boolean).join(" · ");
   const navigate = useNavigate();
   const location = useLocation();

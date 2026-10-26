@@ -63,13 +63,24 @@ export const WHATSAPP_MODULES = [
   "client_portal",
 ];
 
+/**
+ * Is this person an administrator of the workspace?
+ *
+ * Once the organization membership has resolved, it is the only authority: a
+ * cached session role (`globalRole`) must never keep administrator surfaces
+ * visible after an owner demotes someone. Before it resolves — the first paint
+ * after login — the session role is the only signal available, so it is used
+ * as a fallback. The backend enforces the membership either way.
+ */
 export function isWorkspaceAdmin({ demoMode, isOwnerOrAdmin, orgRole, globalRole } = {}) {
-  return (
-    Boolean(demoMode) ||
-    Boolean(isOwnerOrAdmin) ||
-    WORKSPACE_ADMIN_ORG_ROLES.includes(orgRole) ||
-    WORKSPACE_ADMIN_GLOBAL_ROLES.includes(globalRole)
-  );
+  if (demoMode) return true;
+  if (orgRole) return WORKSPACE_ADMIN_ORG_ROLES.includes(orgRole);
+  return Boolean(isOwnerOrAdmin) || WORKSPACE_ADMIN_GLOBAL_ROLES.includes(globalRole);
+}
+
+/** A delegated sub-admin: full workspace, but no role changes or admin creation. */
+export function isWorkspaceSubadmin({ actorRole, globalRole } = {}) {
+  return actorRole === "subadmin" || globalRole === "subadmin";
 }
 
 export function normalizeWorkspacePath(pathname) {

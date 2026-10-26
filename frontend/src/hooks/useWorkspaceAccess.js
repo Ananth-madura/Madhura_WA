@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../config/axios";
 import { useAuth } from "../auth/AuthContext";
 import { useEnterprise } from "../context/EnterpriseContext";
-import { isWorkspaceAdmin } from "../auth/workspaceAccess";
+import { isWorkspaceAdmin, isWorkspaceSubadmin } from "../auth/workspaceAccess";
 
 /**
  * Resolves what the signed-in person may do inside the shared workspace.
@@ -13,13 +13,14 @@ import { isWorkspaceAdmin } from "../auth/workspaceAccess";
  */
 export default function useWorkspaceAccess() {
   const { user, demoMode } = useAuth();
-  const { isOwnerOrAdmin, roleInActiveOrg, activeTenant } = useEnterprise();
+  const { isOwnerOrAdmin, roleInActiveOrg, actorRole, activeTenant } = useEnterprise();
   const admin = isWorkspaceAdmin({
     demoMode,
     isOwnerOrAdmin,
     orgRole: roleInActiveOrg,
     globalRole: user?.role,
   });
+  const subadmin = isWorkspaceSubadmin({ actorRole, globalRole: user?.role });
   const tenantId = activeTenant?.id ?? null;
   const [permissions, setPermissions] = useState(null);
   const [ready, setReady] = useState(admin);
@@ -44,10 +45,11 @@ export default function useWorkspaceAccess() {
     const grant = module => permissions?.[module] || { view: true, edit: false };
     return {
       admin,
+      subadmin,
       ready,
       permissions,
       canView: module => admin || (ready && grant(module).view),
       canEdit: module => admin || (ready && Boolean(permissions?.[module]?.edit)),
     };
-  }, [admin, permissions, ready]);
+  }, [admin, subadmin, permissions, ready]);
 }

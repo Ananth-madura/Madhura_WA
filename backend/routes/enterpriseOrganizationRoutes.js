@@ -13,6 +13,7 @@ const {
   requirePermission,
 } = require("../middleware/tenantMiddleware");
 const orgService = require("../services/organizationService");
+const rolePolicy = require("../services/rolePolicy");
 const db = require("../config/database");
 
 const router = express.Router();
@@ -79,6 +80,15 @@ router.get("/me", verifyToken, requireTenantContext, async (req, res) => {
       }
     }
 
+    // The exact account role, read from the users table on this request. The
+    // UI uses it to hide full-administrator-only controls from a delegated
+    // sub-admin without waiting for a token refresh.
+    const actorRole = rolePolicy.effectiveRole({
+      globalRole: req.user?.role,
+      userRole: user.role,
+      membershipRole: activeOrg?.role,
+    });
+
     res.json({
       success: true,
       user,
@@ -90,6 +100,7 @@ router.get("/me", verifyToken, requireTenantContext, async (req, res) => {
       branches,
       permittedBranchIds,
       roleInActiveOrg: activeOrg?.role || "agent",
+      actorRole,
     });
   } catch (err) {
     console.error("[GET /api/v2/me] Error:", err);

@@ -34,7 +34,7 @@ import {
   ENQUIRY_TYPES,
   enquiryTypeLabel,
 } from "../api/enquiries";
-import { useAuth } from "../auth/AuthContext";
+import useWorkspaceAccess from "../hooks/useWorkspaceAccess";
 
 const TEMP_META = {
   new: {
@@ -92,8 +92,11 @@ const EMPTY_FORM = {
 };
 
 export default function WAEnquiries() {
-  const { user } = useAuth();
-  const canDelete = user?.role === "admin" || user?.role === "subadmin";
+  // Deleting an enquiry is an administrator action on the API (it also clears
+  // linked intake), so mirror that here instead of guessing from a stale
+  // session role.
+  const { admin } = useWorkspaceAccess();
+  const canDelete = admin;
 
   const [enquiries, setEnquiries] = useState([]);
   const [summary, setSummary] = useState({ total: 0, new: 0, cold: 0, warm: 0, hot: 0, converted: 0 });

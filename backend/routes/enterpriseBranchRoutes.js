@@ -564,7 +564,7 @@ router.post(
   async (req, res) => {
     try {
       const branchId = Number(req.params.branchId);
-      const employee = await orgService.createBranchEmployee(req.tenantId, branchId, req.body, req.user.id);
+      const employee = await orgService.createBranchEmployee(req.tenantId, branchId, req.body, req.user.id, { actorRole: req.user?.actorRole || req.user?.role });
       res.status(201).json({
         success: true,
         employee,

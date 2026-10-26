@@ -75,7 +75,11 @@ const ACCESS_LEVEL_META = {
 
 export default function WAEmployees() {
   const { user, demoMode } = useAuth();
-  const { activeTenant, activeBranch, branches, enterpriseHeaders } = useEnterprise();
+  const { activeTenant, activeBranch, branches, enterpriseHeaders, isOwnerOrAdmin, actorRole, loading: orgLoading } = useEnterprise();
+  // A delegated sub-admin manages people but may not touch peers, other
+  // administrators, or the owner. The server enforces this; the UI hides the
+  // controls so nobody is left guessing why an action failed.
+  const subadmin = actorRole === "subadmin" || user?.role === "subadmin";
 
   // Employee data & analytics
   const [employees, setEmployees] = useState([]);
@@ -131,7 +135,10 @@ export default function WAEmployees() {
 
   const fetchEmployees = useCallback(async () => {
     const version = ++employeeRequest.current;
-    if (user?.role === "employee") return;
+    // Only the organization administrators may list people. Wait for the
+    // membership to resolve so an administrator is not skipped on first paint
+    // and a member never fires an unnecessary request.
+    if (orgLoading || !isOwnerOrAdmin) return;
     setLoading(true);
     setError("");
     try {
@@ -160,7 +167,7 @@ export default function WAEmployees() {
     } finally {
       if (version === employeeRequest.current) setLoading(false);
     }
-  }, [user, enterpriseHeaders, branchFilter]);
+  }, [user, enterpriseHeaders, branchFilter, isOwnerOrAdmin, orgLoading]);
 
   useEffect(() => {
     setEmployees([]);
@@ -304,8 +311,11 @@ export default function WAEmployees() {
     return matchesSearch && matchesLevel && matchesStatus && matchesBranch;
   });
 
-  // Strict employee isolation guard: if regular employee, show isolated view
-  if (user?.role === "employee") {
+  // Strict employee isolation guard: members never get the people directory.
+  // The resolved membership decides, not the session role — a promoted member
+  // whose token still says employee must see this page and a demoted admin
+  // must not.
+  if (!orgLoading && !isOwnerOrAdmin) {
     return (
       <div className="hl-page wa-employees-page crm-layout-content p-4 sm:p-6 max-w-4xl mx-auto">
       <WAWorkspaceGuide section="employees" />        <div
@@ -637,6 +647,10 @@ export default function WAEmployees() {
                   const LevelIcon = level.icon;
                   const isCurrentAdmin = emp.id === user?.id;
                   const isPending = emp.status !== "active";
+                  // A sub-admin never manages a peer administrator or the
+                  // owner (owners appear with the admin role).
+                  const targetIsAdministrator = ["admin", "subadmin"].includes(emp.role);
+                  const subadminLocked = subadmin && !isCurrentAdmin && targetIsAdministrator;
 
                   return (
                     <tr
@@ -788,25 +802,29 @@ export default function WAEmployees() {
                           )}
 
                           {/* Regenerate Code */}
-                          <button
-                            onClick={() => handleRegenerateCode(emp.id, emp.first_name)}
-                            className="p-1.5 rounded text-gray-600 hover:text-blue-700 hover:bg-blue-50 transition-colors"
-                            title="Regenerate Access Code"
-                          >
-                            <KeyRound size={14} />
-                          </button>
+                          {!subadminLocked && (
+                            <button
+                              onClick={() => handleRegenerateCode(emp.id, emp.first_name)}
+                              className="p-1.5 rounded text-gray-600 hover:text-blue-700 hover:bg-blue-50 transition-colors"
+                              title="Regenerate Access Code"
+                            >
+                              <KeyRound size={14} />
+                            </button>
+                          )}
 
                           {/* Edit Access Level */}
-                          <button
-                            onClick={() => setEditEmployee({ ...emp })}
-                            className="p-1.5 rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-                            title="Edit Access Level & Job Title"
-                          >
-                            <Edit2 size={14} />
-                          </button>
+                          {!subadminLocked && (
+                            <button
+                              onClick={() => setEditEmployee({ ...emp })}
+                              className="p-1.5 rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                              title="Edit Access Level & Job Title"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                          )}
 
                           {/* Delete */}
-                          {!isCurrentAdmin && (
+                          {!isCurrentAdmin && !subadminLocked && (
                             <button
                               onClick={() => handleDeleteEmployee(emp.id, emp.first_name)}
                               className="p-1.5 rounded text-gray-400 hover:text-red-700 hover:bg-red-50 transition-colors"
@@ -949,8 +967,8 @@ export default function WAEmployees() {
                           so only administrators may hand that role out. The
                           current value stays selectable so an edit form never
                           renders blank. */}
-                      <option value="subadmin" disabled={user?.role === "subadmin" && formData.role !== "subadmin"}>Sub-admin (manager)</option>
-                      <option value="admin" disabled={user?.role === "subadmin" && formData.role !== "admin"}>Admin</option>
+                      <option value="subadmin" disabled={subadmin && formData.role !== "subadmin"}>Sub-admin (manager)</option>
+                      <option value="admin" disabled={subadmin && formData.role !== "admin"}>Admin</option>
                     </select>
                   </div>
                 </div>

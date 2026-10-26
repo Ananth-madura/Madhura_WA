@@ -23,6 +23,28 @@ Authorization is decided per request inside one dashboard, not by mounting a sec
 - `GET /api/v2/workspace/me/permissions` returns the caller's resolved grants. The rail and the route guard use it, so the sidebar lists only routes the server will serve, and a blocked deep link redirects to the assigned inbox instead of rendering an empty page.
 - `PUT /api/v2/workspace/permissions/:userId` requires exactly one grant per known module, so an outdated client payload is rejected rather than partially applied.
 
+### Role matrix
+
+| Capability | `admin` | `subadmin` | `employee` |
+| --- | --- | --- | --- |
+| Admin surfaces (employees, accounts, branches, billing, Meta, audit, session engine) | yes | yes | no |
+| Per-module grants | n/a (full) | n/a (full) | enforced |
+| Create employees / agents | yes | yes | no |
+| Create an admin or another sub-admin | yes | no | no |
+| Change anyone's role (promote / demote) | yes | no | no |
+| Edit / delete / reset a member | yes | yes | no |
+| Edit / delete / reset a peer admin or sub-admin | yes | no | no |
+| Act on the tenant owner | no (never a target) | no | no |
+| Edit their own profile | yes | yes | no account tools |
+
+- **Membership is the authority.** An administrative decision is `organization_memberships.role ∈ {organization_owner, organization_admin}`, not a JWT `role` claim that can be up to 14 days stale. `workspaceModule.isAdmin` and `sharedWorkspaceGuard.isAdmin` read the membership; the `users.role` account row only distinguishes a delegated `subadmin` from a full `admin`. A demoted administrator loses admin surfaces before their token refreshes, and a freshly promoted member gains them before their next login.
+- **`rolePolicy.effectiveRole({ globalRole, userRole, membershipRole })`** is the single resolver used by `authWorkspaceScope`, `/api/v2/me` and the guard. The membership wins when a row exists; `users.role` supplies the admin/sub-admin split; `platform_admin` is never downgraded by an organization row; with no membership row (legacy/system accounts) the account role is used.
+- **Account management is one pure policy** (`backend/services/rolePolicy.js`) shared by `/auth/*`, the branch employee API and the tests: `canCreateRole`, `canManageAccount`, `canChangeRole`, `canResetPassword`, `canDeleteAccount`. No route re-implements the rules. `canCreateRole` is the escalation gate — a sub-admin may only create `employee`/`agent`.
+- **The admin plane resolves the actor on every request.** `authWorkspaceScope` reads `users.role` from the database for `/api/auth/*` administration routes and writes both `req.user.role` and `req.actorRole`, so a promotion or demotion applies immediately. It also pre-checks that the target belongs to the caller's organization before a handler runs.
+- **The shared guard normalizes the actor on every workspace request.** `sharedWorkspaceGuard` replaces `req.user.role` with `rolePolicy.effectiveRole(...)` from the membership for every authenticated workspace call, not only for administrators, and sets `req.actorRole`. A promoted member works immediately, a delegated sub-admin stays recognizable, and a stale `admin` claim after a demotion is rewritten to `employee` before any handler reads it. The legacy `agent` alias resolves to `employee`. No extra database query is added; the exact admin/sub-admin split is resolved from the account row on the `/api/auth` plane.
+- **`/api/v2/me` returns `actorRole`** (`admin` / `subadmin` / `employee` / `platform_admin`) from the same resolver. The UI uses it to hide full-admin-only controls from a sub-admin without trusting the session role.
+- **Frontend mirrors the server.** `isWorkspaceAdmin` treats the resolved organization role as authoritative and only falls back to the session role on the first paint; `isWorkspaceSubadmin` exposes the delegated role; `useWorkspaceAccess().admin` drives admin-only controls (enquiry deletion, client-portal management). Client-portal management additionally accepts a member with the `client_portal` edit grant; a view-only member sees a "Full-use access required" notice instead of the management UI.
+
 ## Transfer contract
 
 Full customer transfer locks the routing pool, customer and conversations; validates every destination number/branch; updates all conversations and contact ownership together; records previous owner, actor, reason and timestamp. Existing notes, attachments, leads, tasks and deals retain their IDs and inherit customer access. Pending tasks follow the customer; completed tasks preserve their completing actor. Active conversation automations pause within the transaction, preventing scheduled steps from continuing under a stale owner. Campaign membership remains attached to the same contact; delegated campaign delivery rechecks current ownership and skips recipients transferred away from its creator. Legacy employee campaign APIs remain restricted. No history is deleted. A stale expected owner causes a conflict.
@@ -82,6 +104,7 @@ flowchart LR
 - Previous owner loses API access; the new owner receives subsequent inbound messages on the original conversation. Module revocation also removes its counts from analytics.
 - Actual built React frontend, cookie login, signed webhook, real WebSocket, inbox-to-customer navigation, task creation, MySQL persistence, hard refresh and mobile layout were exercised in Chrome against an isolated backend.
 - Existing flow/template, signup/billing and scoped inbox regressions pass with local provider transports. No live customer messages, provider payments or orders were initiated.
+- The three-role boundary is covered by `node backend/tests/test_role_policy.js` and `node backend/tests/test_workspace_access_policy.js`: membership overrides a stale claim in both directions, a sub-admin reaches admin routing but cannot create/promote/reset a peer, a sub-admin bypasses module grants, and the guard normalizes the actor role without a second query. `frontend/src/auth/workspaceAccess.test.js` covers the same path rules for administrators, sub-admins and members.
 - Real multipart uploads, media-header templates, private attachment downloads, duplicate/uncertain-send protection, permission revocation during upload, explicit campaign launch through the actual worker, transfer/revocation skips, interrupted-send recovery, CRM intake rollback and consent audit paths were exercised against the actual backend and isolated MySQL. The built campaign/upload UI also passed Chrome checks, including mobile layout.
 
 ### Remaining release work and intentional limits

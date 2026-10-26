@@ -51,11 +51,20 @@ const DEFAULT_EDIT = new Set([
 
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-/** Workspace administrators bypass module grants. */
+/**
+ * Workspace administrators bypass module grants.
+ *
+ * The organization membership resolved by `requireTenantContext` is the
+ * authority. A JWT's `role` claim can be up to 14 days stale — checking it
+ * would let a demoted administrator keep every grant until the token expired,
+ * and would make a delegated sub-admin depend on two different role sources.
+ * Platform super-admins are already mapped to `organization_owner`; the role
+ * check stays as a belt-and-braces fallback for connector-style requests.
+ */
 function isAdmin(req) {
   return (
     ["organization_owner", "organization_admin"].includes(req.userRole) ||
-    ["platform_admin", "admin", "subadmin"].includes(req.user?.role)
+    req.user?.role === "platform_admin"
   );
 }
 

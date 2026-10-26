@@ -370,7 +370,7 @@ async function grantWalletCredits(tenantId, creditType, amount, reason, referenc
 
   // 1. Ensure account exists
   await q(
-    `INSERT OR IGNORE INTO wallet_accounts (tenant_id, currency, credit_type, balance, reserved_balance)
+    `INSERT IGNORE INTO wallet_accounts (tenant_id, currency, credit_type, balance, reserved_balance)
      VALUES (?, 'INR', ?, 0, 0)`,
     [tid, creditType]
   );

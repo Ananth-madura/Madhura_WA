@@ -34,7 +34,10 @@ export default function InboxRoutingSettings() {
     {error && <p role="alert">{error}</p>}{saved && <p role="status">{saved}</p>}
     {rows.map((row, index) => <div key={`${row.user_id}:${row.branch_id}`} className="flex flex-wrap gap-4 items-center border-t py-2"><span>{row.first_name} · {row.branch_name}</span>
       <span>{row.open_count || 0} open conversations · {row.employee_status}</span>
-      <EmployeePermissions userId={row.user_id} name={row.first_name}/>
+      {/* Administrators reach every module through their role, so a grant
+          editor would be meaningless (and the API refuses it). */}
+      {!["admin", "subadmin", "platform_admin"].includes(row.employee_role) && <EmployeePermissions userId={row.user_id} name={row.first_name}/>}
+      {["admin", "subadmin", "platform_admin"].includes(row.employee_role) && <span className="text-xs opacity-70">Full workspace access (administrator)</span>}
       <label>Skills (comma separated) <input className="border rounded p-2 text-black" value={skills[row.user_id] || ""} onChange={event => setSkills(previous => ({ ...previous, [row.user_id]: event.target.value }))}/></label>
       <label><input type="checkbox" checked={Boolean(row.auto_assign_enabled)} onChange={e => update(index, { auto_assign_enabled: e.target.checked })} /> Auto assign</label>
       <label><input type="checkbox" checked={Boolean(row.is_available)} onChange={e => update(index, { is_available: e.target.checked })} /> Available</label>

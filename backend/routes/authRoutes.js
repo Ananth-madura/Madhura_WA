@@ -11,6 +11,7 @@ const { createRateLimiter, loginLimiter, otpLimiter } = require("../middleware/w
 const { getNotificationIO } = require("../sockets/notifications");
 const tenantPlanService = require("../services/tenantPlanService");
 const organizationService = require("../services/organizationService");
+const rolePolicy = require("../services/rolePolicy");
 const { resolveTenantId } = require("../middleware/tenantMiddleware");
 
 const queryAsync = (sql, params = []) =>
@@ -22,6 +23,63 @@ const queryAsync = (sql, params = []) =>
   });
 
 const router = express.Router();
+
+/**
+ * Resolve the account an administrator is acting on, scoped to their own
+ * organization.
+ *
+ * Every account-mutation route goes through this. Two rules it enforces:
+ * the target must live in the caller's tenant (no cross-organization edits),
+ * and the caller must be allowed to manage that target at all under
+ * `services/rolePolicy.js` — a delegated sub-admin may never touch a peer
+ * administrator or the tenant owner.
+ *
+ * Returns `{error, status}` on refusal rather than throwing so the caller can
+ * answer with a specific message.
+ */
+async function resolveManagedAccount(req, targetUserId) {
+  const tenantId = req.tenantId || resolveTenantId(req);
+  const targetId = Number(targetUserId);
+  if (!tenantId) return { error: "Organization context required", status: 403 };
+  if (!Number.isSafeInteger(targetId) || targetId < 1) return { error: "Valid account ID required", status: 400 };
+
+  const [rows] = await db.promise().query(
+    `SELECT u.id, u.email, u.role, m.role AS membership_role
+       FROM users u
+       LEFT JOIN organization_memberships m ON m.tenant_id = u.tenant_id AND m.user_id = u.id
+      WHERE u.id = ? AND u.tenant_id = ? LIMIT 1`,
+    [targetId, tenantId]
+  );
+  if (!rows.length) return { error: "Account not found in this organization", status: 404 };
+
+  const target = rows[0];
+  const actorRole = req.user?.actorRole || req.user?.role;
+  const allowed = rolePolicy.canManageAccount({
+    actorRole,
+    actorId: req.user?.id,
+    targetId,
+    targetRole: target.role,
+    targetMembershipRole: target.membership_role,
+  });
+  if (!allowed) return { error: "You cannot manage this account", status: 403 };
+  return { target, tenantId };
+}
+
+/**
+ * Apply a role to both `users.role` (what the login/JWT carries) and
+ * `organization_memberships.role` (what authorization reads). Writing one
+ * without the other is what made a demoted administrator keep admin access.
+ */
+async function writeAccountRole(tenantId, userId, role) {
+  const normalized = rolePolicy.normalizeRole(role);
+  await db.promise().query("UPDATE users SET role = ? WHERE id = ? AND tenant_id = ?", [normalized, userId, tenantId]);
+  await db.promise().query(
+    "INSERT INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active') ON DUPLICATE KEY UPDATE role = VALUES(role), membership_status = 'active'",
+    [tenantId, userId, rolePolicy.membershipRoleFor(normalized)]
+  );
+  return normalized;
+}
+
 
 /**
  * JWT signing secret accessor.
@@ -437,8 +495,8 @@ router.post("/login", loginLimiter, (req, res) => {
         if (!orgs || orgs.length === 0) {
           try {
             await queryAsync(
-              `INSERT OR IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active')`,
-              [tid, user.id, user.role === 'admin' ? 'organization_owner' : 'agent']
+              `INSERT IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active')`,
+              [tid, user.id, rolePolicy.membershipRoleFor(user.role)]
             );
             orgs = await organizationService.getUserOrganizations(user.id).catch(() => []);
           } catch (_) {}
@@ -455,7 +513,7 @@ router.post("/login", loginLimiter, (req, res) => {
         if (!branchList || branchList.length === 0) {
           try {
             await queryAsync(
-              `INSERT OR IGNORE INTO branches (tenant_id, code, name, timezone, is_head_office, status) VALUES (?, 'HEADOFFICE', 'Head Office (Main)', 'Asia/Kolkata', 1, 'active')`,
+              `INSERT IGNORE INTO branches (tenant_id, code, name, timezone, is_head_office, status) VALUES (?, 'HEADOFFICE', 'Head Office (Main)', 'Asia/Kolkata', 1, 'active')`,
               [activeTenantId]
             );
             branchList = await organizationService.getBranches(activeTenantId).catch(() => []);
@@ -479,7 +537,7 @@ router.post("/login", loginLimiter, (req, res) => {
           if (activeBranch) {
             try {
               await queryAsync(
-                `INSERT OR IGNORE INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary) VALUES (?, ?, ?, 1)`,
+                `INSERT IGNORE INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary) VALUES (?, ?, ?, 1)`,
                 [activeTenantId, user.id, activeBranch.id]
               );
             } catch (_) {}
@@ -523,7 +581,7 @@ router.post("/login", loginLimiter, (req, res) => {
           organizations: orgs,
           activeBranch,
           branches: branchList,
-          permittedBranchIds: user.role === 'admin' ? branchList.map(b => b.id) : (staffBranches.map(s => s.branch_id)),
+          permittedBranchIds: ["organization_owner", "organization_admin"].includes(activeOrg.role) ? branchList.map(b => b.id) : (staffBranches.map(s => s.branch_id)),
           tenant: tInfo,
         });
       };
@@ -651,7 +709,13 @@ router.post("/create-user", verifyToken, isAdmin, (req, res) => {
   const { first_name, last_name, email, emp_id, job_title, emp_role, mobile_number, emp_address, user_password, system_role } = req.body;
   if (!first_name || !email || !user_password) return res.status(400).json({ message: "Name, email and password required" });
 
-  const role = system_role || "employee";
+  // A delegated sub-admin may staff the organization but never mint a peer or
+  // an administrator: a new admin login would be a permanent escalation.
+  const role = rolePolicy.normalizeRole(system_role || "employee");
+  if (!rolePolicy.canCreateRole(req.user?.actorRole || req.user?.role, role)) {
+    return res.status(403).json({ message: "Only an administrator can create administrator accounts" });
+  }
+
   bcrypt.hash(user_password, 10, (err, hash) => {
     if (err) return res.status(500).json({ message: "Password hash failed" });
 
@@ -673,10 +737,11 @@ router.post("/create-user", verifyToken, isAdmin, (req, res) => {
           }
         );
 
-        // Also record in organization_memberships
+        // The membership row is what authorization actually reads, so it must
+        // be written with the same role the user row carries.
         db.query(
-          `INSERT OR IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active')`,
-          [tenantId, newUserId, role === "admin" ? "organization_admin" : "agent"]
+          `INSERT IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active')`,
+          [tenantId, newUserId, rolePolicy.membershipRoleFor(role)]
         );
 
         res.json({ message: "User created successfully", userId: newUserId });
@@ -794,13 +859,14 @@ router.post("/employees", verifyToken, isAdmin, async (req, res) => {
     const tenantId = req.tenantId || resolveTenantId(req);
     // Delegated managers can staff their branch but cannot mint peers or
     // administrators — otherwise a sub-admin could escalate through a new login.
-    if (req.user.role === "subadmin" && ["admin", "subadmin"].includes(req.body.role)) {
+    const requestedRole = rolePolicy.normalizeRole(req.body.role || "employee");
+    if (!rolePolicy.canCreateRole(req.user?.actorRole || req.user?.role, requestedRole)) {
       return res.status(403).json({ message: "Only an administrator can create administrator accounts" });
     }
     if (!tenantId) return res.status(403).json({ message: "Organization context required" });
     const branchId = Number(req.body.branch_id);
     if (!Number.isSafeInteger(branchId) || branchId < 1) return res.status(400).json({ message: "Select a branch for this employee" });
-    const employee = await organizationService.createBranchEmployee(tenantId, branchId, req.body, req.user.id);
+    const employee = await organizationService.createBranchEmployee(tenantId, branchId, req.body, req.user.id, { actorRole: req.user?.actorRole || req.user?.role });
     res.status(201).json({ message: "Employee created. Share their access code privately.", employee, access_code: employee.access_code });
   } catch (error) {
     res.status(400).json({ message: error.code === "ER_DUP_ENTRY" ? "An account with this email already exists" : error.message });
@@ -808,33 +874,26 @@ router.post("/employees", verifyToken, isAdmin, async (req, res) => {
 });
 
 // 3. POST /api/auth/employees/:id/regenerate-code — Admin regenerates a fresh access code
-router.post("/employees/:id/regenerate-code", verifyToken, isAdmin, (req, res) => {
-  const tenantId = resolveTenantId(req);
-  if (!tenantId) return res.status(403).json({ message: "Organization context required", code: "TENANT_REQUIRED" });
-  const targetId = parseInt(req.params.id, 10);
-
-  if (!targetId) return res.status(400).json({ message: "Invalid employee ID" });
-
-  db.query(`SELECT id, first_name, email FROM users WHERE id = ? AND tenant_id = ?`, [targetId, tenantId], (err, rows) => {
-    if (err || !rows || !rows.length) {
-      return res.status(404).json({ message: "Employee not found in your workspace" });
-    }
+router.post("/employees/:id/regenerate-code", verifyToken, isAdmin, async (req, res) => {
+  try {
+    // An access code is a login credential. A sub-admin regenerating an
+    // administrator's code would hand themselves that account, so the target
+    // must pass the same manage check as an edit.
+    const scope = await resolveManagedAccount(req, req.params.id);
+    if (scope.error) return res.status(scope.status).json({ message: scope.error });
+    const { target, tenantId } = scope;
 
     const newCode = generateEmployeeAccessCode();
+    await db.promise().query(`UPDATE users SET access_code = ? WHERE id = ? AND tenant_id = ?`, [newCode, target.id, tenantId]);
+    db.query(`UPDATE teammember SET access_code = ? WHERE user_id = ?`, [newCode, target.id], () => {});
 
-    db.query(`UPDATE users SET access_code = ? WHERE id = ? AND tenant_id = ?`, [newCode, targetId, tenantId], (upErr) => {
-      if (upErr) return res.status(500).json({ message: "Failed to update access code" });
-
-      try {
-        db.query(`UPDATE teammember SET access_code = ? WHERE user_id = ?`, [newCode, targetId]);
-      } catch (_) {}
-
-      res.json({
-        message: "New Access Code generated successfully!",
-        access_code: newCode,
-      });
+    res.json({
+      message: "New Access Code generated successfully!",
+      access_code: newCode,
     });
-  });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update access code" });
+  }
 });
 
 // 4. PUT /api/auth/employees/:id — Admin updates role, status, name, access level
@@ -842,21 +901,47 @@ router.put("/employees/:id", verifyToken, isAdmin, async (req, res) => {
   const tenantId = req.tenantId || resolveTenantId(req);
   const targetId = Number(req.params.id);
   if (!tenantId || !Number.isSafeInteger(targetId) || targetId < 1) return res.status(400).json({ message: "Valid employee and organization required" });
+  const actorRole = req.user?.actorRole || req.user?.role;
   try {
     await require("../services/sharedInboxService").createInboxService(db).transaction(async q => {
       await q("INSERT INTO wa_routing_cursors (tenant_id,last_user_id) VALUES (?,0) ON DUPLICATE KEY UPDATE tenant_id=VALUES(tenant_id)", [tenantId]);
       await q("SELECT tenant_id FROM wa_routing_cursors WHERE tenant_id = ? FOR UPDATE", [tenantId]);
-      const [employee] = await q("SELECT u.id, m.role FROM users u JOIN organization_memberships m ON m.user_id=u.id AND m.tenant_id=u.tenant_id WHERE u.id=? AND u.tenant_id=? FOR UPDATE", [targetId,tenantId]);
-      if (!employee || employee.role === 'organization_owner') throw new Error("Employee not found or owner cannot be edited here");
+      const [employee] = await q("SELECT u.id, u.role, m.role AS membership_role FROM users u LEFT JOIN organization_memberships m ON m.user_id=u.id AND m.tenant_id=u.tenant_id WHERE u.id=? AND u.tenant_id=? FOR UPDATE", [targetId,tenantId]);
+      if (!employee) throw new Error("Employee not found in your organization");
+
+      const manageArgs = {
+        actorRole,
+        actorId: req.user?.id,
+        targetId,
+        targetRole: employee.role,
+        targetMembershipRole: employee.membership_role,
+      };
+      if (!rolePolicy.canManageAccount(manageArgs)) throw new Error("You cannot manage this account");
+
       const fields = [], params = [];
       for (const field of ['first_name','last_name']) if (req.body[field] !== undefined) { fields.push(field+' = ?'); params.push(String(req.body[field]).trim().slice(0,100)); }
-      for (const [field, allowed] of [['role',['admin','subadmin','employee','agent']],['status',['active','pending','banned','inactive']],['whatsapp_access_level',['full','chat_only','read_only','campaign_only']]]) {
+      for (const [field, allowed] of [['status',['active','pending','banned','inactive']],['whatsapp_access_level',['full','chat_only','read_only','campaign_only']]]) {
         if (req.body[field] !== undefined) { if (!allowed.includes(req.body[field])) throw new Error('Invalid '+field); fields.push(field+' = ?'); params.push(req.body[field]); }
       }
       if (fields.length) await q('UPDATE users SET '+fields.join(', ')+' WHERE id = ? AND tenant_id = ?', [...params,targetId,tenantId]);
-      // Delegated managers ("sub-admin") act as organization administrators, but
-      // role changes stay owner/admin-only via isAdminOnly on /change-role.
-      if (req.body.role !== undefined) await q("UPDATE organization_memberships SET role = ? WHERE tenant_id = ? AND user_id = ?", [['admin','subadmin'].includes(req.body.role)?'organization_admin':'agent',tenantId,targetId]);
+
+      // A role write is the escalation boundary. It stays full-administrator
+      // only, never self-service, and never applies to the tenant owner. A
+      // sub-admin may still save an edit form that echoes the unchanged role,
+      // which is why an identical role is not treated as a change.
+      if (req.body.role !== undefined) {
+        const nextRole = rolePolicy.normalizeRole(req.body.role);
+        if (nextRole !== rolePolicy.normalizeRole(employee.role)) {
+          if (!rolePolicy.canChangeRole({ ...manageArgs, nextRole })) {
+            throw new Error("Only an administrator can change roles");
+          }
+          await q("UPDATE users SET role = ? WHERE id = ? AND tenant_id = ?", [nextRole, targetId, tenantId]);
+        }
+        await q(
+          "INSERT INTO organization_memberships (tenant_id,user_id,role,membership_status) VALUES (?,?,?,'active') ON DUPLICATE KEY UPDATE role=VALUES(role), membership_status='active'",
+          [tenantId, targetId, rolePolicy.membershipRoleFor(nextRole)]
+        );
+      }
       const branchId = Number(req.body.branch_id || req.body.branchId);
       if (branchId) {
         const [branch] = await q("SELECT id FROM branches WHERE id = ? AND tenant_id = ? AND status = 'active'", [branchId,tenantId]);
@@ -873,32 +958,31 @@ router.put("/employees/:id", verifyToken, isAdmin, async (req, res) => {
 });
 
 // 5. DELETE /api/auth/employees/:id — Admin deletes employee (cannot delete self)
-router.delete("/employees/:id", verifyToken, isAdmin, (req, res) => {
-  const tenantId = resolveTenantId(req);
-  if (!tenantId) return res.status(403).json({ message: "Organization context required", code: "TENANT_REQUIRED" });
-  const targetId = parseInt(req.params.id, 10);
+router.delete("/employees/:id", verifyToken, isAdmin, async (req, res) => {
+  try {
+    // A sub-admin may remove members but never an administrator or the owner.
+    const scope = await resolveManagedAccount(req, req.params.id);
+    if (scope.error) return res.status(scope.status).json({ message: scope.error });
+    const { target, tenantId } = scope;
+    const actorRole = req.user?.actorRole || req.user?.role;
 
-  if (!targetId) return res.status(400).json({ message: "Invalid employee ID" });
-  if (req.user?.id === targetId) {
-    return res.status(400).json({ message: "You cannot delete your own admin account" });
-  }
-
-  db.query(`SELECT id, email FROM users WHERE id = ? AND tenant_id = ?`, [targetId, tenantId], (err, rows) => {
-    if (err || !rows || !rows.length) {
-      return res.status(404).json({ message: "Employee not found in your workspace" });
+    if (!rolePolicy.canDeleteAccount({
+      actorRole,
+      actorId: req.user?.id,
+      targetId: target.id,
+      targetRole: target.role,
+      targetMembershipRole: target.membership_role,
+    })) {
+      return res.status(403).json({ message: "You cannot delete this account" });
     }
 
-    const email = rows[0].email;
-    db.query(`DELETE FROM users WHERE id = ? AND tenant_id = ?`, [targetId, tenantId], (delErr) => {
-      if (delErr) return res.status(500).json({ message: "Failed to delete employee" });
+    await db.promise().query(`DELETE FROM users WHERE id = ? AND tenant_id = ?`, [target.id, tenantId]);
+    db.query(`DELETE FROM teammember WHERE user_id = ? OR emp_email = ?`, [target.id, target.email], () => {});
 
-      try {
-        db.query(`DELETE FROM teammember WHERE user_id = ? OR emp_email = ?`, [targetId, email]);
-      } catch (_) {}
-
-      res.json({ message: "Employee deleted successfully." });
-    });
-  });
+    res.json({ message: "Employee deleted successfully." });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete employee" });
+  }
 });
 
 // 6. POST /api/auth/verify-access-code — Public code preview for employee signup/activation
@@ -995,8 +1079,8 @@ router.post("/join-with-access-code", async (req, res) => {
             // Ensure organization membership exists
             try {
               await queryAsync(
-                `INSERT OR IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active')`,
-                [tid, user.id, user.role || "agent"]
+                `INSERT IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, ?, 'active')`,
+                [tid, user.id, rolePolicy.membershipRoleFor(user.role)]
               );
             } catch (_) {}
 
@@ -1019,7 +1103,7 @@ router.post("/join-with-access-code", async (req, res) => {
               if (activeBranch) {
                 try {
                   await queryAsync(
-                    `INSERT OR IGNORE INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary) VALUES (?, ?, ?, 1)`,
+                    `INSERT IGNORE INTO staff_branch_memberships (tenant_id, user_id, branch_id, is_primary) VALUES (?, ?, ?, 1)`,
                     [tid, user.id, activeBranch.id]
                   );
                 } catch (_) {}
@@ -1065,7 +1149,7 @@ router.post("/join-with-access-code", async (req, res) => {
               organizations: orgs.length ? orgs : [activeOrg],
               activeBranch,
               branches: branchList,
-              permittedBranchIds: activeBranch ? [activeBranch.id] : [],
+              permittedBranchIds: rolePolicy.isAdminRole(user.role) ? branchList.map((b) => b.id) : (activeBranch ? [activeBranch.id] : []),
               message: "Access code verified! Your employee account is activated.",
             });
           }
@@ -1120,108 +1204,170 @@ router.get("/teammember", verifyToken, (req, res) => {
 
 
 /* ================= ADMIN: UPDATE USER ================= */
-router.put("/update-user/:id", verifyToken, isAdmin, (req, res) => {
+router.put("/update-user/:id", verifyToken, isAdmin, async (req, res) => {
   const { first_name, email, emp_id, job_title, emp_role, mobile_number, emp_address, role } = req.body;
+  try {
+    // Tenant-scoped, and refused for a target a sub-admin may not manage.
+    const scope = await resolveManagedAccount(req, req.params.id);
+    if (scope.error) return res.status(scope.status).json({ message: scope.error });
+    const { target, tenantId } = scope;
+    const actorRole = req.user?.actorRole || req.user?.role;
 
-  db.query(`SELECT email, role FROM users WHERE id = ?`, [req.params.id], (err, rows) => {
-    if (err || !rows.length) return res.status(404).json({ message: "User not found" });
-    const oldEmail = rows[0].email;
-    // Protect: cannot edit the primary admin user's record
-    if (rows[0].email && rows[0].email.toLowerCase() === "admin@madhuratech.com") {
+    if (target.email && target.email.toLowerCase() === "admin@madhuratech.com" && Number(req.user?.id) !== Number(target.id)) {
       return res.status(403).json({ message: "Cannot modify the primary admin account" });
     }
 
-    db.query(`UPDATE users SET first_name = ?, email = ?, role = ? WHERE id = ?`, [first_name, email?.toLowerCase() || oldEmail, role || "employee", req.params.id], (err2) => {
-      if (err2) return res.status(500).json({ message: "Update failed" });
+    const nextEmail = email?.toLowerCase() || target.email;
+    const nextName = first_name !== undefined ? String(first_name).trim().slice(0, 100) : undefined;
+    await db.promise().query(
+      `UPDATE users SET first_name = COALESCE(?, first_name), email = ? WHERE id = ? AND tenant_id = ?`,
+      [nextName ?? null, nextEmail, target.id, tenantId]
+    );
 
-      db.query(`UPDATE teammember SET first_name = ?, emp_email = ?, emp_id = ?, job_title = ?, emp_role = ?, mobile_number = ?, emp_address = ? WHERE emp_email = ?`,
-        [first_name, email?.toLowerCase() || oldEmail, emp_id || null, job_title || "Developer", emp_role || "Developer", mobile_number || null, emp_address || null, oldEmail]);
+    // Optional role field: only a full administrator may actually move the
+    // role, and the membership row is written with it so authorization and the
+    // login claim never disagree.
+    if (role !== undefined) {
+      const nextRole = rolePolicy.normalizeRole(role);
+      if (nextRole !== rolePolicy.normalizeRole(target.role)) {
+        if (!rolePolicy.canChangeRole({ actorRole, actorId: req.user?.id, targetId: target.id, targetMembershipRole: target.membership_role, nextRole })) {
+          return res.status(403).json({ message: "Only an administrator can change roles" });
+        }
+        await writeAccountRole(tenantId, target.id, nextRole);
+      }
+    }
 
-      res.json({ message: "User updated successfully" });
-    });
-  });
+    db.query(
+      `UPDATE teammember SET first_name = ?, emp_email = ?, emp_id = ?, job_title = ?, emp_role = ?, mobile_number = ?, emp_address = ? WHERE emp_email = ?`,
+      [nextName ?? null, nextEmail, emp_id || null, job_title || "Developer", emp_role || "Developer", mobile_number || null, emp_address || null, target.email],
+      () => {}
+    );
+
+    res.json({ message: "User updated successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Update failed" });
+  }
 });
 
 /* ================= ADMIN: CHANGE USER ROLE ================= */
-router.put("/change-role/:id", verifyToken, isAdminOnly, (req, res) => {
+router.put("/change-role/:id", verifyToken, isAdminOnly, async (req, res) => {
   const { role } = req.body;
-  if (!["admin", "subadmin", "employee"].includes(role)) {
+  if (!rolePolicy.ROLE_VALUES.includes(role)) {
     return res.status(400).json({ message: "Invalid role. Can only set admin, subadmin or employee" });
   }
-  // Check if target user is primary admin — primary admin is protected
-  db.query(`SELECT email, role FROM users WHERE id = ?`, [req.params.id], (err, rows) => {
-    if (err || !rows || (Array.isArray(rows) && !rows.length)) return res.status(404).json({ message: "User not found" });
-    const user = (rows && Array.isArray(rows) && rows[0]) ? rows[0] : {};
-    if (user.email && user.email.toLowerCase() === "admin@madhuratech.com") {
-      return res.status(403).json({ message: "Cannot change the role of the primary admin account" });
-    }
-    db.query(`UPDATE users SET role = ? WHERE id = ?`, [role, req.params.id], (err2) => {
-      if (err2) return res.status(500).json({ message: "Role update failed" });
-      res.json({ message: `Role updated to ${role}` });
+  try {
+    const scope = await resolveManagedAccount(req, req.params.id);
+    if (scope.error) return res.status(scope.status).json({ message: scope.error });
+    const { target, tenantId } = scope;
+
+    const allowed = rolePolicy.canChangeRole({
+      actorRole: req.user?.actorRole || req.user?.role,
+      actorId: req.user?.id,
+      targetId: target.id,
+      targetMembershipRole: target.membership_role,
+      nextRole: role,
     });
-  });
+    if (!allowed) {
+      return res.status(403).json({ message: "This role change is not permitted" });
+    }
+
+    const applied = await writeAccountRole(tenantId, target.id, role);
+    res.json({ message: `Role updated to ${applied}` });
+  } catch (error) {
+    res.status(500).json({ message: "Role update failed" });
+  }
 });
 
 /* ================= ADMIN: BAN USER ================= */
-router.put("/ban-user/:id", verifyToken, isAdminOnly, (req, res) => {
+router.put("/ban-user/:id", verifyToken, isAdminOnly, async (req, res) => {
   const { status } = req.body;
   if (!["active", "banned", "pending"].includes(status)) return res.status(400).json({ message: "Invalid status" });
+  try {
+    if (Number(req.user?.id) === Number(req.params.id)) {
+      return res.status(400).json({ message: "You cannot change your own account status" });
+    }
+    // Banning is a manage operation: a sub-admin may never suspend a peer
+    // administrator or the owner (a trivial denial-of-service on the business).
+    const scope = await resolveManagedAccount(req, req.params.id);
+    if (scope.error) return res.status(scope.status).json({ message: scope.error });
+    const { target, tenantId } = scope;
 
-  // Protect primary admin account from being banned
-  db.query(`SELECT email, role FROM users WHERE id = ?`, [req.params.id], (err0, rows0) => {
-    if (err0 || !rows0 || (Array.isArray(rows0) && !rows0.length)) return res.status(404).json({ message: "User not found" });
-    const user0 = (rows0 && Array.isArray(rows0) && rows0[0]) ? rows0[0] : {};
-    if (user0.email && user0.email.toLowerCase() === "admin@madhuratech.com") return res.status(403).json({ message: "Cannot ban the primary admin account" });
+    if (!rolePolicy.canManageAccount({
+      actorRole: req.user?.actorRole || req.user?.role,
+      actorId: req.user?.id,
+      targetId: target.id,
+      targetRole: target.role,
+      targetMembershipRole: target.membership_role,
+    })) {
+      return res.status(403).json({ message: "You cannot change this account's status" });
+    }
 
-    db.query(`UPDATE users SET status = ? WHERE id = ?`, [status, req.params.id], (err) => {
-      if (err) {
-        console.error("ban-user update error:", err);
-        return res.status(500).json({ message: "Update failed", error: err.message });
-      }
-      res.json({ message: "User status updated" });
-    });
-  });
+    await db.promise().query(`UPDATE users SET status = ? WHERE id = ? AND tenant_id = ?`, [status, target.id, tenantId]);
+    res.json({ message: "User status updated" });
+  } catch (error) {
+    res.status(500).json({ message: "Update failed" });
+  }
 });
 
 /* ================= ADMIN: DELETE USER ================= */
-router.delete("/delete-user/:id", verifyToken, isAdminOnly, (req, res) => {
-  db.query(`SELECT email, role FROM users WHERE id = ?`, [req.params.id], (err, rows) => {
-    if (err || !rows.length) return res.status(404).json({ message: "User not found" });
-    // Protect primary admin account from being deleted
-    if (rows[0].email && rows[0].email.toLowerCase() === "admin@madhuratech.com") return res.status(403).json({ message: "Cannot delete the primary admin account" });
+router.delete("/delete-user/:id", verifyToken, isAdminOnly, async (req, res) => {
+  try {
+    const scope = await resolveManagedAccount(req, req.params.id);
+    if (scope.error) return res.status(scope.status).json({ message: scope.error });
+    const { target, tenantId } = scope;
 
+    if (!rolePolicy.canDeleteAccount({
+      actorRole: req.user?.actorRole || req.user?.role,
+      actorId: req.user?.id,
+      targetId: target.id,
+      targetRole: target.role,
+      targetMembershipRole: target.membership_role,
+    })) {
+      return res.status(403).json({ message: "You cannot delete this account" });
+    }
 
-    db.query(`DELETE FROM users WHERE id = ?`, [req.params.id], (err2) => {
-      if (err2) return res.status(500).json({ message: "Delete failed" });
-      db.query(`DELETE FROM teammember WHERE emp_email = ?`, [rows[0].email]);
-      res.json({ message: "User deleted" });
-    });
-  });
+    await db.promise().query(`DELETE FROM users WHERE id = ? AND tenant_id = ?`, [target.id, tenantId]);
+    db.query(`DELETE FROM teammember WHERE user_id = ? OR emp_email = ?`, [target.id, target.email], () => {});
+    res.json({ message: "User deleted" });
+  } catch (error) {
+    res.status(500).json({ message: "Delete failed" });
+  }
 });
 
 /* ================= ADMIN: RESET PASSWORD ================= */
-router.post("/reset-password/:id", verifyToken, isAdmin, (req, res) => {
+router.post("/reset-password/:id", verifyToken, isAdmin, async (req, res) => {
   const { new_password } = req.body;
   if (!new_password) return res.status(400).json({ message: "New password required" });
+  try {
+    // A password reset is account takeover. A sub-admin may reset a member's
+    // or their own, never an administrator's.
+    const scope = await resolveManagedAccount(req, req.params.id);
+    if (scope.error) return res.status(scope.status).json({ message: scope.error });
+    const { target, tenantId } = scope;
 
-  db.query(`SELECT email, role FROM users WHERE id = ?`, [req.params.id], (err, rows) => {
-    if (err || !rows || !rows.length) return res.status(404).json({ message: "User not found" });
-    // If resetting the primary admin's password, allow it ONLY if they are doing it themselves
-    if (rows[0].email && rows[0].email.toLowerCase() === "admin@madhuratech.com") {
-      if (req.user.id !== parseInt(req.params.id)) {
-        return res.status(403).json({ message: "Cannot reset the password of the primary admin account" });
-      }
-    }
-
-    bcrypt.hash(new_password, 10, (errHash, hash) => {
-      if (errHash) return res.status(500).json({ message: "Hash failed" });
-      db.query(`UPDATE users SET user_password = ? WHERE id = ?`, [hash, req.params.id], (err2) => {
-        if (err2) return res.status(500).json({ message: "Reset failed" });
-        const sessions=require("../services/browserSessions");
-        sessions.query("UPDATE browser_sessions SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=?",[Number(req.params.id)]).then(()=>{sessions.disconnectSessions({userId:Number(req.params.id)});res.json({message:"Password reset successfully; browser sessions revoked"});}).catch(()=>res.status(503).json({message:"Password reset, but session revocation could not be completed"}));
-      });
+    const allowed = rolePolicy.canResetPassword({
+      actorRole: req.user?.actorRole || req.user?.role,
+      actorId: req.user?.id,
+      targetId: target.id,
+      targetRole: target.role,
+      targetMembershipRole: target.membership_role,
     });
-  });
+    if (!allowed) return res.status(403).json({ message: "You cannot reset this account's password" });
+
+    const hash = await bcrypt.hash(new_password, 10);
+    await db.promise().query(`UPDATE users SET user_password = ? WHERE id = ? AND tenant_id = ?`, [hash, target.id, tenantId]);
+
+    const sessions = require("../services/browserSessions");
+    try {
+      await sessions.query("UPDATE browser_sessions SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=?", [target.id]);
+      sessions.disconnectSessions({ userId: target.id });
+      res.json({ message: "Password reset successfully; browser sessions revoked" });
+    } catch (_) {
+      res.status(503).json({ message: "Password reset, but session revocation could not be completed" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Reset failed" });
+  }
 });
 
 /* ================= ADMIN: GET REGISTRATION NOTIFICATIONS ================= */
@@ -1250,12 +1396,13 @@ router.put("/approve/:userId", verifyToken, isAdmin, (req, res) => {
   const { userId } = req.params;
   if (!["active", "rejected"].includes(action)) return res.status(400).json({ message: "Invalid action" });
 
-  db.query("UPDATE users SET status = ? WHERE id = ?", [action, userId], (err) => {
+  db.query("UPDATE users SET status = ? WHERE id = ? AND tenant_id = ?", [action, userId, req.tenantId], (err, result) => {
     if (err) return res.status(500).json({ message: "Update failed" });
+    if (!result || !result.affectedRows) return res.status(404).json({ message: "User not found in this organization" });
 
     if (action === "active") {
       db.query("UPDATE admin_notifications SET is_read = 1 WHERE user_id = ? AND type = 'registration'", [userId]);
-      const userRes = db.query("SELECT first_name, email FROM users WHERE id = ?", [userId], (e2, rows) => {
+      db.query("SELECT id, first_name, email FROM users WHERE id = ? AND tenant_id = ?", [userId, req.tenantId], (e2, rows) => {
         if (!e2 && rows.length) {
           const notificationIO = getNotificationIO();
           if (notificationIO) {
@@ -1380,7 +1527,7 @@ router.put("/profile", verifyToken, (req, res) => {
   const userRole = req.user.role;
   const { first_name, email, mobile_number, emp_address } = req.body;
 
-  if (userRole !== "admin" && userRole !== "subadmin") {
+  if (!["admin", "subadmin", "platform_admin"].includes(userRole)) {
     return res.status(403).json({ message: "Only administrators can directly modify profile data without approval." });
   }
 

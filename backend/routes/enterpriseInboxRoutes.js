@@ -208,7 +208,7 @@ router.post("/conversations/:id/assistant",handle(async(req,res)=>{
 }));
 router.get("/routing/employees", handle(async (req, res) => {
   if (!inbox.isAdmin(req) && req.userRole !== "branch_manager") throw fail("Organization administrator required", 403);
-  const employees = await inbox.query(`SELECT m.user_id, m.branch_id, m.auto_assign_enabled, m.is_available, m.max_open_chats,m.max_open_leads, u.first_name, u.email, u.status AS employee_status, b.name AS branch_name,
+  const employees = await inbox.query(`SELECT m.user_id, m.branch_id, m.auto_assign_enabled, m.is_available, m.max_open_chats,m.max_open_leads, u.first_name, u.email, u.role AS employee_role, u.status AS employee_status, b.name AS branch_name,
     (SELECT COUNT(*) FROM conversations c WHERE c.tenant_id=m.tenant_id AND c.owner_user_id=m.user_id AND c.branch_id=m.branch_id AND c.status<>'closed') AS open_count
     FROM staff_branch_memberships m JOIN users u ON u.id = m.user_id JOIN branches b ON b.id = m.branch_id AND b.tenant_id = m.tenant_id
     WHERE m.tenant_id = ? ${inbox.isAdmin(req) ? "" : "AND EXISTS (SELECT 1 FROM staff_branch_memberships manager WHERE manager.tenant_id=m.tenant_id AND manager.user_id=? AND manager.branch_id=m.branch_id)"} ORDER BY m.user_id, m.branch_id`, [req.tenantId, ...(inbox.isAdmin(req) ? [] : [req.user.id])]);

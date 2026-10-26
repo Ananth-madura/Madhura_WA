@@ -22,7 +22,11 @@ export function EnterpriseProvider({ children }) {
   const [activeBranch, setActiveBranch] = useState(null);
   const [branches, setBranches] = useState([]);
   const [permittedBranchIds, setPermittedBranchIds] = useState([]);
-  const [roleInActiveOrg, setRoleInActiveOrg] = useState("agent");
+  const [roleInActiveOrg, setRoleInActiveOrg] = useState(null);
+  // Exact account role (`admin` / `subadmin` / `employee`), read server-side
+  // from the users table. `roleInActiveOrg` cannot distinguish a delegated
+  // sub-admin from a full administrator.
+  const [actorRole, setActorRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const getHeaders = useCallback(() => {
@@ -41,7 +45,7 @@ export function EnterpriseProvider({ children }) {
     if(initializing)return;
     const token = localStorage.getItem("token");
     if (!user || (!token && !hasCookieSession())) {
-      setActiveTenant(null);setOrganizations([]);setActiveBranch(null);setBranches([]);setPermittedBranchIds([]);setRoleInActiveOrg("agent");
+      setActiveTenant(null);setOrganizations([]);setActiveBranch(null);setBranches([]);setPermittedBranchIds([]);setRoleInActiveOrg(null);setActorRole(null);
       setLoading(false);
       return;
     }
@@ -59,6 +63,7 @@ export function EnterpriseProvider({ children }) {
           branches: branchList,
           permittedBranchIds: permBranches,
           roleInActiveOrg: role,
+          actorRole: resolvedActorRole,
         } = res.data;
 
         setOrganizations(orgs || []);
@@ -67,6 +72,7 @@ export function EnterpriseProvider({ children }) {
         setActiveBranch(branch || null);
         setPermittedBranchIds(permBranches || []);
         setRoleInActiveOrg(role || "agent");
+        setActorRole(resolvedActorRole || null);
 
         if (activeOrganization?.id) {
           localStorage.setItem("active_tenant_id", activeOrganization.id);
@@ -132,6 +138,7 @@ export function EnterpriseProvider({ children }) {
         branches,
         permittedBranchIds,
         roleInActiveOrg,
+        actorRole,
         isOwnerOrAdmin,
         isBranchManager,
         loading,
@@ -157,6 +164,7 @@ export function useEnterprise() {
       branches: [],
       permittedBranchIds: [],
       roleInActiveOrg: "agent",
+      actorRole: null,
       isOwnerOrAdmin: false,
       isBranchManager: false,
       loading: false,

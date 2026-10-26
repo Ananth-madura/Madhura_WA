@@ -78,22 +78,24 @@ const verifyToken = (req, res, next) => {
   }
 };
 
+const ADMIN_OR_SUBADMIN = new Set(["admin", "subadmin", "platform_admin"]);
+
 const isAdmin = (req, res, next) => {
-  if (!req.user || (req.user.role !== "admin" && req.user.role !== "subadmin")) {
+  if (!req.user || !ADMIN_OR_SUBADMIN.has(req.user.role)) {
     return res.status(403).json({ message: "Admin or Sub-Admin only" });
   }
   next();
 };
 
 const isEmployee = (req, res, next) => {
-  if (!req.user || (req.user.role !== "employee" && req.user.role !== "admin" && req.user.role !== "subadmin")) {
+  if (!req.user || !["employee", "agent", "admin", "subadmin", "platform_admin"].includes(req.user.role)) {
     return res.status(403).json({ message: "Access denied" });
   }
   next();
 };
 
 const isReadOnly = (req, res, next) => {
-  if (req.user && req.user.role === "employee") {
+  if (req.user && ["employee", "agent"].includes(req.user.role)) {
     return res.status(403).json({ message: "Employees cannot modify data" });
   }
   next();
@@ -101,7 +103,7 @@ const isReadOnly = (req, res, next) => {
 
 // Strict admin only (not subadmin) — prevents privilege escalation via role-change
 const isAdminOnly = (req, res, next) => {
-  if (!req.user || req.user.role !== "admin") {
+  if (!req.user || !["admin", "platform_admin"].includes(req.user.role)) {
     return res.status(403).json({ message: "Only admin can perform this action" });
   }
   next();

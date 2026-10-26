@@ -2,6 +2,7 @@
 
 const { verifyToken } = require("./authMiddleware");
 const { requireTenantContext } = require("./tenantMiddleware");
+const rolePolicy = require("../services/rolePolicy");
 
 /**
  * Shared workspace authorization.
@@ -36,9 +37,11 @@ const ADMIN_ONLY = [
 ];
 
 function isAdmin(req) {
+  // Membership is authoritative; see middleware/workspaceModule.js. A stale
+  // JWT role must not keep administrator access after a demotion.
   return (
     ["organization_owner", "organization_admin"].includes(req.userRole) ||
-    ["platform_admin", "admin", "subadmin"].includes(req.user?.role)
+    req.user?.role === "platform_admin"
   );
 }
 
@@ -81,6 +84,21 @@ function sharedWorkspaceGuard(req, res, next) {
   if (!/^\/(whatsapp|wa(?:\/|-)|v2\/|v1\/|crm\/|teammember|storage|auth\/employees)/.test(req.path)) return next();
 
   verifyToken(req, res, () => requireTenantContext(req, res, () => {
+    // Resolve the effective role for every workspace request, not only for
+    // administrators. Routes behind this guard read `req.user.role` directly
+    // (the enquiry delete middleware and reminder settings, for example), so a
+    // stale administrator claim must be replaced before any handler sees it.
+    // The membership is the authority; `platform_admin` is never downgraded.
+    if (req.user.role !== "platform_admin") {
+      const role = rolePolicy.effectiveRole({
+        globalRole: req.user.role,
+        userRole: req.user.role,
+        membershipRole: req.userRole,
+      });
+      req.user = { ...req.user, role };
+      req.actorRole = role;
+    }
+
     if (isAdmin(req)) return next();
     if (isAdminOnly(req.path)) {
       return deny(res, "This workspace area requires an organization administrator.");

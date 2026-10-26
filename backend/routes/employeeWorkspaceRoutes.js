@@ -107,8 +107,11 @@ router.patch("/customers/:id/consent",handle(async(req,res)=>{
 }));
 router.get("/permissions/:userId", handle(async (req, res) => {
   if (!workspace.inbox.isAdmin(req)) throw Object.assign(new Error("Organization administrator required"), { status: 403 });
-  const [member] = await workspace.inbox.query("SELECT user_id FROM organization_memberships WHERE tenant_id=? AND user_id=?", [req.tenantId,Number(req.params.userId)]);
+  const [member] = await workspace.inbox.query("SELECT user_id, role FROM organization_memberships WHERE tenant_id=? AND user_id=?", [req.tenantId,Number(req.params.userId)]);
   if (!member) throw Object.assign(new Error("Employee not found"), { status: 404 });
+  // Administrators reach every module through their role, not through grants.
+  // Reporting an empty permission set here made their row look unconfigured.
+  if (["organization_owner", "organization_admin"].includes(member.role)) throw Object.assign(new Error("Administrator accounts already have full workspace access"), { status: 400 });
   const permissions = await workspace.inbox.query("SELECT module,can_view,can_edit FROM wa_employee_workspace_permissions WHERE tenant_id=? AND user_id=?", [req.tenantId, Number(req.params.userId)]);
   res.json({ modules: workspace.modules, permissions });
 }));
@@ -117,8 +120,12 @@ router.put("/permissions/:userId", handle(async (req, res) => {
   const grants = req.body.permissions;
   if (!Array.isArray(grants) || grants.length !== workspace.modules.length || new Set(grants.map(grant => grant.module)).size !== workspace.modules.length || grants.some(grant => !workspace.modules.includes(grant.module) || typeof grant.can_view !== "boolean" || typeof grant.can_edit !== "boolean")) throw Object.assign(new Error("Provide one valid view/edit grant for every module"), { status: 400 });
   await workspace.inbox.transaction(async q => {
-    const [member] = await q("SELECT user_id FROM organization_memberships WHERE tenant_id=? AND user_id=? AND role IN ('agent','employee','branch_manager') FOR UPDATE", [req.tenantId, Number(req.params.userId)]);
-    if (!member) throw Object.assign(new Error("Employee not found"), { status: 404 });
+    const [member] = await q("SELECT user_id, role FROM organization_memberships WHERE tenant_id=? AND user_id=? AND role IN ('agent','employee','branch_manager') FOR UPDATE", [req.tenantId, Number(req.params.userId)]);
+    if (!member) {
+      const [admin] = await q("SELECT user_id FROM organization_memberships WHERE tenant_id=? AND user_id=?", [req.tenantId, Number(req.params.userId)]);
+      if (admin) throw Object.assign(new Error("Administrator accounts already have full workspace access"), { status: 400 });
+      throw Object.assign(new Error("Employee not found"), { status: 404 });
+    }
     for (const grant of grants) await q("INSERT INTO wa_employee_workspace_permissions (tenant_id,user_id,module,can_view,can_edit) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE can_view=VALUES(can_view),can_edit=VALUES(can_edit)", [req.tenantId, member.user_id, grant.module, grant.can_view ? 1 : 0, grant.can_view && grant.can_edit ? 1 : 0]);
     await q("INSERT INTO wa_workspace_audit (tenant_id,actor_id,action,subject_user_id,details) VALUES (?,?,'permissions.updated',?,?)", [req.tenantId, req.user.id, member.user_id, JSON.stringify(grants)]);
   });

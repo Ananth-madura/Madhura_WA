@@ -2,6 +2,7 @@ import {
   ADMIN_ONLY_PATHS,
   canOpenWorkspacePath,
   isWorkspaceAdmin,
+  isWorkspaceSubadmin,
   moduleLabel,
   workspaceModuleForPath,
 } from "./workspaceAccess";
@@ -9,18 +10,38 @@ import {
 describe("workspace access policy", () => {
   test("administrators are recognized from every source of authority", () => {
     expect(isWorkspaceAdmin({ demoMode: true })).toBe(true);
-    expect(isWorkspaceAdmin({ isOwnerOrAdmin: true })).toBe(true);
     expect(isWorkspaceAdmin({ orgRole: "organization_owner" })).toBe(true);
     expect(isWorkspaceAdmin({ orgRole: "organization_admin" })).toBe(true);
+    expect(isWorkspaceAdmin({ isOwnerOrAdmin: true })).toBe(true);
+    // Before the membership resolves, the session role is the fallback.
     expect(isWorkspaceAdmin({ globalRole: "platform_admin" })).toBe(true);
     expect(isWorkspaceAdmin({ globalRole: "admin" })).toBe(true);
     expect(isWorkspaceAdmin({ globalRole: "subadmin" })).toBe(true);
+  });
+
+  test("the organization membership overrides a stale session role", () => {
+    // Demoted administrator: the 14-day token still says admin, the
+    // membership says agent. The membership wins.
+    expect(isWorkspaceAdmin({ orgRole: "agent", globalRole: "admin" })).toBe(false);
+    expect(isWorkspaceAdmin({ orgRole: "agent", globalRole: "subadmin" })).toBe(false);
+    expect(isWorkspaceAdmin({ orgRole: "branch_manager", isOwnerOrAdmin: true })).toBe(false);
+    // Promoted member whose token has not refreshed yet still gets admin UI.
+    expect(isWorkspaceAdmin({ orgRole: "organization_admin", globalRole: "employee" })).toBe(true);
   });
 
   test("agents and employees are members, not administrators", () => {
     expect(isWorkspaceAdmin({ orgRole: "agent", globalRole: "employee" })).toBe(false);
     expect(isWorkspaceAdmin({ orgRole: "branch_manager", globalRole: "employee" })).toBe(false);
     expect(isWorkspaceAdmin()).toBe(false);
+  });
+
+  test("sub-admin is a workspace administrator but not a full administrator", () => {
+    expect(isWorkspaceSubadmin({ actorRole: "subadmin" })).toBe(true);
+    expect(isWorkspaceSubadmin({ globalRole: "subadmin" })).toBe(true);
+    expect(isWorkspaceSubadmin({ actorRole: "admin" })).toBe(false);
+    expect(isWorkspaceSubadmin({ actorRole: "employee" })).toBe(false);
+    // A sub-admin still administers the workspace shell.
+    expect(isWorkspaceAdmin({ orgRole: "organization_admin", globalRole: "subadmin" })).toBe(true);
   });
 
   test("members may open the operational workspace but not administration surfaces", () => {

@@ -41,9 +41,9 @@ function runGuard({ path, method = "GET", userRole = "agent", role = "employee",
       statusCode: 200,
       body: null,
       status(code) { this.statusCode = code; return this; },
-      json(body) { this.body = body; resolve({ passed: false, status: this.statusCode, body }); return this; },
+      json(body) { this.body = body; resolve({ passed: false, status: this.statusCode, body, req }); return this; },
     };
-    guard(req, res, () => resolve({ passed: true, status: 200 }));
+    guard(req, res, () => resolve({ passed: true, status: 200, req }));
   });
 }
 
@@ -100,7 +100,62 @@ async function main() {
   for (const path of ["/whatsapp/chats", "/auth/employees", "/v2/branches", "/v2/workspace/permissions/7"]) {
     assert.equal((await runGuard({ path, ...orgAdmin })).passed, true, `${path} must open for an administrator`);
   }
-  assert.equal((await runGuard({ path: "/whatsapp/chats", userRole: "agent", role: "subadmin" })).passed, true, "a global sub-admin acts as an administrator");
+  // ── Membership is the authority, never the JWT role claim ─────────────────
+  assert.equal(
+    (await runGuard({ path: "/whatsapp/chats", userRole: "agent", role: "subadmin" })).passed,
+    false,
+    "a stale administrator role claim must not outlive a demotion"
+  );
+  assert.equal(
+    (await runGuard({ path: "/whatsapp/chats", userRole: "agent", role: "admin" })).passed,
+    false,
+    "a stale admin claim must not outlive a demotion"
+  );
+  assert.equal(
+    (await runGuard({ path: "/whatsapp/chats", userRole: "organization_admin", role: "employee" })).passed,
+    true,
+    "a freshly promoted administrator works before their token refreshes"
+  );
+
+  // ── A sub-admin is an administrator for routing, never for role changes ───
+  const subAdmin = await runGuard({ path: "/whatsapp/chats", userRole: "organization_admin", role: "subadmin" });
+  assert.equal(subAdmin.passed, true, "a sub-admin reaches the shared dashboard");
+  assert.equal(subAdmin.req.user.role, "subadmin", "the guard keeps the sub-admin distinction for downstream checks");
+  assert.equal(subAdmin.req.actorRole, "subadmin");
+
+  const promoted = await runGuard({ path: "/whatsapp/chats", userRole: "organization_admin", role: "employee" });
+  assert.equal(promoted.passed, true);
+  assert.equal(promoted.req.user.role, "admin", "a membership administrator is normalized to admin even with a stale member claim");
+
+  const demoted = await runGuard({ path: "/whatsapp/chats", userRole: "agent", role: "subadmin" });
+  assert.equal(demoted.passed, false, "a demoted sub-admin does not keep administrative routing");
+  assert.equal(demoted.req.user.role, "employee", "a stale administrative claim is rewritten before any handler reads it");
+  assert.equal(demoted.req.actorRole, "employee");
+
+  // A genuine member is canonicalized to `employee` so route-level checks that
+  // look for `role === "employee"` behave the same for both legacy aliases.
+  const memberRequest = await runGuard({ path: "/wa/templates", userRole: "agent", role: "agent" });
+  assert.equal(memberRequest.passed, true);
+  assert.equal(memberRequest.req.user.role, "employee", "the legacy agent alias resolves to employee");
+  assert.equal(memberRequest.req.actorRole, "employee");
+
+  // ── Module gate: administrators bypass grants, stale claims do not ────────
+  grantRows = [];
+  assert.equal(
+    (await runModuleGate("campaigns", { method: "POST", ...orgAdmin })).passed,
+    true,
+    "an organization administrator bypasses module grants"
+  );
+  assert.equal(
+    (await runModuleGate("campaigns", { method: "POST", userRole: "organization_admin", role: "subadmin" })).passed,
+    true,
+    "a sub-admin bypasses module grants"
+  );
+  assert.equal(
+    (await runModuleGate("campaigns", { method: "POST", userRole: "agent", role: "admin" })).passed,
+    false,
+    "a stale administrator claim alone does not bypass grants"
+  );
 
   // ── Module gate: default grants mirror the backend service ────────────────
   assert.equal(MODULES.length, 16, "the catalog is one list, not a copy");
