@@ -155,7 +155,11 @@ async function main() {
     const summary=await api("get",`/v2/inbox/conversations/${ownRow.id}`);assert.equal(summary.status,200);assert.equal(summary.body.conversation.last_message_text,undefined);
     assert.equal((await api("get", `/v2/inbox/conversations/${hidden.id}/notes`)).status, 404);
     assert.equal((await api("get", `/v2/inbox/conversations/${ownRow.id}/messages`,10,2)).status, 404);
-    assert.equal((await api("get", "/whatsapp/chats")).status, 403);
+    app.get("/api/whatsapp/chats", (_req, res) => res.json({ reachedMemberChatRouter: true }));
+    const memberChat = await api("get", "/whatsapp/chats");
+    assert.equal(memberChat.status, 200);
+    assert.equal(memberChat.body.reachedMemberChatRouter, true);
+    assert.equal((await api("get", "/whatsapp/qr")).status, 403);
     assert.equal((await api("post", `/v2/inbox/conversations/${hidden.id}/reply`).send({ text: "private", requestId: "hidden-123" })).status, 404);
     assert.equal((await api("post", `/v2/inbox/conversations/${ownRow.id}/notes`).send({ text: "Shared CRM note" })).status, 201);
     assert.equal((await api("get", `/v2/inbox/conversations/${ownRow.id}/notes`)).body.notes[0].note_text, "Shared CRM note");

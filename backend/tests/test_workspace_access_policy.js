@@ -66,11 +66,15 @@ const orgAdmin = { userRole: "organization_admin", role: "admin" };
 
 async function main() {
   // ── Session engine is closed to members ───────────────────────────────────
-  for (const path of ["/whatsapp", "/whatsapp/chats", "/whatsapp/chat/1/messages", "/whatsapp/test-send", "/whatsapp/unread-count", "/whatsapp/unified-status"]) {
+  for (const path of ["/whatsapp", "/whatsapp/qr", "/whatsapp/test-send", "/whatsapp/unread-count", "/whatsapp/logout"]) {
     const result = await runGuard({ path, ...member });
     assert.equal(result.passed, false, `${path} must not be reachable by a member`);
     assert.equal(result.status, 403);
     assert.equal(result.body.code, "ADMIN_ONLY");
+  }
+
+  for (const path of ["/whatsapp/chats", "/whatsapp/chat/1/messages", "/whatsapp/unified-status"]) {
+    assert.equal((await runGuard({ path, ...member })).passed, true, "Member chat reads reach their ownership checks");
   }
 
   // ── The contacts workspace keeps its two sync actions ─────────────────────
@@ -102,12 +106,12 @@ async function main() {
   }
   // ── Membership is the authority, never the JWT role claim ─────────────────
   assert.equal(
-    (await runGuard({ path: "/whatsapp/chats", userRole: "agent", role: "subadmin" })).passed,
+    (await runGuard({ path: "/whatsapp/qr", userRole: "agent", role: "subadmin" })).passed,
     false,
     "a stale administrator role claim must not outlive a demotion"
   );
   assert.equal(
-    (await runGuard({ path: "/whatsapp/chats", userRole: "agent", role: "admin" })).passed,
+    (await runGuard({ path: "/whatsapp/qr", userRole: "agent", role: "admin" })).passed,
     false,
     "a stale admin claim must not outlive a demotion"
   );
@@ -127,7 +131,7 @@ async function main() {
   assert.equal(promoted.passed, true);
   assert.equal(promoted.req.user.role, "admin", "a membership administrator is normalized to admin even with a stale member claim");
 
-  const demoted = await runGuard({ path: "/whatsapp/chats", userRole: "agent", role: "subadmin" });
+  const demoted = await runGuard({ path: "/whatsapp/qr", userRole: "agent", role: "subadmin" });
   assert.equal(demoted.passed, false, "a demoted sub-admin does not keep administrative routing");
   assert.equal(demoted.req.user.role, "employee", "a stale administrative claim is rewritten before any handler reads it");
   assert.equal(demoted.req.actorRole, "employee");

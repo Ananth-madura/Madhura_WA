@@ -1,7 +1,7 @@
 "use strict";
 const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),http=require("node:http"),puppeteer=require("puppeteer");
 async function verify(){
-  const build=path.resolve(__dirname,"../../../frontend/build");
+  const build=process.env.INBOX_TEST_FRONTEND_BUILD||path.resolve(__dirname,"../../../frontend/build");
   const server=http.createServer((req,res)=>{
     const target=path.resolve(build,"."+new URL(req.url,"http://localhost").pathname);
     if(!target.startsWith(build+path.sep))return res.writeHead(403).end();

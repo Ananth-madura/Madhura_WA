@@ -70,6 +70,7 @@ async function main() {
     assert.equal(employeeResponse.status, 201, JSON.stringify(employee));
     const update = await fetch(`${base}/api/auth/employees/${employee.employee.id}`, { method: "PUT", headers, body: JSON.stringify({ status: "active" }) });
     assert.equal(update.status, 200);
+    await connection.query("UPDATE staff_branch_memberships SET is_available=0 WHERE tenant_id=1 AND user_id<>?",[employee.employee.id]);
     const body = JSON.stringify({ entry: [{ changes: [{ field: "messages", value: { metadata: { phone_number_id: "fixture-provider-number" }, contacts: [{ profile: { name: "Customer" } }], messages: [{ id: "wamid.boot", from: "919999999999", timestamp: String(Math.floor(Date.now()/1000)), type: "text", text: { body: "Do not persist this body" } }] } }] }] });
     const signature = "sha256=" + crypto.createHmac("sha256", "fixture-app-secret").update(body).digest("hex");
     const deliver = () => fetch(`${base}/webhook`, { method: "POST", headers: { "Content-Type": "application/json", "x-hub-signature-256": signature }, body });
@@ -81,7 +82,8 @@ async function main() {
     const [[rawEvents]]=await connection.query("SELECT COUNT(*) AS count FROM wa_webhook_events");assert.equal(rawEvents.count,0,"device-history mode must not duplicate webhook event rows");
     const employeeToken = jwt.sign({ id: employee.employee.id, role: "employee", tenant_id: 1 }, secret);
     const inboxResponse = await fetch(`${base}/api/v2/inbox/conversations`, { headers: { Authorization: `Bearer ${employeeToken}` } });
-    const inbox = await inboxResponse.json(); assert.equal(inboxResponse.status, 200, JSON.stringify(inbox)); assert.equal(inbox.conversations.length, 1);
+    const inbox = await inboxResponse.json(); assert.equal(inboxResponse.status, 200, JSON.stringify(inbox));
+    assert.equal(inbox.conversations.length, 1);
     const [[state]] = await connection.query("SELECT COUNT(*) AS count, MAX(message_text) AS body FROM wa_message_logs WHERE wa_message_id='wamid.boot'");
     assert.equal(state.count, 1); assert.equal(state.body, null);
     const [[contact]] = await connection.query("SELECT COUNT(*) AS count FROM wa_contacts WHERE phone='919999999999'"); assert.equal(contact.count, 1);
@@ -123,6 +125,8 @@ async function main() {
     const foreignStats=await foreignAnalytics.json();assert.equal(foreignAnalytics.status,200,JSON.stringify(foreignStats));assert.equal(foreignStats.totalContacts,0);assert.equal(foreignStats.totalAccounts,0);assert.equal(foreignStats.totalFlows,0);
     for(const path of ["campaigns","automations","flows","daily","status-distribution","webhook-events"]){const response=await fetch(`${base}/api/wa/analytics/${path}`,{headers:secondHeaders});assert.equal(response.status,200,`${path}: ${await response.clone().text()}`);assert.deepEqual(await response.json(),[]);}
     const logResponse=await fetch(`${base}/api/wa/analytics/logs?limit=1000000`,{headers:secondHeaders});const scopedLogs=await logResponse.json();assert.equal(logResponse.status,200);assert.equal(scopedLogs.total,0);assert.deepEqual(scopedLogs.logs,[]);
+    assert.equal((await fetch(`${base}/api/wa/analytics/dashboard`,{headers:{Authorization:`Bearer ${employeeToken}`}})).status,200);
+    await connection.query("INSERT INTO wa_employee_workspace_permissions (tenant_id,user_id,module,can_view,can_edit) VALUES (1,?,'analytics',0,0) ON DUPLICATE KEY UPDATE can_view=0,can_edit=0",[employee.employee.id]);
     assert.equal((await fetch(`${base}/api/wa/analytics/dashboard`,{headers:{Authorization:`Bearer ${employeeToken}`}})).status,403);
     assert.equal((await fetch(`${base}/api/v2/me`,{headers:{Authorization:`Bearer ${employeeToken}`,"x-tenant-id":String(secondId)}})).status,403);
     await require("./helpers/sharedFlows").verify({base,headers,secondHeaders,employeeToken,connection,sender,meta});

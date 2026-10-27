@@ -1,4 +1,15 @@
 {
+  "private": true,
+  "engines": { "node": "24.x" },
+  "scripts": {
+    "dev": "node scripts/dev.cjs",
+    "check:local": "node scripts/dev.cjs --check",
+    "verify:local": "node scripts/check-deployment.cjs --local",
+    "verify:production": "node scripts/check-deployment.cjs --production",
+    "test:environment": "node --test scripts/environment.test.cjs",
+    "verify:integration": "npm --prefix backend run verify:integration",
+    "verify:browser": "npm --prefix backend run verify:browser"
+  },
   "devDependencies": {
     "agentation": "^3.1.2"
   }

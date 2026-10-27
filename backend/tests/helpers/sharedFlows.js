@@ -16,6 +16,10 @@ async function verify({base,headers,secondHeaders,employeeToken,connection,sende
   assert.equal((await api("DELETE",`/wa-flows/${flowId}`,null,secondHeaders)).status,404);
   assert.equal((await api("POST",`/wa-flows/${flowId}/versions/publish`,{},secondHeaders)).status,404);
   const employeeHeaders={...headers,Authorization:`Bearer ${employeeToken}`};
+  const employeeId=require("jsonwebtoken").decode(employeeToken).id;
+  assert.equal((await api("GET","/wa-flows",null,employeeHeaders)).status,200);
+  assert.equal((await api("POST",`/wa-flows/${flowId}/versions/publish`,{},employeeHeaders)).status,403);
+  await connection.query("INSERT INTO wa_employee_workspace_permissions (tenant_id,user_id,module,can_view,can_edit) VALUES (1,?,'flows',0,0) ON DUPLICATE KEY UPDATE can_view=0,can_edit=0",[employeeId]);
   assert.equal((await api("GET","/wa-flows",null,employeeHeaders)).status,403);
   assert.equal((await api("POST",`/wa-flows/${flowId}/versions/publish`,{})).status,200);
   const [[conversation]]=await connection.query("SELECT id FROM conversations WHERE tenant_id=1 ORDER BY id LIMIT 1");
@@ -62,6 +66,8 @@ async function verify({base,headers,secondHeaders,employeeToken,connection,sende
   assert.equal((await api("POST","/wa/campaigns",{name:"Foreign template",template_id:local.id},secondHeaders)).status,400);
   assert.equal((await api("GET",`/wa/templates/${local.id}`,null,secondHeaders)).status,404);
   assert.equal((await api("PUT",`/wa/templates/${local.id}`,{...local,body:"forbidden"},secondHeaders)).status,404);
+  assert.equal((await api("GET","/wa/templates",null,employeeHeaders)).status,200);
+  await connection.query("INSERT INTO wa_employee_workspace_permissions (tenant_id,user_id,module,can_view,can_edit) VALUES (1,?,'templates',0,0) ON DUPLICATE KEY UPDATE can_view=0,can_edit=0",[employeeId]);
   assert.equal((await api("GET","/wa/templates",null,employeeHeaders)).status,403);
   const submitted=await api("POST",`/wa/templates/${local.id}/submit`,{senderId:sender.id,examples:["Customer"]});assert.equal(submitted.status,200,JSON.stringify(submitted));assert.equal(submitted.data.template.meta_status,"PENDING");
   const synced=await api("POST","/wa/templates/sync",{senderId:sender.id});assert.equal(synced.status,200,JSON.stringify(synced));

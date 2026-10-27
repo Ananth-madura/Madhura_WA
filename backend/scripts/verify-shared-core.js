@@ -17,8 +17,20 @@ suites.push("test_inbox_outbound_validation.js");
 suites.push("test_workspace_transaction_connection.js");
 suites.push("test_legacy_employee_memberships.js");
 suites.push("test_domain_connections.js");
+suites.push("test_workspace_access_policy.js");
 if(args.has("--integration"))suites.push("test_browser_sessions_mysql.js","test_saas_onboarding_mysql.js","test_shared_inbox_mysql.js","test_employee_workspace_mysql.js","test_shared_inbox_boot.js","test_billing_mysql.js");
 const env={...process.env,NODE_ENV:"test",WA_SKIP_DOTENV:"1",DB_ENGINE:"mysql",USE_SQLITE:"0",DB_HOST:"127.0.0.1",DB_PORT:"9",DB_NAME:"shared_core_test_only",DB_USER:"isolated_tests_only",DB_PASS:"",DISABLE_R2:"1",REDIS_URL:"",WA_SERVER_CHAT_STORAGE:"0",INBOX_TEST_REAL_BROWSER:args.has("--browser")?"1":"0",INBOX_TEST_AUTH_BROWSER:args.has("--browser")?"1":"0"};
+if(args.has("--browser")){
+  const frontend=path.resolve(__dirname,"../../frontend");
+  const build=path.resolve(__dirname,"../../scratch/integration-frontend-build");
+  console.log("Building an isolated frontend for the test backend on port 15317");
+  const result=spawnSync(process.execPath,["--openssl-legacy-provider","--max-old-space-size=4096",path.join(frontend,"node_modules/react-scripts/bin/react-scripts.js"),"build"],{
+    cwd:frontend,stdio:"inherit",timeout:240000,
+    env:{...process.env,NODE_ENV:"production",CI:"false",GENERATE_SOURCEMAP:"false",BUILD_PATH:build,PUBLIC_URL:"/",REACT_APP_API_URL:"http://127.0.0.1:15317",REACT_APP_SOCKET_URL:"http://127.0.0.1:15317",REACT_APP_MARKETING_URL:"http://localhost:3002"}
+  });
+  if(result.error||result.status!==0){console.error("FAIL: integration frontend build");process.exit(1);}
+  env.INBOX_TEST_FRONTEND_BUILD=build;
+}
 let failed=0;
 for(const suite of suites){
   const testData=fs.mkdtempSync(path.join(os.tmpdir(),"wa-core-test-"));

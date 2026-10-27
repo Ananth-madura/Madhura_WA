@@ -41,7 +41,8 @@ async function verify({base,headers,secondHeaders,employeeToken,connection,sende
   const templateSend=await api("POST",`/v2/inbox/conversations/${chat.id}/send`,{kind:"template",requestId:"fixture-approved-template",templateId:approved.id,parameters:["Customer"]});assert.equal(templateSend.status,200,JSON.stringify(templateSend));
   assert.equal((await upload("fixture-expired-window")).status,409);
   await connection.query("UPDATE conversations SET service_window_expires_at=DATE_ADD(NOW(),INTERVAL 1 DAY) WHERE id=?",[chat.id]);
-  assert.equal((await api("GET","/v2/workspace/campaigns")).status,403,"Campaign delegation must default to denied");
+  assert.equal((await api("GET","/v2/workspace/campaigns")).status,200,"Members may read their scoped campaigns");
+  assert.equal((await api("POST","/v2/workspace/campaigns",{})).status,403,"Campaign creation requires an edit grant");
   const grants=(await api("GET",`/v2/workspace/permissions/${chat.owner_user_id}`,null,headers)).data.modules.map(module=>({module,can_view:true,can_edit:true}));
   assert.equal((await api("PUT",`/v2/workspace/permissions/${chat.owner_user_id}`,{permissions:grants},headers)).status,200);
   const create=async(requestKey)=>api("POST","/v2/workspace/campaigns",{name:"Scoped customer campaign",senderId:sender.id,templateId:approved.id,parameters:["{name}"],contactIds:[chat.contact_id],requestKey});

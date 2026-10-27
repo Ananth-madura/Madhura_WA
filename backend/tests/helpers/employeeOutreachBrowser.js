@@ -1,7 +1,7 @@
 "use strict";
 const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),http=require("node:http"),puppeteer=require("puppeteer");
 async function verify({query,meta}){
-  const build=path.resolve(__dirname,"../../../frontend/build"),fixture=path.resolve(__dirname,"../../../scratch/employee-workspace-browser-upload.pdf");
+  const build=process.env.INBOX_TEST_FRONTEND_BUILD||path.resolve(__dirname,"../../../frontend/build"),fixture=path.resolve(__dirname,"../../../scratch/employee-workspace-browser-upload.pdf");
   fs.writeFileSync(fixture,"%PDF-1.4\nbrowser fixture\n%%EOF");
   const server=http.createServer((req,res)=>{
     const file=path.resolve(build,"."+new URL(req.url,"http://localhost").pathname);
@@ -17,7 +17,7 @@ async function verify({query,meta}){
     await page.setRequestInterception(true);page.on("request",request=>["127.0.0.1","localhost"].includes(new URL(request.url()).hostname)?request.continue():request.abort());
     await page.goto("http://127.0.0.1:15318/login?returnUrl=/whatsapp/team-inbox",{waitUntil:"networkidle2"});
     await page.type("#hl-email","agent@fixture.test");await page.type("#hl-password","fixture-browser-password");await page.click('form button[type="submit"]');
-    await page.waitForSelector('aside[aria-label="Conversations"] button');await page.click('aside[aria-label="Conversations"] button');
+    await page.waitForSelector('button.emp-conv');await page.click('button.emp-conv');
     await page.waitForFunction(()=>[...document.querySelectorAll("summary")].some(element=>element.textContent.includes("Attachments and approved templates")));
     await page.evaluate(()=>[...document.querySelectorAll("summary")].find(element=>element.textContent.includes("Attachments and approved templates")).click());
     const fileInput=await page.$('input[type="file"]');await fileInput.uploadFile(fixture);
@@ -35,11 +35,11 @@ async function verify({query,meta}){
     await focus("Body value 1");await page.keyboard.type("{name}");
     await page.evaluate(()=>[...document.querySelectorAll("label")].find(label=>label.textContent.includes("919999999999")&&label.querySelector('input[type="checkbox"]')).querySelector("input").click());
     const deliveriesBefore=meta.deliveries.length;
-    await page.evaluate(()=>[...document.querySelectorAll("button")].find(button=>button.textContent==="Create draft campaign").click());
-    await page.waitForFunction(()=>[...document.querySelectorAll("button")].some(button=>button.textContent==="start"));
+    await page.evaluate(()=>[...document.querySelectorAll("button")].find(button=>button.textContent.trim()==="Create draft campaign").click());
+    await page.waitForFunction(()=>[...document.querySelectorAll("button")].some(button=>button.textContent.trim()==="Start"));
     assert.equal(meta.deliveries.length,deliveriesBefore,"Saving a draft must not send messages");
     const started=page.waitForResponse(response=>response.request().method()==="POST"&&/\/campaigns\/\d+\/start$/.test(new URL(response.url()).pathname));
-    await page.evaluate(()=>[...document.querySelectorAll("button")].find(button=>button.textContent==="start").click());assert.equal((await started).status(),200);
+    await page.evaluate(()=>[...document.querySelectorAll("button")].find(button=>button.textContent.trim()==="Start").click());assert.equal((await started).status(),200);
     for(let attempt=0;attempt<100&&meta.deliveries.length===deliveriesBefore;attempt++)await new Promise(resolve=>setTimeout(resolve,100));
     assert.equal(meta.deliveries.length,deliveriesBefore+1);
     assert.equal(meta.deliveries.at(-1).type,"template");

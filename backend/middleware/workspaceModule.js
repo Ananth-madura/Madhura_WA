@@ -1,7 +1,5 @@
 "use strict";
 
-const db = require("../config/database");
-
 /**
  * Module catalog for the shared WhatsApp workspace.
  *
@@ -69,6 +67,7 @@ function isAdmin(req) {
 }
 
 async function resolveGrant(req, module) {
+  const db = require("../config/database");
   const [rows] = await db
     .promise()
     .query(

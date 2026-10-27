@@ -47,3 +47,9 @@ scratch/flow-mysql-init.log
 scratch/employee-workspace-*.log
 scratch/employee-workspace-*.png
 scratch/employee-workspace-browser-upload.pdf
+scratch/domain-connections-mysql/
+scratch/domain-mysql-process.txt
+scratch/domain-stack-process.txt
+scratch/domain-stack-state/
+scratch/domain-*.log
+scratch/integration-frontend-build/

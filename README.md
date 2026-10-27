@@ -6,7 +6,11 @@ in the parent repo).
 
 ## Quick start
 
-### 0. New device / fresh clone (recommended)
+To run the marketing site, workspace and API together, configure your local database in `backend/.env`, install each project's dependencies, then run `npm run dev` from this directory. The launcher supplies matching local URLs and CORS origins, supports private LAN addresses, checks for occupied ports, and waits for the services to become ready. Stop the stack with Ctrl+C.
+
+Use `npm run verify:local` to check the running local stack and `npm run verify:production` to check the deployed domains with normal TLS validation. See [domain-connections.md](domain-connections.md) for installation, custom ports, VPS HTTPS repair and deployment settings. The existing launcher below is retained for the older two-service workflow.
+
+### 0. Legacy Windows launcher
 ```bat
 git clone <repo-url>
 cd Whatsapp_CRM

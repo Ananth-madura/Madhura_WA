@@ -19,7 +19,8 @@ set -euo pipefail
 
 APP_DIR="${APP_DIR:-/home/wauser/app/backend}"
 WA_DATA_DIR="${WA_DATA_DIR:-/home/wauser/wa-data}"
-API_DOMAIN="${API_DOMAIN:-api.example.com}"
+API_DOMAIN="${API_DOMAIN:-api.madhuratech.in}"
+DB_NAME="${DB_NAME:-madhura_wa}"
 
 log()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 ok()   { printf '    \033[32mOK\033[0m  %s\n' "$*"; }
@@ -51,12 +52,12 @@ $SUDO apt-get install -y -qq \
   warn "Some Chromium libraries failed to install — QR pairing may fail. Check with: ldd \$CHROME | grep 'not found'"
 
 # -----------------------------------------------------------------------------
-log "Node.js 20 LTS"
+log "Node.js 24 LTS"
 # -----------------------------------------------------------------------------
-if command -v node >/dev/null && [ "$(node -v | cut -d. -f1 | cut -d v -f2)" -ge 20 ]; then
+if command -v node >/dev/null && [ "$(node -v | cut -d. -f1 | cut -d v -f2)" -eq 24 ]; then
   ok "Node $(node -v) already present"
 else
-  curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO -E bash -
+  curl -fsSL https://deb.nodesource.com/setup_24.x | $SUDO -E bash -
   $SUDO apt-get install -y -qq nodejs
   ok "Node $(node -v) installed"
 fi
