@@ -8,6 +8,9 @@ import {
 } from "./workspaceAccess";
 
 describe("workspace access policy", () => {
+  test("staff demo uses member permissions", () => {
+    expect(isWorkspaceAdmin({demoMode:true,globalRole:"employee",orgRole:"agent"})).toBe(false);
+  });
   test("administrators are recognized from every source of authority", () => {
     expect(isWorkspaceAdmin({ demoMode: true })).toBe(true);
     expect(isWorkspaceAdmin({ orgRole: "organization_owner" })).toBe(true);

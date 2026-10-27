@@ -4,6 +4,7 @@ import axios from "axios";
 import Login from "./login";
 import {confirmBrowserSession} from "./browserSession";
 import { MARKETING } from "../config/index";
+import { startDirectDemoSession } from "./demoSession";
 const mockLogin=jest.fn(),mockNavigate=jest.fn();
 jest.mock("axios",()=>({post:jest.fn()}));
 jest.mock("./AuthContext",()=>({useAuth:()=>({login:mockLogin})}));
@@ -29,4 +30,12 @@ test("a cookie failure remains on login with an actionable error",async()=>{
 test("back to home links to the marketing origin rather than the app login route", () => {
   render(<Login />);
   expect(screen.getByRole("link", { name: /Back to Home/ }).getAttribute("href")).toBe(MARKETING);
+});
+
+test("demo login uses the existing workspace with a persistent isolated session", async () => {
+  startDirectDemoSession.mockResolvedValue({id:-1,tenant_id:-1,role:"admin",demoMode:true,isStrictDemo:true});
+  render(<Login/>);fireEvent.click(screen.getByRole("button",{name:/Try Demo/}));
+  fireEvent.click(screen.getByRole("button",{name:/Primary Organization Admin/}));
+  await waitFor(()=>expect(mockNavigate).toHaveBeenCalledWith("/whatsapp",{replace:true}));
+  expect(mockLogin).toHaveBeenCalledWith(expect.objectContaining({isStrictDemo:true}));
 });

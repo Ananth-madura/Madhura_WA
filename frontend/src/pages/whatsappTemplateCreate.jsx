@@ -8,7 +8,7 @@ import axios from "axios";
 import {useEnterprise} from "../context/EnterpriseContext";
 import { API } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
-import { DEMO_TEMPLATES } from "../auth/demoData";
+import { getDemoRecords } from "../auth/demoApi";
 import WAVariablePicker from "../components/WAVariablePicker";
 import { PLACEHOLDER_ITEMS, renderPreviewText } from "./whatsappTemplates";
 
@@ -141,7 +141,7 @@ function TemplateEditorWorkspace() {
       setLoadError("");
       try {
         const source = demoMode
-          ? DEMO_TEMPLATES
+          ? getDemoRecords("templates")
           : (await axios.get(`${API}/api/wa/templates`, { headers: authHeaders })).data;
         const found = (source || []).find(t => String(t.id) === String(templateId));
         if (!found) {
@@ -211,7 +211,7 @@ function TemplateEditorWorkspace() {
       setApiError(
         err.response?.data?.error ||
         (demoMode
-          ? "This demo workspace can't persist templates — the editor is fully usable, but saving needs a live connection."
+          ? "The sample template could not be saved in this tab. Please retry."
           : "Failed to save template. Please try again.")
       );
     }

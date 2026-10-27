@@ -9,10 +9,10 @@ jest.mock("../context/EnterpriseContext",()=>({useEnterprise:()=>({activeTenant:
 jest.mock("../utils/razorpayCheckout",()=>({openRazorpayCheckout:jest.fn()}));
 jest.mock("react-router-dom",()=>({useLocation:()=>({search:""}),useNavigate:()=>mockNavigate}));
 const plan={id:"starter",name:"Starter",price_inr:"1499.00",features:[]};
-let canManage,pendingPlan;
+let canManage,pendingPlan,internalAccess;
 beforeEach(()=>{
-  jest.clearAllMocks();canManage=true;pendingPlan=null;
-  axios.get.mockImplementation(async url=>({data:url.endsWith("/plans")?{success:true,plans:[plan]}:url.endsWith("/gateway")?{success:true,configured:true,checkoutEnabled:true,webhookConfigured:true,mode:"test",canManage}:url.endsWith("/orders")?{success:true,orders:[]}:{success:true,organization:{plan:"free",pending_plan_id:pendingPlan},wallets:{}}}));
+  jest.clearAllMocks();canManage=true;pendingPlan=null;internalAccess=false;
+  axios.get.mockImplementation(async url=>({data:url.endsWith("/plans")?{success:true,plans:[plan]}:url.endsWith("/gateway")?{success:true,configured:true,checkoutEnabled:true,webhookConfigured:true,mode:"test",canManage}:url.endsWith("/orders")?{success:true,orders:[]}:{success:true,organization:{plan:internalAccess?"enterprise":"free",pending_plan_id:pendingPlan,internal_access:internalAccess},wallets:{}}}));
 });
 test("billing opens real Checkout and submits provider proof with tenant scope",async()=>{
   const session={success:true,orderId:"order_server",amount:149900,keyId:"rzp_test_fixture",currency:"INR"};
@@ -32,6 +32,14 @@ test("dismissed Checkout never confirms or changes a plan",async()=>{
 });
 test("read-only billing cannot initiate checkout",async()=>{
   canManage=false;render(<WABilling/>);const button=await screen.findByRole("button",{name:"Pay with Razorpay"});expect(button.disabled).toBe(true);fireEvent.click(button);expect(axios.post).not.toHaveBeenCalled();
+});
+
+test("internal platform access cannot accidentally purchase a subscription",async()=>{
+  internalAccess=true;pendingPlan="starter";render(<WABilling/>);
+  await screen.findByText(/Internal platform account/);
+  expect(screen.queryByRole("region",{name:"Complete signup payment"})).toBeNull();
+  const button=screen.getByRole("button",{name:"Pay with Razorpay"});expect(button.disabled).toBe(true);
+  fireEvent.click(button);expect(axios.post).not.toHaveBeenCalled();
 });
 test("a disconnected billing API stays visible without a static-host fallback",async()=>{
   axios.get.mockRejectedValue(new Error("offline"));render(<WABilling/>);await screen.findByText(/Billing is unavailable/);expect(axios.get.mock.calls.every(([url])=>url.startsWith("http"))).toBe(true);

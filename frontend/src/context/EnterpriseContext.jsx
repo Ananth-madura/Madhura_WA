@@ -11,6 +11,7 @@ import axios from "axios";
 import { API } from "../config/api";
 import { hasCookieSession } from "../auth/browserSession";
 import { useAuth } from "../auth/AuthContext";
+import { demoContext } from "../auth/demoApi";
 
 const EnterpriseContext = createContext(null);
 
@@ -44,7 +45,7 @@ export function EnterpriseProvider({ children }) {
     const current=++version.current;
     if(initializing)return;
     const token = localStorage.getItem("token");
-    if (!user || (!token && !hasCookieSession())) {
+    if (!user || (!user.isStrictDemo && !token && !hasCookieSession())) {
       setActiveTenant(null);setOrganizations([]);setActiveBranch(null);setBranches([]);setPermittedBranchIds([]);setRoleInActiveOrg(null);setActorRole(null);
       setLoading(false);
       return;
@@ -52,7 +53,7 @@ export function EnterpriseProvider({ children }) {
 
     try {
       const headers = getHeaders();
-      const res = await axios.get(`${API}/api/v2/me`, { headers, timeout: 15000 });
+      const res = user.isStrictDemo ? { data: demoContext(user) } : await axios.get(`${API}/api/v2/me`, { headers, timeout: 15000 });
       if(current!==version.current)return;
 
       if (res?.data?.success) {

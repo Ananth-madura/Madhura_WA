@@ -1,6 +1,7 @@
 import axios from "axios";
 import { API } from "../config/api";
 import {validateJsonResponse} from "../utils/apiPayload";
+import { demoAdapter, isDemoPreview } from "./demoApi";
 
 let pendingRefresh;
 const installed=new WeakSet();
@@ -41,6 +42,15 @@ export function installBrowserSession(client) {
   installed.add(client);
   client.interceptors.request.use(config=>{
     if(!backendRequest(config))return config;
+    if(isDemoPreview() && !/\/auth\/(login|self-signup|verify-2fa|logout|refresh|session)$/.test(new URL(config.url,config.baseURL||API).pathname)) {
+      config.adapter=demoAdapter;
+      config.withCredentials=false;
+      config.headers=config.headers||{};
+      for(const name of ["Authorization","authorization","X-Browser-Session"]) {
+        if(config.headers.delete)config.headers.delete(name);else delete config.headers[name];
+      }
+      return config;
+    }
     if((config.method||"get").toLowerCase()==="get"&&!config.timeout)config.timeout=15000;
     config.withCredentials=true;
     config.headers=config.headers||{};

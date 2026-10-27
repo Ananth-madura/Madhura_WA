@@ -482,6 +482,8 @@ function startServer() {
       await require("./migrations/legacy_employee_memberships").migrate(db);
       await require("./migrations/shared_flows").migrate(require("./config/database"));
       await require("./services/schemaReadiness").assertReady(db);
+      const platformAdmin = await require("./services/platformAdminBootstrap").provisionConfiguredAdmin(db);
+      if (platformAdmin) console.log("Platform administrator and internal workspace are ready");
       await require("./services/sharedFlowRuntime").recover();
       app.set("sharedInboxReady", true);
       require("./services/employeeOwnershipRecovery").start(db, app.get("io"));

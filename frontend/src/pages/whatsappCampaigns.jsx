@@ -8,7 +8,7 @@ import {
 import axios from "axios";
 import { API } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
-import { DEMO_CAMPAIGNS, DEMO_TEMPLATES } from "../auth/demoData";
+import { getDemoRecords } from "../auth/demoApi";
 import WhatsAppCampaignWizard from "../components/WhatsAppCampaignWizard";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 
@@ -96,8 +96,8 @@ function CampaignWorkspace() {
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     if (demoMode) {
-      setCampaigns(DEMO_CAMPAIGNS);
-      setTemplates(DEMO_TEMPLATES);
+      setCampaigns(getDemoRecords("campaigns"));
+      setTemplates(getDemoRecords("templates"));
       setLoadError("");
       if (!silent) setLoading(false);
       return;

@@ -12,7 +12,7 @@ import axios from "axios";
 import { API } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
 import { useEnterprise } from "../context/EnterpriseContext";
-import { DEMO_CONTACTS } from "../auth/demoData";
+import { getDemoRecords } from "../auth/demoApi";
 import WAContactAvatar from "../components/WAContactAvatar";
 
 const FILTERS = [
@@ -136,7 +136,7 @@ export default function WhatsAppContacts() {
     setLoading(true);
     setContactsError("");
     if (demoMode) {
-      let filtered = [...DEMO_CONTACTS];
+      let filtered = getDemoRecords("contacts");
       if (f === "opted_in") filtered = filtered.filter(c => Number(c.opt_in_status) === 1);
       if (f === "blocked") filtered = filtered.filter(c => Number(c.is_blocked) === 1 || c.status === "blocked");
       if (f === "unsubscribed") filtered = filtered.filter(c => Number(c.opt_in_status) === 0);
@@ -176,7 +176,8 @@ export default function WhatsAppContacts() {
   const fetchStats = useCallback(async () => {
     setStatsError("");
     if (demoMode) {
-      setStats({ total: DEMO_CONTACTS.length, opted_in: DEMO_CONTACTS.length, blocked: 0 });
+      const contacts=getDemoRecords("contacts");
+      setStats({ total: contacts.length, opted_in: contacts.filter(row=>row.opt_in_status).length, blocked: contacts.filter(row=>row.is_blocked).length });
       return;
     }
     try {

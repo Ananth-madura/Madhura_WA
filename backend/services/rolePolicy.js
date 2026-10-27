@@ -23,7 +23,7 @@
 const ROLE_VALUES = ["admin", "subadmin", "employee", "agent"];
 
 /** Global roles that carry administrative authority for organization work. */
-const ADMIN_ROLES = new Set(["admin", "subadmin"]);
+const ADMIN_ROLES = new Set(["admin", "subadmin", "platform_admin"]);
 
 /** `organization_owner` is the tenant owner and is never a manageable target. */
 const OWNER_MEMBERSHIP = "organization_owner";
@@ -84,6 +84,7 @@ function effectiveRole({ globalRole, userRole, membershipRole } = {}) {
 /** Only full administrators hand out administrator roles. */
 function canCreateRole(actorRole, nextRole) {
   if (!isAdminRole(actorRole)) return false;
+  if (!ROLE_VALUES.includes(nextRole)) return false;
   const role = normalizeRole(nextRole);
   if (isSubadmin(actorRole) && isAdminRole(role)) return false;
   return true;
@@ -96,6 +97,7 @@ function canCreateRole(actorRole, nextRole) {
  * administrator and never the tenant owner.
  */
 function canManageAccount({ actorRole, actorId, targetId, targetRole, targetMembershipRole } = {}) {
+  if (targetRole === "platform_admin" && actorRole !== "platform_admin") return false;
   if (!isAdminRole(actorRole)) return false;
   // Everyone manages their own profile.
   if (Number(actorId) === Number(targetId)) return true;
@@ -108,8 +110,9 @@ function canManageAccount({ actorRole, actorId, targetId, targetRole, targetMemb
  * Role changes are full-administrator only, never self-service, and never on
  * the tenant owner. This is the single rule `isAdminOnly` protects.
  */
-function canChangeRole({ actorRole, actorId, targetId, targetMembershipRole, nextRole } = {}) {
-  if (actorRole !== "admin") return false;
+function canChangeRole({ actorRole, actorId, targetId, targetRole, targetMembershipRole, nextRole } = {}) {
+  if (targetRole === "platform_admin" && actorRole !== "platform_admin") return false;
+  if (!["admin","platform_admin"].includes(actorRole)) return false;
   if (!ROLE_VALUES.includes(nextRole)) return false;
   if (isOwnerMembership(targetMembershipRole)) return false;
   if (Number(actorId) === Number(targetId)) return false;
@@ -122,6 +125,7 @@ function canChangeRole({ actorRole, actorId, targetId, targetMembershipRole, nex
  * reset their own and any member's.
  */
 function canResetPassword({ actorRole, actorId, targetId, targetRole, targetMembershipRole } = {}) {
+  if (targetRole === "platform_admin" && actorRole !== "platform_admin") return false;
   if (!isAdminRole(actorRole)) return false;
   const self = Number(actorId) === Number(targetId);
   if (isOwnerMembership(targetMembershipRole) && !self) return false;
@@ -131,6 +135,7 @@ function canResetPassword({ actorRole, actorId, targetId, targetRole, targetMemb
 
 /** A sub-admin cannot delete an administrator or the owner. */
 function canDeleteAccount({ actorRole, actorId, targetId, targetRole, targetMembershipRole } = {}) {
+  if (targetRole === "platform_admin" && actorRole !== "platform_admin") return false;
   if (!isAdminRole(actorRole)) return false;
   if (Number(actorId) === Number(targetId)) return false;
   if (isOwnerMembership(targetMembershipRole)) return false;

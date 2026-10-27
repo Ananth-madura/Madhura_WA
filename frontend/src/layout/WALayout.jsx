@@ -332,7 +332,7 @@ function WorkspaceShell() {
       }
     >
       {localCacheWarning && <div role="alert" className="px-4 py-2 text-sm bg-[var(--color-paper)] text-[var(--color-ink)]">{localCacheWarning}</div>}
-      {demoMode && !demoBannerClosed && (
+      {demoMode && (user?.isStrictDemo || !demoBannerClosed) && (
         <div
           role="status"
           className="shrink-0 flex items-center justify-between gap-3 px-3 sm:px-6 py-2"
@@ -352,8 +352,9 @@ function WorkspaceShell() {
             </span>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 text-[11px] text-[var(--color-ink-2)]">
-            <span className="hidden md:inline">API: https://madhura-wa-backend.onrender.com</span>
-            <button
+            <button type="button" className="hl-btn-secondary" onClick={()=>{logout();window.location.assign("/signup");}}>Create real workspace</button>
+            <button type="button" className="hl-btn-secondary" onClick={onLogout}>Sign in</button>
+            {!user?.isStrictDemo && <button
               type="button"
               onClick={() => setDemoBannerClosed(true)}
               aria-label="Dismiss demo mode notice"
@@ -361,7 +362,7 @@ function WorkspaceShell() {
               className="ml-1 p-1 rounded-lg shrink-0 transition hover:bg-black/5 hover:text-[var(--color-ink)] focus-visible:outline-2"
             >
               <X size={14} />
-            </button>
+            </button>}
           </div>
         </div>
       )}

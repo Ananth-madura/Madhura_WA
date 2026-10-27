@@ -36,11 +36,12 @@ export default function WABilling() {
   const [upgradingPlan, setUpgradingPlan] = useState(null);
   const [notice, setNotice] = useState(null);
   const [gateway,setGateway]=useState(null);
-  const canManage=gateway?.canManage===true;
+  const internalAccess=billingData?.organization?.internal_access===true;
+  const canManage=gateway?.canManage===true&&!internalAccess;
   const [orders,setOrders]=useState([]);
   const fetchVersion=useRef(0);
   const cancelPendingFetch=useCallback(()=>{fetchVersion.current++;},[]);
-  const requestedPlan=billingData?.organization?.pending_plan_id||new URLSearchParams(location.search).get("plan");
+  const requestedPlan=internalAccess?null:billingData?.organization?.pending_plan_id||new URLSearchParams(location.search).get("plan");
   const onboardingPlan=plans.find(plan=>plan.id===requestedPlan&&plan.id!==billingData?.organization?.plan&&Number(plan.price_inr)>0);
 
   const getHeaders = useCallback(() => {
@@ -199,7 +200,7 @@ export default function WABilling() {
       {gateway&&<p className="mt-4 text-sm text-slate-300" role="status">Razorpay: {gateway.checkoutEnabled?`${gateway.mode} checkout ready`:"checkout unavailable"}. {gateway.webhookConfigured?"Payment notifications configured.":"Payment notifications still need configuration."}</p>}
       {billingData?.subscription?.current_period_end&&<p className="mt-2 text-sm text-slate-300">Current billing period ends: {new Date(billingData.subscription.current_period_end).toLocaleDateString()}</p>}
       {onboardingPlan&&canManage&&<section className="my-5 border border-emerald-700 rounded-lg p-4" aria-label="Complete signup payment"><h2 className="font-bold">Your account is ready. Complete payment for {onboardingPlan.name}.</h2><p className="my-2 text-sm text-slate-300">Your workspace currently uses the free plan. Your selected plan activates after verified payment. You can sign in later to resume.</p><div className="flex flex-wrap gap-3"><button className="border rounded p-2" disabled={Boolean(upgradingPlan)||!gateway?.checkoutEnabled} onClick={()=>handleCheckout(onboardingPlan.id)}>Pay for {onboardingPlan.name}</button><button className="border rounded p-2" disabled={Boolean(upgradingPlan)} onClick={continueFree}>Continue on the free plan</button></div></section>}
-      {!canManage&&<p className="mt-3 text-sm text-slate-300">An organization owner or billing administrator can change the plan.</p>}
+      {internalAccess?<p className="mt-3 text-sm text-slate-300" role="status">Internal platform account: application features are included without a subscription purchase or expiry.</p>:!canManage&&<p className="mt-3 text-sm text-slate-300">An organization owner or billing administrator can change the plan.</p>}
 
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center text-slate-500">

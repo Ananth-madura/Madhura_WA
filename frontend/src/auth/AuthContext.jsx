@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect } from "react";
 import axios from "axios";
 import { hasCookieSession, refreshBrowserSession } from "./browserSession";
 import { isDemoSession } from "./demoSession";
+import { isDemoPreview } from "./demoApi";
 import { connectSocket, disconnectSocket } from "../socket/socket";
 import { clearLocalCache } from "../utils/waLocalCache";
 import { API } from "../config/api";
@@ -15,7 +16,8 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem("user");
-      return saved ? JSON.parse(saved) : null;
+      const profile = saved ? JSON.parse(saved) : null;
+      return profile;
     } catch (_) { return null; }
   });
   const [initializing,setInitializing]=useState(hasCookieSession);
@@ -35,7 +37,7 @@ export function AuthProvider({ children }) {
     restore();return()=>{current=false;};
   },[]);
   useEffect(()=>{
-    const expired=()=>{clearLocalCache().catch(()=>{});localStorage.removeItem("user");localStorage.removeItem("token");setUser(null);disconnectSocket();};
+    const expired=()=>{if(isDemoPreview())return;clearLocalCache().catch(()=>{});localStorage.removeItem("user");localStorage.removeItem("token");setUser(null);disconnectSocket();};
     window.addEventListener("wa_auth_expired",expired);
     return()=>window.removeEventListener("wa_auth_expired",expired);
   },[]);
@@ -44,6 +46,7 @@ export function AuthProvider({ children }) {
     clearLocalCache().catch(() => {});
     setUser(userData);
     const {token,...profile}=userData;
+    if(userData.isStrictDemo)disconnectSocket();
     localStorage.setItem("user", JSON.stringify(userData.cookieSession?profile:userData));
     if (userData.token && !userData.cookieSession) {
       localStorage.setItem("token", userData.token);

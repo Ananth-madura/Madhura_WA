@@ -87,6 +87,15 @@ function main() {
   assert.equal(policy.canCreateRole("subadmin", "admin"), false, "a sub-admin must not mint an admin");
   assert.equal(policy.canCreateRole("employee", "employee"), false, "members never create accounts");
   assert.equal(policy.canCreateRole("agent", "employee"), false);
+  assert.equal(policy.canCreateRole("platform_admin", "admin"), true);
+  assert.equal(policy.canCreateRole("admin", "platform_admin"), false);
+  assert.equal(policy.canCreateRole("platform_admin", "platform_admin"), false);
+  for (const actorRole of ["admin", "subadmin", "employee"]) {
+    const target = { actorRole, actorId: 1, targetId: 2, targetRole: "platform_admin", nextRole: "employee" };
+    for (const operation of ["canManageAccount", "canResetPassword", "canDeleteAccount", "canChangeRole"]) {
+      assert.equal(policy[operation](target), false, `${actorRole} cannot ${operation} a platform administrator`);
+    }
+  }
 
   // ── Editing ───────────────────────────────────────────────────────────────
   const adminEditor = { actorRole: "admin", actorId: 1 };

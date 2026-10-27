@@ -45,6 +45,7 @@ async function main() {
     await connection.query(`USE \`${database}\``);
     await require("./helpers/signupLifecycle").run({base,connection});
     if(process.env.INBOX_TEST_AUTH_BROWSER==="1")await require("./helpers/authBrowser").verify();
+    if(process.env.INBOX_TEST_AUTH_BROWSER==="1")await require("./helpers/demoBrowser").verify();
     const [[admin]] = await connection.query("SELECT id,email FROM users WHERE role='admin' ORDER BY id LIMIT 1");
     assert(admin);
     await connection.query("UPDATE tenants SET max_seats=100 WHERE id=1");
@@ -139,6 +140,7 @@ async function main() {
     const linkCheck=await require("node:util").promisify(require("node:child_process").execFile)(process.execPath,[path.resolve(__dirname,"../../frontend/scripts/verify-api-link.js")],{env:{...process.env,VERIFY_API_URL:base,VERIFY_SITE_URL:"http://127.0.0.1:15318",REACT_APP_SOCKET_URL:base,VERIFY_WITH_TOKEN:token},timeout:30000});
     assert(linkCheck.stdout.includes("All links good"),linkCheck.stdout);
     console.log("PASS: actual organization creation/switching, isolated inboxes, forbidden foreign tenant, no implicit employee branch, and frontend API/CORS/socket link checker.");
+    await require("./helpers/platformAdmin").verify({base,connection});
     console.log("PASS: fresh full MySQL schema, actual backend startup/readiness, transactional employee creation/activation, signed Meta webhook, duplicate webhook, assigned employee HTTP inbox and no persisted body.");
   } finally {
     child.kill();

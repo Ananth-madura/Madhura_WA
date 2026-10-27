@@ -73,7 +73,7 @@ export const WHATSAPP_MODULES = [
  * as a fallback. The backend enforces the membership either way.
  */
 export function isWorkspaceAdmin({ demoMode, isOwnerOrAdmin, orgRole, globalRole } = {}) {
-  if (demoMode) return true;
+  if (demoMode) return !["employee", "agent"].includes(globalRole);
   if (orgRole) return WORKSPACE_ADMIN_ORG_ROLES.includes(orgRole);
   return Boolean(isOwnerOrAdmin) || WORKSPACE_ADMIN_GLOBAL_ROLES.includes(globalRole);
 }

@@ -9,7 +9,7 @@ import {
 import axios from "axios";
 import { API } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
-import { DEMO_TEMPLATES } from "../auth/demoData";
+import { getDemoRecords } from "../auth/demoApi";
 import { VARIABLE_GROUPS, evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -68,7 +68,7 @@ function TemplatesWorkspace() {
     setLoading(true);
     setLoadError("");
     if (demoMode) {
-      setTemplates(DEMO_TEMPLATES);
+      setTemplates(getDemoRecords("templates"));
       setLoading(false);
       return;
     }

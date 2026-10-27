@@ -8,6 +8,7 @@
 
 const crypto = require("crypto");
 const db = require("../config/database");
+const { isInternalTenant } = require("./platformAdminBootstrap");
 
 const q = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -39,7 +40,7 @@ async function getTenantBillingSummary(tenantId) {
 
   // 1. Fetch tenant & plan details
   const [tenant] = await q(
-    `SELECT t.id, t.name, t.plan, t.plan_status, t.pending_plan_id, t.max_branches, t.max_seats, t.max_senders, t.max_monthly_messages,
+    `SELECT t.id, t.name, t.slug, t.plan, t.plan_status, t.pending_plan_id, t.max_branches, t.max_seats, t.max_senders, t.max_monthly_messages,
             p.name as plan_name, p.badge as plan_badge, p.price_inr, p.max_contacts, p.features_json
      FROM tenants t
      LEFT JOIN plans p ON t.plan = p.id
@@ -48,6 +49,7 @@ async function getTenantBillingSummary(tenantId) {
   );
 
   if (!tenant) throw new Error("Organization not found");
+  const internal = await isInternalTenant(tenant, q);
 
   // 2. Fetch current active subscription
   const [subscription] = await q(
@@ -85,10 +87,11 @@ async function getTenantBillingSummary(tenantId) {
       plan_badge: tenant.plan_badge || "Active",
       plan_status: tenant.plan_status,
       pending_plan_id: tenant.pending_plan_id,
-      price_inr: tenant.price_inr || 0,
+      internal_access: internal,
+      price_inr: internal ? 0 : tenant.price_inr || 0,
       features: typeof tenant.features_json === "string" ? JSON.parse(tenant.features_json) : tenant.features_json || [],
     },
-    subscription: subscription || {
+    subscription: internal ? {plan_id:"enterprise",status:"active",provider:"internal",current_period_end:null} : subscription || {
       plan_id: tenant.plan,
       status: tenant.plan_status || "active",
       provider: "none",
@@ -132,6 +135,7 @@ async function createCheckoutSession(tenantId, userId, { planId, interval = "mon
 
   const [tenant] = await q("SELECT * FROM tenants WHERE id = ? LIMIT 1", [tid]);
   if (!tenant) throw new Error("Organization not found");
+  if (await isInternalTenant(tenant,q)) throw Object.assign(new Error("This internal platform organization does not require a paid subscription"),{status:409,code:"INTERNAL_BILLING_MANAGED"});
 
   const [user] = await q("SELECT email, first_name FROM users WHERE id = ? LIMIT 1", [userId]);
 

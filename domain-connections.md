@@ -34,7 +34,7 @@ To change ports, set `WA_DEV_APP_PORT`, `WA_DEV_SITE_PORT` and `WA_DEV_API_PORT`
 
 ## Production certificate and CORS status
 
-On 27 October 2026, the API initially presented a self-signed certificate. After the user installed SSL in CloudPanel, strict HTTPS verification passed. The API now returns HTTP 200 with `ok: true` and `sharedInboxReady: true`. The remaining production check fails because health responses and login preflights omit credentialed CORS headers for the marketing site and both app domains.
+On 27 October 2026, the API initially presented a self-signed certificate. The user installed trusted SSL in CloudPanel, then updated the backend allowlist and restarted it. Production verification now passes all six checks: all three frontend domains serve their pages, and the API permits credentialed requests and login preflights from each frontend. API health reports `ok: true` and `sharedInboxReady: true`.
 
 Update `ALLOWED_ORIGINS` in the running backend's environment to the exact three frontend origins listed below, then restart that backend process. The backend loads `.env` from the directory containing `server.js`; process-manager environment variables take priority over `.env`. If an old allowlist is set in PM2/CloudPanel, update it there as well. Keep other environment values intact. Rerun `npm.cmd run verify:production` after restarting.
 
@@ -132,4 +132,10 @@ Verified locally: 29 frontend suites / 102 tests, 20 backend core suites, 27 COR
 
 Follow-up verification: the complete backend run now passes 27/27 suites with `--integration --browser`, including the shared-workspace permission policy, a fresh MySQL database, real cookie signup/login/reload/logout, WebSocket inbox updates, persisted notes/tasks, flow preview/publishing, template controls, attachment uploads and explicit campaign starts. Provider transports use local fixtures. All four root environment tests pass. This workstation runs Node 26.1.0; the deployment target and VPS setup remain Node 24. Temporary dev servers and the isolated MySQL instance were stopped after testing.
 
-Production SSL was subsequently installed by the user and verified successfully. Production verification remains failed because the API omits the required CORS headers for the frontend origins. No backend environment or deployment changes have been applied from this workspace.
+Production SSL and CORS were corrected by the user and verified successfully with `node scripts/check-deployment.cjs --production` (six checks passed). This confirms HTTPS, backend database/schema readiness, exact credentialed origins and required login preflight headers. Live account login, message delivery and payment settlement have not been exercised against production. No backend environment or deployment changes were applied from this workspace.
+
+## Demo and real-account follow-up
+
+The production demo login loop was reproduced: the public backend demo endpoint returns 403, then protected workspace requests return 401 and clear the preview profile. The frontend now runs the existing workspace screens with isolated tab-local demo data in every environment, without creating a backend demo workspace. It keeps real account cookies, data, provider connections and purchases behind ordinary authentication. Conversion to a real account clears demo storage before opening signup.
+
+See [live-auth-repair.md](live-auth-repair.md) for deployment and server-only provisioning of the requested permanent platform administrator. The updated source must be deployed before the live demo behavior or internal account changes take effect.

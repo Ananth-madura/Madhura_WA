@@ -189,14 +189,14 @@ export default function Login() {
   const handleLaunchDemo = async (role = "admin") => {
     setDemoLoadingRole(role);
     setError("");
-    setNotice(`Initializing enterprise sandbox environment as ${role === "admin" ? "Organization Admin" : "Branch Staff"}…`);
+    setNotice(`Opening the demo as ${role === "admin" ? "Organization Admin" : "Branch Staff"}…`);
 
     try {
       const session = await startDirectDemoSession(API, role);
       login(session);
       navigate("/whatsapp", { replace: true });
     } catch (err) {
-      setError("Could not launch sandbox session. Please try regular login.");
+      setError("Could not open the demo. Please try again.");
     } finally {
       setDemoLoadingRole(null);
     }
@@ -317,7 +317,7 @@ export default function Login() {
             }}
           >
             <Zap size={13} className="text-emerald-600" />
-            <span>1-Click Dev</span>
+            <span>Try Demo</span>
           </button>
         </div>
 
@@ -444,7 +444,7 @@ export default function Login() {
             </button>
 
             {/* Quick dev test autofill */}
-            <div className="mt-4 pt-3.5 border-t border-dashed border-gray-200">
+            {process.env.NODE_ENV !== "production" && <div className="mt-4 pt-3.5 border-t border-dashed border-gray-200">
               <p className="text-[11px] text-gray-500 mb-1.5 font-medium">Quick dev autofill:</p>
               <div className="flex items-center gap-2 flex-wrap">
                 <button
@@ -462,7 +462,7 @@ export default function Login() {
                   demo@madhuratech.com
                 </button>
               </div>
-            </div>
+            </div>}
           </form>
         )}
 
@@ -549,10 +549,10 @@ export default function Login() {
             <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200/80 mb-4 text-xs text-emerald-950">
               <div className="font-bold flex items-center gap-1.5 mb-1 text-emerald-900">
                 <Zap size={15} className="text-emerald-700 fill-emerald-700" />
-                <span>Instant Developer &amp; Evaluation Sandboxes</span>
+                <span>Explore the application</span>
               </div>
               <p className="text-[12px] text-emerald-800 leading-relaxed m-0">
-                Pre-authenticated demo environments for multi-tenant isolation, branch switching, Meta Embedded Signup, and Razorpay wallet workflows.
+                Explore sample conversations, contacts, templates and campaigns. Create an organization to connect your own WhatsApp account.
               </p>
             </div>
 
@@ -572,7 +572,7 @@ export default function Login() {
                       Primary Organization Admin
                     </div>
                     <div className="text-[11px] text-gray-500">
-                      Full control across all branches, WABA senders, billing &amp; RBAC
+                      Sample conversations, contacts, campaigns and templates
                     </div>
                   </div>
                 </div>
@@ -596,7 +596,7 @@ export default function Login() {
                       Branch Support Agent
                     </div>
                     <div className="text-[11px] text-gray-500">
-                      Scoped to branch inbox, conversation transfers &amp; customer chat
+                      Sample staff inbox and assigned customers
                     </div>
                   </div>
                 </div>
