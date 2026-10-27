@@ -8,7 +8,8 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
-    "check:links": "node scripts/check-marketing-links.js"
+    "check:links": "node scripts/check-marketing-links.js",
+    "check:origins": "node scripts/check-origins.js"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",

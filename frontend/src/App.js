@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from "
 import { Agentation } from "agentation";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Login from "./auth/login";
+import { loginDestination } from "./auth/loginDestination";
 import { EnterpriseProvider } from "./context/EnterpriseContext";
 import { BranchProvider } from "./context/BranchContext";
 const Signup = lazy(() => import("./auth/signup"));
@@ -50,7 +51,7 @@ function MarketingHandoff({ to = "" }) {
   const { pathname, search, hash } = useLocation();
   const target = to && to !== "/" ? to : pathname;
   useEffect(() => {
-    if (MARKETING_URL) {
+    if (MARKETING_URL && new URL(MARKETING_URL).origin !== window.location.origin) {
       window.location.replace(`${MARKETING_URL}${target}${search}${hash}`);
     } else {
       // No marketing origin configured — the content lives elsewhere now,
@@ -75,16 +76,17 @@ const MARKETING_SECTIONS = [
   "product", "features", "solutions", "industries", "platform",
   "developers", "resources", "pricing", "changelog", "company",
   "support", "trust", "legal", "status", "blog", "help",
-  "getting-started", "tutorials", "videos", "case-studies",
+  "getting-started", "tutorials", "videos", "case-studies", "docs",
   "faqs", "compare", "demo", "onboarding", "news", "accessibility",
   "com",
 ];
 
 function RequireAuth({ children }) {
   const { user, initializing } = useAuth();
+  const { pathname, search, hash } = useLocation();
   if(initializing)return <p className="p-4">Checking your browser session…</p>;
   const token = localStorage.getItem("token");
-  if (!user && !token) return <Navigate to="/login" replace />;
+  if (!user && !token) return <Navigate to={`/login?returnUrl=${encodeURIComponent(`${pathname}${search}${hash}`)}`} replace />;
   return children;
 }
 
@@ -92,15 +94,21 @@ function RequireAuth({ children }) {
    app instead of showing them a "Sign in" button that would just work. */
 function PublicOnly({ children }) {
   const { user, initializing } = useAuth();
+  const { search } = useLocation();
   if(initializing)return <p className="p-4">Checking your browser session…</p>;
   const token = localStorage.getItem("token");
-  if (user || token) return <Navigate to="/whatsapp" replace />;
+  if (user || token) return <Navigate to={loginDestination(null, search)} replace />;
   return children;
 }
 
 function FlowParamRedirect() {
   const { flowId } = useParams();
   return <Navigate to={flowId ? `/whatsapp/flows/build/${flowId}` : "/whatsapp/flows/build"} replace />;
+}
+
+function LoginRedirect() {
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: "/login", search, hash }} replace />;
 }
 
 // `/whatsapp` is the Live Chats board for every role. The page itself adapts:
@@ -124,7 +132,7 @@ export default function App() {
               path="/"
               element={
                 <PublicOnly>
-                  <MarketingHandoff to="/" />
+                  <LoginRedirect />
                 </PublicOnly>
               }
             />

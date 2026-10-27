@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "./AuthContext";
 import { API } from "../config/api";
+import { MARKETING } from "../config/index";
 import { startDirectDemoSession } from "./demoSession";
 
 export default function Login() {
@@ -215,16 +216,16 @@ export default function Login() {
   return (
     <div className="lp-auth" style={{ minHeight: "100dvh", padding: "24px 16px" }}>
       <div className="lp-auth-panel" style={{ maxWidth: 460 }}>
-        <Link to="/" className="lp-auth-back">
+        <a href={MARKETING} className="lp-auth-back">
           <ArrowLeft size={15} />
           Back to Home
-        </Link>
+        </a>
 
         {/* Brand & Platform Header */}
         <div className="flex items-center justify-between gap-3 mb-2">
-          <Link to="/" className="flex items-center gap-2">
+          <a href={MARKETING} className="flex items-center gap-2">
             <img src="/Group.png" alt="Madhura WhatsApp CRM" className="h-8 w-auto object-contain" />
-          </Link>
+          </a>
           <span
             style={{
               fontSize: 10,

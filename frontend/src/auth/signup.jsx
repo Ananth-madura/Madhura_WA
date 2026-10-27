@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
+import { MARKETING } from "../config/index";
 import {
   CheckCircle2,
   ArrowLeft,
@@ -372,16 +373,16 @@ export default function Signup() {
           transition: "max-width 0.25s ease-in-out",
         }}
       >
-        <Link to="/" className="lp-auth-back">
+        <a href={MARKETING} className="lp-auth-back">
           <ArrowLeft size={15} />
           Back to Home
-        </Link>
+        </a>
 
         {/* Wordmark Header */}
         <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
-          <Link to="/" className="flex items-center gap-2">
+          <a href={MARKETING} className="flex items-center gap-2">
             <img src="/Group.png" alt="Madhura WhatsApp CRM" className="h-8 w-auto object-contain" />
-          </Link>
+          </a>
           <button
             type="button"
             onClick={handleDemoAccess}

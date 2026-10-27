@@ -25,9 +25,9 @@ export default function App() {
         {/* Workspace hand-off */}
         <Route path="/login" element={<ExternalRedirect to="/login" />} />
         <Route path="/signup" element={<ExternalRedirect to="/signup" />} />
-        <Route path="/whatsapp" element={<ExternalRedirect to="/whatsapp" />} />
+        <Route path="/whatsapp/*" element={<ExternalRedirect />} />
         <Route path="/dashboard/*" element={<ExternalRedirect to="/whatsapp" />} />
-        <Route path="/portal/*" element={<ExternalRedirect to="/portal" />} />
+        <Route path="/portal/*" element={<ExternalRedirect />} />
 
         {/* The landing page */}
         <Route path="/" element={<Landing />} />

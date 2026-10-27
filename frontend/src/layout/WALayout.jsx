@@ -23,6 +23,7 @@ import useWorkspaceAccess from "../hooks/useWorkspaceAccess";
 import { canOpenWorkspacePath, workspaceModuleForPath } from "../auth/workspaceAccess";
 import { describeDemoReason } from "../auth/demoSession";
 import { API } from "../config/api";
+import { MARKETING } from "../config/index";
 import socket from "../socket/socket";
 import WAConfigPrompt from "../components/WAConfigPrompt";
 import WAAccountBalanceModal from "../components/WAAccountBalanceModal";
@@ -404,13 +405,13 @@ function WorkspaceShell() {
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap">
           {!member && (
             <button
-              onClick={() => window.location.assign("https://crm.madhuratech.com")}
+              onClick={() => window.location.assign(MARKETING)}
               className="hl-shell-link shrink-0"
               style={{ height: 38, padding: "0 0.75rem", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
-              title="Return to CRM Dashboard"
+              title="Open Madhura website"
             >
               <ChevronLeft size={14} />
-              <span className="hidden xl:inline whitespace-nowrap">CRM Dashboard</span>
+              <span className="hidden xl:inline whitespace-nowrap">Website</span>
             </button>
           )}
 

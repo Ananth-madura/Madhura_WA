@@ -819,7 +819,7 @@ export default function Landing() {
   /* Direct access to live cloud workspace */
   const handleInstantDemoLogin = () => {
     playAppSound("click");
-    window.location.href = LIVE_APP_URL || appUrl("/login?tab=demo");
+    window.location.href = appUrl("/login?tab=demo");
   };
 
   const handleDemoSubmit = (e) => {
@@ -827,7 +827,7 @@ export default function Landing() {
     playAppSound("received");
     setDemoSubmitted(true);
     setTimeout(() => {
-      window.location.href = LIVE_APP_URL || appUrl("/login?tab=demo");
+      window.location.href = appUrl("/login?tab=demo");
     }, 2400);
   };
 

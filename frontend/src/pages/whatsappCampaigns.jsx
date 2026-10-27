@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useEnterprise } from "../context/EnterpriseContext";
 import {
   Send, Plus, Play, Pause, Square, X, Loader2, Clock, CheckCircle, XCircle,
   MessageCircle, Eye, FileText, Users, Settings2, RotateCcw, ChevronDown, ChevronUp,
@@ -63,12 +64,19 @@ function ProgressBar({ sent, total, color = "" }) {
 }
 
 export default function WACampaigns() {
+  const { activeTenant, activeBranch, loading } = useEnterprise();
+  return loading ? null : <CampaignWorkspace key={`${activeTenant?.id || "none"}:${activeBranch?.id || "all"}`} />;
+}
+
+function CampaignWorkspace() {
   const { demoMode } = useAuth();
+  const { enterpriseHeaders } = useEnterprise();
   const [campaigns, setCampaigns] = useState([]);
   const [groups, setGroups] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [flows, setFlows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [campaignDetail, setCampaignDetail] = useState(null);
@@ -83,13 +91,14 @@ export default function WACampaigns() {
 
   const [form, setForm] = useState({ ...DEFAULT_FORM });
 
-  const headers = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
+  const headers = useCallback(() => ({ Authorization: `Bearer ${localStorage.getItem("token")}`, ...enterpriseHeaders }), [enterpriseHeaders]);
 
-  const fetchData = async (silent = false) => {
+  const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     if (demoMode) {
       setCampaigns(DEMO_CAMPAIGNS);
       setTemplates(DEMO_TEMPLATES);
+      setLoadError("");
       if (!silent) setLoading(false);
       return;
     }
@@ -100,20 +109,20 @@ export default function WACampaigns() {
         axios.get(`${API}/api/wa/templates`, { headers: headers() }),
         axios.get(`${API}/api/wa/flows`, { headers: headers() }).catch(() => ({ data: [] })),
       ]);
-      setCampaigns(cRes.data && cRes.data.length ? cRes.data : DEMO_CAMPAIGNS);
+      setCampaigns(Array.isArray(cRes.data) ? cRes.data : []);
       setGroups(gRes.data || []);
-      setTemplates(tRes.data && tRes.data.length ? tRes.data : DEMO_TEMPLATES);
+      setTemplates(Array.isArray(tRes.data) ? tRes.data : []);
       setFlows(flRes.data || []);
+      setLoadError("");
     } catch (err) {
-      setCampaigns(DEMO_CAMPAIGNS);
-      setTemplates(DEMO_TEMPLATES);
+      setLoadError(err.response?.data?.message || "Campaign data could not be refreshed. Check your connection and retry.");
     }
     if (!silent) setLoading(false);
-  };
+  }, [demoMode, headers]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   // Dynamic live auto-refresh every 3.5 seconds whenever a campaign is running
   useEffect(() => {
@@ -123,7 +132,7 @@ export default function WACampaigns() {
       fetchData(true);
     }, 3500);
     return () => clearInterval(interval);
-  }, [campaigns]);
+  }, [campaigns, fetchData]);
 
   const openCreate = () => {
     setForm({ ...DEFAULT_FORM });
@@ -329,6 +338,8 @@ export default function WACampaigns() {
           </button>
         </div>
       </div>
+
+      {loadError && <div role="alert" className="hl-card p-4 mb-4"><p>{loadError}</p><button className="hl-btn-secondary mt-2" onClick={() => fetchData()}>Retry</button></div>}
 
       {/* Dynamic Filter Tabs & Search Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">

@@ -12,6 +12,7 @@ jest.mock("react-router-dom", () => ({
 jest.mock("axios", () => ({ get: jest.fn(), post: jest.fn() }));
 jest.mock("../socket/socket", () => ({ on: jest.fn(), off: jest.fn() }));
 jest.mock("../hooks/useWorkspaceAccess", () => ({ __esModule: true, default: jest.fn() }));
+jest.mock("../auth/AuthContext", () => ({ useAuth: () => ({ user: { whatsapp_access_level: "full" } }) }));
 
 const grants = (modules) => {
   const granted = new Set(modules);
@@ -25,7 +26,7 @@ const grants = (modules) => {
 };
 
 const tabLabels = () =>
-  [...document.querySelectorAll(".wa-nav-tab-btn")].map((button) => button.textContent.trim());
+  screen.getAllByRole("button").filter(button => button.getAttribute("class")?.includes("wa-nav-tab-btn")).map(button => button.textContent.trim());
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -34,16 +35,16 @@ beforeEach(() => {
   useWorkspaceAccess.mockReturnValue(grants([]));
 });
 
-test("a member with no grants sees only the assigned inbox", () => {
+test("a member with no extra grants sees the inbox routes", () => {
   render(<WhatsAppNav />);
-  expect(tabLabels()).toEqual(["Team Inbox"]);
+  expect(tabLabels()).toEqual(["Team Inbox", "Live Chats"]);
 });
 
 test("a member sees exactly the modules the administrator granted", () => {
   useWorkspaceAccess.mockReturnValue(grants(["customers", "contacts", "campaigns", "analytics"]));
   render(<WhatsAppNav />);
-  expect(tabLabels()).toEqual(["Team Inbox", "My workspace", "Contacts", "Bulk Campaigns", "Analytics"]);
-  for (const blocked of ["Live Chats", "Branches", "Accounts", "Employees"]) {
+  expect(tabLabels()).toEqual(["Team Inbox", "My workspace", "Live Chats", "Contacts", "Bulk Campaigns", "Analytics"]);
+  for (const blocked of ["Branches", "Accounts", "Employees"]) {
     expect(screen.queryByText(blocked)).toBeNull();
   }
 });
@@ -82,6 +83,6 @@ test("workspace tab is exact so campaigns does not keep it active", () => {
   mockPathname = "/whatsapp/campaigns";
   useWorkspaceAccess.mockReturnValue(grants(["customers", "campaigns"]));
   render(<WhatsAppNav />);
-  const active = [...document.querySelectorAll(".wa-nav-tab-btn.is-active")].map((button) => button.textContent.trim());
+  const active = screen.getAllByRole("button").filter(button => button.getAttribute("class")?.includes("wa-nav-tab-btn") && button.getAttribute("class")?.includes("is-active")).map(button => button.textContent.trim());
   expect(active).toEqual(["Bulk Campaigns"]);
 });

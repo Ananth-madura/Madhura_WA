@@ -12,20 +12,23 @@
    Override per environment with VITE_APP_URL / VITE_API_URL in `.env`.
    ───────────────────────────────────────────────────────────────────────────── */
 
-const stripTrailingSlash = (value) => String(value || "").replace(/\/+$/, "");
+import { resolveOrigin } from "./origins";
 
-export const APP_URL = stripTrailingSlash(
-  import.meta.env.VITE_APP_URL || (import.meta.env.PROD?"https://live.wa.madhuratech.in":"http://localhost:3001")
+const browserLocation = typeof window !== "undefined" ? window.location : null;
+
+export const APP_URL = resolveOrigin(
+  import.meta.env.VITE_APP_URL, "https://live.wa.madhuratech.in", 3001, browserLocation, import.meta.env.PROD
 );
 
-export const API_URL = stripTrailingSlash(import.meta.env.VITE_API_URL || (import.meta.env.PROD?"https://api.madhuratech.in":""));
-
-/** Canonical live workspace web app URL */
-export const LIVE_APP_URL = "https://live.wa.madhuratech.in";
+export const API_URL = resolveOrigin(
+  import.meta.env.VITE_API_URL, "https://api.madhuratech.in", 5001, browserLocation, import.meta.env.PROD
+);
 
 /** Absolute URL inside the workspace app: appUrl("/login") → http://host/login */
 export const appUrl = (path = "/") =>
   `${APP_URL}${path.startsWith("/") ? path : `/${path}`}`;
+
+export const LIVE_APP_URL = appUrl("/login");
 
 /** Absolute URL inside this marketing site: siteUrl("/pricing") → /pricing */
 export const siteUrl = (path = "/") => `${import.meta.env.BASE_URL || "/"}${path.replace(/^\//, "")}`;

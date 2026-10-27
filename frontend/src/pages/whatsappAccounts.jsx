@@ -474,7 +474,7 @@ export default function WhatsAppAccounts() {
   const qualityInfo = qualityRating?.quality_rating
     ? (QUALITY_COLORS[qualityRating.quality_rating] || QUALITY_COLORS.GREEN)
     : QUALITY_COLORS.GREEN;
-  const webhookUrl = `${window.location.origin}/api/wa/webhook`;
+  const webhookUrl = `${API}/api/wa/webhook`;
 
 
   // ── Fetch All WhatsApp & AI Settings ──

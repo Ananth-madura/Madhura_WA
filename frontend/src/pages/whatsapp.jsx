@@ -1014,7 +1014,7 @@ export default function WhatsAppPage() {
 
       setStatus((prev) => {
         const next = { ...flat };
-        if (workspaceMode && !flat.connected) {
+        if (demoMode && workspaceMode && !flat.connected) {
           next.connected = true;
           next.activeEngine = flat.activeEngine === "Disconnected" ? "Interactive Workspace" : flat.activeEngine;
         }
@@ -1057,7 +1057,7 @@ export default function WhatsAppPage() {
       setInitialChecking(false);
       return null;
     }
-  }, []);
+  }, [demoMode, workspaceMode]);
 
   const fetchQr = useCallback(async (force = false) => {
     if (qrFetchInFlightRef.current && !force) return;
@@ -1099,7 +1099,7 @@ export default function WhatsAppPage() {
           }, 1500);
         } else {
           setQrLoading(false);
-          setError("WhatsApp browser is initializing on server. Click 'Refresh QR Code' or 'Instant Demo Mode' below.");
+          setError("WhatsApp browser is initializing on server. Wait a moment, then refresh the QR code.");
         }
       } else if (res.data && res.data.error) {
         setError(res.data.error);
@@ -3023,6 +3023,13 @@ export default function WhatsAppPage() {
   const handleEnterWorkspace = useCallback(() => {
     setWorkspaceMode(true);
     try { waUiStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
+    if (!demoMode) {
+      setQrCode(null);
+      setQrDataUrl(null);
+      setError(null);
+      fetchChats();
+      return;
+    }
     setStatus((prev) => ({
       ...DEMO_STATUS,
       ...prev,
@@ -3042,7 +3049,7 @@ export default function WhatsAppPage() {
         setMessages(initMsgs);
       }
     }
-  }, [chats]);
+  }, [chats, demoMode, fetchChats]);
 
   const handleCheckLogin = async () => {
     if (checkingLogin) return;
@@ -3897,7 +3904,7 @@ export default function WhatsAppPage() {
               )}
               <span>{error}</span>
             </div>
-            {(error.includes("warming up") || error.includes("initializing")) && (
+            {demoMode && (error.includes("warming up") || error.includes("initializing")) && (
               <button
                 type="button"
                 onClick={() => {
@@ -3924,21 +3931,15 @@ export default function WhatsAppPage() {
           <div className="hl-card mb-4 p-3.5 text-xs border-[var(--color-rule)] bg-[var(--color-paper-2)] flex flex-wrap items-center justify-between gap-3 max-w-2xl mx-auto w-full">
             <div className="flex items-center gap-2">
               <span className="text-amber-500 font-bold">⚠️ Notice:</span>
-              <span>Backend is live on Render in degraded mode (MySQL not yet attached). You can explore all features in Interactive Dev Mode.</span>
+              <span>The backend is not ready. Saved chats and message delivery require the database connection to recover.</span>
             </div>
-            <button
+            {demoMode && <button
               type="button"
-              onClick={() => {
-                setWorkspaceMode(true);
-                try { waUiStorage.setItem("wa_workspace_mode", "true"); } catch (_) { }
-                setStatus({ ...DEMO_STATUS, connected: true, activeEngine: "Interactive Workspace" });
-                setChats([...DEMO_CHATS]);
-                if (DEMO_CHATS.length > 0) setSelectedChat(DEMO_CHATS[0]);
-              }}
+              onClick={handleEnterWorkspace}
               className="hl-btn-primary text-xs px-3 py-1 font-semibold whitespace-nowrap"
             >
               Explore in Dev Mode ⚡
-            </button>
+            </button>}
           </div>
         )}
 
@@ -4098,7 +4099,7 @@ export default function WhatsAppPage() {
                       type="button"
                       onClick={handleEnterWorkspace}
                       className="hl-btn-secondary px-3.5 py-2 text-xs font-semibold text-[var(--color-ink)] hover:bg-[var(--color-paper)] transition flex items-center gap-1.5 border border-dashed border-[var(--color-rule)]"
-                      title="Open chat workspace in test mode without pairing phone"
+                      title="Open saved chats; sending requires a connected WhatsApp account"
                     >
                       <span>💬 Open Chat Workspace</span>
                     </button>

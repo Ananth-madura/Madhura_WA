@@ -14,6 +14,7 @@ async function execute(sql){
 }
 const client={query:async sql=>{transactionQueries++;return [await execute(sql)];},beginTransaction:async()=>{inTransaction=true;},commit:async()=>{inTransaction=false;},rollback:async()=>{inTransaction=false;}};
 const db={isSqlite:false,promise:()=>({query:async sql=>{assert.equal(inTransaction,false,"A held transaction must not acquire a second pool connection");return [await execute(sql)];}}),getConnection:callback=>callback(null,{promise:()=>client,release:()=>released++})};
+require.cache[require.resolve("../config/database")]={loaded:true,exports:db};
 require.cache[require.resolve("../services/waConfigHelper")]={loaded:true,exports:{cloudClientForTenantSender:async()=>({wabaId:"fixture-waba"})}};
 async function main(){
   const service=require("../services/employeeCampaigns").createEmployeeCampaigns(db);

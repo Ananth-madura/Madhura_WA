@@ -6,13 +6,13 @@ import { appUrl } from "../config/site";
    Marketing URLs that need it — /login, /signup, /whatsapp, /portal — resolve
    here and forward the browser there with the query string and hash intact. */
 
-export default function ExternalRedirect({ to = "/login" }) {
+export default function ExternalRedirect({ to }) {
   const location = useLocation();
+  const target = `${to || location.pathname}${location.search}${location.hash}`;
 
   useEffect(() => {
-    const target = `${to}${location.search}${location.hash}`;
     window.location.replace(appUrl(target));
-  }, [to, location.search, location.hash]);
+  }, [target]);
 
   return (
     <div className="min-h-screen bg-[#050e2f] text-white flex flex-col items-center justify-center gap-4 px-6 text-center">
@@ -21,7 +21,7 @@ export default function ExternalRedirect({ to = "/login" }) {
         Opening the MADHURA workspace…
       </p>
       <a
-        href={appUrl(to)}
+        href={appUrl(target)}
         className="text-sm font-semibold text-blue-400 hover:text-blue-300 underline underline-offset-4"
       >
         Continue
