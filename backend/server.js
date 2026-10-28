@@ -343,6 +343,7 @@ app.use("/api/v2/meta", require("./routes/enterpriseMetaRoutes"));
 app.use("/api/v2/billing", require("./routes/enterpriseBillingRoutes"));
 app.use("/api/v2/inbox", (req, res, next) => app.get("sharedInboxReady") ? next() : res.status(503).json({ message: "Shared inbox schema is not ready" }), require("./routes/enterpriseInboxRoutes"));
 app.use("/api/v2/workspace", (req, res, next) => app.get("sharedInboxReady") ? next() : res.status(503).json({ message: "Employee workspace schema is not ready" }), require("./routes/employeeWorkspaceRoutes"));
+app.use("/api/v2/team-chat", (req, res, next) => app.get("teamChatReady") ? next() : res.status(503).json({ message: "Team chat schema is not ready" }), require("./routes/teamChatRoutes"));
 app.use("/webhooks/razorpay", require("./routes/enterpriseBillingRoutes"));
 
 app.use("/api/teammember", require("./middleware/authMiddleware").verifyToken, (req, res) => {
@@ -479,6 +480,7 @@ function startServer() {
       await require("./services/tenantPlanService").ensureTenantsTable();
       await require("./services/enquiryService").ensureEnquiryTables();
       await require("./migrations/shared_number_inbox").migrate(require("./config/database"));
+      await require("./migrations/team_chat").migrate(require("./config/database"));
       await require("./migrations/legacy_employee_memberships").migrate(db);
       await require("./migrations/shared_flows").migrate(require("./config/database"));
       await require("./services/schemaReadiness").assertReady(db);
@@ -486,6 +488,8 @@ function startServer() {
       if (platformAdmin) console.log("Platform administrator and internal workspace are ready");
       await require("./services/sharedFlowRuntime").recover();
       app.set("sharedInboxReady", true);
+      app.set("teamChatReady", true);
+      require("./services/teamChat").startRetentionSweep();
       require("./services/employeeOwnershipRecovery").start(db, app.get("io"));
       await require("./services/waCampaignEngine").startWorker();
       require("./services/waStorageRetention").start();

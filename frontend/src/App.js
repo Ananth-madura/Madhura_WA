@@ -21,7 +21,7 @@ const WAFlows = lazy(() => import("./pages/whatsappFlows"));
 const WAAnalytics = lazy(() => import("./pages/whatsappAnalytics"));
 const WAAccounts = lazy(() => import("./pages/whatsappAccounts"));
 const WAEmployees = lazy(() => import("./pages/whatsappEmployees"));
-const SharedTeamInbox = lazy(() => import("./components/SharedTeamInbox"));
+const TeamChat = lazy(() => import("./components/TeamChat"));
 const EmployeeWorkspace = lazy(() => import("./pages/EmployeeWorkspace"));
 const EmployeeCampaigns = lazy(() => import("./pages/EmployeeCampaigns"));
 const WAEnquiries = lazy(() => import("./pages/whatsappEnquiries"));
@@ -178,7 +178,7 @@ export default function App() {
               }
             >
               <Route index element={<WorkspaceInbox />} />
-              <Route path="team-inbox" element={<SharedTeamInbox />} />
+              <Route path="team-inbox" element={<TeamChat />} />
               <Route path="workspace" element={<EmployeeWorkspace />} />
               <Route path="workspace/campaigns" element={<EmployeeCampaigns />} />
               <Route path="contacts" element={<WAContacts />} />

@@ -70,13 +70,20 @@ const logsDir = resolve(
   DATA_DIR ? path.join(DATA_DIR, "logs") : path.join(BACKEND_ROOT, "..", "logs")
 );
 
+const privateChatDir = resolve(process.env.TEAM_CHAT_STORAGE_DIR,
+  DATA_DIR ? path.join(DATA_DIR, "private-team-chat") : path.join(BACKEND_ROOT, "private-team-chat"));
+const relativeChatPath = path.relative(uploadsDir, privateChatDir);
+if (!relativeChatPath.startsWith(`..${path.sep}`) && !path.isAbsolute(relativeChatPath)) {
+  throw new Error("TEAM_CHAT_STORAGE_DIR must be outside the public uploads directory");
+}
+
 /**
  * Create everything. Called from server.js at boot. Uses mode 0o750 because
  * uploads and session profiles contain customer data and must not be
  * world-readable on a shared host.
  */
 const ensureRuntimeDirs = () => {
-  for (const dir of [uploadsDir, mediaDir, cloudMediaDir, sessionsDir, logsDir, backupDir]) {
+  for (const dir of [uploadsDir, mediaDir, cloudMediaDir, sessionsDir, logsDir, backupDir, privateChatDir]) {
     try {
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o750 });
     } catch (err) {
@@ -96,6 +103,7 @@ module.exports = {
   sessionsDir,
   backupDir,
   logsDir,
+  privateChatDir,
   ensureRuntimeDirs,
   isExternalState,
 };

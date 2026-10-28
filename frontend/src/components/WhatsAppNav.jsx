@@ -17,6 +17,7 @@ import {
   UserCheck,
   GitBranch,
   Inbox,
+  MessagesSquare,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
@@ -160,7 +161,7 @@ export default function WhatsAppNav() {
   };
 
   const tabs = [
-    { id: "team-inbox", label: "Team Inbox", title: "Assigned conversations and shared notes", path: "/whatsapp/team-inbox", icon: Inbox },
+    { id: "team-inbox", label: "Team Inbox", title: "Internal team messaging, group channels and cross-branch chats", path: "/whatsapp/team-inbox", icon: MessagesSquare },
     { id: "workspace", label: "My workspace", title: "Customers, leads, pipeline and follow-ups", path: "/whatsapp/workspace", icon: Users, exact: true, module: "customers" },
     {
       id: "chats",
@@ -326,7 +327,7 @@ export default function WhatsAppNav() {
                     {tab.label}
                   </span>
                 </span>
-                {tab.id === (admin ? "chats" : "team-inbox") && totalUnread > 0 && (
+                {tab.id === "chats" && totalUnread > 0 && (
                   <span
                     className="hl-badge shrink-0"
                     style={

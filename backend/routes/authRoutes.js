@@ -864,6 +864,7 @@ router.put("/employees/:id", verifyToken, isAdmin, async (req, res) => {
       }
       if (req.body.status && req.body.status !== 'active') await q("UPDATE conversations SET owner_user_id = NULL WHERE tenant_id = ? AND owner_user_id = ?", [tenantId,targetId]);
     });
+    await require("../services/teamChat").emitPolicyUpdated(req.app.get("io"), tenantId, null, [targetId]);
     res.json({ message: "Employee updated successfully" });
   } catch (error) { res.status(400).json({ message: error.message }); }
 });
@@ -890,6 +891,7 @@ router.delete("/employees/:id", verifyToken, isAdmin, async (req, res) => {
     await db.promise().query(`DELETE FROM users WHERE id = ? AND tenant_id = ?`, [target.id, tenantId]);
     db.query(`DELETE FROM teammember WHERE user_id = ? OR emp_email = ?`, [target.id, target.email], () => {});
 
+    await require("../services/teamChat").emitPolicyUpdated(req.app.get("io"), tenantId, null, [target.id]);
     res.json({ message: "Employee deleted successfully." });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete employee" });

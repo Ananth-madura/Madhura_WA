@@ -53,3 +53,10 @@ scratch/domain-stack-process.txt
 scratch/domain-stack-state/
 scratch/domain-*.log
 scratch/integration-frontend-build/
+backend/private-team-chat/
+scratch/team-chat-qa/
+scratch/team-chat-*.log
+scratch/team-chat-upload.txt
+scratch/team-chat-avatar.png
+scratch/team-inbox-*.png
+scratch/customer-ops-*.png

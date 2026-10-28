@@ -55,6 +55,11 @@ async function migrate(db) {
   await q("CREATE TABLE IF NOT EXISTS wa_employee_workspace_permissions (tenant_id INT NOT NULL,user_id INT NOT NULL,module VARCHAR(30) NOT NULL,can_view INT NOT NULL DEFAULT 1,can_edit INT NOT NULL DEFAULT 1,PRIMARY KEY(tenant_id,user_id,module))");
   await q("CREATE TABLE IF NOT EXISTS wa_ownership_recovery_positions (tenant_id INT PRIMARY KEY,last_contact_id INT NOT NULL DEFAULT 0)");
   await q(`CREATE TABLE IF NOT EXISTS wa_workspace_audit (id ${identity},tenant_id INT NOT NULL,actor_id INT NOT NULL,action VARCHAR(60) NOT NULL,subject_user_id INT DEFAULT NULL,details TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)${suffix}`);
+  await q(`CREATE TABLE IF NOT EXISTS wa_workspace_preferences (tenant_id INT NOT NULL, user_id INT NOT NULL, preferences_json TEXT NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(tenant_id, user_id))${suffix}`);
+  await add("wa_customer_tasks", "priority", "VARCHAR(20) NOT NULL DEFAULT 'normal'");
+  await add("wa_customer_tasks", "description", "TEXT DEFAULT NULL");
+  await add("wa_customer_deals", "notes", "TEXT DEFAULT NULL");
+  await add("wa_customer_deals", "expected_close_date", "DATE DEFAULT NULL");
   const indexes = [["wa_contacts", "idx_customer_owner", "tenant_id, assigned_agent_id, id"], ["wa_enquiries", "idx_enquiry_customer", "tenant_id, contact_id, id"],
     ["telecalls", "idx_telecalls_tenant_phone", "tenant_id, mobile_number"],
     ["wa_workspace_audit", "idx_workspace_audit_tenant", "tenant_id, id"],

@@ -48,6 +48,35 @@ function initSocket(server, corsOrigin = "*") {
       socket.join(room);
     });
 
+    let lastTeamTypingAt = 0;
+    socket.on("team_chat_typing", async (data) => {
+      try {
+        if (Date.now() - lastTeamTypingAt < 500) return;
+        lastTeamTypingAt = Date.now();
+        const teamChat = require("../services/teamChat");
+        const tenantId = Number(data?.tenantId);
+        const channelId = Number(data?.channelId);
+        if (!channelId) return;
+        const channel = await teamChat.findChannel(tenantId, channelId);
+        if (!channel) return;
+        const canAccess = await teamChat.canAccessChannel({ tenantId, user: socket.data.user, userRole: socket.data.user.role }, channel);
+        if (!canAccess) return;
+        const recipients = await teamChat.recipientsFor(channel);
+        const meId = Number(socket.data.user.id);
+        for (const rId of recipients) {
+          if (rId !== meId) {
+            io.to(`user:${rId}`).emit("team_chat_typing", {
+              tenantId,
+              channelId,
+              userId: meId,
+              userName: socket.data.user.name || `User ${meId}`,
+              isTyping: Boolean(data?.isTyping),
+            });
+          }
+        }
+      } catch (_) {}
+    });
+
     for (const event of ["task_updated", "new_task", "target_updated", "new_target", "send_message"]) {
       socket.on(event, () => socket.emit("socket_error", { code: "REST_REQUIRED", message: "Use the authorized workspace API for changes." }));
     }

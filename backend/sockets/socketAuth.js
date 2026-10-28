@@ -88,7 +88,7 @@ const authenticateSocket = (socket, next) => {
       sessions.requireOrigin({headers:socket.handshake?.headers||{}});
       return sessions.active(decoded).then(allow).catch(()=>next(new Error("unauthorized: browser session revoked")));
     }
-    return next();
+    return allow();
   } catch (err) {
     return next(new Error(`unauthorized: ${err.message}`));
   }

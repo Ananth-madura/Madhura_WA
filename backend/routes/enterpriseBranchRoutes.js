@@ -191,6 +191,7 @@ router.patch(
     try {
       const branchId = Number(req.params.branchId);
       const updated = await orgService.updateBranch(req.tenantId, branchId, req.body);
+      await require("../services/teamChat").emitPolicyUpdated(req.app.get("io"), req.tenantId);
       await orgService.recordBranchAudit(req.tenantId, branchId, req.user.id, "branch.updated", req.body);
       res.json({ success: true, branch: updated });
     } catch (err) {
@@ -212,6 +213,7 @@ router.post(
     try {
       const branchId = Number(req.params.branchId);
       await orgService.archiveBranch(req.tenantId, branchId);
+      await require("../services/teamChat").emitPolicyUpdated(req.app.get("io"), req.tenantId);
       await orgService.recordBranchAudit(req.tenantId, branchId, req.user.id, "branch.archived", { branch_id: branchId });
       res.json({ success: true, message: "Branch archived successfully" });
     } catch (err) {
@@ -269,6 +271,7 @@ router.post(
       const branchId = Number(req.params.branchId);
       const { userId, teamId, isPrimary } = req.body;
       await orgService.assignStaffBranch(req.tenantId, userId, branchId, teamId, isPrimary);
+      await require("../services/teamChat").emitPolicyUpdated(req.app.get("io"), req.tenantId, null, [Number(userId)]);
       await orgService.recordBranchAudit(req.tenantId, branchId, req.user.id, "branch.member.added", { userId, teamId, isPrimary });
       res.status(201).json({ success: true, message: "Team member assigned to branch" });
     } catch (err) {
@@ -291,6 +294,7 @@ router.delete(
       const branchId = Number(req.params.branchId);
       const userId = Number(req.params.userId);
       await orgService.removeBranchMember(req.tenantId, branchId, userId, req.user.id);
+      await require("../services/teamChat").emitPolicyUpdated(req.app.get("io"), req.tenantId, null, [userId]);
       res.json({ success: true, message: "Member unassigned from branch" });
     } catch (err) {
       res.status(400).json({ success: false, message: err.message });

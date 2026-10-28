@@ -511,3 +511,914 @@
   #madhura-visual-flow-studio,
   #madhura-visual-flow-studio * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+
+/* ==========================================================================
+   UNIFIED SAAS OPERATIONS WORKSPACE STYLES (@anti-ui-slop)
+   ========================================================================== */
+
+.wa-unified-workspace {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: calc(100vh - 70px);
+  background: #f8fafc;
+  color: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+  padding: 16px 24px 40px;
+  box-sizing: border-box;
+}
+
+/* ── 1. Workspace Header ── */
+.wa-ws-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.wa-ws-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wa-ws-brand-cluster {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.wa-ws-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+  margin: 0;
+}
+
+.wa-ws-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wa-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.wa-badge-org {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+.wa-badge-branch {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.wa-badge-role {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.wa-ws-subtitle {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.wa-ws-header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Scope Control */
+.wa-scope-control {
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.wa-scope-dropdown {
+  background: transparent;
+  border: 0;
+  padding: 6px 12px 6px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Buttons */
+.wa-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.wa-btn-primary {
+  background: #fcbd16;
+  color: #1e293b;
+  border-color: #eab308;
+}
+.wa-btn-primary:hover {
+  background: #f59e0b;
+}
+
+.wa-btn-secondary {
+  background: #ffffff;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+.wa-btn-secondary:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.wa-btn-ghost {
+  background: transparent;
+  color: #64748b;
+  border-color: transparent;
+}
+.wa-btn-ghost:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.wa-btn-danger {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+.wa-btn-danger:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.wa-btn-xs {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.wa-btn-icon {
+  background: transparent;
+  border: 0;
+  padding: 6px;
+  border-radius: 4px;
+  color: #64748b;
+  cursor: pointer;
+}
+.wa-btn-icon:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* ── 2. Tab Navigation Rail ── */
+.wa-ws-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 12px 0;
+  border-bottom: 1px solid #e2e8f0;
+  scrollbar-width: thin;
+}
+
+.wa-ws-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.wa-ws-tab-btn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+.wa-ws-tab-btn.is-active {
+  color: #0f172a;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.wa-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.wa-ws-tab-btn.is-active .wa-tab-badge {
+  background: #fcbd16;
+  color: #1e293b;
+}
+
+/* ── 3. Active View Container ── */
+.wa-ws-content-body {
+  margin-top: 16px;
+}
+
+/* KPI Deck */
+.wa-kpi-deck {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.wa-kpi-card {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.wa-kpi-card:hover {
+  transform: translateY(-1px);
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.06);
+}
+
+.wa-kpi-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.wa-kpi-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 4px;
+}
+
+.wa-kpi-meta {
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+/* Alerts Strip */
+.wa-alerts-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.wa-alert-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.wa-alert-warning {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.wa-alert-danger {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.wa-alert-info {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+}
+
+.wa-alert-action-btn {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Overview Split */
+.wa-overview-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .wa-overview-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.wa-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  margin-bottom: 16px;
+}
+
+.wa-card-heading {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+/* Stage Bars */
+.wa-stage-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wa-stage-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.wa-stage-name {
+  width: 90px;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: #475569;
+}
+
+.wa-stage-bar-track {
+  flex: 1;
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.wa-stage-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: #3b82f6;
+}
+
+.wa-stage-won { background: #10b981; }
+.wa-stage-lost { background: #ef4444; }
+.wa-stage-proposal { background: #8b5cf6; }
+.wa-stage-negotiation { background: #f59e0b; }
+
+.wa-stage-count {
+  width: 24px;
+  text-align: right;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* Activity Feed */
+.wa-activity-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wa-activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.wa-activity-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fcbd16;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.wa-activity-content {
+  flex: 1;
+}
+
+.wa-activity-text {
+  margin: 0;
+  color: #334155;
+  line-height: 1.4;
+}
+
+.wa-activity-time {
+  font-size: 10.5px;
+  color: #94a3b8;
+}
+
+/* ── 4. Kanban Board ── */
+.wa-kanban-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: 16px;
+}
+
+.wa-kanban-col {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(100vh - 220px);
+}
+
+.wa-kanban-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.wa-count-badge {
+  background: #e2e8f0;
+  color: #475569;
+  border-radius: 10px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.wa-kanban-cards-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.wa-kanban-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.wa-kanban-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+
+.wa-link-inline {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #2563eb;
+  cursor: pointer;
+}
+.wa-link-inline:hover {
+  text-decoration: underline;
+}
+
+/* ── 5. Tables ── */
+.wa-table-wrap {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.wa-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.wa-table th {
+  padding: 10px 14px;
+  background: #f8fafc;
+  color: #64748b;
+  font-weight: 600;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.wa-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+}
+
+.wa-table-compact table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.wa-table-compact th {
+  padding: 6px 10px;
+  background: #f8fafc;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.wa-table-compact td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #f8fafc;
+}
+
+/* ── 6. Drawer & Modals ── */
+.wa-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.wa-drawer-panel {
+  width: min(520px, 95vw);
+  height: 100%;
+  background: #ffffff;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+.wa-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.wa-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.wa-drawer-subnav {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 16px;
+}
+
+.wa-drawer-tab-btn {
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  border-radius: 4px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.wa-drawer-tab-btn.is-active {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Modal Dialog */
+.wa-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.wa-modal-dialog {
+  width: min(480px, 95vw);
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+  padding: 20px;
+}
+
+.wa-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.wa-modal-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 8px;
+  margin-bottom: 14px;
+}
+
+.wa-modal-tabs button {
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #64748b;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.wa-modal-tabs button.is-active {
+  background: #fcbd16;
+  color: #1e293b;
+}
+
+.wa-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* ── 7. Global Search Overlay ── */
+.wa-search-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(3px);
+  z-index: 1200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+}
+
+.wa-search-modal {
+  width: min(600px, 95vw);
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.wa-search-input-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.wa-search-field {
+  flex: 1;
+  border: 0;
+  outline: none;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.wa-search-results-pane {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.wa-search-results-groups {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wa-search-group h4 {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  margin: 0 0 6px;
+}
+
+.wa-search-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+
+.wa-search-item:hover {
+  background: #f1f5f9;
+}
+
+/* ── 8. Pills & Badges ── */
+.wa-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.wa-pill-ok { background: #dcfce7; color: #15803d; }
+.wa-pill-warm { background: #fef3c7; color: #b45309; }
+.wa-pill-urgent { background: #fee2e2; color: #b91c1c; font-weight: 700; }
+.wa-pill-high { background: #ffedd5; color: #c2410c; }
+.wa-pill-hot { background: #ffe4e6; color: #e11d48; font-weight: 700; }
+.wa-pill-lead { background: #e0f2fe; color: #0369a1; }
+.wa-pill-off { background: #f1f5f9; color: #94a3b8; }
+
+/* Segmented Control */
+.wa-segmented-control {
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.wa-segmented-control button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.wa-segmented-control button.is-active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.wa-dropdown-list {
+  margin-top: 4px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  max-height: 150px;
+  overflow-y: auto;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.06);
+}
+
+.wa-dropdown-item {
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.wa-dropdown-item:hover {
+  background: #f1f5f9;
+}
+
+/* My Day Queue Cards */
+.wa-myday-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.wa-myday-queues {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.wa-queue-section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.wa-queue-overdue {
+  border-color: #fecaca;
+  background: #fffafa;
+}
+
+.wa-queue-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+
+.wa-task-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wa-task-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.wa-task-card-overdue {
+  border-color: #fecaca;
+}
+
+.wa-task-checkbox {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: #64748b;
+  padding: 0;
+}
+
+.wa-task-body {
+  flex: 1;
+}
+
+.wa-task-subline {
+  font-size: 11px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}

@@ -6,6 +6,7 @@ import { isDemoPreview } from "./demoApi";
 import { connectSocket, disconnectSocket } from "../socket/socket";
 import { clearLocalCache } from "../utils/waLocalCache";
 import { API } from "../config/api";
+import { clearChatCachesOnLogout } from "../utils/teamChatIndexedDB";
 
 // Minimal auth shell for Whatsapp_CRM (duplicated from the CRM's AuthContext
 // so WA pages keep working standalone — see README divergence note).
@@ -68,6 +69,7 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
+    clearChatCachesOnLogout(user?.id).catch(() => console.warn("Team Inbox device-cache cleanup was blocked; close other application tabs and clear device history."));
     try {
       const token = localStorage.getItem("token");
       if (token || hasCookieSession()) {
