@@ -188,6 +188,8 @@ export default function App() {
               <Route path="groups" element={<WAGroups />} />
               <Route path="campaigns" element={<WACampaigns />} />
               <Route path="automations" element={<WAAutomations />} />
+              <Route path="automations/create" element={<WAAutomations />} />
+              <Route path="automations/:automationId/edit" element={<WAAutomations />} />
               <Route path="reminders" element={<Navigate to="/whatsapp" replace />} />
               <Route path="flows" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
               <Route path="flows/create" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />

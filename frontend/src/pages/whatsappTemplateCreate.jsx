@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, AlertTriangle, CheckCircle2, FileText, Loader2, Tag, Trash2
+  ArrowLeft, AlertTriangle, CheckCircle2, FileText, Loader2, Trash2, Plus
 } from "lucide-react";
 import axios from "axios";
 import {useEnterprise} from "../context/EnterpriseContext";
@@ -293,6 +293,29 @@ function TemplateEditorWorkspace() {
   const sampleText = showSample ? renderPreviewText(form.body) : (form.body || "");
   const charCount = (form.body || "").length;
 
+  const buttonList = useMemo(() => {
+    if (!form.button_type) return [];
+    const parsed = parseButtons(form.buttons);
+    if (!parsed.ok || !parsed.value) return [];
+    const list = Array.isArray(parsed.value) ? parsed.value : [parsed.value];
+    return list.slice(0, 3).map((b) => (typeof b === "string" ? { text: b } : (b && typeof b === "object" ? b : { text: "" })));
+  }, [form.button_type, form.buttons]);
+
+  const syncButtons = (list) => {
+    setField("buttons", list.length ? JSON.stringify(list) : "");
+  };
+  const addButton = () => {
+    if (buttonList.length >= 3) return;
+    syncButtons([...buttonList, { text: "" }]);
+  };
+  const removeButton = (index) => {
+    syncButtons(buttonList.filter((_, i) => i !== index));
+  };
+  const updateButtonText = (index, value) => {
+    const next = buttonList.map((b, i) => (i === index ? { ...b, text: value } : b));
+    syncButtons(next);
+  };
+
   /* ── Loading / not-found states ──────────────────────────────────────── */
   if (loadingTemplate) {
     return (
@@ -512,14 +535,13 @@ function TemplateEditorWorkspace() {
               <span className="hl-id">{charCount} chars · {usedTags.length} placeholders</span>
             </div>
 
-            <WAVariablePicker onInsert={insertPlaceholder} className="mb-2" />
-
             <textarea
               id="tpl-body"
               ref={bodyTextareaRef}
               value={form.body}
               onChange={e => setField("body", e.target.value)}
-              rows={7}
+              rows={30}
+              style={{ minHeight: "240px" }}
               className="hl-input w-full resize-none leading-relaxed"
               placeholder="Hello {name}! Thank you for choosing {company}. Your {service} scheduled on {date} at {city} is confirmed."
               aria-invalid={Boolean(errors.body)}
@@ -560,26 +582,51 @@ function TemplateEditorWorkspace() {
                 </select>
               </div>
               <div>
-                <label className="hl-section-label block mb-1" htmlFor="tpl-buttons">Buttons Config</label>
-                <input
-                  id="tpl-buttons"
-                  type="text"
-                  value={form.buttons}
-                  onChange={e => setField("buttons", e.target.value)}
-                  disabled={!form.button_type}
-                  className="hl-input w-full font-mono disabled:opacity-40"
-                  placeholder='[{"text":"Confirm"},{"text":"Reschedule"}]'
-                  aria-invalid={Boolean(errors.buttons)}
-                />
+                <label className="hl-section-label block mb-1">Button Texts (max 3)</label>
+                {form.button_type ? (
+                  <div className="space-y-2">
+                    {buttonList.map((btn, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={btn.text || ""}
+                          onChange={(e) => updateButtonText(i, e.target.value)}
+                          className="hl-input w-full"
+                          placeholder={`Button ${i + 1} label`}
+                          aria-label={`Button ${i + 1} label`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeButton(i)}
+                          className="hl-btn-danger-ghost shrink-0"
+                          aria-label={`Remove button ${i + 1}`}
+                          title="Remove button"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={addButton}
+                      disabled={buttonList.length >= 3}
+                      className="hl-btn-secondary flex items-center gap-1.5 disabled:opacity-40"
+                    >
+                      <Plus size={14} /> Add button
+                    </button>
+                    <p className="text-[10px]" style={{ color: "var(--color-ink-2)" }}>
+                      {buttonList.length}/3 buttons · {buttonList.length >= 3 ? "Maximum reached." : "Add up to 3 buttons."}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[10px]" style={{ color: "var(--color-ink-2)" }}>
+                    Select a button type first.
+                  </p>
+                )}
               </div>
             </div>
             <p className="text-[10px]" style={{ color: errors.buttons ? "var(--color-error)" : "var(--color-ink-2)" }}>
-              {errors.buttons ||
-                (form.button_type
-                  ? ((form.buttons || "").trim()
-                    ? "JSON array of buttons — up to 3 are shown in the preview."
-                    : "Pick a button type and add its config, or switch back to “No Buttons”.")
-                  : "No buttons on this template.")}
+              {errors.buttons || (form.button_type ? "Buttons sync automatically to the preview (max 3)." : "No buttons on this template.")}
             </p>
           </div>
 
@@ -689,49 +736,8 @@ function TemplateEditorWorkspace() {
             </div>
           </div>
 
-          {/* Used placeholders */}
-          <div className="hl-card p-4">
-            <div className="flex items-center gap-2 mb-2.5">
-              <Tag size={14} style={{ color: "var(--color-ink)" }} />
-              <span className="hl-section-label">Placeholders in this message</span>
-            </div>
-            {usedTags.length === 0 ? (
-              <p className="text-[11px]" style={{ color: "var(--color-ink-2)" }}>
-                None yet — insert one from the variable picker and it will be listed here with its sample value.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {usedTags.map(tag => {
-                  const meta = PLACEHOLDER_ITEMS.find(p => p.key === tag);
-                  return (
-                    <span key={tag} className="hl-badge" title={meta ? `${meta.label} — Example: ${meta.example}` : "Custom placeholder from your own data"}>
-                      <span className="font-bold">{tag}</span>
-                      <span className="text-[10px] opacity-75">({meta ? meta.label : "custom"})</span>
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <WAVariablePicker onInsert={insertPlaceholder} className="mt-4" />
 
-          {/* Placeholder quick reference */}
-          <div className="hl-card p-4">
-            <div className="flex items-center justify-between mb-2.5">
-              <div className="flex items-center gap-2">
-                <Tag size={14} style={{ color: "var(--color-ink)" }} />
-                <span className="hl-section-label">All available placeholders</span>
-              </div>
-              <span className="text-[11px] hidden sm:inline" style={{ color: "var(--color-ink-2)" }}>Filled from CRM records</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {PLACEHOLDER_ITEMS.map(p => (
-                <div key={p.key} className="hl-badge" title={`${p.desc} — Example: ${p.example}`}>
-                  <span className="font-bold">{p.key}</span>
-                  <span className="text-[10px] opacity-75">({p.label})</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>

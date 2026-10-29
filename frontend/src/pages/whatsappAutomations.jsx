@@ -1,7 +1,7 @@
 import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
 import useWADialog from "../hooks/useWADialog";
-import { useLocation, useNavigate } from "react-router-dom";
-import React, { useState, useEffect } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Zap, Plus, X, Edit2, Loader2, CheckCircle2, XCircle, Play,
   Clock, ToggleLeft, ToggleRight, FileText, ListChecks, Trash2,
@@ -14,6 +14,12 @@ import { API } from "../config/api";
 import WhatsAppInteractiveReminders from "../components/WhatsAppInteractiveReminders";
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 import WAConditionEditor, { parseConditions } from "../components/WAConditionEditor";
+import { useEnterprise } from "../context/EnterpriseContext";
+import AutomationDraftPreview from "../components/AutomationDraftPreview";
+import AutomationFollowupOptions from "../components/AutomationFollowupOptions";
+import AutomationWorkspaceSummary from "../components/AutomationWorkspaceSummary";
+import AutomationRuleActivity from "../components/AutomationRuleActivity";
+import { automationIssues, isApprovedTemplate } from "../utils/automationDraft";
 
 const TRIGGER_TYPES = [
   { value: "welcome_message", label: "Welcome Message", desc: "First inbound message / contact added", emoji: "👋" },
@@ -72,10 +78,25 @@ const PLACEHOLDERS = [
 ];
 
 export default function WhatsAppAutomations() {
+  const {activeTenant}=useEnterprise();
+  return <AutomationWorkspace key={activeTenant?.id||"none"}/>;
+}
+
+function AutomationWorkspace() {
   const location = useLocation();
   const navigate = useNavigate();
+  const editRouteId=location.pathname.match(/\/automations\/(\d+)\/edit\/?$/)?.[1];
+  const isEditorPage = Boolean(editRouteId)||location.pathname.replace(/\/$/, "").endsWith("/automations/create");
+  const [searchParams] = useSearchParams();
   const [automations, setAutomations] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [senders,setSenders]=useState([]);
+  const [editorLoading,setEditorLoading]=useState(false);
+  const editorRequest=useRef(0);
+  const [ruleSearch,setRuleSearch]=useState("");
+  const [ruleStatus,setRuleStatus]=useState("all");
+  const [logStatus,setLogStatus]=useState("");
+  const [sampleEvent,setSampleEvent]=useState('{"name":"Sample customer","amount":1500,"service":"Consultation"}');
   const [groups, setGroups] = useState([]);
   const [flows, setFlows] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -88,7 +109,7 @@ export default function WhatsAppAutomations() {
   const [showModal, setShowModal] = useState(false);
   const [savingRule, setSavingRule] = useState(false);
   const [ruleError, setRuleError] = useState("");
-  const automationDialog = useWADialog(showModal, () => setShowModal(false), savingRule);
+  const automationDialog = useWADialog(showModal && !isEditorPage, () => setShowModal(false), savingRule);
   const [editAutomation, setEditAutomation] = useState(null);
   const [toggling, setToggling] = useState(null);
   const [seeding, setSeeding] = useState(false);
@@ -105,7 +126,7 @@ export default function WhatsAppAutomations() {
   const [simTriggerType, setSimTriggerType] = useState("new_lead");
   const [simPhone, setSimPhone] = useState("");
   const [simName, setSimName] = useState("Rahul Sharma");
-  const [simSendReal, setSimSendReal] = useState(false);
+
   const [simLoading, setSimLoading] = useState(false);
   const [simResult, setSimResult] = useState(null);
   const [showExplainer, setShowExplainer] = useState(false);
@@ -124,6 +145,7 @@ export default function WhatsAppAutomations() {
   });
   const [welcomeSaving, setWelcomeSaving] = useState(false);
   const [welcomeTestPhone, setWelcomeTestPhone] = useState("");
+  const [welcomeSender,setWelcomeSender]=useState("");
   const [welcomeTestLoading, setWelcomeTestLoading] = useState(false);
   const [welcomeTestResult, setWelcomeTestResult] = useState(null);
 
@@ -159,6 +181,21 @@ export default function WhatsAppAutomations() {
 
   const headers = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
   const anyActive = automations.some((a) => a.is_active);
+  const draftIssues = automationIssues(form, conditions, menuOptions, templates, flows, senders);
+  const [starterTrigger, setStarterTrigger] = useState("invoice_created");
+  useEffect(()=>{
+    const connected=senders.filter(sender=>sender.status==="connected");
+    if(!editRouteId&&isEditorPage&&connected.length===1)setForm(previous=>previous.sender_id?previous:{...previous,sender_id:connected[0].id});
+  },[senders,isEditorPage,editRouteId]);
+  useEffect(()=>{
+    const tab=searchParams.get("tab");if(["rules","welcome","logs","reminders"].includes(tab))setActiveTab(tab);
+  },[searchParams]);
+  useEffect(()=>{
+    if(activeTab!=="logs")return undefined;
+    let active=true;
+    const refresh=async()=>{try{const [result,summary]=await Promise.all([axios.get(`${API}/api/wa/automations/logs/recent`,{params:{limit:100,status:logStatus||undefined,automation_id:searchParams.get("rule")||undefined}}),axios.get(`${API}/api/wa/automations/stats`)]);if(active){setLogs(result.data);setStats(summary.data);}}catch(error){if(active)setPageNotice({type:"error",message:error.response?.data?.error||"Execution logs could not be refreshed."});}};
+    refresh();const timer=setInterval(refresh,15000);return()=>{active=false;clearInterval(timer);};
+  },[activeTab,logStatus,searchParams]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -166,15 +203,15 @@ export default function WhatsAppAutomations() {
     try {
       const [aRes, tRes, lRes, wRes, gRes, fRes, sRes] = await Promise.all([
         axios.get(`${API}/api/wa/automations`, { headers: headers() }),
-        axios.get(`${API}/api/wa/templates`, { headers: headers() }),
+        axios.get(`${API}/api/wa/automations/references`, { headers: headers() }),
         axios.get(`${API}/api/wa/automations/logs/recent?limit=40`, { headers: headers() }),
         axios.get(`${API}/api/wa/automations/welcome-settings`, { headers: headers() }).catch(() => ({ data: null })),
-        axios.get(`${API}/api/wa/groups`, { headers: headers() }).catch(() => ({ data: [] })),
-        axios.get(`${API}/api/wa/flows`, { headers: headers() }).catch(() => ({ data: [] })),
+        Promise.resolve({data:null}),
+        Promise.resolve({data:null}),
         axios.get(`${API}/api/wa/automations/stats`, { headers: headers() }).catch(() => ({ data: null })),
       ]);
       setAutomations(aRes.data || []);
-      setTemplates(tRes.data || []);
+      setTemplates(tRes.data.templates || []);setFlows(tRes.data.flows||[]);setGroups(tRes.data.groups||[]);setSenders(tRes.data.senders||[]);
       setLogs(lRes.data || []);
       if (wRes.data) setWelcomeSettings(wRes.data);
       if (gRes.data) setGroups(gRes.data || []);
@@ -217,10 +254,12 @@ export default function WhatsAppAutomations() {
   };
 
   const openCreate = () => {
+    editorRequest.current++;
     setRuleError("");
     setConditions({ match: "all", rules: [] });
     setEditAutomation(null);
     setForm({
+      sender_id:senders.filter(sender=>sender.status==="connected").length===1?senders.find(sender=>sender.status==="connected").id:"",
       name: "",
       trigger_type: "welcome_message",
       msg_kind: "text",
@@ -244,6 +283,45 @@ export default function WhatsAppAutomations() {
     setShowModal(true);
   };
 
+  // Open the create-rule editor as a full page at /whatsapp/automations/create
+  // instead of a popup modal, so the flow is deep-linkable and deployable.
+  const openCreatePage = () => {
+    setRuleError("");
+    setConditions({ match: "all", rules: [] });
+    setEditAutomation(null);
+    setForm({
+      sender_id:senders.filter(sender=>sender.status==="connected").length===1?senders.find(sender=>sender.status==="connected").id:"",
+      name: "",
+      trigger_type: "welcome_message",
+      msg_kind: "text",
+      template_id: "",
+      message_text: PRESET_MESSAGES.welcome_message,
+      media_type: "image",
+      media_url: "",
+      enable_sequence: false,
+      sequence_delay_seconds: 7,
+      followup_msg_kind: "text",
+      followup_message_text: "",
+      followup_media_type: "image",
+      followup_media_url: "",
+      followup_template_id: "",
+      flow_id: "",
+      group_id: "",
+      delay_minutes: 0,
+      is_active: 1,
+    });
+    setMenuOptions([]);
+    navigate("/whatsapp/automations/create");
+  };
+
+  // Deep-link entry: /whatsapp/automations/create opens the full-page editor.
+  useEffect(() => {
+    if(editRouteId)openEdit({id:editRouteId});
+    else if (isEditorPage) openCreate();
+    else setShowModal(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
   useEffect(() => {
     const templateId = location.state?.templateId;
     if (!templateId || loading) return;
@@ -260,6 +338,10 @@ export default function WhatsAppAutomations() {
   }, [location.state, location.pathname, loading, templates, navigate]);
 
   const openEdit = async (a) => {
+    if(!isEditorPage){navigate(`/whatsapp/automations/${a.id}/edit`);return;}
+    const ticket=++editorRequest.current;setEditAutomation(null);setEditorLoading(true);
+    try{a=(await axios.get(`${API}/api/wa/automations/${a.id}`,{headers:headers()})).data;if(ticket!==editorRequest.current)return;}catch(error){if(ticket!==editorRequest.current)return;setRuleError(error.response?.data?.error||"Could not load this rule. Return to the list and retry.");setEditorLoading(false);return;}
+    setEditorLoading(false);
     setRuleError("");
     setConditions(parseConditions(a.conditions));
     setEditAutomation(a);
@@ -268,6 +350,8 @@ export default function WhatsAppAutomations() {
     const followKind = a.followup_template_id ? "template" : a.followup_media_type && a.followup_media_url ? "media" : "text";
 
     setForm({
+      sender_id:a.sender_id||"",
+      revision:a.revision,
       name: a.name,
       trigger_type: a.trigger_type,
       msg_kind: msgKind,
@@ -289,12 +373,7 @@ export default function WhatsAppAutomations() {
     });
     setMenuOptions([]);
     setShowModal(true);
-    try {
-      const { data } = await axios.get(`${API}/api/wa/automations/${a.id}/options`, { headers: headers() });
-      setMenuOptions((data || []).map((o) => ({ label: o.label, reply_text: o.reply_text })));
-    } catch (err) {
-      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Automation reply options could not be loaded." });
-    }
+    setMenuOptions((a.options||[]).map(option=>({label:option.label,reply_text:option.reply_text})));
   };
 
   const handleToggle = async (a) => {
@@ -324,21 +403,25 @@ export default function WhatsAppAutomations() {
     setForm((prev) => ({ ...prev, [field]: (prev[field] || "") + (prev[field] ? " " : "") + tag }));
   };
 
+  // Close the rule editor and, when it was opened via the /create deep link,
+  // return to the automations list page.
+  const closeEditor = () => {
+    editorRequest.current++;
+    setShowModal(false);
+    if (isEditorPage) navigate("/whatsapp/automations", { replace: true });
+  };
+
   const handleSave = async () => {
-    if (savingRule) return;
+    if (savingRule||editorLoading) return;
+    if(editRouteId&&String(editAutomation?.id)!==String(editRouteId)){setRuleError("This saved rule has not loaded. Return to the list and reopen it before saving.");return;}
     setRuleError("");
-    if (!form.name.trim() || !form.trigger_type) {
-      setRuleError("Enter a rule name and choose a trigger type.");
-      return;
-    }
-    if (!form.flow_id && ((form.msg_kind === "template" && !form.template_id) || (form.msg_kind === "text" && !form.message_text.trim()) || (form.msg_kind === "media" && !form.media_url.trim()))) {
-      setRuleError("Choose a template, enter a message or provide a media URL before saving.");
-      return;
-    }
-    if (Number(form.delay_minutes) < 0) { setRuleError("The delay cannot be negative."); return; }
+    if (draftIssues.length) { setRuleError(draftIssues.join(" ")); return; }
     setSavingRule(true);
 
     const payload = {
+      sender_id:form.sender_id||null,
+      revision:form.revision,
+      options:menuOptions,
       name: form.name.trim(),
       trigger_type: form.trigger_type,
       template_id: form.msg_kind === "template" ? form.template_id || null : null,
@@ -366,9 +449,7 @@ export default function WhatsAppAutomations() {
         automationId = data.id;
         setEditAutomation({ id: automationId });
       }
-      const validOptions = menuOptions.filter((o) => o.label.trim() && o.reply_text.trim());
-      await axios.put(`${API}/api/wa/automations/${automationId}/options`, { options: validOptions }, { headers: headers() });
-      setShowModal(false);
+      closeEditor();
       fetchData();
     } catch (err) {
       setRuleError(err.response?.data?.error || "The automation could not be fully saved. Retry to finish saving this rule.");
@@ -385,15 +466,19 @@ export default function WhatsAppAutomations() {
     try {
       const { data } = await axios.post(
         `${API}/api/wa/automations/${testModal.id}/trigger`,
-        { phone: testPhone.trim(), contact_name: testName.trim() },
+        { phone: testPhone.trim(), contact_name: testName.trim(),request_id:crypto.randomUUID() },
         { headers: headers()}
       );
-      setTestResult({ success: true, message: data.message });
+      setTestResult({ success: true, message: [data.message,...(data.warnings||[])].join(" ") });
       fetchData();
     } catch (err) {
       setTestResult({ success: false, message: err.response?.data?.error || "Trigger failed" });
     }
     setTestLoading(false);
+  };
+  const cancelExecution=async log=>{
+    try{await axios.post(`${API}/api/wa/automations/${log.automation_id}/executions/${log.id}/cancel`,{},{headers:headers()});setLogs(previous=>previous.map(row=>row.id===log.id?{...row,status:"skipped",error:"Cancelled by an authorized employee"}:row));}
+    catch(error){setPageNotice({type:"error",message:error.response?.data?.error||"Could not cancel this execution. Refresh its current status."});}
   };
 
   const handleSimulateTrigger = async () => {
@@ -406,12 +491,13 @@ export default function WhatsAppAutomations() {
           trigger_type: simTriggerType,
           phone: simPhone.trim(),
           contact_name: simName.trim(),
-          send_real_message: simSendReal && !!simPhone.trim(),
+          send_real_message: false,
+          custom_data: JSON.parse(sampleEvent),
         },
         { headers: headers() }
       );
       setSimResult(data);
-      if (simSendReal) fetchData();
+
     } catch (err) {
       setSimResult({
         success: false,
@@ -438,7 +524,7 @@ export default function WhatsAppAutomations() {
     setWelcomeTestLoading(true);
     setWelcomeTestResult(null);
     try {
-      const { data } = await axios.post(`${API}/api/wa/automations/test-welcome`, { phone: welcomeTestPhone }, { headers: headers() });
+      const { data } = await axios.post(`${API}/api/wa/automations/test-welcome`, { phone: welcomeTestPhone, sender_id:welcomeSender||undefined }, { headers: headers() });
       setWelcomeTestResult({
         success: true,
         message: `Welcome message sent via ${data.engineUsed || "WhatsApp"}`,
@@ -457,7 +543,9 @@ export default function WhatsAppAutomations() {
 
   return (
     <div className="hl-page">
+      {!isEditorPage && <>
       <WAWorkspaceGuide section="automations" />
+      <AutomationWorkspaceSummary stats={stats} senders={senders} templates={templates} navigate={navigate} onLogs={()=>setActiveTab("logs")}/>
       {/* Header Banner */}
       <div className="hl-commandbar hl-card flex-col md:flex-row md:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 p-4 sm:p-5">
         <div className="flex items-center gap-3.5 min-w-0">
@@ -468,7 +556,7 @@ export default function WhatsAppAutomations() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="hl-title">Event automations</h1>
               <span className="hl-badge hl-badge-accent">
-                {automations.length} Active Rules
+                {automations.filter(rule=>rule.is_active).length} Enabled rules
               </span>
             </div>
             <p className="hl-subtitle mt-0.5">
@@ -512,7 +600,7 @@ export default function WhatsAppAutomations() {
           </button>
 
           <button
-            onClick={openCreate}
+            onClick={openCreatePage}
             className="hl-btn-primary"
           >
             <Plus size={16} />
@@ -703,6 +791,7 @@ export default function WhatsAppAutomations() {
       {/* ── TAB 1: Rules List ── */}
       {activeTab === "rules" && (
         <>
+          <div className="flex flex-wrap gap-3 mb-4"><label className="text-sm flex-1 min-w-0">Find a rule<input className="hl-input w-full p-2 mt-1" value={ruleSearch} onChange={event=>setRuleSearch(event.target.value)} placeholder="Name, event or template"/></label><label className="text-sm">Rule status<select className="hl-select block p-2 mt-1" value={ruleStatus} onChange={event=>setRuleStatus(event.target.value)}><option value="all">All rules</option><option value="enabled">Enabled</option><option value="paused">Paused</option></select></label></div>
           {loading ? (
             <div className="flex justify-center py-20">
               <Loader2 size={36} className="animate-spin" />
@@ -724,7 +813,7 @@ export default function WhatsAppAutomations() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {automations.map((a) => {
+              {automations.filter(rule=>(ruleStatus==="all"||Boolean(rule.is_active)===(ruleStatus==="enabled"))&&`${rule.name} ${rule.trigger_type} ${rule.template_name||""}`.toLowerCase().includes(ruleSearch.toLowerCase())).map((a) => {
                 const tr = TRIGGER_TYPES.find((t) => t.value === a.trigger_type) || { emoji: "⚡", label: a.trigger_type };
                 const hasSeq = Boolean(a.followup_message_text || a.followup_media_url || a.followup_template_name);
 
@@ -833,6 +922,8 @@ export default function WhatsAppAutomations() {
                         <span>Test Send</span>
                       </button>
                     </div>
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs"><button className="underline" type="button" onClick={()=>navigate(`/whatsapp/automations?tab=logs&rule=${a.id}`)}>View executions</button>{a.flow_id&&<button className="underline" type="button" onClick={()=>navigate(`/whatsapp/flows/build/${a.flow_id}`)}>Open linked flow</button>}{a.template_id&&<button className="underline" type="button" onClick={()=>navigate(`/whatsapp/templates/${a.template_id}/edit`)}>Open template</button>}</div>
+                    <AutomationRuleActivity id={a.id}/>
                   </div>
                 );
               })}
@@ -844,6 +935,7 @@ export default function WhatsAppAutomations() {
       {/* ── TAB 2: Welcome Auto-Reply Settings ── */}
       {activeTab === "welcome" && (
         <div className="hl-card p-6 max-w-3xl mx-auto space-y-6">
+          <label className="block text-sm">Sender for welcome test<select className="hl-select w-full p-2 mt-1" value={welcomeSender} onChange={event=>setWelcomeSender(event.target.value)}><option value="">Choose a connected sender</option>{senders.filter(sender=>sender.status==="connected").map(sender=><option key={sender.id} value={sender.id}>{sender.display_phone}</option>)}</select></label>
           <div className="hl-card p-4 flex items-start gap-3">
             <ShieldCheck className="mt-0.5 shrink-0" size={20} />
             <div className="hl-subtitle space-y-1.5">
@@ -1179,6 +1271,7 @@ export default function WhatsAppAutomations() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="hl-title">Automation audit log</h2>
+              <label className="block text-xs mt-2">Execution status<select className="hl-select p-2 ml-2" value={logStatus} onChange={event=>setLogStatus(event.target.value)}><option value="">All statuses</option>{["scheduled","sending","sent","failed","skipped","unknown"].map(status=><option key={status}>{status}</option>)}</select></label>
               <p className="hl-subtitle">Live feed of all automated messages triggered by CRM events</p>
             </div>
             <button onClick={fetchData} className="hl-btn-secondary p-2">
@@ -1200,7 +1293,7 @@ export default function WhatsAppAutomations() {
                     <th className="py-2.5 px-3">Trigger Type</th>
                     <th className="py-2.5 px-3">Recipient</th>
                     <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3">Event Data</th>
+                    <th className="py-2.5 px-3">Execution details</th>
                     <th className="py-2.5 px-3">Executed At</th>
                   </tr>
                 </thead>
@@ -1213,7 +1306,7 @@ export default function WhatsAppAutomations() {
 
                     return (
                       <tr key={log.id} className="">
-                        <td className="py-3 px-3">{log.automation_name || "Automation"}</td>
+                        <td className="py-3 px-3"><button className="underline" type="button" onClick={()=>navigate(`/whatsapp/automations/${log.automation_id}/edit`)}>{log.automation_name || "Automation"}</button></td>
                         <td className="py-3 px-3 hl-section-label">{log.trigger_type}</td>
                         <td className="py-3 px-3 hl-id">
                           +{log.phone}
@@ -1228,6 +1321,7 @@ export default function WhatsAppAutomations() {
                             {log.status}
                           </span>
                           {log.status === "unknown" && <span className="hl-subtitle block">Check delivery before retrying</span>}
+                          {log.status==="scheduled"&&<button type="button" className="block underline text-xs mt-1" onClick={()=>cancelExecution(log)}>Cancel scheduled send</button>}
                         </td>
                         <td className="py-3 px-3 max-w-xs truncate hl-id">
                           <span>Step {log.execution_step || triggerData.step || 1}</span>
@@ -1248,33 +1342,40 @@ export default function WhatsAppAutomations() {
         </div>
       )}
 
-      {/* ── MODAL: Create / Edit Automation ── */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3" onClick={() => { if (!savingRule) setShowModal(false); }}>
-          <div ref={automationDialog} role="dialog" aria-modal="true" aria-label={editAutomation ? "Edit automation" : "Create automation"} className="hl-card w-full max-w-3xl max-h-[92dvh] min-h-0 flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      </>}
+      {(showModal || isEditorPage) && (
+        <div className={isEditorPage ? "w-full" : "fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3"} onClick={isEditorPage ? undefined : () => { if (!savingRule) closeEditor(); }}>
+          <div ref={isEditorPage ? undefined : automationDialog} role={isEditorPage ? "region" : "dialog"} aria-modal={isEditorPage ? undefined : true} aria-label={editAutomation ? "Edit automation" : "Create automation"} className={isEditorPage ? "hl-card w-full min-w-0 flex flex-col" : "hl-card w-full max-w-3xl max-h-[92dvh] min-h-0 flex flex-col overflow-hidden"} onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 flex items-center justify-center">
                   <Zap size={18} />
                 </div>
                 <div>
-                  <h2 className="hl-title">
-                    {editAutomation ? "Edit Automation Rule" : "Create WhatsApp Automation"}
-                  </h2>
-                  <p className="hl-subtitle">Configure background event triggers, anti-ban pacing, and follow-ups</p>
+                  {isEditorPage ? <h1 className="hl-title">{editRouteId?"Edit WhatsApp Automation":"Create WhatsApp Automation"}</h1> : <h2 className="hl-title">{editAutomation ? "Edit Automation Rule" : "Create WhatsApp Automation"}</h2>}
+                  <p className="hl-subtitle">Choose an event, define who qualifies, and configure messages and follow-ups.</p>
                 </div>
               </div>
-              <button disabled={savingRule} aria-label="Close automation editor" onClick={() => setShowModal(false)} className="hl-btn-secondary p-1">
+              <button disabled={savingRule||editorLoading} aria-label="Close automation editor" onClick={closeEditor} className="hl-btn-secondary p-1">
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1 min-h-0 wa-custom-scrollbar overscroll-contain">
+            <div className={isEditorPage ? "grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] min-w-0" : "contents"}>
+            <div className={isEditorPage ? "p-4 sm:p-6 space-y-5 min-w-0" : "p-4 sm:p-6 overflow-y-auto space-y-5 flex-1 min-h-0 wa-custom-scrollbar overscroll-contain"}>
               {ruleError && <p role="alert" className="wa-form-error">{ruleError}</p>}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {isEditorPage && <>
+                {pageNotice && <p role="alert" className="wa-form-error">{pageNotice.message}<button type="button" className="hl-btn-secondary ml-2" onClick={fetchData}>Retry loading</button></p>}
+                <nav aria-label="Automation configuration sections" className="flex flex-wrap gap-3 text-xs">{[["setup","Event"],["message","Message"],["followup","Follow-up"],["conditions","Conditions"],["delivery","Delivery"]].map(([id,label])=><a className="underline underline-offset-4" key={id} href={`#automation-${id}`}>{label}</a>)}</nav>
+                <section className="border rounded-lg p-4 space-y-3" aria-label="Automation starters"><h2 className="font-semibold">Start with a business event</h2><p className="text-xs">Apply a starter to replace the event and main message. Conditions, follow-ups and delivery settings stay editable.</p><div className="flex flex-wrap gap-2"><select aria-label="Automation starter" className="hl-select p-2 flex-1 min-w-0" value={starterTrigger} onChange={event=>setStarterTrigger(event.target.value)}>{TRIGGER_TYPES.map(trigger=><option key={trigger.value} value={trigger.value}>{trigger.label}</option>)}</select><button type="button" className="hl-btn-secondary" onClick={()=>{if(form.message_text?.trim()&&form.message_text!==PRESET_MESSAGES[form.trigger_type]&&!window.confirm("Replace the current event and main message with this starter?"))return;setForm(previous=>({...previous,name:previous.name||TRIGGER_TYPES.find(trigger=>trigger.value===starterTrigger)?.label||"",trigger_type:starterTrigger,msg_kind:"text",message_text:PRESET_MESSAGES[starterTrigger]||""}));}}>Apply starter</button></div></section>
+              </>}
+              <label className="block text-sm">WhatsApp sender<select className="hl-select w-full p-2 mt-1" value={form.sender_id||""} onChange={event=>setForm(previous=>({...previous,sender_id:event.target.value}))}><option value="">Choose a connected Meta sender</option>{senders.map(sender=><option key={sender.id} value={sender.id} disabled={sender.status!=="connected"}>{sender.display_phone||`Sender ${sender.id}`} · {sender.status}</option>)}</select><small className="block mt-1">Rules use this organization's selected Meta number. <button className="underline" type="button" onClick={()=>navigate("/whatsapp/accounts")}>Manage senders</button></small></label>
+              {editorLoading&&<p role="status">Loading the saved rule and its reply options…</p>}
+              <div id="automation-setup" className="grid grid-cols-1 sm:grid-cols-2 gap-4 scroll-mt-6">
                 <div>
-                  <label className="hl-section-label block mb-1">Rule Name *</label>
+                  <label htmlFor="automation-rule-name" className="hl-section-label block mb-1">Rule Name *</label>
                   <input
+                    id="automation-rule-name"
                     type="text"
                     value={form.name}
                     onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -1285,15 +1386,16 @@ export default function WhatsAppAutomations() {
                 </div>
 
                 <div>
-                  <label className="hl-section-label block mb-1">Trigger Event *</label>
+                  <label htmlFor="automation-trigger-event" className="hl-section-label block mb-1">Trigger Event *</label>
                   <select
+                    id="automation-trigger-event"
                     value={form.trigger_type}
                     onChange={(e) => {
                       const t = e.target.value;
                       setForm((f) => ({
                         ...f,
                         trigger_type: t,
-                        message_text: PRESET_MESSAGES[t] || f.message_text,
+                        message_text: !f.message_text?.trim() || f.message_text === PRESET_MESSAGES[f.trigger_type] ? PRESET_MESSAGES[t] || "" : f.message_text,
                       }));
                     }}
                     className="hl-select w-full px-3 py-2.5"
@@ -1308,11 +1410,10 @@ export default function WhatsAppAutomations() {
               </div>
 
               {/* Step 1: Main Message Box */}
-              <div className="hl-card p-4 space-y-3">
+              <div id="automation-message" className="hl-card p-4 space-y-3 scroll-mt-6">
                 <div className="flex items-center justify-between">
                   <span className="hl-section-label flex items-center gap-1.5">
-                    <span>1️⃣</span>
-                    <span>Step 1: Main WhatsApp Message</span>
+                    <span>Main WhatsApp message</span>
                   </span>
 
                   <div className="flex items-center gap-1.5">
@@ -1324,6 +1425,7 @@ export default function WhatsAppAutomations() {
                         className={`hl-tab px-2.5 py-1 uppercase ${
                           form.msg_kind === kind ? "is-active" : ""
                         }`}
+                        aria-pressed={form.msg_kind === kind}
                       >
                         {kind}
                       </button>
@@ -1339,13 +1441,15 @@ export default function WhatsAppAutomations() {
 
                     <textarea
                       rows={4}
+                      aria-label="Main message text"
+                      maxLength={4096}
                       value={form.message_text || ""}
                       onChange={(e) => setForm((f) => ({ ...f, message_text: e.target.value }))}
                       className="hl-input w-full p-3 resize-none"
                       placeholder="Type dynamic message here, e.g. Hello {{name}}! Your invoice {{invoice_no}} for {{amount}} is due on {{due_date}}..."
                     />
 
-                    {form.message_text && (
+                    {form.message_text && !isEditorPage && (
                       <div className="hl-card p-3 space-y-1">
                         <div className="flex items-center justify-between hl-section-label">
                           <span className="flex items-center gap-1"><Sparkles size={11} /> Live Preview:</span>
@@ -1377,7 +1481,7 @@ export default function WhatsAppAutomations() {
                         </select>
                       </div>
                       <div className="sm:col-span-2">
-                        <label className="hl-section-label block">Media Public URL or Upload</label>
+                        <label className="hl-section-label block">Public HTTPS media URL</label>
                         <input
                           type="text"
                           value={form.media_url || ""}
@@ -1407,12 +1511,12 @@ export default function WhatsAppAutomations() {
                       className="hl-select w-full p-2.5"
                     >
                       <option value="">-- Choose Template --</option>
-                      {templates.map((t) => (
+                      {templates.filter(isApprovedTemplate).map((t) => (
                         <option key={t.id} value={t.id}>{t.name} ({t.category})</option>
                       ))}
                     </select>
 
-                    {form.template_id && (() => {
+                    {form.template_id && !isEditorPage && (() => {
                       const tmpl = templates.find(t => String(t.id) === String(form.template_id));
                       if (!tmpl) return null;
                       return (
@@ -1432,7 +1536,7 @@ export default function WhatsAppAutomations() {
               </div>
 
               {/* Step 2: Multi-Message Sequence (Anti-Ban Paced Follow-up) */}
-              <div className="hl-card p-4 space-y-3">
+              <div id="automation-followup" className="hl-card p-4 space-y-3 scroll-mt-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <input
@@ -1443,13 +1547,13 @@ export default function WhatsAppAutomations() {
                       className="w-4 h-4"
                     />
                     <label htmlFor="enable_seq" className="hl-section-label cursor-pointer">
-                      2️⃣ Enable Step 2 Follow-Up Message (Multi-Step Drip)
+                      Enable a follow-up message
                     </label>
                   </div>
 
                   {form.enable_sequence && (
                     <span className="hl-badge hl-badge-info">
-                      ⏱️ {form.sequence_delay_seconds || 7}s Human Pacing
+                      {form.sequence_delay_seconds || 7}s after the main message
                     </span>
                   )}
                 </div>
@@ -1470,34 +1574,18 @@ export default function WhatsAppAutomations() {
                       />
                     </div>
 
-                    <textarea
-                      rows={2}
-                      value={form.followup_message_text || ""}
-                      onChange={(e) => setForm((f) => ({ ...f, followup_message_text: e.target.value }))}
-                      className="hl-input w-full p-2.5"
-                      placeholder="Follow-up message (e.g. 📄 Download our PDF brochure here: https://...)"
-                    />
-
-                    {form.followup_message_text && (
-                      <div className="hl-card p-2.5 space-y-1">
-                        <div className="flex items-center justify-between hl-section-label">
-                          <span className="flex items-center gap-1"><Sparkles size={11} /> Step 2 Follow-Up Preview:</span>
-                          <span className="hl-id">Dynamic</span>
-                        </div>
-                        <div className="hl-id p-2 whitespace-pre-wrap">
-                          {evaluateMessagePlaceholders(form.followup_message_text)}
-                        </div>
-                      </div>
-                    )}
+                    <AutomationFollowupOptions form={form} setForm={setForm} templates={templates} />
                   </div>
                 )}
               </div>
 
               {/* Cross-Module Linkages: Contact Group & Chatbot Flow */}
-              <WAConditionEditor value={conditions} onChange={setConditions} />
+              <div id="automation-conditions" className="scroll-mt-6"><WAConditionEditor value={conditions} onChange={setConditions} /></div>
+              <section className="hl-card p-4 space-y-3" aria-label="Customer reply options"><h2 className="font-semibold text-sm">Customer reply options</h2><p className="text-xs">Offer up to three choices and configure the response for each. Native buttons require a compatible Meta sender; other delivery paths may show numbered choices.</p>{menuOptions.map((option,index)=><div key={index} className="border rounded p-3 space-y-2"><label className="block text-xs">Reply {index+1} label<input className="hl-input w-full p-2 mt-1" maxLength={20} value={option.label} onChange={event=>setMenuOptions(previous=>previous.map((item,i)=>i===index?{...item,label:event.target.value}:item))}/></label><label className="block text-xs">Response message<textarea className="hl-input w-full p-2 mt-1" maxLength={4096} value={option.reply_text} onChange={event=>setMenuOptions(previous=>previous.map((item,i)=>i===index?{...item,reply_text:event.target.value}:item))}/></label><button type="button" className="hl-btn-secondary" onClick={()=>setMenuOptions(previous=>previous.filter((_,i)=>i!==index))}>Remove reply {index+1}</button></div>)}<button type="button" className="hl-btn-secondary" disabled={menuOptions.length>=3} onClick={()=>setMenuOptions(previous=>[...previous,{label:"",reply_text:""}])}>Add reply option</button></section>
+              <div id="automation-delivery" className="scroll-mt-6 space-y-4">
               <label className="block text-sm space-y-1">
                 <span>Delay before sending (minutes)</span>
-                <input type="number" min="0" max="43200" className="hl-input w-full p-2" value={form.delay_minutes} onChange={(e) => setForm((f) => ({ ...f, delay_minutes: e.target.value }))} />
+                <input type="number" min="0" max="43200" step="1" className="hl-input w-full p-2" value={form.delay_minutes} onChange={(e) => setForm((f) => ({ ...f, delay_minutes: e.target.value }))} />
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 hl-card">
                 <div>
@@ -1528,18 +1616,23 @@ export default function WhatsAppAutomations() {
                     className="hl-input w-full p-2"
                   >
                     <option value="">-- Do Not Trigger Flow --</option>
-                    {flows.map((fl) => (
-                      <option key={fl.id} value={fl.id}>{fl.name}</option>
+                    {flows.filter(flow=>flow.status==="active"||String(flow.id)===String(form.flow_id)).map((fl) => (
+                      <option key={fl.id} value={fl.id} disabled={fl.status!=="active"}>{fl.name}{fl.status!=="active"?" (publish before use)":""}</option>
                     ))}
                   </select>
                 </div>
               </div>
+              <label className="flex items-start gap-3 border rounded p-4 text-sm"><input type="checkbox" checked={Boolean(form.is_active)} onChange={event=>setForm(previous=>({...previous,is_active:event.target.checked?1:0}))}/><span><strong>Enable when saved</strong><small className="block mt-1">{form.is_active?"This rule can run on matching events after saving.":"Save paused, then enable it from the automation list when ready."}</small></span></label>
+              </div>
+            </div>
+            {isEditorPage&&<AutomationDraftPreview form={form} conditions={conditions} options={menuOptions} templates={templates} flows={flows} groups={groups} issues={draftIssues} triggerLabel={TRIGGER_TYPES.find(trigger=>trigger.value===form.trigger_type)?.label}/>}
             </div>
 
             <div className="flex gap-3 p-4 border-t">
               <button
                 type="button"
-                onClick={() => setShowModal(false)}
+                onClick={closeEditor}
+                disabled={savingRule}
                 className="hl-btn-secondary flex-1 py-2.5"
               >
                 Cancel
@@ -1702,18 +1795,8 @@ export default function WhatsAppAutomations() {
                 />
               </div>
 
-              <div className="hl-card flex items-center gap-2 p-3">
-                <input
-                  type="checkbox"
-                  id="sim_real_send"
-                  checked={simSendReal}
-                  onChange={(e) => setSimSendReal(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                <label htmlFor="sim_real_send" className="hl-section-label cursor-pointer">
-                  Send actual WhatsApp message to this number during simulation
-                </label>
-              </div>
+              <label className="block text-sm">Sample event data (JSON)<textarea className="hl-input w-full p-3 mt-1 font-mono text-xs" rows={7} value={sampleEvent} onChange={event=>setSampleEvent(event.target.value)} maxLength={16000}/></label>
+              <p className="text-xs">Read-only simulation. Use a rule's Test Send action to send to an eligible contact.</p>
 
               <div className="flex justify-end gap-2.5 pt-2">
                 <button

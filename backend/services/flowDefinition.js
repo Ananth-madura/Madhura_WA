@@ -1,15 +1,17 @@
 "use strict";
 const rules=require("./flowRules");
-const SUPPORTED=new Set(["start","trigger","keyword_trigger","all_inbound_trigger","first_inbound_trigger","send_message","send_buttons","send_list","interactive_menu","collect_input","collect_number","collect_email","collect_date","condition","set_variable","send_template","send_cta","business_hours","contact_lookup","handoff","end"]);
+const SUPPORTED=new Set(["start","trigger","keyword_trigger","all_inbound_trigger","first_inbound_trigger","send_message","send_buttons","send_list","interactive_menu","collect_input","collect_number","collect_email","collect_date","condition","set_variable","send_template","send_cta","business_hours","contact_lookup","handoff","end","switch","business_action"]);
 const parse=value=>{try{return typeof value==="string"?JSON.parse(value):value;}catch(_){throw fail("Configuration must be valid JSON");}};
 const fail=message=>Object.assign(new Error(message),{status:400});
+SUPPORTED.add("ai_reply");
+SUPPORTED.add("send_media");
 function options(node){
   const c=node.config||{};
   if(c.sections!==undefined&&!Array.isArray(c.sections))throw fail("Menu sections must be an array");
   const sections=c.sections?.length?c.sections:[{buttons:c.buttons||c.rows||c.options||[]}];
   return sections.flatMap(s=>{const list=s?.buttons||s?.rows||s?.options||[];if(!Array.isArray(list)||list.some(o=>!o||typeof o!=="object"))throw fail("Menu options must be an array of objects");return list;}).map((o,i)=>({...o,id:String(o.reply_id||o.id||`option_${i+1}`),title:String(o.title||o.label||o.text||""),next_node_key:o.next_node_key||o.nextNodeId||o.next_node||o.target_node}));
 }
-function links(node){const c=node.config||{};return [c.next_node_key,c.true_next,c.false_next,c.open_next,c.closed_next,c.invalid_next,c.fallback_node_key,...options(node).map(o=>o.next_node_key)].filter(Boolean);}
+function links(node){const c=node.config||{};return [c.next_node_key,c.true_next,c.false_next,c.open_next,c.closed_next,c.invalid_next,c.error_next,c.fallback_node_key,...(c.cases||[]).map(r=>r.next_node_key),...options(node).map(o=>o.next_node_key)].filter(Boolean);}
 function normalize(input,{publish=false}={}){
   if(!input||typeof input!=="object"||!String(input.name||"").trim()||String(input.name).length>255)throw fail("Provide a flow name up to 255 characters");
   if(!Array.isArray(input.nodes)||!input.nodes.length||input.nodes.length>100)throw fail("A flow needs 1 to 100 steps");
@@ -36,6 +38,22 @@ function normalize(input,{publish=false}={}){
       const conditions=node.config.rules??[{field:node.config.variable,operator:node.config.operator||"equals"}];
       if(!Array.isArray(conditions)||!conditions.length||conditions.length>10||conditions.some(r=>!r||!rules.OPERATORS.includes(r.operator||"equals")||typeof r.field!=="string"||!r.field.trim()))throw fail("Use 1 to 10 conditions with supported operators and variable names");
       if(node.config.match&&!['all','any'].includes(node.config.match))throw fail("Choose all or any conditions");
+    }
+    if(node.node_type==="switch"){
+      const c=node.config;
+      if(typeof c.variable!=="string"||!c.variable.trim()||!Array.isArray(c.cases)||!c.cases.length||c.cases.length>10||c.cases.some(r=>!r||!rules.OPERATORS.includes(r.operator||"equals")||typeof r.value!=="string"))throw fail("Switch needs a variable and 1 to 10 valid routes");
+      if(publish&&(!c.fallback_node_key||c.cases.some(r=>!r.next_node_key)))throw fail("Connect every switch route and its fallback");
+    }
+    if(node.node_type==="business_action")require("./flowIntegrations").validate(node.config,{publish});
+    if(node.node_type==="ai_reply"){
+      const c=node.config;
+      if(typeof c.prompt!=="string"||!c.prompt.trim()||c.prompt.length>2000||!/^[a-zA-Z][a-zA-Z0-9_]{0,79}$/.test(c.output_variable||"")||["constructor","prototype","name","input","last_input"].includes(c.output_variable))throw fail("AI reply needs a prompt and a custom output variable");
+      if(publish&&(!c.next_node_key||!c.error_next))throw fail("Connect AI reply success and failure routes");
+    }
+    if(node.node_type==="send_media"){
+      const c=node.config;
+      if(!["image","video","audio","document"].includes(c.media_type))throw fail("Choose an image, video, audio or document");
+      if(publish){try{rules.secureUrl(c.url,{});}catch(_){throw fail("Media needs a fixed HTTPS destination");}}
     }
     if(node.node_type==="collect_input"){
       const c=node.config;
@@ -66,7 +84,7 @@ function normalize(input,{publish=false}={}){
       if(node.node_type.startsWith("collect_")&&!String(node.config.prompt||node.config.text||"").trim())throw fail(`Step ${node.node_key} needs a question`);
       if(node.node_type==="condition"&&(!node.config.true_next||!node.config.false_next))throw fail("Connect both condition routes");
       if(node.node_type==="business_hours"&&(!node.config.open_next||!node.config.closed_next))throw fail("Connect the open and closed business-hours routes");
-      if(!["end","handoff","send_buttons","send_list","interactive_menu","condition","business_hours"].includes(node.node_type)&&!node.config.next_node_key)throw fail(`Step ${node.node_key} needs a next step`);
+      if(!["end","handoff","send_buttons","send_list","interactive_menu","condition","business_hours","switch","business_action"].includes(node.node_type)&&!node.config.next_node_key)throw fail(`Step ${node.node_key} needs a next step`);
     }
   }
   if(!keys.has(flow.entry_node_key))throw fail("The entry step does not exist");
@@ -113,7 +131,18 @@ function step(flow,input="",state=null,initial={},execution={}){
       return {messages:[...messages,{sender:"bot",type:node.node_type,text:interpolate(c.text||c.message?.text,vars),options:items,buttons:node.node_type==="send_buttons"?items:undefined,sections:node.node_type==="send_buttons"?undefined:[{title:"Options",rows:items}]}],vars,currentNodeKey:key,waiting:true,isEnded:false,logs};
     }
     if(node.node_type.startsWith("collect_"))return {messages:[...messages,{sender:"bot",type:"text",text:interpolate(c.prompt||c.text,vars)}],vars,currentNodeKey:key,waiting:true,isEnded:false,logs};
+    if(node.node_type==="switch"){
+      key=c.cases.find(route=>rules.compare({...route,field:c.variable},vars))?.next_node_key||c.fallback_node_key;continue;
+    }
+    if(["business_action","ai_reply"].includes(node.node_type)){
+      if(execution.live)return {messages,vars,logs,action:node,isEnded:false};
+      for(const name of Object.keys(c.outputs||{}))vars[name]=`[Preview: ${name}]`;
+      if(node.node_type==="ai_reply")vars[c.output_variable]="[Preview: AI response]";
+      vars["integration.status"]="preview";
+      key=execution.previewActionError?c.error_next:c.next_node_key;continue;
+    }
     if(node.node_type==="send_message")messages.push({sender:"bot",type:"text",text:interpolate(c.text,vars)});
+    if(node.node_type==="send_media")messages.push({sender:"bot",type:"media",media_type:c.media_type,url:rules.secureUrl(c.url,vars),text:interpolate(c.caption,vars),filename:interpolate(c.filename,vars)});
     if(node.node_type==="send_template")messages.push({sender:"bot",type:"template",template_id:c.template_id,template_name:c.template_name,parameters:c.parameters||[],text:"Template delivery requires verified Meta approval for this sender."});
     if(node.node_type==="send_cta"){
       let url;try{url=rules.secureUrl(c.url,vars);}catch(_){throw fail("Configure a fixed HTTPS destination before previewing this link step");}
@@ -133,4 +162,31 @@ function step(flow,input="",state=null,initial={},execution={}){
   if(turns>=40)throw fail("Flow exceeded 40 steps in one turn; check for an automatic loop");
   return {messages,vars,currentNodeKey:null,isEnded:true,logs};
 }
-module.exports={normalize,step,options,interpolate,SUPPORTED};
+async function execute(flow,input,state,initial,execution){
+  let result=step(flow,input,state,initial,{...execution,live:true}),count=0;
+  const logs=[];
+  while(true){
+    count+=result.logs.length;
+    if(count>40)throw fail("Flow exceeded 40 steps in one turn; check for an automatic loop");
+    if(execution.onVisit)await execution.onVisit(result.logs);
+    await execution.onMessages(result.messages,result.vars);
+    logs.push(...result.logs);
+    if(!result.action)return {...result,logs};
+    const {config:c}=result.action;
+    let next=c.next_node_key;
+    try{
+      const outputs=await execution.onAction(result.action,result.vars);
+      if(Buffer.byteLength(JSON.stringify({...result.vars,...outputs}))>16384)throw fail("Action outputs exceed the workflow memory limit");
+      Object.assign(result.vars,outputs,{"integration.status":"success"});
+    }catch(error){
+      if(error.flowInterrupted)throw error;
+      result.vars["integration.status"]="failed";
+      for(const name of Object.keys(c.outputs||{}))delete result.vars[name];
+      if(c.output_variable)delete result.vars[c.output_variable];
+      next=c.error_next;
+      if(!next)throw error;
+    }
+    result=step({...flow,entry_node_key:next},"",null,result.vars,{...execution,contact:initial,live:true});
+  }
+}
+module.exports={normalize,step,execute,options,interpolate,SUPPORTED};

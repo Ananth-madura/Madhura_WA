@@ -580,6 +580,7 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
     let triggeredCount = 0;
     let unknownCount = 0;
     for (const rule of rules) {
+      if(opts.senderId&&Number(rule.sender_id)!==Number(opts.senderId))continue;
       const ruleSessionKey = opts.sessionKey || eventInfo.sessionKey || rule.created_by || require("./whatsappService").defaultKey;
       const targetChatId = eventInfo.chatId || null;
       if (!require("./waRuleConditions").matchesConditions(rule.conditions, { ...mergedData, phone: cleanPhone, name: resolvedName })) continue;
@@ -617,7 +618,8 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
         }
       } else {
         // Execute immediately
-        const result = await executeAutomationSend(rule, cleanPhone, resolvedName, messageText, mergedData, ruleSessionKey, targetChatId);
+        const requestId=`event:${rule.id}:${dedupeKey}:${eventId == null ? Math.floor(Date.now()/AUTOMATION_DEDUPE_TTL_MS) : "record"}`;
+        const result = await executeAutomationSend(rule, cleanPhone, resolvedName, messageText, mergedData, ruleSessionKey, targetChatId,{requestId});
         if (!result?.success) {
           if (result?.deliveryUnknown) unknownCount++;
           continue;
@@ -629,6 +631,7 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
     if (!triggeredCount && !unknownCount) automationDedupeStore.delete(dedupeKey);
     return { success: triggeredCount > 0, count: triggeredCount, triggeredCount, deliveryUnknown: unknownCount > 0, reason: triggeredCount ? undefined : unknownCount ? "delivery_unknown" : "no_rules_dispatched" };
   } catch (err) {
+    automationDedupeStore.delete(dedupeKey);
     console.error(`❌ [WA Automation] Error handling '${triggerType}':`, err.message);
     return { success: false, error: err.message };
   }
@@ -647,14 +650,15 @@ async function runScheduledAutomation(logId, rule, cleanPhone, contactName, mess
   if (!claim.affectedRows) return false; // already handled elsewhere
 
   try {
-    const [current] = await db.promise().query("SELECT is_active FROM wa_automations WHERE id = ?", [rule.id]);
+    const [current] = await db.promise().query("SELECT is_active FROM wa_automations WHERE tenant_id=? AND id=?", [rule.tenant_id,rule.id]);
     if (!current[0]?.is_active) throw Object.assign(new Error("Automation was paused or deleted before dispatch."), { skipped: true });
+    if(!require("./waRuleConditions").matchesConditions(rule.conditions,{...data,phone:cleanPhone,name:contactName}))throw Object.assign(new Error("Event no longer matches the rule conditions"),{skipped:true});
     const phase = Number(context.execution_step || 1);
     if (phase === 2 && !(rule.followup_message_text || rule.followup_media_url || rule.followup_template_name)) {
       throw Object.assign(new Error("Follow-up content was removed before dispatch."), { skipped: true });
     }
     const dispatchRule = phase === 2 ? {
-      ...rule, message_text: rule.followup_message_text, template_name: rule.followup_template_name,
+      ...rule, message_text: rule.followup_message_text, template_id: rule.followup_template_id, template_name: rule.followup_template_name,
       template_body: rule.followup_template_body, media_type: rule.followup_media_type,
       media_url: rule.followup_media_url, media_filename: rule.followup_media_filename,
       followup_message_text: null, followup_media_url: null, followup_template_name: null,
@@ -678,8 +682,10 @@ async function runScheduledAutomation(logId, rule, cleanPhone, contactName, mess
  * Sweeper for delayed automations whose in-process timer never fired
  * (server restart / crash). Without this every delayed rule was lost silently.
  */
+let lastSweepAt=null,lastSweepError=null;
 async function runDueAutomationsSweep() {
   try {
+    lastSweepAt=new Date().toISOString();lastSweepError=null;
     // Never resend a stale in-flight dispatch: its delivery outcome is uncertain.
     await db.promise().query("UPDATE wa_automation_logs SET status = 'unknown', error = 'Dispatch interrupted; verify provider delivery before retrying', trigger_data = NULL WHERE status = 'sending' AND (claimed_at IS NULL OR claimed_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))");
     await db.promise().query("UPDATE wa_automation_logs SET status = 'skipped', error = 'Automation deleted before dispatch', trigger_data = NULL WHERE status = 'scheduled' AND automation_id NOT IN (SELECT id FROM wa_automations)");
@@ -689,8 +695,8 @@ async function runDueAutomationsSweep() {
               ft.name AS followup_template_name, ft.body AS followup_template_body
        FROM wa_automation_logs l
        JOIN wa_automations a ON l.automation_id = a.id
-       LEFT JOIN wa_templates t ON a.template_id = t.id
-       LEFT JOIN wa_templates ft ON a.followup_template_id = ft.id
+       LEFT JOIN wa_templates t ON a.template_id = t.id AND t.tenant_id=a.tenant_id
+       LEFT JOIN wa_templates ft ON a.followup_template_id = ft.id AND ft.tenant_id=a.tenant_id
        WHERE l.status = 'scheduled' AND l.scheduled_for IS NOT NULL AND l.scheduled_for <= NOW()
 
        ORDER BY l.scheduled_for ASC LIMIT 50`
@@ -703,7 +709,10 @@ async function runDueAutomationsSweep() {
       let payload = {};
       try {
         payload = typeof row.trigger_data === "string" ? JSON.parse(row.trigger_data) : (row.trigger_data || {});
-      } catch (_) {}
+      } catch (_) {payload=null;}
+      if(!payload||typeof payload!=="object"||Array.isArray(payload)){
+        await db.promise().query("UPDATE wa_automation_logs SET status='failed',error='Stored event data is invalid',trigger_data=NULL WHERE id=? AND status='scheduled'",[row.log_id]);continue;
+      }
 
       const rule = { ...row, id: row.rule_id };
       const messageText = payload.messageText
@@ -714,6 +723,7 @@ async function runDueAutomationsSweep() {
     }
     return ran;
   } catch (err) {
+    lastSweepError="Scheduled automation sweep failed";
     console.error("[WA Automation] Delayed-automation sweep error:", err.message);
     return 0;
   }
@@ -751,9 +761,10 @@ function parseWelcomeButtons(raw) {
   }
 }
 
-async function getWelcomeSettings() {
+async function getWelcomeSettings(tenantId) {
+  if(!Number.isSafeInteger(Number(tenantId))||Number(tenantId)<1)return {enabled:false};
   try {
-    const [rows] = await db.promise().query("SELECT * FROM wa_welcome_settings WHERE id = 1");
+    const [rows] = await db.promise().query("SELECT * FROM wa_automation_welcome WHERE tenant_id=?",[tenantId]);
     if (!rows.length) {
       return {
         enabled: false,
@@ -785,15 +796,17 @@ async function getWelcomeSettings() {
   }
 }
 
-async function updateWelcomeSettings(settings) {
+async function updateWelcomeSettings(settings, tenantId) {
+  if(!Number.isSafeInteger(Number(tenantId))||Number(tenantId)<1)throw Object.assign(new Error("Organization is required"),{status:403});
+  if(!["text","buttons"].includes(settings.welcome_type)||typeof settings.welcome_text!=="string"||!settings.welcome_text.trim()||settings.welcome_text.length>4096||!Number.isInteger(Number(settings.cooldown_hours))||Number(settings.cooldown_hours)<0||Number(settings.cooldown_hours)>8760||![settings.start_time,settings.end_time].every(value=>/^([01]\d|2[0-3]):[0-5]\d$/.test(value)))throw Object.assign(new Error("Provide valid welcome text, hours and cooldown"),{status:400});
   const { enabled, welcome_type, welcome_text, welcome_buttons, welcome_footer, template_id, cooldown_hours, working_hours_only, start_time, end_time } = settings;
   const normalizedButtons = parseWelcomeButtons(welcome_buttons);
   if (welcome_type === "buttons" && !normalizedButtons.length) {
     throw new Error("Welcome type 'buttons' requires at least one button with a title.");
   }
   await db.promise().query(
-    `INSERT INTO wa_welcome_settings (id, enabled, welcome_type, welcome_text, welcome_buttons, welcome_footer, template_id, cooldown_hours, working_hours_only, start_time, end_time)
-     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO wa_automation_welcome (tenant_id, enabled, welcome_type, welcome_text, welcome_buttons, welcome_footer, template_id, cooldown_hours, working_hours_only, start_time, end_time)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        enabled = VALUES(enabled),
        welcome_type = VALUES(welcome_type),
@@ -807,7 +820,7 @@ async function updateWelcomeSettings(settings) {
        end_time = VALUES(end_time),
        updated_at = NOW()`,
     [
-      enabled ? 1 : 0,
+      tenantId, enabled ? 1 : 0,
       welcome_type || "text",
       welcome_text || "Hello {name}! Welcome to Madhura Tech. Thank you for reaching out to us. How can we help you today?",
       normalizedButtons.length ? JSON.stringify(normalizedButtons) : null,
@@ -819,7 +832,7 @@ async function updateWelcomeSettings(settings) {
       end_time || "21:00",
     ]
   );
-  return getWelcomeSettings();
+  return getWelcomeSettings(tenantId);
 }
 
 async function maybeSendWelcomeReply(targetPhoneOrJid, contactName, sessionKey, options = {}) {
@@ -898,7 +911,7 @@ async function maybeSendWelcomeReply(targetPhoneOrJid, contactName, sessionKey, 
     }
   } catch (_) {}
 
-  const settings = await getWelcomeSettings();
+  const settings = await getWelcomeSettings(options.tenantId||await require("./waContactTenancy").tenantForSessionKey(sessionKey));
   if (!settings.enabled) return false; // Safe default: strictly requires user to enable it
 
   // ── 5. Check working hours if enabled ─────────────────────────────────────
@@ -1068,12 +1081,13 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
   const waLoadBalancer = require("./waLoadBalancer");
   const waService = require("./whatsappService");
   const activeSessionKey = actualSessionKey || rule.created_by || waService.defaultKey;
-  const sessionTenantId = await require("./waContactTenancy").tenantForSessionKey(activeSessionKey);
+  const sessionTenantId = rule.sender_id ? rule.tenant_id : await require("./waContactTenancy").tenantForSessionKey(activeSessionKey);
   if (!rule.tenant_id || Number(sessionTenantId) !== Number(rule.tenant_id)) throw new Error("Automation sender organization does not match its rule");
 
   let sentResult = null;
   let sendError = null;
   let deliveryUnknown = false;
+  const warnings=[];
   const sendTarget = (actualTargetChatId && actualTargetChatId.includes("@lid")) ? actualTargetChatId : cleanPhone;
   const chatId = actualTargetChatId || `${cleanPhone}@c.us`;
 
@@ -1088,7 +1102,9 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
       [rule.tenant_id, cleanPhone, `%${cleanPhone.slice(-10)}`]
     );
     if (optedOut.length || blocked.length) throw new Error("Contact opted out, unsubscribed, or is blocked.");
-    if (rule.template_name) {
+    if(rule.sender_id){
+      sentResult=await require("./automationCloudDelivery").send(rule,cleanPhone,actualMessageText,{...actualData,name:contactName||actualData.name},execution);
+    }else if (rule.template_name) {
       const bodyComponent = buildTemplateBodyComponent(rule.template_body, contactName, actualData);
       sentResult = await waLoadBalancer.sendTemplateMessage(sendTarget, rule.template_name, "en", bodyComponent ? [bodyComponent] : [], activeSessionKey);
     } else if (rule.media_type && rule.media_url) {
@@ -1118,15 +1134,17 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
     // Also record in wa_message_logs for CRM conversation history & UI display
     const msgId = confirmedId;
     await db.promise().query(
-      `INSERT INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
-       VALUES (?, ?, 'outbound', ?, ?, ?, 'sent', NOW())`,
-      [activeSessionKey, cleanPhone, (rule.media_type && rule.media_url) ? "media" : "text", actualMessageText, msgId]
+      `INSERT INTO wa_message_logs (tenant_id,sender_id,conversation_id,session_key,phone,direction,message_type,message_text,wa_message_id,status,created_at)
+       VALUES (?,?,?,?,?,'outbound',?,?,?,'sent',NOW())`,
+      [rule.tenant_id,rule.sender_id||null,sentResult?.automationConversation?.id||null,activeSessionKey,cleanPhone,(rule.media_type&&rule.media_url)?"media":"text",actualMessageText,msgId]
     ).catch(() => {});
 
     // Also auto-add/update wa_contacts table if not present. Attributed to the
     // automation's organization (rule.tenant_id) with the session owner as the
     // fallback, so an automation never writes a contact into another tenant.
-    await db.promise().query(
+    if(rule.sender_id){
+      await db.promise().query("UPDATE wa_contacts SET last_message_text=?,last_message_at=NOW(),last_contacted=NOW() WHERE tenant_id=? AND id=?",[actualMessageText,rule.tenant_id,sentResult.automationContactId]).catch(()=>{});
+    }else await db.promise().query(
       `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, last_contacted)
        VALUES (?, ?, ?, '91', 'Automation Trigger', 1, ?, NOW(), NOW())
        ON DUPLICATE KEY UPDATE name=VALUES(name), last_message_text=VALUES(last_message_text), last_message_at=NOW(), last_contacted=NOW()`,
@@ -1188,6 +1206,7 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
         );
         console.log(`👥 [WA Automation] Contact ${cleanPhone} enrolled into Group ${rule.group_id}`);
       } catch (grpErr) {
+        warnings.push("Contact group enrollment could not be completed.");
         console.warn(`[WA Automation] Group enrollment failed:`, grpErr.message);
       }
     }
@@ -1195,23 +1214,33 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
     // ── STEP 1.6: Auto Trigger Chatbot Flow (if configured) ─────────────────
     if (rule.flow_id && execution.phase !== 2) {
       try {
-        const [flowRows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? AND status = 'active' LIMIT 1", [rule.flow_id]);
+        if(rule.sender_id){
+          if(!sentResult?.automationConversation?.id)throw new Error("A shared conversation is required to start the linked flow");
+          await require("./sharedFlowRuntime").start(rule.tenant_id,sentResult.automationConversation.id,rule.flow_id);
+        }else{
+        const [flowRows] = await db.promise().query("SELECT * FROM wa_flows WHERE tenant_id=? AND id=? AND status='active' LIMIT 1", [rule.tenant_id,rule.flow_id]);
         if (flowRows.length > 0) {
           const waFlowEngine = require("./waFlowEngine");
           await waFlowEngine.startFlowRun(flowRows[0], cleanPhone, activeSessionKey, "", actualTargetChatId, { ...actualData, automation_id: rule.id });
           console.log(`🤖 [WA Automation] Triggered Chatbot Flow "${flowRows[0].name}" for ${cleanPhone}`);
         }
+        }
       } catch (flowErr) {
+        warnings.push("The linked flow could not start. Check its publication, conversation window and takeover status.");
         console.warn(`[WA Automation] Chatbot flow trigger failed:`, flowErr.message);
       }
     }
 
     // ── STEP 1.7: Send Interactive Menu Options (if configured) ─────────────
     try {
+      if(rule.sender_id){if(execution.phase!==2)await require("./automationCloudDelivery").sendMenu(rule,cleanPhone,actualData,execution);}
+      else{
       const { sendMenu, getOptions } = require("./waMenuHandler");
       const options = await getOptions(rule.id);
       if (execution.phase !== 2 && options.length) await sendMenu(cleanPhone, rule.id, activeSessionKey);
+      }
     } catch (menuErr) {
+      warnings.push("The reply menu could not be sent.");
       console.error(`[WA Automation] Menu send failed for rule '${rule.name}':`, menuErr.message);
     }
 
@@ -1240,7 +1269,8 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
       [rule.id, cleanPhone, contactName || null, deliveryUnknown ? "unknown" : "failed", sendError, activeSessionKey, execution.phase || 1]
     ).catch(() => {});
   }
-  return { success: !sendError, deliveryUnknown, error: sendError || undefined, result: sentResult };
+  if(warnings.length)await db.promise().query("UPDATE wa_automation_logs SET error=? WHERE automation_id=? AND wa_message_id=?",[warnings.join(" ").slice(0,500),rule.id,require("./waInteractive").deliveryMessageId(sentResult)]).catch(()=>{});
+  return { success: !sendError, deliveryUnknown, warnings, error: sendError || undefined, result: sentResult };
 }
 
 module.exports = {
@@ -1263,4 +1293,5 @@ module.exports = {
   runScheduledAutomation,
   runDueAutomationsSweep,
   startAutomationScheduler,
+  schedulerStatus:()=>({running:Boolean(sweepTimer),lastSweepAt,lastError:lastSweepError}),
 };

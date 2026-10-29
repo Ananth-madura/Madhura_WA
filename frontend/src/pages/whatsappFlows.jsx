@@ -3,6 +3,10 @@ import FlowTemplateFields from "../components/FlowTemplateFields";
 import FlowInputOptions from "../components/FlowInputOptions";
 import FlowRuleOptions from "../components/FlowRuleOptions";
 import FlowHoursOptions from "../components/FlowHoursOptions";
+import FlowBusinessActionOptions from "../components/FlowBusinessActionOptions";
+import FlowSwitchOptions from "../components/FlowSwitchOptions";
+import FlowConnections from "../components/FlowConnections";
+import FlowRunEvents from "../components/FlowRunEvents";
 import FlowWorkspaceGate from "../components/FlowWorkspaceGate";
 import { flowPorts, setFlowPort, removeFlowNodes, duplicateFlowNodes } from "../utils/waFlowGraph";
 import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
@@ -84,6 +88,8 @@ const PALETTE_CATEGORIES = [
     items: [
       { type: "condition", label: "Condition (If/Else)", icon: "🔀", desc: "Branch on Yes/No or value", color: "border-amber-500 bg-amber-50 text-amber-900" },
       { type: "business_hours", label: "Business Hours", desc: "Timezone, weekdays and overnight shifts" },
+      { type: "switch", label: "Switch / Multiple Routes", desc: "First matching route with an otherwise fallback" },
+      { type: "ai_reply", label: "AI Reply", desc: "Generate a reply with your configured inbox assistant" },
       { type: "ai_intent", label: "AI Intent Router", icon: "🎯", desc: "LLM Natural language classifier", color: "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-900" },
       { type: "ai_generate", label: "AI Smart Reply", icon: "🧠", desc: "Auto-answer via AI agent", color: "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-900" },
       { type: "delay", label: "Pacing Delay", icon: "⏱️", desc: "Human typing delay pause", color: "border-orange-500 bg-orange-50 text-orange-900" },
@@ -97,6 +103,7 @@ const PALETTE_CATEGORIES = [
     items: [
       { type: "crm_lookup", label: "CRM Live Lookup", icon: "🔍", desc: "Fetch balances, invoices, AMC", color: "border-sky-500 bg-sky-50 text-sky-900" },
       { type: "contact_lookup", label: "Contact Snapshot", desc: "Current conversation's shared name, phone and email" },
+      { type: "business_action", label: "Business Action", desc: "Call a configured business system and map its response" },
       { type: "create_lead", label: "Create CRM Lead", icon: "💼", desc: "Save contact as hot sales lead", color: "border-blue-500 bg-blue-50 text-blue-900" },
       { type: "api_webhook", label: "API Webhook", icon: "🌐", desc: "Call external REST API", color: "border-violet-500 bg-violet-50 text-violet-900" },
       { type: "set_variable", label: "Set Variable", icon: "⚙️", desc: "Assign custom session variable", color: "border-slate-500 bg-slate-50 text-slate-900" },
@@ -115,7 +122,7 @@ const PALETTE_CATEGORIES = [
   }
 ];
 
-const SHARED_PALETTE = PALETTE_CATEGORIES.map(category=>({...category,items:category.items.filter(item=>!["send_media","ai_intent","ai_generate","delay","crm_lookup","create_lead","api_webhook","jump_to_flow"].includes(item.type))})).filter(category=>category.items.length);
+const SHARED_PALETTE = PALETTE_CATEGORIES.map(category=>({...category,items:category.items.filter(item=>!["ai_intent","ai_generate","delay","crm_lookup","create_lead","api_webhook","jump_to_flow"].includes(item.type))})).filter(category=>category.items.length);
 
 const makeEntryNode = () => ({
   node_key: "start",
@@ -160,6 +167,8 @@ const getFlowIssues = (list, entryKey) => {
       issues.push({ severity: "error", nodeKey: node.node_key, text: "Connect both the yes and no routes of this condition." });
     }
     if(node.node_type==="business_hours"&&(!cfg.open_next||!cfg.closed_next))issues.push({severity:"error",nodeKey:node.node_key,text:"Connect both Open and Closed business-hours routes."});
+    if(node.node_type==="business_action"&&(!cfg.connection||!cfg.operation||!cfg.next_node_key||!cfg.error_next))issues.push({severity:"error",nodeKey:node.node_key,text:"Choose a connection and operation, and connect Success and Failure routes."});
+    if(node.node_type==="switch"&&(!cfg.variable||!cfg.cases?.length||!cfg.fallback_node_key||cfg.cases.some(route=>!route.next_node_key)))issues.push({severity:"error",nodeKey:node.node_key,text:"Choose a switch variable and connect every route, including Otherwise."});
 
     links.forEach(l => {
       if (!nodeMap[l.target]) {
@@ -349,6 +358,7 @@ function FlowsWorkspace() {
   const [simLogs, setSimLogs] = useState([]);
   const [simTyping, setSimTyping] = useState(false);
   const [simError, setSimError] = useState("");
+  const [simActionFailure, setSimActionFailure] = useState(false);
   const simRequestRef = useRef(false);
   const simGenerationRef = useRef(0);
   const [simInputText, setSimInputText] = useState("");
@@ -888,6 +898,7 @@ function FlowsWorkspace() {
         : (nodes.find(n => n.node_type === "start" || n.node_type?.includes("trigger"))?.node_key || nodes[0]?.node_key || "start");
 
       const payload = {
+        previewActionError: simActionFailure,
         name: flowName.trim(),
         description: flowDesc,
         status: "draft",
@@ -1071,6 +1082,8 @@ function FlowsWorkspace() {
       };
     } else if (item.type === "send_message") {
       newConfig = { text: "Thank you for contacting us!", next_node_key: "" };
+    } else if (item.type === "send_media") {
+      newConfig = { media_type: "document", url: "", caption: "", filename: "", next_node_key: "" };
     } else if (item.type === "collect_input" || item.type.startsWith("collect_")) {
       newConfig = {
         prompt_text: "Please enter your response:",
@@ -1086,6 +1099,12 @@ function FlowsWorkspace() {
         true_next: "",
         false_next: ""
       };
+    } else if(item.type==="switch"){
+      newConfig={variable:"input",cases:[{label:"Route 1",operator:"equals",value:"yes",next_node_key:""}],fallback_node_key:""};
+    } else if(item.type==="business_action"){
+      newConfig={connection:"business",operation:"appointments.availability",inputs:{service:"{{service}}"},outputs:{result_message:"message"},next_node_key:"",error_next:""};
+    } else if(item.type==="ai_reply"){
+      newConfig={prompt:"{{last_input}}",output_variable:"ai_response",next_node_key:"",error_next:""};
     } else if(item.type==="business_hours"){
       newConfig={timezone:"Asia/Kolkata",days:[1,2,3,4,5],start:"09:00",end:"18:00",open_next:"",closed_next:""};
     } else if(item.type==="contact_lookup"){
@@ -1940,6 +1959,7 @@ function FlowsWorkspace() {
                 <option value="document">Document / PDF Catalog</option>
                 <option value="image">Product Image (JPEG / PNG)</option>
                 <option value="video">Product Video (MP4)</option>
+                <option value="audio">Audio / Voice</option>
               </select>
             </div>
             <div>
@@ -1969,6 +1989,9 @@ function FlowsWorkspace() {
         {/* ── CONDITION BRANCHING CONFIGURATION ─────────────────────── */}
         {selectedNode.node_type === "condition"&&<FlowRuleOptions config={cfg} onChange={updateConfig}/>}
         {selectedNode.node_type === "business_hours"&&<FlowHoursOptions config={cfg} onChange={updateConfig}/>}
+        {selectedNode.node_type === "switch"&&<FlowSwitchOptions config={cfg} onChange={updateConfig}/>}
+        {selectedNode.node_type === "business_action"&&<FlowBusinessActionOptions config={cfg} onChange={updateConfig}/>}
+        {selectedNode.node_type === "ai_reply"&&<div className="space-y-3"><p className="text-xs">Uses the configured inbox AI provider and business instructions. Save its reply to a variable, then connect a Text Message step to send it. This step cannot access business records or perform actions.</p><label className="text-xs block">Prompt<textarea className="w-full border rounded p-2" value={cfg.prompt||""} maxLength={2000} onChange={e=>updateConfig({prompt:e.target.value})}/></label><label className="text-xs block">Output variable<input className="w-full border rounded p-2" value={cfg.output_variable||""} onChange={e=>updateConfig({output_variable:e.target.value})}/></label></div>}
         {selectedNode.node_type === "contact_lookup"&&<p className="text-xs">Loads customer.name, customer.phone, customer.email and contact.exists from this conversation's organization-owned contact. Preview uses sample contact data. No balances or banking records are fetched.</p>}
         {selectedNode.node_type === "condition" && !cfg.rules?.length && (
           <div className="space-y-3">
@@ -2446,7 +2469,7 @@ function FlowsWorkspace() {
         )}
 
         {/* ── GENERIC FALLBACK FOR ANY NODE WITH NEXT STEP ────────────── */}
-        {!["interactive_menu", "send_buttons", "send_list", "send_message", "send_media", "send_template", "send_cta", "condition", "business_hours", "contact_lookup", "ai_intent", "ai_generate", "crm_lookup", "collect_input", "create_lead", "delay", "api_webhook", "set_variable", "handoff", "end", "start"].includes(selectedNode.node_type) && !selectedNode.node_type?.includes("trigger") && (
+        {!["switch", "business_action", "ai_reply", "interactive_menu", "send_buttons", "send_list", "send_message", "send_media", "send_template", "send_cta", "condition", "business_hours", "contact_lookup", "ai_intent", "ai_generate", "crm_lookup", "collect_input", "create_lead", "delay", "api_webhook", "set_variable", "handoff", "end", "start"].includes(selectedNode.node_type) && !selectedNode.node_type?.includes("trigger") && (
           <div className="space-y-3">
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
@@ -2678,10 +2701,10 @@ function FlowsWorkspace() {
           name={flowName} setName={value => { setFlowName(value); setDirty(true); }} dirty={dirty} saving={saving} loading={studioLoading}
           onSave={() => handleSaveFlow(false)} onPublish={() => handleSaveFlow(true)} onExit={handleCloseStudio}
           issues={flowIssues} entry={entryNodeKey} panelRequest={studioPanelRequest}
-          settings={<WAFlowOutline view="settings" nodes={nodes} issues={flowIssues} selectedKey={selectedNodeKey} name={flowName} description={flowDesc} trigger={flowTriggerType} keywords={flowKeywords} entry={entryNodeKey} onSelect={key => setSelectedNodeKey(key)} onChange={(key, value) => { ({ name: setFlowName, description: setFlowDesc, trigger: setFlowTriggerType, keywords: setFlowKeywords, entry: setFlowEntryNode })[key](value); setDirty(true); }} />}
+          settings={<><WAFlowOutline view="settings" nodes={nodes} issues={flowIssues} selectedKey={selectedNodeKey} name={flowName} description={flowDesc} trigger={flowTriggerType} keywords={flowKeywords} entry={entryNodeKey} onSelect={key => setSelectedNodeKey(key)} onChange={(key, value) => { ({ name: setFlowName, description: setFlowDesc, trigger: setFlowTriggerType, keywords: setFlowKeywords, entry: setFlowEntryNode })[key](value); setDirty(true); }} /><FlowConnections /></>}
           inspector={<div className="flow-studio-inspector-config">{renderNodeInspector()}</div>}
           onStartPreview={() => resetSimulation()}
-          preview={<div>{simError && <p role="alert" className="wa-form-error mb-3">{simError}</p>}{renderWhatsAppPhoneSimulator()}</div>}
+          preview={<div>{nodes.some(node=>["business_action","ai_reply"].includes(node.node_type))&&<div className="text-xs border rounded p-3 mb-3"><p>Actions use labeled sample values in preview. No bookings, payments or API calls are made.</p><label className="flex gap-2 mt-2"><input type="checkbox" checked={simActionFailure} onChange={event=>setSimActionFailure(event.target.checked)}/>Simulate action failure</label></div>}{simError && <p role="alert" className="wa-form-error mb-3">{simError}</p>}{renderWhatsAppPhoneSimulator()}</div>}
           logs={<div className="space-y-3 text-xs">{simLogs.length ? simLogs.map((log, index) => <pre key={index} className="whitespace-pre-wrap break-words p-3 bg-slate-50 rounded border">{typeof log === "string" ? log : JSON.stringify(log, null, 2)}</pre>) : <p className="p-4 text-slate-500">No simulation events yet. Open Preview and send a message to trace the conversation.</p>}</div>}
           notice={saveNotice} onDismissNotice={() => setSaveNotice(null)} loadError={studioLoadError} onRetry={() => openStudio({ id: editingFlowId })}
           onTest={() => openTestDialog()} flowId={editingFlowId} onVersions={() => openVersions(editingFlowId)}
@@ -2787,8 +2810,8 @@ function FlowsWorkspace() {
       <div className="w-full min-w-0 space-y-4">
         <header className="hl-commandbar flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="hl-title">Conversation flows</h1>
-            <p className="hl-subtitle">Build, validate, and monitor WhatsApp conversations.</p>
+            <h1 className="hl-title">WhatsApp automation hub</h1>
+            <p className="hl-subtitle">Build business workflows, connect systems, and inspect every execution.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button onClick={handleSeedFlows} className="hl-btn-secondary">
@@ -2799,7 +2822,7 @@ function FlowsWorkspace() {
             </button>
           </div>
         </header>
-
+        <FlowConnections />
         {loadError && <div role="alert" className="wa-flow-load-error"><AlertCircle size={17} /><span>{loadError}</span><button type="button" className="hl-btn-secondary" disabled={loading} onClick={fetchFlows}>Retry</button></div>}
         {/* View Tabs & Search Toolbar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
@@ -2978,7 +3001,7 @@ function FlowsWorkspace() {
                     <th className="p-3">Current Node</th>
                     <th className="p-3">Status</th>
                     <th className="p-3">Started</th>
-                    <th className="p-3">Variables Captured</th>
+                    <th className="p-3">Execution trace</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -2992,9 +3015,6 @@ function FlowsWorkspace() {
                     </tr>
                   ) : (
                     runsList.map(run => {
-                      let parsedVars = {};
-                      try { parsedVars = typeof run.vars === "string" ? JSON.parse(run.vars) : (run.vars || {}); } catch (_) {}
-
                       return (
                         <tr key={`${run.flow_id}-${run.id}`} className="hover:bg-slate-50">
                           <td className="p-3 font-bold text-slate-900">{run.contact_name || "Unnamed contact"}<small className="block text-slate-500 font-normal">{run.flow_name}</small></td>
@@ -3010,9 +3030,7 @@ function FlowsWorkspace() {
                           </td>
                           <td className="p-3 text-slate-400">{new Date(run.started_at).toLocaleString()}</td>
                           <td className="p-3">
-                            <span className="font-mono text-[10px] text-slate-500 truncate max-w-xs block">
-                              {Object.keys(parsedVars).length} captured
-                            </span>
+                            <FlowRunEvents flowId={run.flow_id} runId={run.id} />
                           </td>
                         </tr>
                       );

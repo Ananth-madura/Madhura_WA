@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Bell, CheckCircle2, RefreshCw, XCircle, Clock, Send,
   Settings, Play, Plus, Loader2, Sparkles, Check, AlertCircle,
@@ -179,6 +180,8 @@ function interpolateText(text = "", vars = {}) {
 }
 
 export default function WhatsAppInteractiveReminders({ workspace = false }) {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [workspaceError, setWorkspaceError] = useState("");
   const [queueError, setQueueError] = useState("");
   // Navigation tabs
@@ -230,6 +233,9 @@ export default function WhatsAppInteractiveReminders({ workspace = false }) {
 
   // Instant Send Modal State
   const [showSendModal, setShowSendModal] = useState(false);
+  useEffect(() => {
+    if (searchParams.get("send") === "1") setShowSendModal(true);
+  }, [searchParams]);
   const [activePersona, setActivePersona] = useState("professional");
   const [contactSearchQuery, setContactSearchQuery] = useState("");
   const [contactSuggestions, setContactSuggestions] = useState([]);
@@ -776,7 +782,7 @@ export default function WhatsAppInteractiveReminders({ workspace = false }) {
           </button>
 
           <button
-            onClick={() => setShowSendModal(true)}
+            onClick={() => navigate("/whatsapp/automations?send=1")}
             className="hl-btn-primary flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition shadow-md"
           >
             <Plus size={15} />
@@ -1310,7 +1316,7 @@ export default function WhatsAppInteractiveReminders({ workspace = false }) {
                 </p>
               </div>
               <button
-                onClick={() => setShowSendModal(false)}
+                onClick={() => { setShowSendModal(false); navigate("/whatsapp/automations"); }}
                 className="hl-btn-secondary w-8 h-8 rounded-full bg-[var(--color-paper)] hover:bg-[var(--color-paper)] text-[var(--color-ink-2)] font-bold flex items-center justify-center transition"
               >
                 ✕

@@ -7,7 +7,7 @@ async function verify({base,headers,secondHeaders,employeeToken,connection,sende
     let data=await response.json();return {status:response.status,data};
   };
   assert.equal((await api("POST","/wa-flows/seed",{})).status,200);
-  const library=(await api("GET","/wa-flows/library")).data;assert.equal(library.length,13);
+  const library=(await api("GET","/wa-flows/library")).data;assert.equal(library.length,68);assert.equal(library.filter(flow=>flow.category==="Appointments").length,10);
   const seeded=await api("GET","/wa-flows");assert.equal(seeded.data.length,10);assert(seeded.data.every(f=>f.status==="draft"));
   assert.equal((await api("POST","/wa-flows/seed",{})).data.count,0);
   assert.equal((await api("GET","/wa-flows",null,secondHeaders)).data.length,0);

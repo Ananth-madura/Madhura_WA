@@ -15,6 +15,8 @@ async function main() {
   const db = { isSqlite: false, getConnection: callback => pool.getConnection(callback), query: (...args) => pool.query(...args), promise: () => sql };
   try {
     const schemas = [
+      "wa_campaigns (id INT AUTO_INCREMENT PRIMARY KEY,tenant_id INT,created_by INT,status VARCHAR(30))",
+      "wa_automations (id INT AUTO_INCREMENT PRIMARY KEY,tenant_id INT,is_active INT)",
       "users (id INT PRIMARY KEY,tenant_id INT,first_name VARCHAR(50),email VARCHAR(150),status ENUM('pending','active','rejected','on_leave') DEFAULT 'pending',whatsapp_access_level VARCHAR(20) DEFAULT 'full')",
       "tenants (id INT PRIMARY KEY,name VARCHAR(50),slug VARCHAR(50),plan VARCHAR(20),plan_status VARCHAR(20),max_branches INT,max_seats INT,max_senders INT,max_monthly_messages INT,status VARCHAR(20))",
       "organization_memberships (tenant_id INT,user_id INT,role VARCHAR(40),membership_status VARCHAR(20),PRIMARY KEY(tenant_id,user_id))",

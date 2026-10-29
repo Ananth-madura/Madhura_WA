@@ -14,9 +14,13 @@ router.get("/",route(async(req,res)=>res.json(await store.query(`SELECT f.*,
   (SELECT COUNT(*) FROM wa_flow_runs r WHERE r.flow_id=f.id AND r.status='completed') AS completed_runs,
   (SELECT COUNT(*) FROM wa_flow_runs r WHERE r.flow_id=f.id AND r.status='handed_off') AS handoff_runs
   FROM wa_flows f WHERE f.tenant_id=? ORDER BY f.created_at DESC LIMIT 500`,[req.tenantId]))));
-router.get("/library",route(async(req,res)=>res.json([...require("../services/prebuiltFlows"),...require("../services/serviceFlowBlueprints")])));
+router.get("/library",route(async(req,res)=>res.json([...require("../services/prebuiltFlows"),...require("../services/serviceFlowBlueprints"),...require("../services/industryFlowBlueprints")])));
+const connectionAdmin=(req,res,next)=>require("../middleware/workspaceModule").isAdmin(req)?next():res.status(403).json({error:"Only organization administrators can manage workflow connections"});
+router.get("/connections",route(async(req,res)=>res.json(await require("../services/flowConnectionStore").list(req.tenantId))));
+router.post("/connections",connectionAdmin,route(async(req,res)=>res.json(await require("../services/flowConnectionStore").save(req.tenantId,req.body))));
+router.delete("/connections/:name",connectionAdmin,route(async(req,res)=>{await require("../services/flowConnectionStore").remove(req.tenantId,req.params.name);res.json({success:true});}));
 router.post("/seed",route(async(req,res)=>res.json(await store.seed(req.tenantId,req.user.id))));
-function simulation(flow,req){const normalized=definition.normalize(flow);const result=definition.step(normalized,req.body.input,req.body.state,{name:"Preview customer","customer.name":"Preview customer","customer.phone":"919000000000","customer.email":"preview@example.test","contact.exists":true});const input=String(req.body.input||"").toLowerCase().trim();return {success:true,...result,triggerType:normalized.trigger_type,triggerKeywords:normalized.trigger_config.keywords||[],triggerMatched:normalized.trigger_type==="keyword"&&(normalized.trigger_config.keywords||[]).some(k=>String(k).toLowerCase()===input)};}
+function simulation(flow,req){const normalized=definition.normalize(flow);const result=definition.step(normalized,req.body.input,req.body.state,{name:"Preview customer","customer.name":"Preview customer","customer.phone":"919000000000","customer.email":"preview@example.test","contact.exists":true},{previewActionError:req.body.previewActionError===true});const input=String(req.body.input||"").toLowerCase().trim();return {success:true,...result,triggerType:normalized.trigger_type,triggerKeywords:normalized.trigger_config.keywords||[],triggerMatched:normalized.trigger_type==="keyword"&&(normalized.trigger_config.keywords||[]).some(k=>String(k).toLowerCase()===input)};}
 router.post("/draft-simulate",route(async(req,res)=>res.json(simulation(req.body.flow,req))));
 const trigger=route(async(req,res)=>{
   const id=req.params.id||req.body.flow_id;
@@ -44,6 +48,12 @@ router.post("/:id/test-simulate",route(async(req,res)=>res.json(simulation(await
 router.get("/:id/runs",route(async(req,res)=>{
   await store.get(req.tenantId,req.params.id);
   res.json(await store.query("SELECT id,flow_id,phone,status,current_node_key,started_at,last_advanced_at,ended_at,end_reason FROM wa_flow_runs WHERE flow_id=? ORDER BY id DESC LIMIT 50",[req.params.id]));
+}));
+router.get("/:id/runs/:runId/events",route(async(req,res)=>{
+  await store.get(req.tenantId,req.params.id);
+  const runs=await store.query("SELECT id FROM wa_flow_runs WHERE id=? AND flow_id=?",[req.params.runId,req.params.id]);
+  if(!runs.length)return res.status(404).json({error:"Run not found"});
+  res.json(await store.query("SELECT id,node_key,event_type,created_at FROM wa_flow_run_events WHERE run_id=? ORDER BY id LIMIT 500",[req.params.runId]));
 }));
 router.get("/:id/versions",route(async(req,res)=>{await store.get(req.tenantId,req.params.id);res.json(await store.query("SELECT id,flow_id,version_number,name,status,changelog,published_at,created_at,created_by FROM wa_flow_versions WHERE flow_id=? ORDER BY version_number DESC LIMIT 100",[req.params.id]));}));
 router.post("/:id/versions/publish",route(async(req,res)=>res.json(await store.publish(req.tenantId,req.user.id,req.params.id,req.body.changelog))));

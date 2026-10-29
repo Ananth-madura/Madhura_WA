@@ -20,6 +20,11 @@ function createFlowStore(db){
   });}
   async function publish(tenant,user,id,changelog="Published version"){return transaction(async q=>{
     const flow=definition.normalize(await get(tenant,id,q,true),{publish:true});
+    for(const node of flow.nodes.filter(n=>n.node_type==="business_action"))await require("./flowConnectionStore").resolve(tenant,node.config.connection,node.config.operation);
+    if(flow.nodes.some(n=>n.node_type==="ai_reply")){
+      const settings=await require("./sharedInboxAssistant").publicSettings(tenant);
+      if(!settings.enabled||!settings.hasApiKey||!settings.model)throw fail("Configure and enable the inbox AI assistant before publishing an AI reply step");
+    }
     for(const node of flow.nodes.filter(n=>n.node_type==="send_template")){
       const [template]=await q("SELECT id FROM wa_templates WHERE tenant_id=? AND (id=? OR name=?) AND meta_status='APPROVED' AND meta_template_id IS NOT NULL LIMIT 1",[tenant,Number(node.config.template_id)||0,node.config.template_name||""]);
       if(!template)throw fail(`Step ${node.node_key} needs a template synchronized from Meta with approval`);

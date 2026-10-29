@@ -435,6 +435,7 @@ async function processIncomingMessage(msg, metadata, contacts = [], account = nu
     } else if(msg.type==="text"||msg.type==="interactive"||msg.type==="button") {
       if(Math.abs(Date.now()-Number(msg.timestamp)*1000)>120000)return;
       const input=msg.interactive?.button_reply?.id||msg.interactive?.list_reply?.id||msg.button?.payload||messageText;
+      if(await require("../services/automationInbound").handle(sharedSender.tenant_id,sharedSender.id,sharedConversation,msgId,input,sharedConversation.isNew))return;
       const handled=await require("../services/sharedFlowRuntime").handle(sharedSender.tenant_id,sharedConversation.id,msgId,input,sharedConversation.isNew);
       if(!handled&&msg.type==="text")require("../services/sharedInboxAssistant").enqueue(sharedSender.tenant_id,sharedConversation.id,msgId,messageText,sharedConversation.isNew);
     }

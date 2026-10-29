@@ -33,6 +33,7 @@ async function ensureWATables() {
 
     `CREATE TABLE IF NOT EXISTS wa_contact_groups (
       id INT AUTO_INCREMENT PRIMARY KEY,
+      tenant_id INT DEFAULT NULL,
       name VARCHAR(255) NOT NULL,
       description TEXT DEFAULT NULL,
       total_contacts INT DEFAULT 0,

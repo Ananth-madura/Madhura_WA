@@ -28,8 +28,7 @@ import socket from "../socket/socket";
 import WAConfigPrompt from "../components/WAConfigPrompt";
 import WAAccountBalanceModal from "../components/WAAccountBalanceModal";
 import WhatsAppNav from "../components/WhatsAppNav";
-import OrganizationSwitcher from "../components/OrganizationSwitcher";
-import BranchSwitcher from "../components/BranchSwitcher";
+
 import "../pages/whatsapp-workspace.css";
 import "../pages/whatsapp-operations.css";
 import "../pages/whatsapp-employee.css";
@@ -396,8 +395,8 @@ function WorkspaceShell() {
             </>
           ) : (
             <>
-              <OrganizationSwitcher />
-              <BranchSwitcher />
+              
+              
             </>
           )}
         </div>

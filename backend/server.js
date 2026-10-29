@@ -483,6 +483,7 @@ function startServer() {
       await require("./migrations/team_chat").migrate(require("./config/database"));
       await require("./migrations/legacy_employee_memberships").migrate(db);
       await require("./migrations/shared_flows").migrate(require("./config/database"));
+      await require("./migrations/automation_workspace").migrate(db);
       await require("./services/schemaReadiness").assertReady(db);
       const platformAdmin = await require("./services/platformAdminBootstrap").provisionConfiguredAdmin(db);
       if (platformAdmin) console.log("Platform administrator and internal workspace are ready");

@@ -16,3 +16,15 @@ test("imports accept supported hyphenated keys and enforce the server's node lim
   expect(parseFlowImport(JSON.stringify({name:"Hours",entry_node_key:"office-hours",nodes:[hours,open,closed]}),allowed).nodes).toHaveLength(3);
   expect(()=>parseFlowImport(JSON.stringify({nodes:Array.from({length:101},(_,i)=>({...open,node_key:`step_${i}`}))}),allowed)).toThrow("100 steps");
 });
+
+test("switch and business-action branches survive duplication and destination deletion",()=>{
+  const router={node_key:"router",node_type:"switch",config:{variable:"service",cases:[{label:"Repair",operator:"equals",value:"repair",next_node_key:"action"}],fallback_node_key:"closed"}};
+  const action={node_key:"action",node_type:"business_action",config:{next_node_key:"open",error_next:"closed"}};
+  const all=[router,action,open,closed];
+  const copies=duplicateFlowNodes(all,all);
+  expect(flowPorts(copies[0]).map(port=>port.target)).toEqual(["action_copy","closed_copy"]);
+  expect(flowPorts(copies[1]).map(port=>port.target)).toEqual(["open_copy","closed_copy"]);
+  const removed=removeFlowNodes(all,new Set(["closed"]));
+  expect(flowPorts(removed[0]).map(port=>port.target)).toEqual(["action",""]);
+  expect(flowPorts(removed[1]).map(port=>port.target)).toEqual(["open",""]);
+});

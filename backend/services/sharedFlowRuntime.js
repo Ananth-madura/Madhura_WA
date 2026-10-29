@@ -53,6 +53,8 @@ async function deliver(c,state,message,messageId,index,vars){
       if(required!==message.parameters.length||template.header_type&&template.header_type!=="TEXT"||/[{}]/.test(template.header_value||""))throw fail("Configure all body parameters; media or variable headers require the advanced sender workflow");
       const parameters=message.parameters.map(value=>({type:"text",text:definition.interpolate(value,vars)}));
       result=await client.sendTemplate(c.contact_phone,template.name,template.language,parameters.length?[{type:"body",parameters}]:[],15000);
+    }else if(message.type==="media"){
+      result=await client.sendMedia(c.contact_phone,message.media_type,message.url,message.text,message.filename);
     }else if(message.type==="cta_url"){
       result=await client.sendCTAUrl(c.contact_phone,message.text,message.button_text,message.url,null,null,15000);
     }else if(message.options){
@@ -64,9 +66,9 @@ async function deliver(c,state,message,messageId,index,vars){
     await query("UPDATE wa_inbox_send_requests SET status=? WHERE tenant_id=? AND request_id=?",[unknown?"unknown":"failed",c.tenant_id,requestId]);throw fail(unknown?"delivery_unknown":"flow_delivery_failed",502);
   }
   await query("UPDATE wa_inbox_send_requests SET status='sent',provider_id=? WHERE tenant_id=? AND request_id=?",[providerId,c.tenant_id,requestId]);
-  await query("INSERT INTO wa_message_logs (tenant_id,conversation_id,sender_id,phone,direction,message_type,message_text,wa_message_id,status,sent_by) VALUES (?,?,?,?,'outbound',?,NULL,?,'sent','flow')",[c.tenant_id,c.id,c.sender_id,c.contact_phone,message.options?"interactive":message.type==="template"?"template":"text",providerId]);
+  await query("INSERT INTO wa_message_logs (tenant_id,conversation_id,sender_id,phone,direction,message_type,message_text,wa_message_id,status,sent_by) VALUES (?,?,?,?,'outbound',?,NULL,?,'sent','flow')",[c.tenant_id,c.id,c.sender_id,c.contact_phone,message.options?"interactive":message.type==="media"?message.media_type:message.type==="template"?"template":"text",providerId]);
   const body=message.options?`${message.text}\n${message.options.map((o,i)=>`${i+1}. ${o.title}`).join("\n")}`:message.type==="cta_url"?`${message.text}\n${message.url}`:message.text;
-  await notify(c,"inbox_message",{message:{id:providerId,body,isMe:true,status:"sent",sentBy:"flow",timestamp:Math.floor(Date.now()/1000)}});
+  await notify(c,"inbox_message",{message:{id:providerId,body,isMe:true,status:"sent",sentBy:"flow",...(message.type==="media"?{hasMedia:true,type:message.media_type,mediaUrl:message.url,filename:message.filename}:{}),timestamp:Math.floor(Date.now()/1000)}});
 }
 async function processMessage(tenant,id,messageId,input,isNew=false,flowId=null){
   let c=await row(tenant,id),state=states.get(cacheKey(tenant,id));
@@ -104,15 +106,35 @@ async function processMessage(tenant,id,messageId,input,isNew=false,flowId=null)
     await query("UPDATE wa_flows SET execution_count=execution_count+1 WHERE id=? AND tenant_id=?",[flow.id,tenant]);
   }
   try{
-    const result=definition.step(state.flow,input,state.state,{name:c.contact_name||"Customer","customer.name":c.contact_name||"Customer","customer.phone":c.contact_phone,"customer.email":c.contact_email||"","contact.exists":true});
+    let deliveryIndex=0,actionIndex=0;
+    const runAction=require("./flowIntegrations").createRunner();
+    const assertCurrent=async()=>{
+      const fresh=await row(tenant,id);
+      if(!eligible(fresh)||fresh.automation_mode!=="flow"||Number(fresh.automation_version)!==state.version||states.get(state.key)!==state||!(await query("SELECT id FROM wa_flows WHERE tenant_id=? AND id=? AND status='active'",[tenant,state.flow.id])).length)throw Object.assign(fail("Flow interrupted by an employee or conversation change"),{flowInterrupted:true});
+    };
+    const result=await definition.execute(state.flow,input,state.state,{name:c.contact_name||"Customer","customer.name":c.contact_name||"Customer","customer.phone":c.contact_phone,"customer.email":c.contact_email||"","contact.exists":true},{
+      onMessages:async(messages,vars)=>{for(const message of messages)await deliver(c,state,message,messageId,deliveryIndex++,vars);},
+      onVisit:async logs=>{for(const nodeKey of logs)await query("INSERT INTO wa_flow_run_events (run_id,node_key,event_type,payload) VALUES (?,?,'step',NULL)",[state.runId,nodeKey]);},
+      onAction:async(node,vars)=>{
+        await assertCurrent();
+        await query("INSERT INTO wa_flow_run_events (run_id,node_key,event_type,payload) VALUES (?,?,'action_started',NULL)",[state.runId,node.node_key]);
+        try{
+          const outputs=node.node_type==="ai_reply"?{[node.config.output_variable]:await require("./sharedInboxAssistant").generate(tenant,id,definition.interpolate(node.config.prompt,vars))}:await runAction(node,vars,{tenantId:tenant,conversationId:id,runId:state.runId,messageId,occurrence:actionIndex++});
+          await assertCurrent();
+          await query("INSERT INTO wa_flow_run_events (run_id,node_key,event_type,payload) VALUES (?,?,'action_succeeded',NULL)",[state.runId,node.node_key]);
+          return outputs;
+        }catch(error){
+          await query("INSERT INTO wa_flow_run_events (run_id,node_key,event_type,payload) VALUES (?,?,'action_failed',NULL)",[state.runId,node.node_key]);
+          throw error;
+        }
+      },
+    });
     if(Buffer.byteLength(JSON.stringify(result.vars))>16384)throw fail("Collected answers exceed this bot's transient memory limit");
     const inputStep=state.flow.nodes.find(node=>node.node_key===state.state?.currentNodeKey);
     if(inputStep?.node_type==="collect_input"&&["name","email"].includes(inputStep.config.contact_field)&&result.currentNodeKey!==state.state?.currentNodeKey&&!result.vars._invalid_count){
       const field=inputStep.config.contact_field,value=result.vars[inputStep.config.variable];
       if(typeof value==="string")await query(`UPDATE wa_contacts ct JOIN conversations c ON c.contact_id=ct.id AND c.tenant_id=ct.tenant_id SET ct.${field}=? WHERE c.tenant_id=? AND c.id=? AND c.automation_mode='flow' AND c.automation_version=?`,[value,tenant,id,state.version]);
     }
-    for(let index=0;index<result.messages.length;index++)await deliver(c,state,result.messages[index],messageId,index,result.vars);
-    for(const nodeKey of result.logs)await query("INSERT INTO wa_flow_run_events (run_id,node_key,event_type,payload) VALUES (?,?,'step',NULL)",[state.runId,nodeKey]);
     if(result.isEnded){await finish(state,result.isHandedOff?"handed_off":"completed",result.isHandedOff?"handoff":"end");await query("UPDATE conversations SET automation_mode=?,automation_version=automation_version+1 WHERE tenant_id=? AND id=? AND automation_version=?",[result.isHandedOff?"human":"idle",tenant,id,state.version]);await notify(c,"inbox_changed",{handoff:Boolean(result.isHandedOff)});}
     else{state.state={vars:result.vars,currentNodeKey:result.currentNodeKey};state.expires=Date.now()+4*3600000;await query("UPDATE wa_flow_runs SET current_node_key=?,last_advanced_at=NOW(),vars=NULL WHERE id=?",[result.currentNodeKey,state.runId]);}
     return true;

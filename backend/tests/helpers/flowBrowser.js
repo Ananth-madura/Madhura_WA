@@ -42,9 +42,9 @@ async function verify({email,secondId}){
     await page.screenshot({path:path.resolve(__dirname,"../../../scratch/flows-builder-browser.png"),fullPage:true});
     await page.goto("http://127.0.0.1:15318/whatsapp/flows/create",{waitUntil:"networkidle2"});
     await page.waitForSelector('input[aria-label="Flow name"]');
-    await page.waitForFunction(()=>document.querySelector('aside[aria-label="library panel"]')?.textContent.includes("Start from a workflow"));
+    await page.waitForFunction(()=>document.querySelector('aside[aria-label="library panel"]')?.textContent.includes("Workflow library"));
     await page.waitForSelector('aside[aria-label="library panel"] option[value="branch_hours"]');
-    await page.select('aside[aria-label="library panel"] select',"branch_hours");
+    await page.select('aside[aria-label="library panel"] select[aria-label="Starter workflow"]',"branch_hours");
     await page.evaluate(()=>[...document.querySelectorAll("button")].find(button=>button.textContent==="Use this starter").click());
     await page.waitForFunction(()=>document.querySelector('input[aria-label="Flow name"]')?.value==="Branch hours and callback routing");
     await page.evaluate(()=>[...document.querySelectorAll("button")].find(button=>button.textContent==="Add step").click());

@@ -5,7 +5,13 @@ export function flowPorts(node) {
   const ports = [];
   const add = (id, label, path, target = "", button = false) => ports.push({ id, label, path, target, button });
   if (["end", "handoff"].includes(node.node_type)) return ports;
-  if (node.node_type === "condition") {
+  if (node.node_type === "switch") {
+    (cfg.cases || []).forEach((route, index) => add(`case_${index}`, route.label || `Route ${index + 1}`, ["cases", index, "next_node_key"], route.next_node_key));
+    add("fallback", "Otherwise", ["fallback_node_key"], cfg.fallback_node_key);
+  } else if (["business_action", "ai_reply"].includes(node.node_type)) {
+    add("success", "Success", ["next_node_key"], cfg.next_node_key);
+    add("error", "Failure", ["error_next"], cfg.error_next);
+  } else if (node.node_type === "condition") {
     add("true", "Yes", ["true_next"], cfg.true_next);
     add("false", "No", ["false_next"], cfg.false_next);
   } else if(node.node_type==="business_hours"){

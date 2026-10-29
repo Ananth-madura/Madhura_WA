@@ -46,6 +46,7 @@ async function emitSocketEvent(eventName, payload) {
 
 // ── 1. INVOICE CREATED AUTOMATION ───────────────────────────────────────────
 crmEventBus.on("invoice_created", async (invoice) => {
+  const tenantId=Number(invoice?.tenantId||invoice?.tenant_id);if(!Number.isSafeInteger(tenantId)||tenantId<1)return;
   try {
     // The /events ingestion endpoint lets any caller emit this event with an
     // arbitrary payload, so ignore shape-less payloads instead of logging
@@ -63,8 +64,8 @@ crmEventBus.on("invoice_created", async (invoice) => {
     if (!phone && client_company) {
       const [clientRows] = await db.promise().query(
         `SELECT phone, name FROM clients 
-         WHERE (company_name = ? OR name = ?) AND phone IS NOT NULL AND phone != '' LIMIT 1`,
-        [client_company, client_company]
+         WHERE tenant_id=? AND (company_name = ? OR name = ?) AND phone IS NOT NULL AND phone != '' LIMIT 1`,
+        [tenantId, client_company, client_company]
       );
       if (clientRows && clientRows[0]) {
         phone = clientRows[0].phone;
@@ -78,13 +79,14 @@ crmEventBus.on("invoice_created", async (invoice) => {
       return;
     }
 
-    const amountVal = grand_total || total_amount;
-    const amountStr = amountVal ? `₹${parseFloat(amountVal).toLocaleString("en-IN")}` : "as detailed";
+    const amountVal = grand_total ?? total_amount;
+    const amountStr = amountVal != null ? `₹${parseFloat(amountVal).toLocaleString("en-IN")}` : "as detailed";
     const dueDateStr = invoice_duedate ? new Date(invoice_duedate).toLocaleDateString("en-IN") : "on receipt";
 
     // 1. Dispatch through Automations Engine (matches Rule #2 'Instant Invoice WhatsApp Notice', linked flow bots, etc.)
     const { triggerAutomation } = require("./waAutomationService");
     const autoRes = await triggerAutomation("invoice_created", {
+      tenantId, eventId: invoice.id||invoice.eventId,
       phone: normPhone,
       contactName: customerName,
       data: {
@@ -102,7 +104,7 @@ crmEventBus.on("invoice_created", async (invoice) => {
     });
 
     // 2. If no active rule was executed, dispatch standard interactive confirmation reminder
-    if (autoRes?.reason === "no_active_rules") {
+    if (process.env.WA_LEGACY_UNCONFIGURED_NOTICES === "1" && tenantId===1 && autoRes?.reason === "no_active_rules") {
       const messageText =
         `Hello *${customerName}*,\n\n` +
         `Your invoice *INV-${id}* has been generated.\n\n` +
@@ -129,7 +131,7 @@ crmEventBus.on("invoice_created", async (invoice) => {
       });
     }
 
-    emitSocketEvent("invoice_created", { id, customerName, phone: normPhone, amount: amountStr });
+    emitSocketEvent("invoice_created", { tenantId, id, customerName, phone: normPhone, amount: amountStr });
     console.log(`✅ [CRM Event Bus] Invoice #${id} automated WhatsApp notice dispatched to +${normPhone}`);
   } catch (err) {
     console.error("[CRM Event Bus] Error in invoice_created listener:", err.message);
@@ -138,6 +140,7 @@ crmEventBus.on("invoice_created", async (invoice) => {
 
 // ── 2. QUOTATION CREATED AUTOMATION ─────────────────────────────────────────
 crmEventBus.on("quotation_created", async (quotation) => {
+  const tenantId=Number(quotation?.tenantId||quotation?.tenant_id);if(!Number.isSafeInteger(tenantId)||tenantId<1)return;
   try {
     const { id, reference_no, grand_total, customer_id, client_company, mobile_number, phone: rawPhone } = quotation;
 
@@ -146,8 +149,8 @@ crmEventBus.on("quotation_created", async (quotation) => {
 
     if (!phone && customer_id) {
       const [custRows] = await db.promise().query(
-        "SELECT customer_name, mobile_number FROM customers WHERE id = ? LIMIT 1",
-        [customer_id]
+        "SELECT customer_name, mobile_number FROM customers WHERE tenant_id=? AND id = ? LIMIT 1",
+        [tenantId, customer_id]
       );
       if (custRows && custRows[0]) {
         phone = custRows[0].mobile_number;
@@ -173,11 +176,12 @@ crmEventBus.on("quotation_created", async (quotation) => {
     }
 
     const refNo = reference_no || `QT-${id}`;
-    const amountStr = grand_total ? `₹${parseFloat(grand_total).toLocaleString("en-IN")}` : "";
+    const amountStr = grand_total != null ? `₹${parseFloat(grand_total).toLocaleString("en-IN")}` : "";
 
     // 1. Dispatch through Automations Engine (matches Rule #7 'Instant Quotation Proposal Notice')
     const { triggerAutomation } = require("./waAutomationService");
     const autoRes = await triggerAutomation("quotation_created", {
+      tenantId, eventId: quotation.id||quotation.eventId,
       phone: normPhone,
       contactName: customerName,
       data: {
@@ -195,7 +199,7 @@ crmEventBus.on("quotation_created", async (quotation) => {
     });
 
     // 2. If no active rule was executed, dispatch interactive quotation followup
-    if (autoRes?.reason === "no_active_rules") {
+    if (process.env.WA_LEGACY_UNCONFIGURED_NOTICES === "1" && tenantId===1 && autoRes?.reason === "no_active_rules") {
       const messageText =
         `Hello *${customerName}*,\n\n` +
         `Your quotation proposal *${refNo}* ${amountStr ? `(${amountStr}) ` : ""}is ready for review.\n\n` +
@@ -220,7 +224,7 @@ crmEventBus.on("quotation_created", async (quotation) => {
       });
     }
 
-    emitSocketEvent("quotation_created", { id, refNo, customerName, phone: normPhone, amount: amountStr });
+    emitSocketEvent("quotation_created", { tenantId, id, refNo, customerName, phone: normPhone, amount: amountStr });
     console.log(`✅ [CRM Event Bus] Quotation #${id} automated WhatsApp notice dispatched to +${normPhone}`);
   } catch (err) {
     console.error("[CRM Event Bus] Error in quotation_created listener:", err.message);
@@ -229,6 +233,7 @@ crmEventBus.on("quotation_created", async (quotation) => {
 
 // ── 3. PAYMENT RECEIVED AUTOMATION (AUTO RECEIPT) ───────────────────────────
 crmEventBus.on("payment_received", async (payment) => {
+  const tenantId=Number(payment?.tenantId||payment?.tenant_id);if(!Number.isSafeInteger(tenantId)||tenantId<1)return;
   try {
     const { invoice_id, amount, payment_method, reference_no, Transaction_ID, phone, client_name } = payment;
 
@@ -238,11 +243,11 @@ crmEventBus.on("payment_received", async (payment) => {
     if (!targetPhone && invoice_id) {
       const [invRows] = await db.promise().query(
         `SELECT ci.client_company,
-          (SELECT c.phone FROM clients c WHERE (c.company_name = ci.client_company OR c.name = ci.client_company) AND c.phone IS NOT NULL LIMIT 1) AS phone,
+          (SELECT c.phone FROM clients c WHERE c.tenant_id=ci.tenant_id AND (c.company_name = ci.client_company OR c.name = ci.client_company) AND c.phone IS NOT NULL LIMIT 1) AS phone,
           (SELECT c.name FROM clients c WHERE (c.company_name = ci.client_company OR c.name = ci.client_company) LIMIT 1) AS name
         FROM clientinvoices ci
-        WHERE ci.id = ? LIMIT 1`,
-        [invoice_id]
+        WHERE ci.tenant_id=? AND ci.id = ? LIMIT 1`,
+        [tenantId, invoice_id]
       );
 
       if (invRows && invRows[0]) {
@@ -254,12 +259,13 @@ crmEventBus.on("payment_received", async (payment) => {
     const normPhone = cleanPhone(targetPhone);
     if (!normPhone || normPhone.length < 10) return;
 
-    const amountStr = amount ? `₹${parseFloat(amount).toLocaleString("en-IN")}` : "";
+    const amountStr = amount != null ? `₹${parseFloat(amount).toLocaleString("en-IN")}` : "";
     const refStr = reference_no || Transaction_ID || "";
 
     // 1. Dispatch through Automations Engine (matches Rule #3 'Payment Receipt Acknowledgement')
     const { triggerAutomation } = require("./waAutomationService");
     const autoRes = await triggerAutomation("payment_received", {
+      tenantId, eventId: payment.id||payment.eventId,
       phone: normPhone,
       contactName: customerName,
       data: {
@@ -275,7 +281,7 @@ crmEventBus.on("payment_received", async (payment) => {
       return null;
     });
 
-    if (autoRes?.reason === "no_active_rules") {
+    if (process.env.WA_LEGACY_UNCONFIGURED_NOTICES === "1" && tenantId===1 && autoRes?.reason === "no_active_rules") {
       const receiptMsg =
         `🎉 *Payment Received Successfully!*\n\n` +
         `Dear *${customerName}*,\n` +
@@ -295,7 +301,7 @@ crmEventBus.on("payment_received", async (payment) => {
         .catch(() => {});
     }
 
-    emitSocketEvent("payment_received", { invoice_id, amount: amountStr, customerName, phone: normPhone });
+    emitSocketEvent("payment_received", { tenantId, invoice_id, amount: amountStr, customerName, phone: normPhone });
     console.log(`✅ [CRM Event Bus] Payment receipt dispatched via WhatsApp to +${normPhone}`);
   } catch (err) {
     console.error("[CRM Event Bus] Error in payment_received listener:", err.message);
@@ -304,6 +310,7 @@ crmEventBus.on("payment_received", async (payment) => {
 
 // ── 4. NEW LEAD CREATED AUTOMATION ──────────────────────────────────────────
 crmEventBus.on("new_lead", async (lead) => {
+  const tenantId=Number(lead?.tenantId||lead?.tenant_id);if(!Number.isSafeInteger(tenantId)||tenantId<1)return;
   try {
     const { phone, customerName, name, companyName, company, serviceName, service, locationCity, city, leadId } = lead;
     const normPhone = cleanPhone(phone);
@@ -314,7 +321,8 @@ crmEventBus.on("new_lead", async (lead) => {
 
     const { triggerAutomation } = require("./waAutomationService");
     await triggerAutomation("new_lead", {
-      tenantId: lead.tenantId,
+      tenantId, eventId: lead.id||lead.eventId,
+
       phone: normPhone,
       contactName: resolvedName,
       data: {
@@ -328,7 +336,7 @@ crmEventBus.on("new_lead", async (lead) => {
       },
     }).catch((e) => console.warn("[CRM Event Bus] new_lead error:", e.message));
 
-    emitSocketEvent("new_lead", { tenantId: lead.tenantId, phone: normPhone, name: resolvedName, service: resolvedService, leadId });
+    emitSocketEvent("new_lead", { tenantId, phone: normPhone, name: resolvedName, service: resolvedService, leadId });
     console.log(`✅ [CRM Event Bus] New lead automation executed for ${resolvedName} (+${normPhone})`);
   } catch (err) {
     console.error("[CRM Event Bus] Error in new_lead listener:", err.message);
@@ -337,6 +345,7 @@ crmEventBus.on("new_lead", async (lead) => {
 
 // ── 5. WALKIN SHOP VISIT AUTOMATION ─────────────────────────────────────────
 crmEventBus.on("walkin_created", async (walkin) => {
+  const tenantId=Number(walkin?.tenantId||walkin?.tenant_id);if(!Number.isSafeInteger(tenantId)||tenantId<1)return;
   try {
     const { mobile_number, phone, customer_name, name, company_name, purpose, location_city, id } = walkin;
     const normPhone = cleanPhone(mobile_number || phone);
@@ -347,6 +356,7 @@ crmEventBus.on("walkin_created", async (walkin) => {
 
     const { triggerAutomation } = require("./waAutomationService");
     await triggerAutomation("walkin_created", {
+      tenantId, eventId: walkin.id||walkin.eventId,
       phone: normPhone,
       contactName: resolvedName,
       data: {
@@ -358,7 +368,7 @@ crmEventBus.on("walkin_created", async (walkin) => {
       },
     }).catch((e) => console.warn("[CRM Event Bus] walkin_created error:", e.message));
 
-    emitSocketEvent("walkin_created", { phone: normPhone, name: resolvedName, purpose: resolvedPurpose });
+    emitSocketEvent("walkin_created", { tenantId, phone: normPhone, name: resolvedName, purpose: resolvedPurpose });
     console.log(`✅ [CRM Event Bus] Walkin visit automation executed for ${resolvedName} (+${normPhone})`);
   } catch (err) {
     console.error("[CRM Event Bus] Error in walkin_created listener:", err.message);
@@ -367,6 +377,7 @@ crmEventBus.on("walkin_created", async (walkin) => {
 
 // ── 6. AMC CONTRACT AGREEMENT AUTOMATION ────────────────────────────────────
 crmEventBus.on("amc_created", async (contract) => {
+  const tenantId=Number(contract?.tenantId||contract?.tenant_id);if(!Number.isSafeInteger(tenantId)||tenantId<1)return;
   try {
     const { id, client_company, contract_title, start_date, end_date, amount_value, mobile_number } = contract;
     let phone = mobile_number;
@@ -386,12 +397,13 @@ crmEventBus.on("amc_created", async (contract) => {
     const normPhone = cleanPhone(phone);
     if (!normPhone || normPhone.length < 10) return;
 
-    const amountStr = amount_value ? `₹${parseFloat(amount_value).toLocaleString("en-IN")}` : "";
+    const amountStr = amount_value != null ? `₹${parseFloat(amount_value).toLocaleString("en-IN")}` : "";
     const startDateStr = start_date ? new Date(start_date).toLocaleDateString("en-IN") : "";
     const endDateStr = end_date ? new Date(end_date).toLocaleDateString("en-IN") : "";
 
     const { triggerAutomation } = require("./waAutomationService");
     await triggerAutomation("amc_created", {
+      tenantId, eventId: contract.id||contract.eventId,
       phone: normPhone,
       contactName: customerName,
       data: {
@@ -404,7 +416,7 @@ crmEventBus.on("amc_created", async (contract) => {
       },
     }).catch((e) => console.warn("[CRM Event Bus] amc_created error:", e.message));
 
-    emitSocketEvent("amc_created", { id, customerName, phone: normPhone, contractTitle: contract_title });
+    emitSocketEvent("amc_created", { tenantId, id, customerName, phone: normPhone, contractTitle: contract_title });
     console.log(`✅ [CRM Event Bus] AMC Contract #${id} notice executed for +${normPhone}`);
   } catch (err) {
     console.error("[CRM Event Bus] Error in amc_created listener:", err.message);
@@ -413,6 +425,7 @@ crmEventBus.on("amc_created", async (contract) => {
 
 // ── 7. SERVICE VISIT SCHEDULED ALERT ─────────────────────────────────────────
 crmEventBus.on("service_visit_scheduled", async (visit) => {
+  const tenantId=Number(visit?.tenantId||visit?.tenant_id);if(!Number.isSafeInteger(tenantId)||tenantId<1)return;
   try {
     const { phone, customerName, name, visit_date, service_type, engineer_name, time_slot } = visit;
     const normPhone = cleanPhone(phone);
@@ -422,6 +435,7 @@ crmEventBus.on("service_visit_scheduled", async (visit) => {
 
     const { triggerAutomation } = require("./waAutomationService");
     await triggerAutomation("service_visit_scheduled", {
+      tenantId, eventId: visit.id||visit.eventId,
       phone: normPhone,
       contactName: resolvedName,
       data: {
@@ -432,7 +446,7 @@ crmEventBus.on("service_visit_scheduled", async (visit) => {
       },
     }).catch((e) => console.warn("[CRM Event Bus] service_visit_scheduled error:", e.message));
 
-    emitSocketEvent("service_visit_scheduled", { phone: normPhone, name: resolvedName, visit_date });
+    emitSocketEvent("service_visit_scheduled", { tenantId, phone: normPhone, name: resolvedName, visit_date });
     console.log(`✅ [CRM Event Bus] Service visit alert executed for ${resolvedName} (+${normPhone})`);
   } catch (err) {
     console.error("[CRM Event Bus] Error in service_visit_scheduled listener:", err.message);
@@ -441,6 +455,7 @@ crmEventBus.on("service_visit_scheduled", async (visit) => {
 
 // ── 8. TICKET CLOSED FEEDBACK REQUEST ───────────────────────────────────────
 crmEventBus.on("ticket_closed", async (ticket) => {
+  const tenantId=Number(ticket?.tenantId||ticket?.tenant_id);if(!Number.isSafeInteger(tenantId)||tenantId<1)return;
   try {
     const { phone, customerName, name, ticket_id, issue_type, resolved_by } = ticket;
     const normPhone = cleanPhone(phone);
@@ -450,6 +465,7 @@ crmEventBus.on("ticket_closed", async (ticket) => {
 
     const { triggerAutomation } = require("./waAutomationService");
     await triggerAutomation("ticket_closed", {
+      tenantId, eventId: ticket.id||ticket.eventId,
       phone: normPhone,
       contactName: resolvedName,
       data: {
@@ -459,7 +475,7 @@ crmEventBus.on("ticket_closed", async (ticket) => {
       },
     }).catch((e) => console.warn("[CRM Event Bus] ticket_closed error:", e.message));
 
-    emitSocketEvent("ticket_closed", { phone: normPhone, name: resolvedName, ticket_id });
+    emitSocketEvent("ticket_closed", { tenantId, phone: normPhone, name: resolvedName, ticket_id });
     console.log(`✅ [CRM Event Bus] Ticket closed feedback request executed for +${normPhone}`);
   } catch (err) {
     console.error("[CRM Event Bus] Error in ticket_closed listener:", err.message);
@@ -468,6 +484,7 @@ crmEventBus.on("ticket_closed", async (ticket) => {
 
 // ── 9. NEW CLIENT WELCOME ONBOARDING ────────────────────────────────────────
 crmEventBus.on("welcome_message", async (client) => {
+  const tenantId=Number(client?.tenantId||client?.tenant_id);if(!Number.isSafeInteger(tenantId)||tenantId<1)return;
   try {
     const { phone, name, company_name } = client;
     const normPhone = cleanPhone(phone);
@@ -477,6 +494,7 @@ crmEventBus.on("welcome_message", async (client) => {
 
     const { triggerAutomation } = require("./waAutomationService");
     await triggerAutomation("welcome_message", {
+      tenantId, eventId: client.id||client.eventId,
       phone: normPhone,
       contactName: resolvedName,
       data: {
@@ -485,7 +503,7 @@ crmEventBus.on("welcome_message", async (client) => {
       },
     }).catch((e) => console.warn("[CRM Event Bus] welcome_message error:", e.message));
 
-    emitSocketEvent("welcome_message", { phone: normPhone, name: resolvedName });
+    emitSocketEvent("welcome_message", { tenantId, phone: normPhone, name: resolvedName });
     console.log(`✅ [CRM Event Bus] Welcome onboarding executed for ${resolvedName} (+${normPhone})`);
   } catch (err) {
     console.error("[CRM Event Bus] Error in welcome_message listener:", err.message);

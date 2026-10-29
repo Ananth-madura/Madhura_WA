@@ -19,7 +19,6 @@ import {
   Edit2,
   FileText,
   GitBranch,
-  Info,
   MessageSquare,
   MoreHorizontal,
   Paperclip,
@@ -29,18 +28,15 @@ import {
   RefreshCw,
   Search,
   Send,
-  Settings2,
   Smile,
   Trash2,
   UserPlus,
   Users,
-  WifiOff,
   X,
   PanelRight,
   Download,
   AlertCircle,
   ShieldCheck,
-  Bell,
   BellOff,
 } from "lucide-react";
 import "../pages/team-chat.css";
@@ -139,7 +135,6 @@ function TeamChatWorkspace({ branchId = null }) {
   const [beforeCursor, setBeforeCursor] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
-  const [connected, setConnected] = useState(Boolean(socket.connected));
 
   // Modals & Panels
   const [showDetails, setShowDetails] = useState(false);
@@ -1039,7 +1034,6 @@ function TeamChatWorkspace({ branchId = null }) {
     };
 
     const onConnect = () => {
-      setConnected(true);
       flushOutbox();
       loadBootstrap({ silent: true });
       const channelId = activeIdRef.current;
@@ -1051,7 +1045,7 @@ function TeamChatWorkspace({ branchId = null }) {
         }
       }).catch(() => {});
     };
-    const onDisconnect = () => setConnected(false);
+    const onDisconnect = () => {};
     const onOnline = () => {
       setOnline(true);
       flushOutbox();
@@ -1108,39 +1102,6 @@ function TeamChatWorkspace({ branchId = null }) {
 
   return (
     <div className="tc-root" ref={rootRef}>
-      {/* ── Top Status Strip ──────────────────────────────────────────────── */}
-      <header className="tc-strip">
-        <div className="tc-strip-note">
-          <Info size={14} aria-hidden="true" />
-          <span>
-            <strong>{bootstrap?.tenantName || "Team workspace"}</strong> · {retentionDays} days on the server. Older history may be available on this device.
-          </span>
-        </div>
-        <div className="tc-strip-actions">
-          <button type="button" className="tc-icon-btn" title="Notification preferences" aria-label="Notification preferences" onClick={() => { setNotificationDraft(notificationPreferences); setShowNotificationSettings(true); }}><Bell size={15} /></button>
-          {!online ? (
-            <span className="tc-pill tc-pill-warn"><WifiOff size={12} /> Offline (cached)</span>
-          ) : !connected ? (
-            <span className="tc-pill"><Clock size={12} /> Reconnecting</span>
-          ) : (
-            <span className="tc-pill tc-pill-ok"><CheckCheck size={12} /> Live</span>
-          )}
-
-          {bootstrap?.canManageSettings && (
-            <button
-              type="button"
-              className="emp-btn emp-btn-sm"
-              onClick={() => {
-                loadBranchPolicies();
-                setDevicePolicyDraft({ localCacheDays: settings.localCacheDays || 0, clearCacheOnLogout: Boolean(settings.clearCacheOnLogout) });
-                setShowBranchAdmin(true);
-              }}
-            >
-              <Settings2 size={13} aria-hidden="true" /> Team settings
-            </button>
-          )}
-        </div>
-      </header>
 
       {error && (
         <div className="emp-banner emp-banner-error" role="alert">
