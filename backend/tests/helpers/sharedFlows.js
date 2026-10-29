@@ -32,7 +32,7 @@ async function verify({base,headers,secondHeaders,employeeToken,connection,sende
   const deliver=async(text,type="text")=>{
     const id=`wamid.flow.${crypto.randomUUID()}`;
     const message={id,from:"919999999999",timestamp:String(Math.floor(Date.now()/1000)),type,...(type==="text"?{text:{body:text}}:{interactive:{type:"button_reply",button_reply:{id:text,title:text}}})};
-    const body=JSON.stringify({entry:[{changes:[{field:"messages",value:{metadata:{phone_number_id:"fixture-provider-number"},messages:[message]}}]}]});
+    const body=JSON.stringify({entry:[{changes:[{field:"messages",value:{metadata:{phone_number_id:"1111100001"},messages:[message]}}]}]});
     const response=await fetch(`${base}/webhook`,{method:"POST",headers:{"Content-Type":"application/json","x-hub-signature-256":"sha256="+crypto.createHmac("sha256","fixture-app-secret").update(body).digest("hex")},body});
     assert.equal(response.status,200,await response.text());return {body,id};
   };
@@ -94,7 +94,7 @@ async function verify({base,headers,secondHeaders,employeeToken,connection,sende
   await connection.query("UPDATE wa_templates SET waba_id='another-account' WHERE id=?",[approved.id]);
   const beforeForeignTemplate=meta.deliveries.length;
   assert.equal((await api("POST",`/v2/inbox/conversations/${conversation.id}/flow`,{flowId:created.data.id},employeeHeaders)).status,502);assert.equal(meta.deliveries.length,beforeForeignTemplate);
-  await connection.query("UPDATE wa_templates SET waba_id='fixture-waba' WHERE id=?",[approved.id]);
+  await connection.query("UPDATE wa_templates SET waba_id='9999900001' WHERE id=?",[approved.id]);
   const onboarding=seeded.data.find(flow=>flow.name==="New customer onboarding");
   await api("POST",`/wa-flows/${onboarding.id}/versions/publish`,{});
   await api("POST",`/v2/inbox/conversations/${conversation.id}/flow`,{flowId:onboarding.id},employeeHeaders);

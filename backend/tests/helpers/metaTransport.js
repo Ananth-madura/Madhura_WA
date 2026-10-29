@@ -7,6 +7,7 @@ async function start(){
     const bytes=Buffer.concat(chunks),body=bytes.toString("utf8");
     if(req.url.startsWith("/media-bytes/")){res.setHeader("Content-Type","application/pdf");return res.end(Buffer.from("%PDF-1.4\nfixture attachment\n%%EOF"));}
     res.setHeader("Content-Type","application/json");
+    if(req.url.includes("/9999900001/phone_numbers")&&req.method==="GET")return res.end(JSON.stringify({data:[{id:"1111100001",display_phone_number:"919123456789",verified_name:"Fixture business",quality_rating:"GREEN",status:"CONNECTED"}]}));
     if(req.url.endsWith("/media")&&req.method==="POST"){
       uploads.push({size:bytes.length,contentType:req.headers["content-type"]});
       if(uploadHook){try{await uploadHook();}catch(error){console.error("[MetaFixture] Upload hook failed",error.code);res.statusCode=500;return res.end(JSON.stringify({error:{message:"Fixture upload hook failed"}}));}}

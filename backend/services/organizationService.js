@@ -560,10 +560,12 @@ async function getBranchSenders(tenantId, branchId) {
 
   const rows = await q(
     `SELECT sba.id as assignment_id, sba.is_default, sba.routing_weight, sba.created_at as assigned_at,
-            s.id as sender_id, s.phone_number_id, s.display_phone, s.verified_name, s.quality, s.messaging_tier,
+            s.id as sender_id, s.phone_number_id, s.display_phone, s.verified_name,
+            CASE WHEN s.last_verified_at IS NOT NULL THEN s.quality ELSE NULL END AS quality,
+            CASE WHEN s.last_verified_at IS NOT NULL THEN s.messaging_tier ELSE NULL END AS messaging_tier,
             s.is_shared, s.status as sender_status
      FROM sender_branch_assignments sba
-     JOIN wa_senders s ON sba.sender_id = s.id
+     JOIN wa_senders s ON sba.sender_id = s.id AND sba.tenant_id = s.tenant_id
      WHERE sba.tenant_id = ? AND sba.branch_id = ?
      ORDER BY sba.is_default DESC, s.display_phone ASC`,
     [tid, bid]
@@ -575,48 +577,14 @@ async function getBranchSenders(tenantId, branchId) {
  * Attach a sender to a branch (dedicated or shared).
  */
 async function attachSenderToBranch(tenantId, branchId, { senderId, isDefault = false, routingWeight = 100 }, actorUserId = null) {
-  const tid = Number(tenantId);
-  const bid = Number(branchId);
-  const sid = Number(senderId);
-
-  const [sender] = await q("SELECT id, display_phone FROM wa_senders WHERE id = ? AND tenant_id = ? LIMIT 1", [sid, tid]);
-  if (!sender) throw new Error("Sender does not belong to this organization");
-
-  if (isDefault) {
-    // Demote existing default
-    await q("UPDATE sender_branch_assignments SET is_default = 0 WHERE tenant_id = ? AND branch_id = ?", [tid, bid]);
-  }
-
-  await q(
-    `INSERT INTO sender_branch_assignments (tenant_id, sender_id, branch_id, is_default, routing_weight)
-     VALUES (?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE is_default = excluded.is_default, routing_weight = excluded.routing_weight`,
-    [tid, sid, bid, isDefault ? 1 : 0, routingWeight]
-  ).catch(async () => {
-    // SQLite fallback
-    const [exist] = await q("SELECT id FROM sender_branch_assignments WHERE tenant_id = ? AND sender_id = ? AND branch_id = ? LIMIT 1", [tid, sid, bid]);
-    if (exist) {
-      await q("UPDATE sender_branch_assignments SET is_default = ?, routing_weight = ? WHERE id = ?", [isDefault ? 1 : 0, routingWeight, exist.id]);
-    } else {
-      await q("INSERT INTO sender_branch_assignments (tenant_id, sender_id, branch_id, is_default, routing_weight) VALUES (?, ?, ?, ?, ?)", [tid, sid, bid, isDefault ? 1 : 0, routingWeight]);
-    }
-  });
-
-  await recordBranchAudit(tid, bid, actorUserId, "branch.sender.attached", { sender_id: sid, phone: sender.display_phone, is_default: isDefault });
-  return { success: true };
+  return require("./senderWorkspace").createService(db).changeBranch(tenantId, senderId, branchId, actorUserId, { isDefault, routingWeight });
 }
 
 /**
  * Unassign sender from branch.
  */
 async function unassignSenderFromBranch(tenantId, branchId, senderId, actorUserId = null) {
-  const tid = Number(tenantId);
-  const bid = Number(branchId);
-  const sid = Number(senderId);
-
-  await q("DELETE FROM sender_branch_assignments WHERE tenant_id = ? AND branch_id = ? AND sender_id = ?", [tid, bid, sid]);
-  await recordBranchAudit(tid, bid, actorUserId, "branch.sender.unassigned", { sender_id: sid });
-  return { success: true };
+  return require("./senderWorkspace").createService(db).changeBranch(tenantId, senderId, branchId, actorUserId);
 }
 
 /**

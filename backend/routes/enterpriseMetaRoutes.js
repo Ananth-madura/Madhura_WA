@@ -1,179 +1,34 @@
-/**
- * enterpriseMetaRoutes.js
- *
- * REST API v2 endpoints for Meta Partner Embedded Signup and Multi-Sender Management.
- * Reference: MADHURA_WHATSAPP_ENTERPRISE_SAAS_MASTER_BLUEPRINT.md §6 & §17
- */
-
-const express = require("express");
+"use strict";
+const router = require("express").Router();
 const { verifyToken } = require("../middleware/authMiddleware");
-const {
-  requireTenantContext,
-  requirePermission,
-} = require("../middleware/tenantMiddleware");
-const metaPartner = require("../services/metaPartnerService");
-
-const router = express.Router();
-
-/**
- * POST /api/v2/meta/onboarding/sessions
- * Start an Embedded Signup session with a short-lived nonce and state token.
- */
-router.post(
-  "/onboarding/sessions",
-  verifyToken,
-  requireTenantContext,
-  requirePermission("sender.connect"),
-  async (req, res) => {
-    try {
-      const session = await metaPartner.createOnboardingSession(req.tenantId, req.user.id);
-      res.status(201).json({ success: true, session });
-    } catch (err) {
-      console.error("[POST /api/v2/meta/onboarding/sessions] Error:", err);
-      res.status(500).json({ success: false, message: err.message });
-    }
+const { requireTenantContext, requirePermission } = require("../middleware/tenantMiddleware");
+const service = require("../services/metaPartnerService");
+const handle = work => async (req, res) => {
+  try {
+    if (["POST", "PATCH"].includes(req.method) && (!req.body || typeof req.body !== "object" || Array.isArray(req.body))) return res.status(400).json({ success: false, message: "A JSON object is required" });
+    await work(req, res);
   }
-);
-
-/**
- * POST /api/v2/meta/onboarding/complete
- * Accepts popup finish data, validates state, exchanges code for permanent token, registers sender.
- */
-router.post(
-  "/onboarding/complete",
-  verifyToken,
-  requireTenantContext,
-  requirePermission("sender.connect"),
-  async (req, res) => {
-    try {
-      const result = await metaPartner.completeOnboarding(req.tenantId, req.user.id, req.body);
-      res.json({
-        success: true,
-        message: "WhatsApp Business Account and Phone Number connected successfully",
-        data: result,
-      });
-    } catch (err) {
-      console.error("[POST /api/v2/meta/onboarding/complete] Error:", err);
-      res.status(400).json({ success: false, message: err.message });
-    }
-  }
-);
-
-/**
- * GET /api/v2/meta/senders
- * Lists all connected senders with their branch assignments.
- */
-router.get(
-  "/senders",
-  verifyToken,
-  requireTenantContext,
-  requirePermission("sender.view"),
-  async (req, res) => {
-    try {
-      const senders = await metaPartner.getTenantSenders(req.tenantId);
-      res.json({ success: true, senders });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
-  }
-);
-
-/**
- * PATCH /api/v2/meta/senders/:id/branch-assignments
- * Configure branch assignments and shared status for a sender (Hybrid Model).
- */
-router.patch(
-  "/senders/:id/branch-assignments",
-  verifyToken,
-  requireTenantContext,
-  requirePermission("sender.manage"),
-  async (req, res) => {
-    try {
-      const senderId = Number(req.params.id);
-      const { branchIds, isShared } = req.body;
-      await metaPartner.updateSenderBranchAssignments(req.tenantId, senderId, {
-        branchIds,
-        isShared: isShared !== undefined ? isShared : 1,
-      });
-
-      res.json({
-        success: true,
-        message: "Sender branch assignments updated successfully",
-      });
-    } catch (err) {
-      res.status(400).json({ success: false, message: err.message });
-    }
-  }
-);
-
-/**
- * POST /api/v2/meta/senders/manual
- * Register a direct Meta Cloud API sender manually with provided credentials.
- */
-router.post(
-  "/senders/manual",
-  verifyToken,
-  requireTenantContext,
-  requirePermission("sender.connect"),
-  async (req, res) => {
-    try {
-      const result = await metaPartner.registerDirectSender(req.tenantId, req.user.id, req.body);
-      res.status(201).json({
-        success: true,
-        message: "Direct Meta Cloud sender registered successfully",
-        sender: result,
-      });
-    } catch (err) {
-      res.status(400).json({ success: false, message: err.message });
-    }
-  }
-);
-
-/**
- * POST /api/v2/meta/senders/:id/sync
- * Sync sender health, quality rating, and messaging limit tier with Meta Graph API.
- */
-router.post(
-  "/senders/:id/sync",
-  verifyToken,
-  requireTenantContext,
-  requirePermission("sender.view"),
-  async (req, res) => {
-    try {
-      const senderId = Number(req.params.id);
-      const health = await metaPartner.syncSenderHealth(req.tenantId, senderId);
-      res.json({
-        success: true,
-        message: "Sender health synchronized",
-        health,
-      });
-    } catch (err) {
-      res.status(400).json({ success: false, message: err.message });
-    }
-  }
-);
-
-/**
- * DELETE /api/v2/meta/senders/:id
- * Disconnect and remove a WhatsApp sender asset.
- */
-router.delete(
-  "/senders/:id",
-  verifyToken,
-  requireTenantContext,
-  requirePermission("sender.manage"),
-  async (req, res) => {
-    try {
-      const senderId = Number(req.params.id);
-      await metaPartner.deleteSender(req.tenantId, senderId);
-      res.json({
-        success: true,
-        message: "Sender disconnected successfully",
-      });
-    } catch (err) {
-      res.status(400).json({ success: false, message: err.message });
-    }
-  }
-);
-
+  catch (error) { if (!error.status) console.error("[Sender workspace]", error.code || "OPERATION_FAILED"); res.status(error.status || 503).json({ success: false, message: error.status ? error.message : "The sender operation failed. Retry or contact your administrator." }); }
+};
+router.use(verifyToken, requireTenantContext);
+router.use((req, res, next) => { res.set("Cache-Control", "private, no-store"); next(); });
+router.get("/setup", requirePermission("sender.view"), handle(async (req, res) => res.json({ success: true, ...service.setup() })));
+router.get("/senders", requirePermission("sender.view"), handle(async (req, res) => res.json({ success: true, senders: await service.getTenantSenders(req.tenantId) })));
+router.post("/onboarding/sessions", requirePermission("sender.connect"), handle(async (req, res) => res.status(201).json({ success: true, session: await service.createOnboardingSession(req.tenantId, req.user.id) })));
+router.post("/onboarding/complete", requirePermission("sender.connect"), handle(async (req, res) => res.json({ success: true, data: await service.completeOnboarding(req.tenantId, req.user.id, req.body) })));
+router.post("/senders/manual", requirePermission("sender.connect"), handle(async (req, res) => res.status(201).json({ success: true, sender: await service.registerDirectSender(req.tenantId, req.user.id, req.body) })));
+router.get("/senders/:id", requirePermission("sender.view"), handle(async (req, res) => res.json({ success: true, sender: await service.getSender(req.tenantId, req.params.id) })));
+router.patch("/senders/:id/branch-assignments", requirePermission("sender.manage"), handle(async (req, res) => res.json({ success: true, sender: await service.updateSenderBranchAssignments(req.tenantId, req.params.id, req.body, req.user.id) })));
+router.post("/senders/:id/sync", requirePermission("sender.manage"), handle(async (req, res) => { const sender = await service.syncSenderHealth(req.tenantId, req.params.id, req.user.id); res.json({ success: true, sender, health: sender }); }));
+router.post("/senders/:id/register", requirePermission("sender.manage"), handle(async (req, res) => res.json({ success: true, sender: await service.registerSender(req.tenantId, req.params.id, req.user.id, req.body) })));
+router.post("/senders/:id/credentials", requirePermission("sender.manage"), handle(async (req, res) => {
+  const previous = await service.getSender(req.tenantId, req.params.id);
+  const sender = await service.registerDirectSender(req.tenantId, req.user.id, { ...req.body, phoneNumberId: previous.phone_number_id, wabaId: previous.waba_id,
+    isShared: previous.is_shared, branchIds: previous.assigned_branch_ids, defaultBranchIds: previous.default_branch_ids });
+  res.json({ success: true, sender });
+}));
+router.get("/senders/:id/webhook", requirePermission("sender.manage"), handle(async (req, res) => res.json({ success: true, ...await service.webhookSettings(req.tenantId, req.params.id) })));
+router.post("/senders/:id/webhook", requirePermission("sender.manage"), handle(async (req, res) => res.json({ success: true, sender: await service.subscribeWebhook(req.tenantId, req.params.id, req.user.id) })));
+router.get("/senders/:id/activity", requirePermission("sender.view"), handle(async (req, res) => res.json({ success: true, events: await service.activity(req.tenantId, req.params.id) })));
+router.delete("/senders/:id", requirePermission("sender.manage"), handle(async (req, res) => res.json(await service.deleteSender(req.tenantId, req.params.id, req.user.id))));
 module.exports = router;

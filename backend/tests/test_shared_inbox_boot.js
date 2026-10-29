@@ -57,13 +57,13 @@ async function main() {
     assert.equal((await fetch(`${base}/api/wa/campaigns/upload-media`, {method:"POST",headers,body:"{}"})).status,409);
     assert.equal((await fetch(`${base}/api/whatsapp/upload-media`, {method:"POST",headers,body:"{}"})).status,409);
     assert.equal((await fetch(`${base}/uploads/wa-media/fixture.jpg`)).status,404);
-    const senderPayload = {phoneNumberId:"fixture-provider-number",accessToken:"fixture-access-token",wabaId:"fixture-waba",displayPhone:"919123456789",isShared:1};
+    const senderPayload = {phoneNumberId:"1111100001",accessToken:"fixture-access-token",wabaId:"9999900001",isShared:1};
     for (let i=0;i<2;i++) {
       const registered = await fetch(`${base}/api/v2/meta/senders/manual`, {method:"POST",headers,body:JSON.stringify(senderPayload)});
       assert.equal(registered.status,201,await registered.text());
     }
-    const [[sender]] = await connection.query("SELECT id FROM wa_senders WHERE phone_number_id='fixture-provider-number'");
-    const [[connectionRecord]] = await connection.query("SELECT encrypted_token FROM waba_connections WHERE waba_id='fixture-waba'");
+    const [[sender]] = await connection.query("SELECT id FROM wa_senders WHERE phone_number_id='1111100001'");
+    const [[connectionRecord]] = await connection.query("SELECT encrypted_token FROM waba_connections WHERE waba_id='9999900001'");
     assert.notEqual(connectionRecord.encrypted_token,"fixture-access-token");
     const [[assignedNumber]] = await connection.query("SELECT COUNT(*) AS count FROM sender_branch_assignments WHERE sender_id=?",[sender.id]);assert.equal(assignedNumber.count,1);
     const employeeResponse = await fetch(`${base}/api/auth/employees`, { method: "POST", headers, body: JSON.stringify({ first_name: "Agent", email: "agent@fixture.test", role: "employee", branch_id: branch.id, whatsapp_access_level: "chat_only" }) });
@@ -72,7 +72,7 @@ async function main() {
     const update = await fetch(`${base}/api/auth/employees/${employee.employee.id}`, { method: "PUT", headers, body: JSON.stringify({ status: "active" }) });
     assert.equal(update.status, 200);
     await connection.query("UPDATE staff_branch_memberships SET is_available=0 WHERE tenant_id=1 AND user_id<>?",[employee.employee.id]);
-    const body = JSON.stringify({ entry: [{ changes: [{ field: "messages", value: { metadata: { phone_number_id: "fixture-provider-number" }, contacts: [{ profile: { name: "Customer" } }], messages: [{ id: "wamid.boot", from: "919999999999", timestamp: String(Math.floor(Date.now()/1000)), type: "text", text: { body: "Do not persist this body" } }] } }] }] });
+    const body = JSON.stringify({ entry: [{ changes: [{ field: "messages", value: { metadata: { phone_number_id: "1111100001" }, contacts: [{ profile: { name: "Customer" } }], messages: [{ id: "wamid.boot", from: "919999999999", timestamp: String(Math.floor(Date.now()/1000)), type: "text", text: { body: "Do not persist this body" } }] } }] }] });
     const signature = "sha256=" + crypto.createHmac("sha256", "fixture-app-secret").update(body).digest("hex");
     const deliver = () => fetch(`${base}/webhook`, { method: "POST", headers: { "Content-Type": "application/json", "x-hub-signature-256": signature }, body });
     const received = await deliver(); assert.equal(received.status, 200, await received.text());
@@ -134,6 +134,7 @@ async function main() {
     await require("./helpers/employeeOutreach").verify({base,headers,secondHeaders,employeeToken,connection,sender,meta});
     if(process.env.INBOX_TEST_REAL_BROWSER==="1")await require("./helpers/employeeOutreachBrowser").verify({query:(...args)=>connection.query(...args),meta});
     if(process.env.INBOX_TEST_REAL_BROWSER==="1")await require("./helpers/flowBrowser").verify({email:admin.email,secondId});
+    if(process.env.INBOX_TEST_ACCOUNTS_BROWSER==="1")await require("./helpers/accountsBrowser").verify({email:admin.email,secondId});
     await connection.query("DELETE FROM staff_branch_memberships WHERE tenant_id=1 AND user_id=?",[employee.employee.id]);
     const noBranch=await fetch(`${base}/api/v2/me`,{headers:{Authorization:`Bearer ${employeeToken}`}}).then(response=>response.json());
     assert.deepEqual(noBranch.branches,[]);assert.deepEqual(noBranch.permittedBranchIds,[]);assert.equal(noBranch.activeBranch,null);

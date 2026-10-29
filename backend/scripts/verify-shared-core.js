@@ -24,6 +24,7 @@ suites.push("test_workflow_connections.js");
 suites.push("test_wa_manual_automation.js");
 suites.push("test_crm_automation_scope.js");
 if(args.has("--integration"))suites.push("test_browser_sessions_mysql.js","test_saas_onboarding_mysql.js","test_shared_inbox_mysql.js","test_employee_workspace_mysql.js","test_shared_inbox_boot.js","test_billing_mysql.js","test_automation_workspace_mysql.js");
+if(args.has("--integration"))suites.push("test_sender_workspace_mysql.js");
 const env={...process.env,NODE_ENV:"test",WA_SKIP_DOTENV:"1",DB_ENGINE:"mysql",USE_SQLITE:"0",DB_HOST:"127.0.0.1",DB_PORT:"9",DB_NAME:"shared_core_test_only",DB_USER:"isolated_tests_only",DB_PASS:"",DISABLE_R2:"1",REDIS_URL:"",WA_SERVER_CHAT_STORAGE:"0",INBOX_TEST_REAL_BROWSER:args.has("--browser")?"1":"0",INBOX_TEST_AUTH_BROWSER:args.has("--browser")?"1":"0"};
 if(args.has("--browser")){
   const frontend=path.resolve(__dirname,"../../frontend");
