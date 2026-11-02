@@ -169,18 +169,66 @@ function createClientPortalService(db, { secret = () => process.env.JWT_SECRET, 
     catch (error) { const saved = await one('SELECT decision FROM client_portal_responses WHERE document_id=? AND client_id=?', [documentId, clientId]); if (!saved || saved.decision !== input.decision) throw fail(409, 'A response is already recorded'); }
     return getDocument(clientId, documentId);
   };
-  const attach = async (clientId, documentId, file) => {
+  const attach = async (clientId, documentId, file, tenantId = 1) => {
     await getDocument(clientId, documentId, false);
     if (!file || file.mimetype !== 'application/pdf' || file.buffer.subarray(0, 5).toString() !== '%PDF-') throw fail(400, 'Upload a valid PDF document');
     const filename = text(file.originalname.replace(/[\\/]/g, '_'), 180);
-    await query('UPDATE client_portal_documents SET file_name=?, file_mime=?, file_bytes=? WHERE id=? AND client_id=?', [filename, 'application/pdf', file.buffer, documentId, clientId]);
+    const r2Storage = require('./r2StorageService');
+    if (r2Storage.isConfigured()) {
+      const storageKey = r2Storage.tenantKey(tenantId, 'client-portal-docs', `doc-${documentId}-${Date.now()}.pdf`);
+      const uploadRes = await r2Storage.uploadPrivateObject(file.buffer, storageKey, 'application/pdf', {
+        clientId: String(clientId),
+        documentId: String(documentId),
+        originalFilename: filename,
+      });
+      if (uploadRes.success) {
+        await query('UPDATE client_portal_documents SET file_name=?, file_mime=?, file_bytes=NULL, storage_key=?, storage_provider=? WHERE id=? AND client_id=?',
+          [filename, 'application/pdf', storageKey, 'r2', documentId, clientId]);
+        return { storageKey, storageProvider: 'r2' };
+      }
+    }
+    // Fallback to storing in MySQL BLOB if R2 not configured
+    await query('UPDATE client_portal_documents SET file_name=?, file_mime=?, file_bytes=?, storage_key=NULL, storage_provider=? WHERE id=? AND client_id=?',
+      [filename, 'application/pdf', file.buffer, 'local', documentId, clientId]);
+    return { storageKey: null, storageProvider: 'local' };
   };
   const download = async (clientId, documentId) => {
     await getDocument(clientId, documentId);
-    const row = await one('SELECT file_name, file_mime, file_bytes FROM client_portal_documents WHERE id=? AND client_id=?', [documentId, clientId]);
-    if (!row?.file_bytes) throw fail(404, 'No PDF has been attached to this document'); return { ...row, file_bytes: Buffer.from(row.file_bytes) };
+    const row = await one('SELECT file_name, file_mime, file_bytes, storage_key, storage_provider FROM client_portal_documents WHERE id=? AND client_id=?', [documentId, clientId]);
+    if (!row) throw fail(404, 'No PDF has been attached to this document');
+    const r2Storage = require('./r2StorageService');
+    if (row.storage_key && (row.storage_provider === 'r2' || r2Storage.isConfigured())) {
+      try {
+        const streamRes = await r2Storage.getMediaStream(row.storage_key);
+        if (streamRes && streamRes.Body) {
+          return {
+            file_name: row.file_name,
+            file_mime: row.file_mime || 'application/pdf',
+            stream: streamRes.Body,
+            content_length: streamRes.ContentLength,
+            storage_key: row.storage_key,
+          };
+        }
+      } catch (err) {
+        if (!row.file_bytes) throw err;
+      }
+    }
+    if (!row.file_bytes) throw fail(404, 'No PDF has been attached to this document');
+    return { ...row, file_bytes: Buffer.from(row.file_bytes) };
   };
-  const unpublish = async (clientId, documentId) => { await getDocument(clientId, documentId, false); await query('DELETE FROM client_portal_documents WHERE id=? AND client_id=?', [documentId, clientId]); };
+  const unpublish = async (clientId, documentId) => {
+    await getDocument(clientId, documentId, false);
+    const row = await one('SELECT storage_key, storage_provider FROM client_portal_documents WHERE id=? AND client_id=?', [documentId, clientId]);
+    if (row?.storage_key) {
+      try {
+        const r2Storage = require('./r2StorageService');
+        await r2Storage.deleteObject(row.storage_key);
+      } catch (err) {
+        console.warn(`[ClientPortal] R2 cleanup note for ${row.storage_key}:`, err.message);
+      }
+    }
+    await query('DELETE FROM client_portal_documents WHERE id=? AND client_id=?', [documentId, clientId]);
+  };
   const requestRow = async (clientId, requestId) => { const row = await one('SELECT * FROM client_portal_requests WHERE id=? AND client_id=?', [requestId, clientId]); if (!row) throw fail(404, 'Request not found'); return row; };
   const requests = async (clientId) => query('SELECT id, subject, category, priority, status, body, created_at, updated_at FROM client_portal_requests WHERE client_id=? ORDER BY updated_at DESC, id DESC LIMIT 100', [clientId]);
   const createRequest = async (clientId, input) => {

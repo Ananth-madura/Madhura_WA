@@ -324,10 +324,17 @@ router.post("/channels/:id/attachments", handle(async (req, res, next) => {
 }));
 
 router.get("/attachments/stream/:storageKey", handle(async (req, res) => {
-  const { row, filePath } = await teamChat.getAttachmentFile(req, req.params.storageKey);
+  const { row, filePath, stream, contentLength } = await teamChat.getAttachmentFile(req, req.params.storageKey);
   res.setHeader("Content-Type", row.mime_type || "application/octet-stream");
   res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(row.file_name)}"`);
-  res.sendFile(filePath);
+  if (stream) {
+    if (contentLength) res.setHeader("Content-Length", String(contentLength));
+    stream.pipe(res);
+  } else if (filePath) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).json({ error: "Attachment not available" });
+  }
 }));
 
 /* ── Search & Members ─────────────────────────────────────────────────────── */

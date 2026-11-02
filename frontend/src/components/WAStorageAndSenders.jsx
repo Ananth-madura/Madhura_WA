@@ -1,5 +1,5 @@
 import { waUiStorage } from "../utils/waUiStorage";
-import { X, Download, Trash2, ShieldCheck } from "lucide-react";
+import { X, HardDrive, Download, Trash2, Database, ShieldCheck, RefreshCw } from "lucide-react";
 import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
@@ -40,7 +40,7 @@ export default function WAStorageAndSenders({ settings = false, compact = false,
     try {
       const stats = await getLocalStorageUsage();
       setUsage(stats);
-    } catch (_) {}
+    } catch (_) { }
   }, []);
 
   useEffect(() => {

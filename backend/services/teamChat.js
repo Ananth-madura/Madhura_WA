@@ -1369,10 +1369,35 @@ async function saveAttachment(req, channelId, file) {
   const storageKey = file.filename || path.basename(file.path);
   const fileUrl = `/api/v2/team-chat/attachments/stream/${storageKey}`;
 
+  const r2Storage = require("./r2StorageService");
+  let storageProvider = "local";
+  if (r2Storage.isConfigured()) {
+    try {
+      const fileBytes = file.buffer || (file.path && fs.existsSync(file.path) ? await fs.promises.readFile(file.path) : null);
+      if (fileBytes) {
+        const r2Key = r2Storage.tenantKey(req.tenantId, "team-chat", storageKey);
+        const uploadRes = await r2Storage.uploadPrivateObject(fileBytes, r2Key, file.mimetype || "application/octet-stream", {
+          tenantId: String(req.tenantId),
+          channelId: String(channel.id),
+          originalFilename: fileName,
+          uploadedBy: String(req.user.id),
+        });
+        if (uploadRes.success) {
+          storageProvider = "r2";
+          if (file.path && fs.existsSync(file.path)) {
+            await fs.promises.unlink(file.path).catch(() => {});
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[TeamChat] R2 upload fallback to local storage:", e.message);
+    }
+  }
+
   const result = await query(
-    `INSERT INTO team_chat_attachments (tenant_id, channel_id, message_id, file_name, file_size, mime_type, file_url, storage_key, uploaded_by)
-     VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)`,
-    [req.tenantId, channel.id, fileName, file.size, file.mimetype || "application/octet-stream", fileUrl, storageKey, req.user.id]
+    `INSERT INTO team_chat_attachments (tenant_id, channel_id, message_id, file_name, file_size, mime_type, file_url, storage_key, storage_provider, uploaded_by)
+     VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
+    [req.tenantId, channel.id, fileName, file.size, file.mimetype || "application/octet-stream", fileUrl, storageKey, storageProvider, req.user.id]
   );
 
   return {
@@ -1394,6 +1419,20 @@ async function getAttachmentFile(req, storageKey) {
   if (!row) throw fail("Attachment not found", 404);
   const channel = await assertChannel(req, row.channel_id);
   if (!row.message_id && Number(row.uploaded_by) !== Number(req.user.id)) throw fail("Attachment not available", 403);
+
+  const r2Storage = require("./r2StorageService");
+  if (row.storage_provider === "r2" || r2Storage.isConfigured()) {
+    try {
+      const r2Key = r2Storage.tenantKey(row.tenant_id, "team-chat", row.storage_key);
+      const streamRes = await r2Storage.getMediaStream(r2Key);
+      if (streamRes && streamRes.Body) {
+        return { row, stream: streamRes.Body, contentLength: streamRes.ContentLength };
+      }
+    } catch (_) {
+      // Fall through to local disk check if R2 failed
+    }
+  }
+
   const filePath = path.join(privateChatDir, row.storage_key);
   if (!fs.existsSync(filePath)) throw fail("Attachment file expired or unavailable", 404);
   return { row, filePath };
@@ -1754,9 +1793,17 @@ async function purgeExpired() {
     try {
     const cutoff = await windowSql(tenant.id);
     const expired = `SELECT id FROM team_chat_messages WHERE tenant_id = ? AND created_at < ${cutoff}`;
-    const attachments = await query(`SELECT id, storage_key FROM team_chat_attachments WHERE tenant_id = ? AND (created_at < ${cutoff} OR message_id IN (${expired}))`, [tenant.id, tenant.id]);
+    const attachments = await query(`SELECT id, storage_key, storage_provider FROM team_chat_attachments WHERE tenant_id = ? AND (created_at < ${cutoff} OR message_id IN (${expired}))`, [tenant.id, tenant.id]);
     for (const file of attachments) {
       if (file.storage_key && path.basename(file.storage_key) === file.storage_key) {
+        if (file.storage_provider === "r2") {
+          try {
+            const r2Storage = require("./r2StorageService");
+            if (r2Storage.isConfigured()) {
+              await r2Storage.deleteObject(r2Storage.tenantKey(tenant.id, "team-chat", file.storage_key));
+            }
+          } catch (_) {}
+        }
         for (const directory of [privateChatDir, mediaDir]) {
           try { await fs.promises.unlink(path.join(directory, file.storage_key)); }
           catch (error) { if (error.code !== "ENOENT") throw error; }

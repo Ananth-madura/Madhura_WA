@@ -33,7 +33,14 @@ function createClientPortalRouter(database = db, { staffAuth = verifyToken, admi
   router.post('/documents/:id/response', portalAuth, writeLimit, handle(async (req, res) => res.json(await service.respond(req.portalAccount.client_id, id(req.params.id), req.body))));
   router.get('/documents/:id/download', portalAuth, handle(async (req, res) => {
     const file = await service.download(req.portalAccount.client_id, id(req.params.id));
-    res.setHeader('Content-Type', file.file_mime); res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file.file_name)}`); res.send(file.file_bytes);
+    res.setHeader('Content-Type', file.file_mime || 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file.file_name)}`);
+    if (file.stream) {
+      if (file.content_length) res.setHeader('Content-Length', String(file.content_length));
+      file.stream.pipe(res);
+    } else {
+      res.send(file.file_bytes);
+    }
   }));
   router.post('/requests', portalAuth, writeLimit, handle(async (req, res) => res.status(201).json(await service.createRequest(req.portalAccount.client_id, req.body))));
   router.get('/requests/:id', portalAuth, handle(async (req, res) => res.json(await service.thread(req.portalAccount.client_id, id(req.params.id), req.query.before))));
@@ -75,8 +82,19 @@ function createClientPortalRouter(database = db, { staffAuth = verifyToken, admi
   admin.put('/settings', handle(async (req, res) => res.json(await service.saveSettings(req.body))));
   admin.post('/clients/:clientId/documents', handle(async (req, res) => res.status(201).json(await service.publish(id(req.params.clientId), req.body, req.user.id))));
   admin.delete('/clients/:clientId/documents/:id', handle(async (req, res) => { await service.unpublish(id(req.params.clientId), id(req.params.id)); res.json({ success: true }); }));
+  admin.get('/clients/:clientId/documents/:id/download', handle(async (req, res) => {
+    const file = await service.download(id(req.params.clientId), id(req.params.id));
+    res.setHeader('Content-Type', file.file_mime || 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file.file_name)}`);
+    if (file.stream) {
+      if (file.content_length) res.setHeader('Content-Length', String(file.content_length));
+      file.stream.pipe(res);
+    } else {
+      res.send(file.file_bytes);
+    }
+  }));
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-  admin.post('/clients/:clientId/documents/:id/file', upload.single('file'), handle(async (req, res) => { await service.attach(id(req.params.clientId), id(req.params.id), req.file); res.json({ success: true }); }));
+  admin.post('/clients/:clientId/documents/:id/file', upload.single('file'), handle(async (req, res) => { await service.attach(id(req.params.clientId), id(req.params.id), req.file, req.tenantId || 1); res.json({ success: true }); }));
   admin.get('/clients/:clientId/requests/:id', handle(async (req, res) => res.json(await service.thread(id(req.params.clientId), id(req.params.id), req.query.before))));
   admin.patch('/clients/:clientId/requests/:id', handle(async (req, res) => res.json(await service.updateRequest(id(req.params.clientId), id(req.params.id), req.body.status))));
   admin.post('/clients/:clientId/requests/:id/replies', handle(async (req, res) => res.json(await service.reply(id(req.params.clientId), id(req.params.id), req.body, { role: 'staff', id: req.user.id }))));

@@ -290,10 +290,29 @@ router.get("/knowledge", verifyToken, async (req, res) => {
 router.post("/knowledge", verifyToken, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "File is required" });
-    const doc = await waKnowledgeBase.addDocument(req.file, req.user?.id);
+    const doc = await waKnowledgeBase.addDocument(req.file, req.user?.id, req.tenantId || 1);
     res.status(201).json(doc);
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+router.get("/knowledge/:id/download", verifyToken, async (req, res) => {
+  try {
+    const doc = await waKnowledgeBase.getSourceDocument(req.params.id);
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(doc.filename)}"`);
+    if (doc.stream) {
+      if (doc.contentLength) res.setHeader("Content-Length", String(doc.contentLength));
+      doc.stream.pipe(res);
+    } else if (doc.content) {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.send(doc.content);
+    } else {
+      res.status(404).json({ error: "Source document unavailable" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

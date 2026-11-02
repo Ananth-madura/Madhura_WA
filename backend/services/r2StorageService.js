@@ -15,7 +15,9 @@ const {
   HeadObjectCommand,
   HeadBucketCommand,
   DeleteObjectCommand,
+  CopyObjectCommand,
 } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 class R2StorageService {
   constructor({ env = process.env, client } = {}) {
@@ -411,6 +413,202 @@ class R2StorageService {
       if (err.name === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) return null;
       throw new Error("R2 download unavailable");
     }
+  }
+
+  /**
+   * Upload an object into the private R2 bucket
+   */
+  async uploadPrivateObject(fileData, key, contentType = "application/octet-stream", metadata = {}) {
+    if (!this.isConfigured()) return { success: false, reason: "r2_not_configured" };
+    try {
+      const body = Buffer.isBuffer(fileData) ? fileData : fs.readFileSync(fileData);
+      const putCommand = new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+        CacheControl: "private, no-store",
+        Metadata: metadata,
+      });
+      await this.client.send(putCommand, { abortSignal: AbortSignal.timeout(20000) });
+      return { success: true, key, bucket: this.bucket, size: body.length };
+    } catch (err) {
+      if (this.isAuthError(err)) this.handleAuthFailure(err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Upload an object into the public R2 bucket (e.g. public campaign assets, brochures)
+   */
+  async uploadPublicObject(fileData, key, contentType = "application/octet-stream", metadata = {}) {
+    if (!this.isConfigured()) return { success: false, reason: "r2_not_configured" };
+    if (!this.publicBucket || !this.publicDomain) return { success: false, reason: "public_bucket_not_configured" };
+    try {
+      const body = Buffer.isBuffer(fileData) ? fileData : fs.readFileSync(fileData);
+      const putCommand = new PutObjectCommand({
+        Bucket: this.publicBucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+        CacheControl: "public, max-age=3600",
+        Metadata: metadata,
+      });
+      await this.client.send(putCommand, { abortSignal: AbortSignal.timeout(20000) });
+      const url = `${this.publicDomain}/${key}`;
+      return { success: true, key, url, bucket: this.publicBucket, size: body.length };
+    } catch (err) {
+      if (this.isAuthError(err)) this.handleAuthFailure(err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Retrieve a private object stream directly from R2
+   */
+  async getPrivateObjectStream(key) {
+    if (!this.isConfigured()) return null;
+    try {
+      const command = new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      });
+      return await this.client.send(command, { abortSignal: AbortSignal.timeout(15000) });
+    } catch (err) {
+      if (err.name === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) return null;
+      throw new Error("R2 private download unavailable");
+    }
+  }
+
+  /**
+   * Generate an authenticated, short-lived signed download URL
+   */
+  async createSignedDownloadUrl(key, { expiresIn = 900 } = {}) {
+    if (!this.isConfigured()) return null;
+    try {
+      const bucket = this.mediaBucket(key);
+      const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+      return await getSignedUrl(this.client, command, { expiresIn });
+    } catch (err) {
+      console.warn("[Cloudflare R2] Failed to generate signed download URL:", err.message);
+      return null;
+    }
+  }
+
+  /**
+   * Generate a secure, pre-signed upload URL
+   */
+  async createSignedUploadUrl(key, { contentType = "application/octet-stream", expiresIn = 900 } = {}) {
+    if (!this.isConfigured()) return null;
+    try {
+      const bucket = this.mediaBucket(key);
+      const command = new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType });
+      return await getSignedUrl(this.client, command, { expiresIn });
+    } catch (err) {
+      console.warn("[Cloudflare R2] Failed to generate signed upload URL:", err.message);
+      return null;
+    }
+  }
+
+  /**
+   * Check object existence and metadata
+   */
+  async headObject(key, { published = false } = {}) {
+    if (!this.isConfigured()) return null;
+    try {
+      const bucket = published ? this.publicBucket : this.mediaBucket(key);
+      const command = new HeadObjectCommand({ Bucket: bucket, Key: key });
+      return await this.client.send(command, { abortSignal: AbortSignal.timeout(10000) });
+    } catch (err) {
+      if (err.name === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) return null;
+      throw err;
+    }
+  }
+
+  /**
+   * Delete an object from R2
+   */
+  async deleteObject(key, { published = false } = {}) {
+    if (!this.isConfigured()) return false;
+    try {
+      const bucket = published ? this.publicBucket : this.mediaBucket(key);
+      const command = new DeleteObjectCommand({ Bucket: bucket, Key: key });
+      await this.client.send(command, { abortSignal: AbortSignal.timeout(15000) });
+      return true;
+    } catch (err) {
+      console.warn("[Cloudflare R2] Delete object failed:", err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Copy an object within R2
+   */
+  async copyObject(sourceKey, targetKey, { sourceBucket, targetBucket } = {}) {
+    if (!this.isConfigured()) throw new Error("R2 unavailable");
+    const srcB = sourceBucket || this.mediaBucket(sourceKey);
+    const dstB = targetBucket || this.mediaBucket(targetKey);
+    const command = new CopyObjectCommand({
+      CopySource: `${srcB}/${sourceKey}`,
+      Bucket: dstB,
+      Key: targetKey,
+    });
+    return await this.client.send(command, { abortSignal: AbortSignal.timeout(20000) });
+  }
+
+  /**
+   * Move an object within R2
+   */
+  async moveObject(sourceKey, targetKey, options = {}) {
+    await this.copyObject(sourceKey, targetKey, options);
+    await this.deleteObject(sourceKey, options);
+    return true;
+  }
+
+  /**
+   * Fetch object metadata
+   */
+  async getObjectMetadata(key) {
+    const head = await this.headObject(key);
+    if (!head) return null;
+    return {
+      contentType: head.ContentType,
+      contentLength: head.ContentLength,
+      lastModified: head.LastModified,
+      etag: head.ETag,
+      metadata: head.Metadata || {},
+    };
+  }
+
+  /**
+   * Verify object integrity against content hash
+   */
+  async verifyObjectIntegrity(key, expectedHash) {
+    const head = await this.headObject(key);
+    if (!head) return false;
+    if (!expectedHash) return true;
+    const cleanEtag = String(head.ETag || "").replace(/["']/g, "");
+    return cleanEtag === String(expectedHash).replace(/["']/g, "");
+  }
+
+  /**
+   * Calculate SHA-256 or MD5 checksum of a buffer or file
+   */
+  calculateChecksum(data, algorithm = "sha256") {
+    const buffer = Buffer.isBuffer(data) ? data : fs.readFileSync(data);
+    return require("node:crypto").createHash(algorithm).update(buffer).digest("hex");
+  }
+
+  /**
+   * Tenant key namespace builder
+   */
+  tenantKey(tenantId, category, filename) {
+    const safeTid = String(tenantId || "global").replace(/[^a-zA-Z0-9_-]/g, "");
+    const safeCat = String(category || "assets").replace(/[^a-zA-Z0-9_-]/g, "");
+    const ext = path.extname(filename || "").toLowerCase().replace(/[^a-z0-9.]/g, "");
+    const base = path.basename(filename || "file", ext).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 50);
+    const uid = require("node:crypto").randomUUID().slice(0, 8);
+    return `tenants/${safeTid}/${safeCat}/${Date.now()}_${uid}_${base}${ext}`;
   }
 }
 

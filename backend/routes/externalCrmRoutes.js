@@ -165,6 +165,8 @@ router.post(["/messages/send", "/send"], async (req, res) => {
 
 // ── POST /messages/send-media: Universal send media/file/document ───────────
 router.post(["/messages/send-media", "/send-media"], upload.single("file"), async (req, res) => {
+  let filePath = null;
+  let isEphemeral = false;
   try {
     const session = getSession(req);
     const { to, phone, caption, mediaUrl, filename } = req.body || {};
@@ -174,12 +176,12 @@ router.post(["/messages/send-media", "/send-media"], upload.single("file"), asyn
       return res.status(400).json({ success: false, error: "Recipient phone number is required" });
     }
 
-    let filePath = null;
     let fileOriginalName = filename || null;
 
     if (req.file) {
       filePath = req.file.path;
       fileOriginalName = fileOriginalName || req.file.originalname;
+      isEphemeral = req.body?.persist !== "true" && req.body?.persist !== true;
     } else if (mediaUrl) {
       // Download mediaUrl to local uploads
       const axios = require("axios");
@@ -189,6 +191,7 @@ router.post(["/messages/send-media", "/send-media"], upload.single("file"), asyn
       const dlRes = await axios.get(mediaUrl, { responseType: "arraybuffer", timeout: 15000 });
       fs.writeFileSync(filePath, Buffer.from(dlRes.data));
       fileOriginalName = fileOriginalName || path.basename(mediaUrl.split("?")[0]);
+      isEphemeral = true;
     } else {
       return res.status(400).json({ success: false, error: "Either file upload or 'mediaUrl' is required" });
     }
@@ -230,6 +233,10 @@ const result = await session.sendMediaMessage(
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  } finally {
+    if (isEphemeral && filePath && fs.existsSync(filePath)) {
+      try { await fs.promises.unlink(filePath); } catch (_) {}
+    }
   }
 });
 
