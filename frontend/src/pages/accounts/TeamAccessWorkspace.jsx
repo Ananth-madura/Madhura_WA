@@ -770,3 +770,4 @@ export default function TeamAccessWorkspace({ enterprise, request, admin }) {
     </div>
   );
 }
+

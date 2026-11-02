@@ -202,10 +202,11 @@ async function memberChatStatus(req) {
 // Recording errors never turn a confirmed provider send into a retryable failure.
 async function recordCloudSend(req, chatId, phone, messageId, body, type = "text", extra = {}) {
   const sessionKey = logSessionKey(req);
+  const persistContent = require("../services/waChatPrivacy").serverChatStorageEnabled();
   await db.promise().query(
     `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
      VALUES (?, ?, 'outbound', ?, ?, ?, 'sent', NOW())`,
-    [sessionKey, phone, type, body, messageId]
+    [sessionKey, phone, type, persistContent ? body : null, messageId]
   ).catch((err) => console.warn("[Cloud Send] History recording failed:", err.message));
   const contactTenantId = await require("../services/waContactTenancy").tenantForContactWrite({
     req,
@@ -215,7 +216,7 @@ async function recordCloudSend(req, chatId, phone, messageId, body, type = "text
     `INSERT INTO wa_contacts (tenant_id, name, phone, country_code, source, opt_in_status, last_message_text, last_message_at, unread_count)
      VALUES (?, 'Customer', ?, '91', 'WhatsApp Chat', 1, ?, NOW(), 0)
      ON DUPLICATE KEY UPDATE last_message_text = VALUES(last_message_text), last_message_at = NOW()`,
-    [contactTenantId, phone.slice(-10), body]
+    [contactTenantId, phone.slice(-10), persistContent ? body : null]
   ).catch(() => {});
   await require("../services/waBotGate").pauseBot(chatId, undefined, "manual cloud reply", sessionKey).catch(() => {});
   const io = req.app?.get("io");

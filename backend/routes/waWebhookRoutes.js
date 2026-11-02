@@ -314,29 +314,30 @@ async function processIncomingMessage(msg, metadata, contacts = [], account = nu
     messageText = msg[msg.type]?.caption || msg[msg.type]?.id || "";
   }
 
+  const persistContent = require("../services/waChatPrivacy").serverChatStorageEnabled();
   if (sharedConversation) {
     await db.promise().query(`INSERT IGNORE INTO wa_message_logs (tenant_id, conversation_id, sender_id, branch_id, session_key, phone, direction, message_type, message_text, wa_message_id, status, media_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'inbound', ?, ?, ?, 'delivered', ?, ?)`, [sharedSender.tenant_id, sharedConversation.id, sharedSender.id, sharedConversation.branch_id, sessionKey, phone, messageType, messageText, msgId, cloudMediaId, timestamp]);
+      VALUES (?, ?, ?, ?, ?, ?, 'inbound', ?, ?, ?, 'delivered', ?, ?)`, [sharedSender.tenant_id, sharedConversation.id, sharedSender.id, sharedConversation.branch_id, sessionKey, phone, messageType, persistContent ? messageText : null, msgId, cloudMediaId, timestamp]);
   } else await db.promise().query(
     `INSERT INTO wa_message_logs (phone, direction, message_type, message_text, wa_message_id, status, metadata, interactive_payload, has_media, media_mime_type, media_filename, created_at)
      VALUES (?, 'inbound', ?, ?, ?, 'delivered', ?, ?, ?, ?, ?, ?)`,
     [
       phone,
       messageType,
-      messageText,
+      persistContent ? messageText : null,
       msgId,
-      JSON.stringify(msg),
-      interaction ? JSON.stringify(interaction) : null,
+      persistContent ? JSON.stringify(msg) : null,
+      persistContent && interaction ? JSON.stringify(interaction) : null,
       isMediaMsg ? 1 : 0,
       mediaMimeType,
-      mediaFilename,
+      persistContent ? mediaFilename : null,
       timestamp,
     ]
   ).catch(async () => {
     await db.promise().query(
       `INSERT INTO wa_message_logs (phone, direction, message_type, message_text, wa_message_id, status, metadata, interactive_payload, created_at)
        VALUES (?, 'inbound', ?, ?, ?, 'delivered', ?, ?, ?)`,
-      [phone, messageType, messageText, msgId, JSON.stringify(msg), interaction ? JSON.stringify(interaction) : null, timestamp]
+      [phone, messageType, persistContent ? messageText : null, msgId, persistContent ? JSON.stringify(msg) : null, persistContent && interaction ? JSON.stringify(interaction) : null, timestamp]
     ).catch(() => {});
   });
 
@@ -422,7 +423,7 @@ async function processIncomingMessage(msg, metadata, contacts = [], account = nu
        name = COALESCE(VALUES(name), name),
        last_message_text = VALUES(last_message_text),
        last_message_at = NOW()`,
-    [contactTenantId, contactProfileName || `+${phone}`, phone.slice(-10), messageText]
+    [contactTenantId, contactProfileName || `+${phone}`, phone.slice(-10), persistContent ? messageText : null]
   ).catch(() => {});
 
   // Shared numbers are handled by their assigned employees; legacy session bots do not own these conversations.

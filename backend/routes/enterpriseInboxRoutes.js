@@ -198,7 +198,7 @@ router.post("/conversations/:id/reply", messageSendLimiter, handle(async (req, r
   try {
     await inbox.query("UPDATE wa_inbox_send_requests SET status = 'sent', provider_id = ? WHERE tenant_id = ? AND request_id = ?", [providerId, req.tenantId, requestId]);
     await inbox.query(`INSERT INTO wa_message_logs (tenant_id, conversation_id, sender_id, phone, direction, message_type, message_text, wa_message_id, status, sent_by, author_id, author_name)
-      VALUES (?, ?, ?, ?, 'outbound', 'text', ?, ?, 'sent', 'employee', ?, ?)`, [req.tenantId, row.id, row.sender_id, row.contact_phone, text, providerId, req.user.id, authorName]);
+      VALUES (?, ?, ?, ?, 'outbound', 'text', ?, ?, 'sent', 'employee', ?, ?)`, [req.tenantId, row.id, row.sender_id, row.contact_phone, serverChatStorageEnabled() ? text : null, providerId, req.user.id, authorName]);
     await inbox.query("UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND id = ?", [req.tenantId, row.id]);
   } catch (error) { console.error("[SharedInbox] Confirmed send metadata could not be saved:", error.code || "DB_ERROR"); }
   const message = { id: providerId, body: text, isMe: true, sentBy: "employee", authorId: req.user.id, authorName, status: "sent", timestamp: Math.floor(Date.now() / 1000), type: "text" };

@@ -444,6 +444,8 @@ async function messages(req, chatId, conversationId = null, limit = 10) {
           : row.message_type === "location"
           ? "📍 Location"
           : ""),
+      contentAvailable: Boolean(row.body),
+      historyUnavailable: !Boolean(row.body) && !isFile && !interactive && row.message_type !== "location",
       timestamp: Math.floor(new Date(row.created_at).getTime() / 1000),
       isMe: row.direction === "outbound",
       hasMedia: Boolean(isFile),

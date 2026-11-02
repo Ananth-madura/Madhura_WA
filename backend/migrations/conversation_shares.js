@@ -86,3 +86,4 @@ async function migrate(db) {
 }
 
 module.exports = { migrate };
+

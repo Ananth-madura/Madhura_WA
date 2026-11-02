@@ -74,6 +74,21 @@ import { DEMO_STATUS, DEMO_CHATS, DEMO_MESSAGES_MAP } from "../auth/demoData";
 import socket from "../socket/socket";
 import RichMessageContent from "../components/RichMessageContent";
 import { readLocalMessages, writeLocalMessages, mergeLocalMessages, readLocalMedia, writeLocalMedia, localMediaUrl, localCacheOwner, mediaFromFile } from "../utils/waLocalCache";
+import {
+  initializeLocalChatStorage,
+  saveLocalMessage,
+  saveBatchLocalMessages,
+  getLocalMessages,
+  getLocalMessageById,
+  updateLocalMessage,
+  saveLocalMedia,
+  getLocalMedia,
+  searchLocalMessages,
+  clearLocalConversation,
+  clearLocalChatStorage,
+  getLocalStorageUsage,
+  exportLocalChatData
+} from "../services/whatsappLocalMessageStore";
 import WAStorageAndSenders from "../components/WAStorageAndSenders";
 import WAInteractiveOptions from "../components/WAInteractiveOptions";
 import { getInteractiveMessage } from "../utils/waInteractiveMessage";
@@ -314,13 +329,32 @@ function MediaBubble({ chatId, messageId, serializedId = null, filename = "", me
     setLoading(true);
     setError(false);
     try {
+      // 1. Check SociaWhatsAppLocal IndexedDB
+      const localCached = await getLocalMedia(cloudMediaId || messageId).catch(() => null);
+      if (localCached?.url) {
+        localBlobRef.current = localCached.url;
+        setMedia(localCached);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Check legacy waLocalCache
       const token = waUiStorage.getItem("token");
       const owner = localCacheOwner();
       const cached = await readLocalMedia(`${chatId}:${messageId}`, owner);
       if (cached?.data) {
         localBlobRef.current = localMediaUrl(cached);
-        setMedia({ ...cached, url: localBlobRef.current }); setLoading(false); return;
+        setMedia({ ...cached, url: localBlobRef.current });
+        await saveLocalMedia(cloudMediaId || messageId, cached.data, {
+          conversationId: chatId,
+          filename: cached.filename || filename,
+          mimetype: cached.mimetype || mimetype
+        }).catch(() => {});
+        setLoading(false);
+        return;
       }
+
+      // 3. Authenticated media streaming proxy
       const url = `${API}/api/whatsapp/chat/${encodeURIComponent(chatId)}/media/${encodeURIComponent(messageId)}?${new URLSearchParams({ ...(serializedId ? { serializedId } : {}), ...(cloudMediaId ? { cloudMediaId } : {}) })}`;
       const { data } = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
@@ -328,6 +362,11 @@ function MediaBubble({ chatId, messageId, serializedId = null, filename = "", me
       if (data && (data.url || data.data)) {
         if (data.data) {
           await writeLocalMedia(`${chatId}:${messageId}`, data, owner).catch(() => {});
+          await saveLocalMedia(cloudMediaId || messageId, data.data, {
+            conversationId: chatId,
+            filename: data.filename || filename,
+            mimetype: data.mimetype || mimetype
+          }).catch(() => {});
           localBlobRef.current = localMediaUrl(data);
           setMedia({ ...data, url: localBlobRef.current });
         } else setMedia(data);
@@ -338,7 +377,7 @@ function MediaBubble({ chatId, messageId, serializedId = null, filename = "", me
       setError(true);
     }
     setLoading(false);
-  }, [chatId, messageId, mediaUrl, serializedId, cloudMediaId]);
+  }, [chatId, messageId, mediaUrl, serializedId, cloudMediaId, filename, mimetype]);
 
   useEffect(() => {
     if (mediaUrl && !mediaUrl.startsWith("blob:")) {
@@ -664,6 +703,12 @@ export default function WhatsAppPage() {
   const lastQrRefreshClickRef = useRef(0);
 
   useEffect(() => {
+    initializeLocalChatStorage().catch((err) => {
+      console.warn("[SociaWhatsAppLocal] Engine init error:", err?.message);
+    });
+  }, []);
+
+  useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
     }, 150);
@@ -921,6 +966,7 @@ export default function WhatsAppPage() {
       const toStore = messages.slice(0, 100);
       safeLocalStorageSet(`wa_chat_messages_${selectedChat.id}`, JSON.stringify(toStore));
       writeLocalMessages(selectedChat.id, messages).catch(() => {});
+      saveBatchLocalMessages(messages.filter((m) => m.body && !m.historyUnavailable)).catch(() => {});
       if (!messagesCacheRef.current) messagesCacheRef.current = {};
       messagesCacheRef.current[selectedChat.id] = messages;
     }
@@ -1343,6 +1389,17 @@ export default function WhatsAppPage() {
       if (limit === 10) setTimeout(() => scrollToBottom(false), 50);
       return;
     }
+
+    // Step 1: Instant load from browser IndexedDB (SociaWhatsAppLocal)
+    let localStored = [];
+    try {
+      localStored = await getLocalMessages(chatId, { limit }).catch(() => []);
+      if (Array.isArray(localStored) && localStored.length > 0) {
+        messagesCacheRef.current[chatId] = localStored;
+        setMessages(localStored);
+      }
+    } catch (_) {}
+
     const hasCached = Boolean(messagesCacheRef.current[chatId] && messagesCacheRef.current[chatId].length > 0);
     if (!hasCached) {
       try {
@@ -1361,21 +1418,82 @@ export default function WhatsAppPage() {
         else setLoadingMore(true);
       }
     }
+
+    // Step 2: Fetch metadata from server and reconcile
     try {
       const token = waUiStorage.getItem("token");
       const res = await axios.get(`${API}/api/whatsapp/chat/${encodeURIComponent(chatId)}/messages?limit=${limit}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const local = await readLocalMessages(chatId);
-      const data = mergeLocalMessages(mergeLocalMessages(local, messagesCacheRef.current[chatId] || []), res.data || []);
-      await writeLocalMessages(chatId, data).catch(() => {});
-      messagesCacheRef.current[chatId] = data;
-      setMessages(data);
-      if (Array.isArray(data) && data.length > 0) {
-        safeLocalStorageSet(`wa_chat_messages_${chatId}`, JSON.stringify(data.slice(0, 100)));
+      const serverRecords = Array.isArray(res.data) ? res.data : [];
+
+      // Reconcile server metadata with local IndexedDB records
+      const localMap = new Map();
+      for (const m of localStored) {
+        if (m.id) localMap.set(String(m.id), m);
+        if (m.serializedId) localMap.set(String(m.serializedId), m);
       }
+
+      const toSaveLocally = [];
+      const reconciled = serverRecords.map((srv) => {
+        const srvId = String(srv.id || "");
+        const local = localMap.get(srvId) || (srv.serializedId ? localMap.get(String(srv.serializedId)) : null);
+
+        if (local) {
+          // Local record exists: preserve local message body & media, update server status
+          return {
+            ...srv,
+            ...local,
+            status: srv.status || local.status,
+            contentAvailable: true,
+            historyUnavailable: false
+          };
+        } else {
+          // Server record without local copy
+          const hasContent = Boolean(srv.body && srv.body.trim().length > 0);
+          if (hasContent) {
+            toSaveLocally.push(srv);
+            return {
+              ...srv,
+              contentAvailable: true,
+              historyUnavailable: false
+            };
+          } else {
+            // Offline message gap
+            return {
+              ...srv,
+              contentAvailable: false,
+              historyUnavailable: !srv.hasMedia && !srv.interactive && srv.type !== "location"
+            };
+          }
+        }
+      });
+
+      // Retain pending optimistic messages
+      for (const local of localStored) {
+        const exists = reconciled.some((r) => r.id === local.id || (local.serializedId && r.serializedId === local.serializedId));
+        if (!exists && String(local.id).startsWith("temp_")) {
+          reconciled.push(local);
+        }
+      }
+
+      reconciled.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+      if (toSaveLocally.length > 0) {
+        saveBatchLocalMessages(toSaveLocally).catch(() => {});
+      }
+
+      // Sync with legacy cache for backward compatibility
+      const legacyLocal = await readLocalMessages(chatId).catch(() => []);
+      const mergedLegacy = mergeLocalMessages(legacyLocal, reconciled);
+      await writeLocalMessages(chatId, mergedLegacy).catch(() => {});
+
+      messagesCacheRef.current[chatId] = reconciled;
+      setMessages(reconciled);
       if (limit === 10) scrollToBottom(false);
-    } catch { }
+    } catch (err) {
+      console.warn("[LocalFirst] Reconcile messages error:", err?.message);
+    }
     setMessagesLoading(false);
     setLoadingMore(false);
   }, [demoMode, scrollToBottom]);
@@ -1631,6 +1749,7 @@ export default function WhatsAppPage() {
       isMe: true,
       status: "sending",
     };
+    saveLocalMessage(tempMsg, selectedChat.id).catch(() => {});
     setMessages((prev) => [tempMsg, ...prev]);
     setTimeout(scrollToBottom, 50);
 
@@ -1734,6 +1853,10 @@ export default function WhatsAppPage() {
 
       // Mark message as delivered/sent in thread
       const realId = res.data?.id || res.data?.result?.id || tempId;
+      updateLocalMessage(tempId, { id: realId, status: "sent", body: textToSend }).catch(() => {});
+      if (realId !== tempId) {
+        saveLocalMessage({ ...tempMsg, id: realId, status: "sent" }, selectedChat.id).catch(() => {});
+      }
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId || m.idempotencyKey === idempotencyKey
@@ -1748,12 +1871,14 @@ export default function WhatsAppPage() {
       // It may be on the customer's phone. Say so and make no further attempt.
       if (payload?.deliveryUnknown) {
         setDeliveryWarning(payload.error || "Delivery could not be confirmed.");
+        updateLocalMessage(tempId, { status: "unknown" }).catch(() => {});
         setMessages((prev) =>
           prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "unknown" } : m))
         );
       } else {
         const msg = payload?.error || err.message || "Failed to send message";
         setError(`Failed to send message: ${msg}`);
+        updateLocalMessage(tempId, { status: "failed" }).catch(() => {});
         setMessages((prev) =>
           prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "failed" } : m))
         );
@@ -1846,6 +1971,7 @@ export default function WhatsAppPage() {
       isMe: true,
       status: "sending",
     };
+    saveLocalMessage(tempMsg, selectedChat.id).catch(() => {});
     setMessages((prev) => [tempMsg, ...prev]);
     setTimeout(scrollToBottom, 50);
 
@@ -1876,6 +2002,10 @@ export default function WhatsAppPage() {
       );
 
       const realId = res.data?.id || res.data?.result?.id || tempId;
+      updateLocalMessage(tempId, { id: realId, status: "sent", body: cleanText }).catch(() => {});
+      if (realId !== tempId) {
+        saveLocalMessage({ ...tempMsg, id: realId, status: "sent" }, selectedChat.id).catch(() => {});
+      }
       setMessages((prev) =>
         prev.map((m) =>
           m.idempotencyKey === idempotencyKey ? { ...m, id: realId, status: "sent" } : m
@@ -1885,11 +2015,13 @@ export default function WhatsAppPage() {
       const payload = err.response?.data;
       if (payload?.deliveryUnknown) {
         setDeliveryWarning(payload.error || "Delivery could not be confirmed.");
+        updateLocalMessage(tempId, { status: "unknown" }).catch(() => {});
         setMessages((prev) =>
           prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "unknown" } : m))
         );
       } else {
         console.warn("handleSendDirect error:", err.message);
+        updateLocalMessage(tempId, { status: "failed" }).catch(() => {});
         setMessages((prev) =>
           prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "failed" } : m))
         );
@@ -1974,6 +2106,8 @@ export default function WhatsAppPage() {
       filename: file.name,
       status: "sending",
     };
+    saveLocalMedia(tempId, file, { conversationId: selectedChat.id, filename: file.name, mimetype: file.type }).catch(() => {});
+    saveLocalMessage(optimisticMsg, selectedChat.id).catch(() => {});
     setMessages((prev) => [optimisticMsg, ...prev]);
     scrollToBottom();
 
@@ -2009,6 +2143,11 @@ export default function WhatsAppPage() {
       const res = await axios.post(`${API}/api/whatsapp/send-media-upload`, formData, { headers, timeout: 60000 });
       const realId = res.data?.id || tempId;
       await writeLocalMedia(`${selectedChat.id}:${realId}`, localFile, owner).catch(() => {});
+      await saveLocalMedia(realId, file, { conversationId: selectedChat.id, filename: file.name, mimetype: file.type }).catch(() => {});
+      await updateLocalMessage(tempId, { id: realId, status: "sent", mediaUrl: localBlobUrl }).catch(() => {});
+      if (realId !== tempId) {
+        await saveLocalMessage({ ...optimisticMsg, id: realId, status: "sent" }, selectedChat.id).catch(() => {});
+      }
       setMessages((prev) => {
         const next = prev.map((m) =>
           m.id === tempId ? { ...m, id: realId, mediaUrl: localBlobUrl, status: "sent" } : m
@@ -2025,6 +2164,7 @@ export default function WhatsAppPage() {
       }
       const errMsg = payload?.error || err.message || "Failed to send attachment";
       setError(`Attachment error: ${errMsg}`);
+      updateLocalMessage(tempId, { status: payload?.deliveryUnknown || !err.response ? "unknown" : "failed" }).catch(() => {});
       setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, status: payload?.deliveryUnknown || !err.response ? "unknown" : "failed" } : m)));
     }
     setMediaSending(false);
@@ -3290,6 +3430,10 @@ export default function WhatsAppPage() {
         isMe: Boolean(data?.isMe),
       };
 
+      if (msgObj && (targetChatId || activeSelected?.id)) {
+        saveLocalMessage(msgObj, targetChatId || activeSelected?.id).catch(() => {});
+      }
+
       const owner = localCacheOwner();
       if (data?.sessionKey && String(data.sessionKey) !== owner) return;
       // Play pleasant audio chime on inbound messages (respects sound toggle)
@@ -3436,6 +3580,7 @@ export default function WhatsAppPage() {
     const handleMessageUpdated = (data) => {
       const { id, serializedId, mediaUrl, filename } = data || {};
       if (!id && !serializedId) return;
+      updateLocalMessage(id || serializedId, data).catch(() => {});
       setMessages((prev) => {
         const next = prev.map((m) => {
           if (m.id === id || (serializedId && m.serializedId === serializedId)) {
@@ -3530,6 +3675,7 @@ export default function WhatsAppPage() {
       if (!message?.id && !message?.serializedId) return;
       const status = message.status;
       if (!status) return;
+      updateLocalMessage(message.id || message.serializedId, { status, ack: message.ack }).catch(() => {});
 
       setMessages((prev) =>
         prev.map((m) =>
@@ -4893,12 +5039,10 @@ export default function WhatsAppPage() {
                 >
                   <RefreshCw size={14} className={chatsLoading ? "animate-spin text-[var(--color-ink)]" : ""} />
                 </button>
-                {isAdminView && (
-                  <details className="wa-storage-details is-icon">
-                    <summary title="Sender & storage" aria-label="Sender and storage"><Database size={15} /><ChevronDown size={13} /></summary>
-                    <div className="wa-storage-popover"><WAStorageAndSenders compact /></div>
-                  </details>
-                )}
+                <details className="wa-storage-details is-icon">
+                  <summary title="Device Storage & Privacy" aria-label="Device storage and privacy"><Database size={15} /><ChevronDown size={13} /></summary>
+                  <div className="wa-storage-popover"><WAStorageAndSenders compact /></div>
+                </details>
               </div>
             ) : (
               <>
@@ -5649,6 +5793,11 @@ export default function WhatsAppPage() {
                                       >
                                         <MapPin size={14} /> {msg.location.name || "Shared location"}
                                       </a>
+                                    ) : (msg.historyUnavailable || (!msg.body && !msg.hasMedia && !msg.interactive && !msg.location && msg.contentAvailable === false)) ? (
+                                      <div className="py-1 px-2.5 rounded-lg bg-[var(--color-paper-2)]/80 border border-dashed border-[var(--color-rule)] text-[11px] text-[var(--color-ink-2)] flex items-center gap-1.5 my-1">
+                                        <Info size={13} className="shrink-0 text-amber-500" />
+                                        <span>History not available on this device · Message received while offline</span>
+                                      </div>
                                     ) : (msg.hasMedia || msg.type === "image" || msg.type === "video" || msg.type === "audio" || msg.type === "ptt" || msg.type === "document" || msg.type === "sticker" || isFilename(msg.body) || isFilename(msg.filename)) ? (
                                       <div className="space-y-1">
                                         <MediaBubble
