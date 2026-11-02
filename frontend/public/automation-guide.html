@@ -1,0 +1,2689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Automation Command Center — Visual Master Guide</title>
+  <style>
+    /* ==========================================================================
+       CSS RESET & DESIGN TOKENS (Strict Anti-Slop System)
+       Slate / Zinc Neutral Palette + Deep Navy Accents + Emerald Semantic Highlights
+       ========================================================================== */
+    :root {
+      --bg-base: #090d16;
+      --bg-surface: #0f172a;
+      --bg-surface-elevated: #131e36;
+      --bg-surface-highlight: #1a2744;
+      --border-subtle: #1e293b;
+      --border-focus: #334155;
+      --border-active: #10b981;
+      
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.2);
+      --emerald-dark: #064e3b;
+      --sky: #0ea5e9;
+      --sky-glow: rgba(14, 165, 233, 0.2);
+      --amber: #f59e0b;
+      --amber-glow: rgba(245, 158, 11, 0.2);
+      --rose: #f43f5e;
+      --rose-glow: rgba(244, 63, 94, 0.2);
+      --indigo: #6366f1;
+      
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --radius-full: 9999px;
+      
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+      --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.5), 0 2px 6px -1px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 12px 28px -4px rgba(0, 0, 0, 0.7), 0 6px 14px -2px rgba(0, 0, 0, 0.5);
+      --shadow-emerald: 0 0 20px -2px rgba(16, 185, 129, 0.25);
+      
+      --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      color-scheme: dark;
+    }
+
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
+      padding-bottom: 80px;
+    }
+
+    /* Ambient Background Grid */
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 60%),
+        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 100% 100%, 48px 48px, 48px 48px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Layout Containers */
+    .container {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 0 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ==========================================================================
+       HEADER & NAVIGATION
+       ========================================================================== */
+    header.top-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(9, 13, 22, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-subtle);
+      transition: var(--transition-normal);
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 68px;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text-main);
+    }
+
+    .nav-logo-badge {
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, #10b981, #047857);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+    }
+
+    .nav-logo-badge svg {
+      width: 22px;
+      height: 22px;
+      fill: #ffffff;
+    }
+
+    .nav-brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .nav-brand-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      transition: var(--transition-fast);
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active {
+      color: var(--text-main);
+      background-color: var(--bg-surface-elevated);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .badge-live {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--emerald);
+    }
+
+    .pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+      animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    @keyframes pulse-ring {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.3); }
+    }
+
+    /* ==========================================================================
+       HERO SECTION
+       ========================================================================== */
+    .hero-section {
+      padding: 72px 0 48px;
+      text-align: center;
+    }
+
+    .hero-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      padding: 6px 14px;
+      border-radius: var(--radius-full);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--emerald);
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .hero-title {
+      font-size: 48px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 18px;
+      max-width: 900px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .hero-title span.highlight {
+      background: linear-gradient(135deg, #10b981 20%, #38bdf8 80%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-desc {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 740px;
+      margin: 0 auto 36px;
+      line-height: 1.6;
+    }
+
+    .hero-cta-group {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 22px;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: var(--transition-fast);
+      border: 1px solid transparent;
+      user-select: none;
+    }
+
+    .btn-primary {
+      background: var(--emerald);
+      color: #042016;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+    }
+
+    .btn-primary:hover {
+      background: #0ea572;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(16, 185, 129, 0.45);
+    }
+
+    .btn-secondary {
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      border-color: var(--border-subtle);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-surface-highlight);
+      border-color: var(--border-focus);
+      transform: translateY(-1px);
+    }
+
+    /* Floating Stats Ticker */
+    .stats-ticker {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-top: 56px;
+    }
+
+    .stat-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+      transition: var(--transition-normal);
+    }
+
+    .stat-card:hover {
+      border-color: var(--border-focus);
+      transform: translateY(-2px);
+    }
+
+    .stat-card::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: var(--emerald);
+      opacity: 0.6;
+    }
+
+    .stat-card.sky::after { background: var(--sky); }
+    .stat-card.amber::after { background: var(--amber); }
+    .stat-card.indigo::after { background: var(--indigo); }
+
+    .stat-num {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+
+    .stat-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* ==========================================================================
+       ARCHITECTURE: THE 3 PILLARS INTERACTIVE VISUALIZER
+       ========================================================================== */
+    .section-block {
+      padding: 64px 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .section-header {
+      margin-bottom: 40px;
+    }
+
+    .section-tag {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--emerald);
+      margin-bottom: 8px;
+      display: inline-block;
+    }
+
+    .section-title {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+
+    .section-subtitle {
+      font-size: 16px;
+      color: var(--text-muted);
+      max-width: 680px;
+    }
+
+    /* 3 Pillars Grid */
+    .pillars-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-bottom: 40px;
+    }
+
+    .pillar-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      transition: var(--transition-normal);
+      cursor: pointer;
+    }
+
+    .pillar-card:hover,
+    .pillar-card.active {
+      border-color: var(--emerald);
+      background: var(--bg-surface-elevated);
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-emerald);
+    }
+
+    .pillar-icon-box {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      color: var(--emerald);
+    }
+
+    .pillar-card.sky .pillar-icon-box {
+      background: rgba(14, 165, 233, 0.1);
+      border-color: rgba(14, 165, 233, 0.25);
+      color: var(--sky);
+    }
+
+    .pillar-card.amber .pillar-icon-box {
+      background: rgba(245, 158, 11, 0.1);
+      border-color: rgba(245, 158, 11, 0.25);
+      color: var(--amber);
+    }
+
+    .pillar-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .pillar-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 20px;
+      flex-grow: 1;
+    }
+
+    .pillar-features {
+      list-style: none;
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 16px;
+      font-size: 13px;
+      color: var(--text-main);
+    }
+
+    .pillar-features li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .pillar-features li svg {
+      width: 14px;
+      height: 14px;
+      fill: var(--emerald);
+      flex-shrink: 0;
+    }
+
+    /* Interactive Visual Bridge */
+    .triad-visualizer {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      position: relative;
+    }
+
+    .triad-visualizer-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .triad-pipeline-stage {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .flow-node {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      text-align: center;
+      position: relative;
+    }
+
+    .flow-node.active-pulse {
+      border-color: var(--emerald);
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.3);
+    }
+
+    .flow-node-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .flow-node-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .flow-connector {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: var(--text-dim);
+    }
+
+    .connector-beam {
+      width: 40px;
+      height: 2px;
+      background: var(--border-subtle);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .connector-beam::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, var(--emerald), transparent);
+      animation: beam-flow 2s infinite linear;
+    }
+
+    @keyframes beam-flow {
+      0% { left: -100%; }
+      100% { left: 100%; }
+    }
+
+    /* ==========================================================================
+       COMMAND CENTER: 8 MODULES SHOWCASE (INTERACTIVE TABS)
+       ========================================================================== */
+    .tabs-controller {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 12px;
+      margin-bottom: 28px;
+      border-bottom: 1px solid var(--border-subtle);
+      scrollbar-width: thin;
+    }
+
+    .tab-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      padding: 10px 18px;
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: var(--transition-fast);
+    }
+
+    .tab-btn:hover {
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      border-color: var(--border-focus);
+    }
+
+    .tab-btn.active {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: var(--emerald);
+      color: var(--emerald);
+    }
+
+    .tab-pane {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .tab-pane.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Tab Content Grid */
+    .module-display {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 32px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+    }
+
+    .module-info h3 {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .module-info p {
+      font-size: 15px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .feature-points {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .feature-point-item {
+      display: flex;
+      gap: 12px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+    }
+
+    .feature-point-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--emerald);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 14px;
+    }
+
+    .feature-point-text h4 {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .feature-point-text p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 0;
+    }
+
+    /* Module Live Mockup */
+    .module-mockup-frame {
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-md);
+    }
+
+    .mockup-header {
+      background: var(--bg-surface-elevated);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .mockup-dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .mockup-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--border-focus);
+    }
+
+    .mockup-dot.red { background: #ef4444; }
+    .mockup-dot.yellow { background: #f59e0b; }
+    .mockup-dot.green { background: #10b981; }
+
+    .mockup-label {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+    }
+
+    .mockup-body {
+      padding: 20px;
+      overflow-y: auto;
+      max-height: 480px;
+    }
+
+    /* ==========================================================================
+       INTERACTIVE PIPELINE SIMULATOR & PHONE MOCKUP
+       ========================================================================== */
+    .simulator-wrapper {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      position: relative;
+    }
+
+    .simulator-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .control-select,
+    .control-input {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      color: var(--text-main);
+      font-size: 14px;
+      font-family: var(--font-sans);
+      outline: none;
+      transition: var(--transition-fast);
+    }
+
+    .control-select:focus,
+    .control-input:focus {
+      border-color: var(--emerald);
+      box-shadow: 0 0 0 2px var(--emerald-glow);
+    }
+
+    /* Phone Mockup Canvas */
+    .phone-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .phone-shell {
+      width: 340px;
+      height: 580px;
+      background: #0f172a;
+      border: 8px solid #1e293b;
+      border-radius: 36px;
+      box-shadow: var(--shadow-lg), 0 0 30px rgba(0, 0, 0, 0.8);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .phone-notch {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 120px;
+      height: 18px;
+      background: #1e293b;
+      border-bottom-left-radius: 12px;
+      border-bottom-right-radius: 12px;
+      z-index: 20;
+    }
+
+    .phone-wa-header {
+      background: #075e54;
+      color: #ffffff;
+      padding: 24px 14px 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 10;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .wa-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #128c7e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .wa-header-info {
+      flex: 1;
+    }
+
+    .wa-name {
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .wa-status {
+      font-size: 10px;
+      color: #a7f3d0;
+    }
+
+    .phone-wa-chat {
+      flex: 1;
+      background: #0b141a;
+      background-image: radial-gradient(#1e293b 0.75px, transparent 0.75px);
+      background-size: 16px 16px;
+      padding: 14px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .wa-bubble {
+      max-width: 82%;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      line-height: 1.4;
+      position: relative;
+      box-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
+      animation: bubblePop 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    }
+
+    @keyframes bubblePop {
+      0% { opacity: 0; transform: scale(0.9) translateY(10px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .wa-bubble.incoming {
+      background: #202c33;
+      color: #e9edef;
+      align-self: flex-start;
+      border-top-left-radius: 0;
+    }
+
+    .wa-bubble.outgoing {
+      background: #005c4b;
+      color: #e9edef;
+      align-self: flex-end;
+      border-top-right-radius: 0;
+    }
+
+    .wa-time {
+      font-size: 9px;
+      color: #8696a0;
+      float: right;
+      margin-left: 8px;
+      margin-top: 4px;
+    }
+
+    .wa-pdf-card {
+      background: #111b21;
+      border: 1px solid #222e35;
+      border-radius: 6px;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .wa-pdf-icon {
+      width: 28px;
+      height: 28px;
+      background: #ef4444;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .wa-btn-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 8px;
+    }
+
+    .wa-quick-btn {
+      background: #222e35;
+      border: 1px solid #2a3942;
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: #00a884;
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+
+    .wa-quick-btn:hover {
+      background: #2a3942;
+      color: #25d366;
+    }
+
+    .wa-typing-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 10px;
+      background: #202c33;
+      border-radius: 12px;
+      align-self: flex-start;
+    }
+
+    .typing-dot {
+      width: 5px;
+      height: 5px;
+      background: #8696a0;
+      border-radius: 50%;
+      animation: typingJump 1.2s infinite ease-in-out;
+    }
+
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes typingJump {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-4px); }
+    }
+
+    /* ==========================================================================
+       CONDITION ENGINE VISUALIZER (NESTED AND/OR LOGIC)
+       ========================================================================== */
+    .condition-builder-mock {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 24px;
+    }
+
+    .rule-group {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px dashed var(--border-focus);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .rule-group-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .operator-toggle {
+      display: inline-flex;
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+
+    .op-btn {
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      transition: var(--transition-fast);
+    }
+
+    .op-btn.active {
+      background: var(--emerald);
+      color: #042016;
+    }
+
+    .rule-row {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1.2fr auto;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .rule-field,
+    .rule-comp,
+    .rule-val {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      font-size: 13px;
+      color: var(--text-main);
+    }
+
+    .rule-status-badge {
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .rule-status-badge.pass {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .rule-status-badge.fail {
+      background: rgba(244, 63, 94, 0.2);
+      color: var(--rose);
+      border: 1px solid rgba(244, 63, 94, 0.4);
+    }
+
+    /* ==========================================================================
+       DYNAMIC VARIABLE CHEAT SHEET
+       ========================================================================== */
+    .variable-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .var-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      position: relative;
+    }
+
+    .var-card:hover {
+      border-color: var(--border-focus);
+    }
+
+    .var-badge {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--sky);
+      background: rgba(14, 165, 233, 0.1);
+      border: 1px solid rgba(14, 165, 233, 0.25);
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+    }
+
+    .var-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .var-copy-btn {
+      width: 100%;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: var(--transition-fast);
+    }
+
+    .var-copy-btn:hover {
+      background: var(--bg-surface-highlight);
+      border-color: var(--emerald);
+      color: var(--emerald);
+    }
+
+    /* ==========================================================================
+       INDUSTRY BLUEPRINTS (READY-TO-USE RECIPES)
+       ========================================================================== */
+    .blueprints-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .blueprint-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      transition: var(--transition-normal);
+    }
+
+    .blueprint-card:hover {
+      border-color: var(--emerald);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .blueprint-industry-tag {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--emerald);
+      margin-bottom: 8px;
+    }
+
+    .blueprint-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .blueprint-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 18px;
+      flex-grow: 1;
+    }
+
+    .blueprint-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 14px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .blueprint-load-btn {
+      background: transparent;
+      border: none;
+      color: var(--emerald);
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+    }
+
+    .blueprint-load-btn:hover {
+      text-decoration: underline;
+    }
+
+    /* ==========================================================================
+       INTERACTIVE QUIZ (KNOWLEDGE VERIFICATION)
+       ========================================================================== */
+    .quiz-container {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 36px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .quiz-question-box {
+      margin-bottom: 28px;
+    }
+
+    .quiz-q-num {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--emerald);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    .quiz-q-text {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .quiz-options {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .quiz-opt {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: var(--transition-fast);
+      user-select: none;
+    }
+
+    .quiz-opt:hover {
+      border-color: var(--border-focus);
+      background: var(--bg-surface-highlight);
+    }
+
+    .quiz-opt.selected-correct {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: var(--emerald);
+      color: var(--text-main);
+    }
+
+    .quiz-opt.selected-wrong {
+      background: rgba(244, 63, 94, 0.15);
+      border-color: var(--rose);
+      color: var(--text-main);
+    }
+
+    .quiz-feedback {
+      margin-top: 8px;
+      font-size: 13px;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      display: none;
+    }
+
+    .quiz-feedback.show-correct {
+      display: block;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--emerald);
+    }
+
+    .quiz-feedback.show-wrong {
+      display: block;
+      background: rgba(244, 63, 94, 0.12);
+      border: 1px solid rgba(244, 63, 94, 0.3);
+      color: var(--rose);
+    }
+
+    /* ==========================================================================
+       SEARCH BAR & UTILITIES
+       ========================================================================== */
+    .search-guide-box {
+      margin-bottom: 32px;
+      position: relative;
+    }
+
+    .search-input {
+      width: 100%;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 16px 20px 16px 48px;
+      font-size: 15px;
+      color: var(--text-main);
+      outline: none;
+      transition: var(--transition-fast);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .search-input:focus {
+      border-color: var(--emerald);
+      box-shadow: 0 0 0 3px var(--emerald-glow);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 18px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim);
+      pointer-events: none;
+    }
+
+    /* Diagnostics Log Box */
+    .diagnostic-terminal {
+      background: #050811;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.6;
+      color: #cbd5e1;
+      overflow-x: auto;
+      max-height: 240px;
+    }
+
+    .log-line {
+      display: flex;
+      gap: 12px;
+    }
+
+    .log-ts {
+      color: #64748b;
+      user-select: none;
+    }
+
+    .log-tag {
+      font-weight: 700;
+    }
+
+    .log-tag.info { color: #38bdf8; }
+    .log-tag.success { color: #34d399; }
+    .log-tag.warn { color: #fbbf24; }
+    .log-tag.error { color: #f87171; }
+
+    /* Footer */
+    footer.guide-footer {
+      border-top: 1px solid var(--border-subtle);
+      padding: 40px 0 20px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 13px;
+    }
+
+    /* Responsive Queries */
+    @media (max-width: 1024px) {
+      .stats-ticker,
+      .pillars-grid,
+      .blueprints-grid,
+      .variable-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .module-display,
+      .simulator-wrapper {
+        grid-template-columns: 1fr;
+      }
+      .triad-pipeline-stage {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .connector-beam {
+        width: 2px;
+        height: 24px;
+      }
+      .connector-beam::after {
+        animation: beam-flow-vertical 2s infinite linear;
+      }
+      @keyframes beam-flow-vertical {
+        0% { top: -100%; left: 0; }
+        100% { top: 100%; left: 0; }
+      }
+    }
+
+    @media (max-width: 640px) {
+      .hero-title {
+        font-size: 32px;
+      }
+      .stats-ticker,
+      .pillars-grid,
+      .blueprints-grid,
+      .variable-grid {
+        grid-template-columns: 1fr;
+      }
+      .nav-links {
+        display: none;
+      }
+      .rule-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==========================================================================
+       TOP NAVIGATION
+       ========================================================================== -->
+  <header class="top-nav">
+    <div class="container nav-inner">
+      <a href="#top" class="nav-brand">
+        <div class="nav-logo-badge">
+          <svg viewBox="0 0 24 24"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.03 14.69 2 12.04 2M12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.15 12.04 20.15C10.56 20.15 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 14.99 3.8 13.47 3.8 11.91C3.81 7.37 7.5 3.67 12.05 3.67Z"/></svg>
+        </div>
+        <div class="nav-brand-title">
+          <span>CRM Automation Command Center</span>
+          <span class="nav-brand-subtitle">Master User Guide & Simulator</span>
+        </div>
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="#architecture">3 Pillars</a></li>
+        <li><a href="#modules">8 Modules</a></li>
+        <li><a href="#simulator">Live Simulator</a></li>
+        <li><a href="#conditions">Condition Engine</a></li>
+        <li><a href="#variables">Variables</a></li>
+        <li><a href="#blueprints">Blueprints</a></li>
+        <li><a href="#quiz">Skill Quiz</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <div class="badge-live">
+          <span class="pulse-dot"></span>
+          Engine Active v2.4
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="top">
+    <!-- ==========================================================================
+         HERO SECTION
+         ========================================================================== -->
+    <section class="hero-section">
+      <div class="hero-pill">
+        <span>⚡ Interactive Visual Walkthrough</span>
+        <span>•</span>
+        <span>Zero WhatsApp Web Dependency</span>
+      </div>
+
+      <h1 class="hero-title">
+        Master Your CRM’s <span class="highlight">WhatsApp Automation</span> Command Center
+      </h1>
+
+      <p class="hero-desc">
+        Connect WhatsApp Templates, Flow Bots, and Event-Driven Pipelines into a single resilient workflow. 
+        Auto-dispatch invoices, pause for customer replies across server restarts, and execute business logic without writing a line of code.
+      </p>
+
+      <div class="hero-cta-group">
+        <a href="#simulator" class="btn btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          Launch Live Phone Simulator
+        </a>
+        <a href="#blueprints" class="btn btn-secondary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          Browse Industry Blueprints
+        </a>
+      </div>
+
+      <!-- Live Stats Ticker -->
+      <div class="stats-ticker">
+        <div class="stat-card">
+          <div class="stat-num">3 Pillars</div>
+          <div class="stat-label">Templates • Flow Bot • Automation</div>
+        </div>
+        <div class="stat-card sky">
+          <div class="stat-num">8 Tabs</div>
+          <div class="stat-label">Full Command Center Workspaces</div>
+        </div>
+        <div class="stat-card amber">
+          <div class="stat-num">Durable</div>
+          <div class="stat-label">Persistent Checkpoints in DB</div>
+        </div>
+        <div class="stat-card indigo">
+          <div class="stat-num">100%</div>
+          <div class="stat-label">Native CRM Integration & Storage</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Search Bar for Guide -->
+    <div class="search-guide-box">
+      <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="text" id="guideSearchInput" class="search-input" placeholder="Search any topic: checkpoints, invoice pdf, flow bot handoff, AND/OR rules, delay dispatch..." oninput="handleGuideSearch()">
+    </div>
+
+    <!-- ==========================================================================
+         SECTION 1: THE 3 PILLARS ARCHITECTURE
+         ========================================================================== -->
+    <section class="section-block" id="architecture">
+      <div class="section-header">
+        <span class="section-tag">Core Architecture</span>
+        <h2 class="section-title">The Three Pillars Working as One</h2>
+        <p class="section-subtitle">
+          Instead of keeping templates, chatbots, and triggers in isolated silos, our Command Center orchestrates them into a unified, reliable cycle.
+        </p>
+      </div>
+
+      <div class="pillars-grid">
+        <!-- Pillar 1 -->
+        <div class="pillar-card active" onclick="activatePillar(0)">
+          <div class="pillar-icon-box">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+          </div>
+          <h3 class="pillar-title">1. Approved Templates</h3>
+          <p class="pillar-desc">
+            Meta-approved WhatsApp templates ensuring 100% deliverability outside the 24-hour customer window.
+          </p>
+          <ul class="pillar-features">
+            <li><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Dynamic variable injection ({{name}}, {{amount}})</li>
+            <li><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Media headers (PDF bill, Video, Brochure)</li>
+            <li><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Quick-reply & URL call-to-action buttons</li>
+          </ul>
+        </div>
+
+        <!-- Pillar 2 -->
+        <div class="pillar-card sky" onclick="activatePillar(1)">
+          <div class="pillar-icon-box">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8" y2="16"></line><line x1="16" y1="16" x2="16" y2="16"></line></svg>
+          </div>
+          <h3 class="pillar-title">2. Flow Bot Builder</h3>
+          <p class="pillar-desc">
+            Visual conversation trees that guide the customer through menus, choices, and structured questions.
+          </p>
+          <ul class="pillar-features">
+            <li><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Interactive button & list selection nodes</li>
+            <li><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Branching logic based on user reply</li>
+            <li><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Seamless hand-off to human support staff</li>
+          </ul>
+        </div>
+
+        <!-- Pillar 3 -->
+        <div class="pillar-card amber" onclick="activatePillar(2)">
+          <div class="pillar-icon-box">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          </div>
+          <h3 class="pillar-title">3. Automation Engine</h3>
+          <p class="pillar-desc">
+            The event-driven brain that detects CRM changes, evaluates conditions, and runs multi-action pipelines.
+          </p>
+          <ul class="pillar-features">
+            <li><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> CRM Triggers (Invoices, Leads, AMC, Won)</li>
+            <li><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Durable conversation checkpoints</li>
+            <li><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Smart reminders with auto-cancellation</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Animated Triad Pipeline Visualizer -->
+      <div class="triad-visualizer">
+        <div class="triad-visualizer-title">
+          <span>Live Data-Flow Cycle</span>
+          <span style="color: var(--emerald); font-weight: 600;">Autonomous Closed-Loop</span>
+        </div>
+        <div class="triad-pipeline-stage">
+          <div class="flow-node active-pulse" id="node-stage-1">
+            <div class="flow-node-title">1. CRM Trigger Event</div>
+            <div class="flow-node-desc">Invoice Created ($1,200)</div>
+          </div>
+
+          <div class="flow-connector">
+            <div class="connector-beam"></div>
+          </div>
+
+          <div class="flow-node" id="node-stage-2">
+            <div class="flow-node-title">2. Send Template + Bill PDF</div>
+            <div class="flow-node-desc">WhatsApp Utility Message</div>
+          </div>
+
+          <div class="flow-connector">
+            <div class="connector-beam"></div>
+          </div>
+
+          <div class="flow-node" id="node-stage-3">
+            <div class="flow-node-title">3. Checkpoint Wait & Reply</div>
+            <div class="flow-node-desc">Customer clicks "Pay Now"</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         SECTION 2: COMMAND CENTER 8 TABS MODULES
+         ========================================================================== -->
+    <section class="section-block" id="modules">
+      <div class="section-header">
+        <span class="section-tag">Workspace Navigation</span>
+        <h2 class="section-title">The 8 Command Center Workspaces</h2>
+        <p class="section-subtitle">
+          Every tab in <code style="color: var(--emerald); font-family: var(--font-mono);">/whatsapp/automations</code> has a distinct mission. Click each tab to explore its purpose and actions.
+        </p>
+      </div>
+
+      <div class="tabs-controller">
+        <button class="tab-btn active" onclick="switchTab(0)">⚡ Event Automations</button>
+        <button class="tab-btn" onclick="switchTab(1)">🔀 Workflow Pipelines</button>
+        <button class="tab-btn" onclick="switchTab(2)">⏰ Smart Reminders</button>
+        <button class="tab-btn" onclick="switchTab(3)">💬 Checkpoints</button>
+        <button class="tab-btn" onclick="switchTab(4)">💳 Billing & Invoices</button>
+        <button class="tab-btn" onclick="switchTab(5)">👋 Welcome & Onboarding</button>
+        <button class="tab-btn" onclick="switchTab(6)">🚀 Blueprints</button>
+        <button class="tab-btn" onclick="switchTab(7)">🔍 Diagnostics</button>
+      </div>
+
+      <!-- Tab Panes -->
+      <div class="tab-panes-wrapper">
+        <!-- Tab 0: Event Automations -->
+        <div class="tab-pane active" id="pane-0">
+          <div class="module-display">
+            <div class="module-info">
+              <h3>⚡ Instant Event Automations</h3>
+              <p>
+                Trigger actions the moment an event happens in your CRM. When a lead is captured on Facebook, an invoice is generated, or a deal is marked "Closed Won", this engine fires within milliseconds.
+              </p>
+              <div class="feature-points">
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">✓</div>
+                  <div class="feature-point-text">
+                    <h4>Zero Polling Lag</h4>
+                    <p>Internal backend hooks emit events instantly upon database commit.</p>
+                  </div>
+                </div>
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">✓</div>
+                  <div class="feature-point-text">
+                    <h4>Multi-Condition Filtering</h4>
+                    <p>Only fire if amount &gt; 500, lead source is "Google", and branch is "Headquarters".</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="module-mockup-frame">
+              <div class="mockup-header">
+                <div class="mockup-dots"><span class="mockup-dot red"></span><span class="mockup-dot yellow"></span><span class="mockup-dot green"></span></div>
+                <span class="mockup-label">event_rule.config.json</span>
+              </div>
+              <div class="mockup-body">
+                <pre style="color: #38bdf8; font-family: var(--font-mono); font-size: 13px;">{
+  "trigger": "lead.created",
+  "conditions": {
+    "matchType": "ALL",
+    "rules": [
+      { "field": "lead.source", "op": "equals", "val": "Website" },
+      { "field": "lead.score", "op": "greater_than", "val": "50" }
+    ]
+  },
+  "action": "send_template",
+  "template": "welcome_high_priority_vip"
+}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 1: Workflow Pipelines -->
+        <div class="tab-pane" id="pane-1">
+          <div class="module-display">
+            <div class="module-info">
+              <h3>🔀 Multi-Step Workflow Pipelines</h3>
+              <p>
+                Chain together sequences of actions with delays, branching, and team notifications. No more single one-off messages.
+              </p>
+              <div class="feature-points">
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">⏱</div>
+                  <div class="feature-point-text">
+                    <h4>Non-Blocking Delays</h4>
+                    <p>Delay 2 hours, 1 day, or until 9:00 AM the following morning before the next step.</p>
+                  </div>
+                </div>
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">🔄</div>
+                  <div class="feature-point-text">
+                    <h4>Branching by Customer Response</h4>
+                    <p>If customer responds YES → Continue to Step 3. If NO → Alert sales team.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="module-mockup-frame">
+              <div class="mockup-header">
+                <div class="mockup-dots"><span class="mockup-dot red"></span><span class="mockup-dot yellow"></span><span class="mockup-dot green"></span></div>
+                <span class="mockup-label">pipeline_sequence.view</span>
+              </div>
+              <div class="mockup-body">
+                <div style="font-size: 13px; font-family: var(--font-mono); display: flex; flex-direction: column; gap: 8px;">
+                  <div style="padding: 8px; background: rgba(16, 185, 129, 0.1); border-left: 3px solid var(--emerald);">[Step 1] Send Welcome Message</div>
+                  <div style="padding: 8px; background: rgba(14, 165, 233, 0.1); border-left: 3px solid var(--sky);">[Step 2] Wait 24 Hours</div>
+                  <div style="padding: 8px; background: rgba(245, 158, 11, 0.1); border-left: 3px solid var(--amber);">[Step 3] Ask Checkpoint: "Are you free for a call?"</div>
+                  <div style="padding: 8px; background: rgba(99, 102, 241, 0.1); border-left: 3px solid var(--indigo);">[Step 4] Hand off to Flow Bot</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Smart Reminders -->
+        <div class="tab-pane" id="pane-2">
+          <div class="module-display">
+            <div class="module-info">
+              <h3>⏰ Smart Reminders with Auto-Cancel</h3>
+              <p>
+                Automate due-date reminders for pending invoices, upcoming appointments, and AMC contract expirations.
+              </p>
+              <div class="feature-points">
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">🛡</div>
+                  <div class="feature-point-text">
+                    <h4>Automatic Payment Cancellation</h4>
+                    <p>The moment an invoice is paid, scheduled overdue reminder alerts are automatically terminated so customers are never annoyed.</p>
+                  </div>
+                </div>
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">📅</div>
+                  <div class="feature-point-text">
+                    <h4>Relative Date Triggers</h4>
+                    <p>Trigger 3 days before due date, on the due date, and 2 days overdue.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="module-mockup-frame">
+              <div class="mockup-header">
+                <div class="mockup-dots"><span class="mockup-dot red"></span><span class="mockup-dot yellow"></span><span class="mockup-dot green"></span></div>
+                <span class="mockup-label">reminder_schedule.log</span>
+              </div>
+              <div class="mockup-body">
+                <div style="font-size: 13px; font-family: var(--font-mono); color: #94a3b8; display: flex; flex-direction: column; gap: 8px;">
+                  <div>[SCHEDULED] 3-Day Pre-Due Reminder → 2026-11-05 10:00</div>
+                  <div>[SCHEDULED] Due-Date Alert → 2026-11-08 09:00</div>
+                  <div style="color: #34d399;">[AUTO-CANCEL] Invoice #INV-1092 marked PAID. Reminders purged.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Durable Checkpoints -->
+        <div class="tab-pane" id="pane-3">
+          <div class="module-display">
+            <div class="module-info">
+              <h3>💬 Durable Conversation Checkpoints</h3>
+              <p>
+                The standout feature of our architecture. When an automation needs a customer answer, it creates a persistent checkpoint in MySQL and waits.
+              </p>
+              <div class="feature-points">
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">💾</div>
+                  <div class="feature-point-text">
+                    <h4>Survives Server Restarts</h4>
+                    <p>State is saved in <code>wa_automation_checkpoints</code> with expiration windows. Reboots will never drop active conversations.</p>
+                  </div>
+                </div>
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">🎯</div>
+                  <div class="feature-point-text">
+                    <h4>Strict Input Validation</h4>
+                    <p>Validates numbers, phone formats, YYYY-MM-DD dates, or choice lists before resuming the pipeline.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="module-mockup-frame">
+              <div class="mockup-header">
+                <div class="mockup-dots"><span class="mockup-dot red"></span><span class="mockup-dot yellow"></span><span class="mockup-dot green"></span></div>
+                <span class="mockup-label">wa_automation_checkpoints.schema</span>
+              </div>
+              <div class="mockup-body">
+                <pre style="color: #a7f3d0; font-family: var(--font-mono); font-size: 12.5px;">CREATE TABLE wa_automation_checkpoints (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  rule_id INT NOT NULL,
+  contact_id INT,
+  phone VARCHAR(32) NOT NULL,
+  question_key VARCHAR(64),
+  expected_type ENUM('text','choice','number','date'),
+  status ENUM('pending','completed','expired'),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 4: Billing & Invoices -->
+        <div class="tab-pane" id="pane-4">
+          <div class="module-display">
+            <div class="module-info">
+              <h3>💳 Billing & Invoice Dispatch</h3>
+              <p>
+                Connect your accounting and invoicing straight to WhatsApp. Send PDF invoices, payment links, and balance status with a single click or automatic event.
+              </p>
+              <div class="feature-points">
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">📄</div>
+                  <div class="feature-point-text">
+                    <h4>Auto-Generated PDF Bill</h4>
+                    <p>Streams direct binary PDF documents cleanly to WhatsApp without external URL expiring issues.</p>
+                  </div>
+                </div>
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">🔗</div>
+                  <div class="feature-point-text">
+                    <h4>One-Click Payment Button</h4>
+                    <p>Directs client to Razorpay / Stripe checkout with pre-filled customer details.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="module-mockup-frame">
+              <div class="mockup-header">
+                <div class="mockup-dots"><span class="mockup-dot red"></span><span class="mockup-dot yellow"></span><span class="mockup-dot green"></span></div>
+                <span class="mockup-label">invoice_action.payload</span>
+              </div>
+              <div class="mockup-body">
+                <pre style="color: #f59e0b; font-family: var(--font-mono); font-size: 13px;">{
+  "action": "send_bill_pdf",
+  "invoice_number": "INV-2026-401",
+  "amount_due": "₹14,500",
+  "due_date": "2026-11-15",
+  "quick_buttons": [
+    { "text": "💳 Pay Now Online" },
+    { "text": "📞 Request Callback" }
+  ]
+}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 5: Welcome & Onboarding -->
+        <div class="tab-pane" id="pane-5">
+          <div class="module-display">
+            <div class="module-info">
+              <h3>👋 Welcome & First-Touch Onboarding</h3>
+              <p>
+                Never leave a prospective client waiting. Greet incoming queries within 3 seconds, qualify their requirements, and assign them to the right branch.
+              </p>
+              <div class="feature-points">
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">⏰</div>
+                  <div class="feature-point-text">
+                    <h4>Business Hours Routing</h4>
+                    <p>Send an away message during off-hours with immediate booking link.</p>
+                  </div>
+                </div>
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">🏢</div>
+                  <div class="feature-point-text">
+                    <h4>Branch-Aware Routing</h4>
+                    <p>Direct customer to Mumbai, Dubai, or Singapore branch staff based on phone country code.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="module-mockup-frame">
+              <div class="mockup-header">
+                <div class="mockup-dots"><span class="mockup-dot red"></span><span class="mockup-dot yellow"></span><span class="mockup-dot green"></span></div>
+                <span class="mockup-label">welcome_routing.log</span>
+              </div>
+              <div class="mockup-body">
+                <div style="font-size: 13px; font-family: var(--font-mono); color: #94a3b8; display: flex; flex-direction: column; gap: 8px;">
+                  <div>[INBOUND] Message from +971 50 123 4567</div>
+                  <div>[GEO-ROUTER] Country: UAE → Route to Dubai Branch</div>
+                  <div>[DISPATCH] Sent "welcome_dubai_real_estate" template</div>
+                  <div style="color: #34d399;">[CRM] Lead created & assigned to: agent_tariq</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 6: Blueprints -->
+        <div class="tab-pane" id="pane-6">
+          <div class="module-display">
+            <div class="module-info">
+              <h3>🚀 1-Click Industry Blueprints</h3>
+              <p>
+                Deploy complete, battle-tested automations in seconds. Pre-configured triggers, templates, checkpoint questions, and actions for popular business verticals.
+              </p>
+              <div class="feature-points">
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">🏥</div>
+                  <div class="feature-point-text">
+                    <h4>Healthcare / Hospital</h4>
+                    <p>Appointment booking, pre-consultation reminder, and prescription follow-up.</p>
+                  </div>
+                </div>
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">🏠</div>
+                  <div class="feature-point-text">
+                    <h4>Real Estate & Property</h4>
+                    <p>Site visit confirmation, brochure delivery, and VIP buyer qualification.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="module-mockup-frame">
+              <div class="mockup-header">
+                <div class="mockup-dots"><span class="mockup-dot red"></span><span class="mockup-dot yellow"></span><span class="mockup-dot green"></span></div>
+                <span class="mockup-label">blueprints.catalog</span>
+              </div>
+              <div class="mockup-body">
+                <div style="font-size: 13px; font-family: var(--font-mono); color: #38bdf8; display: flex; flex-direction: column; gap: 6px;">
+                  <div>• hospital_opd_appointment_flow</div>
+                  <div>• realestate_site_visit_qualifier</div>
+                  <div>• ecommerce_abandoned_cart_recovery</div>
+                  <div>• b2b_saas_trial_expansion</div>
+                  <div>• automobile_service_invoice_dispatch</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 7: Diagnostics -->
+        <div class="tab-pane" id="pane-7">
+          <div class="module-display">
+            <div class="module-info">
+              <h3>🔍 Live Diagnostics & Rule Tracing</h3>
+              <p>
+                No more guessing why an automation didn’t trigger. Every execution logs exact condition results, evaluated payload variables, and error stack traces.
+              </p>
+              <div class="feature-points">
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">🔬</div>
+                  <div class="feature-point-text">
+                    <h4>Per-Condition Pass/Fail Auditing</h4>
+                    <p>Inspect why condition #2 failed (e.g. amount 450 was not &gt; 500).</p>
+                  </div>
+                </div>
+                <div class="feature-point-item">
+                  <div class="feature-point-icon">📋</div>
+                  <div class="feature-point-text">
+                    <h4>Live Variable Payload Inspector</h4>
+                    <p>View the exact JSON received from the database trigger.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="module-mockup-frame">
+              <div class="mockup-header">
+                <div class="mockup-dots"><span class="mockup-dot red"></span><span class="mockup-dot yellow"></span><span class="mockup-dot green"></span></div>
+                <span class="mockup-label">diagnostics_trace.log</span>
+              </div>
+              <div class="mockup-body">
+                <div class="diagnostic-terminal">
+                  <div class="log-line"><span class="log-ts">10:45:01.102</span> <span class="log-tag info">[EVENT]</span> invoice.created received</div>
+                  <div class="log-line"><span class="log-ts">10:45:01.105</span> <span class="log-tag info">[EVAL]</span> Rule #14: Checking conditions...</div>
+                  <div class="log-line"><span class="log-ts">10:45:01.106</span> <span class="log-tag success">[PASS]</span> invoice.amount &gt; 500 (Value: 1200)</div>
+                  <div class="log-line"><span class="log-ts">10:45:01.107</span> <span class="log-tag success">[PASS]</span> invoice.status == unpaid</div>
+                  <div class="log-line"><span class="log-ts">10:45:01.112</span> <span class="log-tag success">[DISPATCH]</span> Triggering Template send_invoice_v2</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         SECTION 3: LIVE INTERACTIVE PIPELINE SIMULATOR
+         ========================================================================== -->
+    <section class="section-block" id="simulator">
+      <div class="section-header">
+        <span class="section-tag">Interactive Sandbox</span>
+        <h2 class="section-title">Hands-On Automation Simulator</h2>
+        <p class="section-subtitle">
+          Configure a real-world scenario, run the simulation, and watch the messages, checkpoints, and invoice PDFs interact with the phone mockup in real-time.
+        </p>
+      </div>
+
+      <div class="simulator-wrapper">
+        <!-- Left: Controls -->
+        <div class="simulator-controls">
+          <div class="control-group">
+            <label class="control-label">1. Choose CRM Trigger Event</label>
+            <select class="control-select" id="simTrigger" onchange="updateSimScenario()">
+              <option value="invoice.created">Invoice Created (Billing & Accounts)</option>
+              <option value="lead.created">New Lead Captured (Sales CRM)</option>
+              <option value="appointment.booked">Appointment Scheduled (Calendar)</option>
+              <option value="order.placed">E-Commerce Order Placed (Store)</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label class="control-label">
+              <span>2. Mock CRM Payload Data</span>
+              <span style="font-size: 11px; color: var(--emerald);">Editable JSON</span>
+            </label>
+            <textarea id="simPayload" class="control-input" rows="5" style="font-family: var(--font-mono); font-size: 12px; resize: vertical;">{
+  "customer_name": "Rahul Verma",
+  "phone": "+919876543210",
+  "invoice_number": "INV-2026-89",
+  "amount": 1500,
+  "status": "unpaid",
+  "due_date": "2026-11-10"
+}</textarea>
+          </div>
+
+          <div class="control-group">
+            <label class="control-label">3. Automation Action Sequence</label>
+            <div style="background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 12px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="color: var(--emerald); font-weight: 700;">[1]</span> Send Template: <code>invoice_dispatch_v1</code>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="color: var(--amber); font-weight: 700;">[2]</span> Checkpoint Gate: Expect choice (<code>YES</code> or <code>NO</code>)
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="color: var(--sky); font-weight: 700;">[3]</span> On YES → Deliver PDF Invoice & Payment Link
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px;">
+            <button class="btn btn-primary" onclick="runSimulation()" id="runSimBtn" style="flex: 1;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              ▶ Run Live Simulation
+            </button>
+            <button class="btn btn-secondary" onclick="resetSimChat()">
+              Reset Phone
+            </button>
+          </div>
+
+          <!-- Real-time Diagnostic Output -->
+          <div class="control-group">
+            <label class="control-label">Live Execution Trace</label>
+            <div class="diagnostic-terminal" id="simTraceLog">
+              <div class="log-line"><span class="log-ts">READY</span> <span class="log-tag info">[IDLE]</span> Awaiting simulation trigger...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Animated WhatsApp Phone -->
+        <div class="phone-container">
+          <div class="phone-shell">
+            <div class="phone-notch"></div>
+            
+            <!-- WhatsApp Chat Header -->
+            <div class="phone-wa-header">
+              <div class="wa-avatar">CRM</div>
+              <div class="wa-header-info">
+                <div class="wa-name">CRM Command Center</div>
+                <div class="wa-status" id="waHeaderStatus">Online • Official Business</div>
+              </div>
+            </div>
+
+            <!-- Chat Messages View -->
+            <div class="phone-wa-chat" id="waChatBox">
+              <div class="wa-bubble incoming">
+                Welcome to your interactive automation phone. Click <strong>"Run Live Simulation"</strong> to see actions fire!
+                <div class="wa-time">10:00 AM</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         SECTION 4: ADVANCED CONDITION BUILDER EXPLAINED
+         ========================================================================== -->
+    <section class="section-block" id="conditions">
+      <div class="section-header">
+        <span class="section-tag">Decision Logic</span>
+        <h2 class="section-title">Multi-Group AND / OR Condition Engine</h2>
+        <p class="section-subtitle">
+          Build sophisticated business rules without writing SQL. Group conditions into nested sets and inspect evaluation in real-time.
+        </p>
+      </div>
+
+      <div class="condition-builder-mock">
+        <div class="rule-group">
+          <div class="rule-group-header">
+            <span style="font-size: 13px; font-weight: 700; color: var(--emerald);">Group 1: Invoice Criteria</span>
+            <div class="operator-toggle">
+              <button class="op-btn active" id="opBtnAnd" onclick="toggleSimOp('AND')">AND</button>
+              <button class="op-btn" id="opBtnOr" onclick="toggleSimOp('OR')">OR</button>
+            </div>
+          </div>
+
+          <div class="rule-row">
+            <input type="text" class="rule-field" value="invoice.amount" readonly>
+            <input type="text" class="rule-comp" value="greater_than (&gt;)" readonly>
+            <input type="number" class="rule-val" id="condAmountVal" value="500" oninput="evalConditionSandbox()">
+            <span class="rule-status-badge pass" id="condBadge1">MATCHED</span>
+          </div>
+
+          <div class="rule-row">
+            <input type="text" class="rule-field" value="invoice.status" readonly>
+            <input type="text" class="rule-comp" value="equals (==)" readonly>
+            <input type="text" class="rule-val" id="condStatusVal" value="unpaid" oninput="evalConditionSandbox()">
+            <span class="rule-status-badge pass" id="condBadge2">MATCHED</span>
+          </div>
+        </div>
+
+        <div style="background: var(--bg-surface); padding: 14px 18px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: space-between;">
+          <span style="font-size: 13px; color: var(--text-muted);">
+            Evaluation against Current Simulator Payload ($1,500, unpaid):
+          </span>
+          <span id="condOverallResult" style="font-size: 13px; font-weight: 800; color: var(--emerald);">
+            ✓ CONDITION PASSED (EXECUTE WORKFLOW)
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         SECTION 5: CRM VARIABLE PICKER CHEAT SHEET
+         ========================================================================== -->
+    <section class="section-block" id="variables">
+      <div class="section-header">
+        <span class="section-tag">Variable Dictionary</span>
+        <h2 class="section-title">Dynamic Variable Cheat Sheet</h2>
+        <p class="section-subtitle">
+          Use double curly braces to inject real CRM data into your WhatsApp templates, questions, and billing messages. Click any variable to copy.
+        </p>
+      </div>
+
+      <div class="variable-grid">
+        <div class="var-card">
+          <span class="var-badge">{{contact.name}}</span>
+          <p class="var-desc">Customer's full name (e.g. Rahul Verma)</p>
+          <button class="var-copy-btn" onclick="copyVariable('{{contact.name}}')">Copy Variable</button>
+        </div>
+
+        <div class="var-card">
+          <span class="var-badge">{{invoice.number}}</span>
+          <p class="var-desc">Invoice identifier (e.g. INV-2026-89)</p>
+          <button class="var-copy-btn" onclick="copyVariable('{{invoice.number}}')">Copy Variable</button>
+        </div>
+
+        <div class="var-card">
+          <span class="var-badge">{{invoice.amount}}</span>
+          <p class="var-desc">Total invoice amount (e.g. $1,500.00)</p>
+          <button class="var-copy-btn" onclick="copyVariable('{{invoice.amount}}')">Copy Variable</button>
+        </div>
+
+        <div class="var-card">
+          <span class="var-badge">{{invoice.payment_url}}</span>
+          <p class="var-desc">Unique dynamic payment checkout link</p>
+          <button class="var-copy-btn" onclick="copyVariable('{{invoice.payment_url}}')">Copy Variable</button>
+        </div>
+
+        <div class="var-card">
+          <span class="var-badge">{{appointment.date_time}}</span>
+          <p class="var-desc">Formatted appointment schedule timestamp</p>
+          <button class="var-copy-btn" onclick="copyVariable('{{appointment.date_time}}')">Copy Variable</button>
+        </div>
+
+        <div class="var-card">
+          <span class="var-badge">{{assigned_staff.name}}</span>
+          <p class="var-desc">Name of the sales or support agent assigned</p>
+          <button class="var-copy-btn" onclick="copyVariable('{{assigned_staff.name}}')">Copy Variable</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         SECTION 6: INDUSTRY BLUEPRINTS (READY-TO-USE RECIPES)
+         ========================================================================== -->
+    <section class="section-block" id="blueprints">
+      <div class="section-header">
+        <span class="section-tag">Production Starters</span>
+        <h2 class="section-title">Industry Starter Blueprints</h2>
+        <p class="section-subtitle">
+          Jumpstart your business operations with proven, pre-packaged automation templates. Click "Load into Simulator" to test any blueprint above.
+        </p>
+      </div>
+
+      <div class="blueprints-grid">
+        <!-- Blueprint 1 -->
+        <div class="blueprint-card">
+          <div class="blueprint-industry-tag">Healthcare & Clinics</div>
+          <h3 class="blueprint-title">OPD Appointment & Checkpoint Confirmation</h3>
+          <p class="blueprint-desc">
+            Sends an appointment booking alert 24h prior, pauses at a Checkpoint asking for <code>YES</code> to confirm or <code>NO</code> to reschedule, then notifies reception.
+          </p>
+          <div class="blueprint-meta">
+            <span>3 Steps • 1 Checkpoint</span>
+            <button class="blueprint-load-btn" onclick="loadBlueprintToSim('clinic')">Load into Simulator →</button>
+          </div>
+        </div>
+
+        <!-- Blueprint 2 -->
+        <div class="blueprint-card">
+          <div class="blueprint-industry-tag">Real Estate & Developers</div>
+          <h3 class="blueprint-title">Site Visit Brochure & VIP Qualification</h3>
+          <p class="blueprint-desc">
+            When a property inquiry arrives, immediately dispatches the brochure PDF, asks budget preference, and assigns hot leads directly to sales executives.
+          </p>
+          <div class="blueprint-meta">
+            <span>4 Steps • PDF Brochure</span>
+            <button class="blueprint-load-btn" onclick="loadBlueprintToSim('realestate')">Load into Simulator →</button>
+          </div>
+        </div>
+
+        <!-- Blueprint 3 -->
+        <div class="blueprint-card">
+          <div class="blueprint-industry-tag">Automobile & Service Center</div>
+          <h3 class="blueprint-title">Vehicle Service Completed & PDF Bill</h3>
+          <p class="blueprint-desc">
+            Triggers when job card status is marked "READY". Dispatches final billing PDF, payment link, and workshop pickup timing.
+          </p>
+          <div class="blueprint-meta">
+            <span>2 Steps • Auto-PDF</span>
+            <button class="blueprint-load-btn" onclick="loadBlueprintToSim('auto')">Load into Simulator →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         SECTION 7: INTERACTIVE MASTERY QUIZ
+         ========================================================================== -->
+    <section class="section-block" id="quiz">
+      <div class="section-header" style="text-align: center;">
+        <span class="section-tag">Test Your Knowledge</span>
+        <h2 class="section-title">Automation Mastery Check</h2>
+        <p class="section-subtitle" style="margin: 0 auto;">
+          Verify that you understand the key concepts of our WhatsApp Automation Command Center before configuring production rules.
+        </p>
+      </div>
+
+      <div class="quiz-container">
+        <!-- Question 1 -->
+        <div class="quiz-question-box" id="q1Box">
+          <div class="quiz-q-num">Question 1 of 3</div>
+          <div class="quiz-q-text">
+            How does the system prevent sending embarrassing overdue invoice reminders if a customer pays today?
+          </div>
+          <div class="quiz-options">
+            <div class="quiz-opt" onclick="checkQuizAnswer(1, 0)">
+              <span>A</span> The agent has to manually delete the scheduled reminder in the dashboard.
+            </div>
+            <div class="quiz-opt" onclick="checkQuizAnswer(1, 1)">
+              <span>B</span> The system automatically cancels all pending reminders when the invoice payment event occurs.
+            </div>
+            <div class="quiz-opt" onclick="checkQuizAnswer(1, 2)">
+              <span>C</span> WhatsApp Web detects the payment through the customer's phone status.
+            </div>
+          </div>
+          <div class="quiz-feedback" id="q1Feedback"></div>
+        </div>
+
+        <!-- Question 2 -->
+        <div class="quiz-question-box" id="q2Box">
+          <div class="quiz-q-num">Question 2 of 3</div>
+          <div class="quiz-q-text">
+            What happens to a customer waiting at a Conversation Checkpoint if your backend server restarts?
+          </div>
+          <div class="quiz-options">
+            <div class="quiz-opt" onclick="checkQuizAnswer(2, 0)">
+              <span>A</span> The conversation state is lost and the customer must start over.
+            </div>
+            <div class="quiz-opt" onclick="checkQuizAnswer(2, 1)">
+              <span>B</span> The state is durably preserved in the database (wa_automation_checkpoints) and resumes cleanly upon customer reply.
+            </div>
+            <div class="quiz-opt" onclick="checkQuizAnswer(2, 2)">
+              <span>C</span> The customer receives an error message: "Server restarted, please call support".
+            </div>
+          </div>
+          <div class="quiz-feedback" id="q2Feedback"></div>
+        </div>
+
+        <!-- Question 3 -->
+        <div class="quiz-question-box" id="q3Box">
+          <div class="quiz-q-num">Question 3 of 3</div>
+          <div class="quiz-q-text">
+            Why do we use approved WhatsApp Templates instead of regular text messages outside the 24-hour window?
+          </div>
+          <div class="quiz-options">
+            <div class="quiz-opt" onclick="checkQuizAnswer(3, 0)">
+              <span>A</span> Because Meta policy strictly requires pre-approved utility/marketing templates to initiate contact with customers.
+            </div>
+            <div class="quiz-opt" onclick="checkQuizAnswer(3, 1)">
+              <span>B</span> Because approved templates are cheaper than regular SMS.
+            </div>
+            <div class="quiz-opt" onclick="checkQuizAnswer(3, 2)">
+              <span>C</span> Templates are only for sending images; text does not need approval.
+            </div>
+          </div>
+          <div class="quiz-feedback" id="q3Feedback"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="guide-footer">
+    <div class="container">
+      <p>WhatsApp Automation Command Center • Native Architecture • Enterprise Multi-Tenant Edition</p>
+      <p style="margin-top: 6px; font-size: 11px;">Built strictly in accordance with @anti-ui-slop design principles.</p>
+    </div>
+  </footer>
+
+  <!-- ==========================================================================
+       INLINE INTERACTIVE LOGIC (SIMULATOR, TABS, QUIZ, COPY UTILITIES)
+       ========================================================================== -->
+  <script>
+    /* --------------------------------------------------------------------------
+       Tabs Controller
+       -------------------------------------------------------------------------- */
+    function switchTab(index) {
+      const tabs = document.querySelectorAll('.tab-btn');
+      const panes = document.querySelectorAll('.tab-pane');
+      tabs.forEach((tab, i) => {
+        tab.classList.toggle('active', i === index);
+      });
+      panes.forEach((pane, i) => {
+        pane.classList.toggle('active', i === index);
+      });
+    }
+
+    /* --------------------------------------------------------------------------
+       Pillars Animation
+       -------------------------------------------------------------------------- */
+    function activatePillar(index) {
+      const cards = document.querySelectorAll('.pillar-card');
+      cards.forEach((card, i) => {
+        card.classList.toggle('active', i === index);
+      });
+    }
+
+    /* --------------------------------------------------------------------------
+       Simulator State & Execution
+       -------------------------------------------------------------------------- */
+    let currentSimStep = 0;
+    let simTimer = null;
+    let checkpointExpected = false;
+
+    function logSim(type, message) {
+      const logContainer = document.getElementById('simTraceLog');
+      const now = new Date();
+      const ts = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+      
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      line.innerHTML = `<span class="log-ts">${ts}</span> <span class="log-tag ${type}">[${type.toUpperCase()}]</span> ${message}`;
+      logContainer.appendChild(line);
+      logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    function addWaBubble(type, htmlContent) {
+      const chatBox = document.getElementById('waChatBox');
+      const bubble = document.createElement('div');
+      bubble.className = `wa-bubble ${type}`;
+      
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      bubble.innerHTML = `${htmlContent} <div class="wa-time">${timeStr}</div>`;
+      chatBox.appendChild(bubble);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function showTyping() {
+      const chatBox = document.getElementById('waChatBox');
+      const indicator = document.createElement('div');
+      indicator.id = 'waTyping';
+      indicator.className = 'wa-typing-indicator';
+      indicator.innerHTML = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
+      chatBox.appendChild(indicator);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function hideTyping() {
+      const indicator = document.getElementById('waTyping');
+      if (indicator) indicator.remove();
+    }
+
+    function resetSimChat() {
+      if (simTimer) clearTimeout(simTimer);
+      const chatBox = document.getElementById('waChatBox');
+      chatBox.innerHTML = `
+        <div class="wa-bubble incoming">
+          Welcome to your interactive automation phone. Click <strong>"Run Live Simulation"</strong> to see actions fire!
+          <div class="wa-time">10:00 AM</div>
+        </div>
+      `;
+      document.getElementById('simTraceLog').innerHTML = `
+        <div class="log-line"><span class="log-ts">READY</span> <span class="log-tag info">[IDLE]</span> Awaiting simulation trigger...</div>
+      `;
+      document.getElementById('runSimBtn').disabled = false;
+      checkpointExpected = false;
+    }
+
+    function runSimulation() {
+      resetSimChat();
+      const btn = document.getElementById('runSimBtn');
+      btn.disabled = true;
+
+      const triggerSelect = document.getElementById('simTrigger').value;
+      let payload;
+      try {
+        payload = JSON.parse(document.getElementById('simPayload').value);
+      } catch (err) {
+        logSim('error', 'Invalid JSON payload. Please fix syntax.');
+        btn.disabled = false;
+        return;
+      }
+
+      logSim('info', `Event received: ${triggerSelect}`);
+      logSim('info', `Evaluating condition rules against payload...`);
+
+      // Stage 1: Evaluate
+      setTimeout(() => {
+        logSim('success', `Conditions PASSED: amount (${payload.amount || 0}) >= 500 && status == 'unpaid'`);
+        logSim('info', `Dispatching Action 1: Send Template "invoice_dispatch_v1"`);
+        showTyping();
+
+        // Stage 2: Deliver WhatsApp Message
+        setTimeout(() => {
+          hideTyping();
+          const custName = payload.customer_name || 'Customer';
+          const invNum = payload.invoice_number || 'INV-2026-89';
+          const amt = payload.amount || 1500;
+
+          addWaBubble('incoming', `
+            Hello <strong>${custName}</strong>! 👋<br><br>
+            Your bill <strong>#${invNum}</strong> for <strong>₹${amt}</strong> is ready for review.<br><br>
+            Please reply with <strong>YES</strong> to confirm receiving this invoice.
+            <div class="wa-btn-actions">
+              <button class="wa-quick-btn" onclick="handleSimReply('YES')">✓ Confirm YES</button>
+              <button class="wa-quick-btn" onclick="handleSimReply('NO')">✗ Reject NO</button>
+            </div>
+          `);
+
+          logSim('warn', `Action 2: Created Durable Checkpoint [Key: "confirm_bill", Type: "choice", Status: "pending"]`);
+          logSim('info', `Workflow paused. Waiting for client response (YES/NO)...`);
+          checkpointExpected = true;
+        }, 1200);
+      }, 700);
+    }
+
+    function handleSimReply(userText) {
+      if (!checkpointExpected) return;
+      checkpointExpected = false;
+
+      // User outgoing reply
+      addWaBubble('outgoing', userText);
+      logSim('info', `Inbound WhatsApp response received: "${userText}"`);
+
+      showTyping();
+      setTimeout(() => {
+        hideTyping();
+
+        if (userText.trim().toUpperCase() === 'YES') {
+          logSim('success', `Checkpoint validator: Answer "${userText}" matches expected choice (YES). Resuming pipeline!`);
+          logSim('info', `Dispatching Action 3: Generate & Deliver PDF Invoice`);
+
+          showTyping();
+          setTimeout(() => {
+            hideTyping();
+            addWaBubble('incoming', `
+              Thank you for confirming! Here is your official tax invoice copy:
+              <div class="wa-pdf-card">
+                <div class="wa-pdf-icon">PDF</div>
+                <div style="flex: 1;">
+                  <div style="font-weight: 700; font-size: 11px;">Invoice-INV-2026-89.pdf</div>
+                  <div style="font-size: 9px; color: #8696a0;">142 KB • Verified Invoice</div>
+                </div>
+              </div>
+              <div class="wa-btn-actions">
+                <button class="wa-quick-btn" style="color: #38bdf8;" onclick="alert('Simulation: Redirecting to secure payment checkout!')">💳 Pay Now (Razorpay/Stripe)</button>
+              </div>
+            `);
+
+            logSim('success', `Pipeline execution completed with 100% success.`);
+            document.getElementById('runSimBtn').disabled = false;
+          }, 1000);
+
+        } else {
+          logSim('warn', `Checkpoint received negative answer ("${userText}"). Triggering alternate branch: notify sales manager.`);
+          addWaBubble('incoming', `
+            Understood! We have marked this for review. Our accounts officer will get in touch shortly to assist you.
+          `);
+          document.getElementById('runSimBtn').disabled = false;
+        }
+      }, 900);
+    }
+
+    function updateSimScenario() {
+      const trigger = document.getElementById('simTrigger').value;
+      const payloadArea = document.getElementById('simPayload');
+      
+      if (trigger === 'lead.created') {
+        payloadArea.value = JSON.stringify({
+          "customer_name": "Priya Sharma",
+          "phone": "+919123456789",
+          "lead_source": "Website Form",
+          "interest": "Cloud ERP Package",
+          "assigned_agent": "Alex Morgan"
+        }, null, 2);
+      } else if (trigger === 'appointment.booked') {
+        payloadArea.value = JSON.stringify({
+          "customer_name": "Vikram Malhotra",
+          "phone": "+919811223344",
+          "appointment_date": "2026-11-04 15:30",
+          "doctor_name": "Dr. Ananya Roy",
+          "department": "Cardiology"
+        }, null, 2);
+      } else if (trigger === 'order.placed') {
+        payloadArea.value = JSON.stringify({
+          "customer_name": "Sara Khan",
+          "phone": "+919777888999",
+          "order_id": "ORD-5542",
+          "items_count": 3,
+          "total_price": "₹3,499",
+          "tracking_url": "https://crm.local/track/5542"
+        }, null, 2);
+      } else {
+        payloadArea.value = JSON.stringify({
+          "customer_name": "Rahul Verma",
+          "phone": "+919876543210",
+          "invoice_number": "INV-2026-89",
+          "amount": 1500,
+          "status": "unpaid",
+          "due_date": "2026-11-10"
+        }, null, 2);
+      }
+      resetSimChat();
+    }
+
+    /* --------------------------------------------------------------------------
+       Condition Sandbox Logic
+       -------------------------------------------------------------------------- */
+    let currentOp = 'AND';
+
+    function toggleSimOp(op) {
+      currentOp = op;
+      document.getElementById('opBtnAnd').classList.toggle('active', op === 'AND');
+      document.getElementById('opBtnOr').classList.toggle('active', op === 'OR');
+      evalConditionSandbox();
+    }
+
+    function evalConditionSandbox() {
+      const threshold = parseFloat(document.getElementById('condAmountVal').value) || 0;
+      const expectedStatus = document.getElementById('condStatusVal').value.trim().toLowerCase();
+
+      // Test against default sim payload: amount = 1500, status = "unpaid"
+      const simAmt = 1500;
+      const simStatus = "unpaid";
+
+      const pass1 = simAmt > threshold;
+      const pass2 = (simStatus === expectedStatus);
+
+      const b1 = document.getElementById('condBadge1');
+      b1.className = `rule-status-badge ${pass1 ? 'pass' : 'fail'}`;
+      b1.textContent = pass1 ? 'MATCHED' : 'FAILED';
+
+      const b2 = document.getElementById('condBadge2');
+      b2.className = `rule-status-badge ${pass2 ? 'pass' : 'fail'}`;
+      b2.textContent = pass2 ? 'MATCHED' : 'FAILED';
+
+      const overall = (currentOp === 'AND') ? (pass1 && pass2) : (pass1 || pass2);
+      const res = document.getElementById('condOverallResult');
+      if (overall) {
+        res.style.color = 'var(--emerald)';
+        res.textContent = `✓ CONDITION PASSED (EXECUTE WORKFLOW)`;
+      } else {
+        res.style.color = 'var(--rose)';
+        res.textContent = `✗ CONDITION FAILED (WORKFLOW SKIPPED)`;
+      }
+    }
+
+    /* --------------------------------------------------------------------------
+       Blueprint Loader
+       -------------------------------------------------------------------------- */
+    function loadBlueprintToSim(type) {
+      const sel = document.getElementById('simTrigger');
+      if (type === 'clinic') {
+        sel.value = 'appointment.booked';
+      } else if (type === 'realestate') {
+        sel.value = 'lead.created';
+      } else {
+        sel.value = 'invoice.created';
+      }
+      updateSimScenario();
+      document.getElementById('simulator').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    /* --------------------------------------------------------------------------
+       Variable Copier
+       -------------------------------------------------------------------------- */
+    function copyVariable(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        alert(`Copied "${text}" to clipboard!`);
+      }).catch(() => {
+        prompt('Copy variable:', text);
+      });
+    }
+
+    /* --------------------------------------------------------------------------
+       Interactive Quiz Validation
+       -------------------------------------------------------------------------- */
+    const quizAnswers = {
+      1: 1, // B
+      2: 1, // B
+      3: 0  // A
+    };
+
+    function checkQuizAnswer(qNum, optIdx) {
+      const box = document.getElementById(`q${qNum}Box`);
+      const opts = box.querySelectorAll('.quiz-opt');
+      const feedback = document.getElementById(`q${qNum}Feedback`);
+      const isCorrect = (optIdx === quizAnswers[qNum]);
+
+      opts.forEach((opt, idx) => {
+        opt.classList.remove('selected-correct', 'selected-wrong');
+        if (idx === optIdx) {
+          opt.classList.add(isCorrect ? 'selected-correct' : 'selected-wrong');
+        }
+      });
+
+      if (isCorrect) {
+        feedback.className = 'quiz-feedback show-correct';
+        feedback.innerHTML = '<strong>✓ Correct!</strong> You understand how our resilient architecture operates.';
+      } else {
+        feedback.className = 'quiz-feedback show-wrong';
+        feedback.innerHTML = '<strong>✗ Not quite.</strong> Review the 3 Pillars & Checkpoint section above to understand why this matters.';
+      }
+    }
+
+    /* --------------------------------------------------------------------------
+       Guide Search Filter
+       -------------------------------------------------------------------------- */
+    function handleGuideSearch() {
+      const query = document.getElementById('guideSearchInput').value.toLowerCase();
+      if (!query) return;
+
+      const searchableSections = document.querySelectorAll('section.section-block');
+      searchableSections.forEach(sec => {
+        const text = sec.textContent.toLowerCase();
+        if (text.includes(query)) {
+          sec.style.opacity = '1';
+        } else {
+          sec.style.opacity = '0.35';
+        }
+      });
+    }
+  </script>
+</body>
+</html>
