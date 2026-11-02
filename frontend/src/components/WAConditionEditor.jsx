@@ -188,6 +188,7 @@ function GroupEditor({ group, onChange, isRoot = false, onRemoveGroup }) {
                 <div className="flex-1 min-w-[180px]">
                   <input
                     list={`crm-fields-${idx}`}
+                    aria-label={`${isRoot ? "Condition" : "Sub-condition"} ${idx + 1} field`}
                     className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-800"
                     placeholder="Field path (e.g. amount, city)"
                     value={item.field || ""}
@@ -206,6 +207,7 @@ function GroupEditor({ group, onChange, isRoot = false, onRemoveGroup }) {
 
                 {/* Operator selector */}
                 <select
+                  aria-label={`${isRoot ? "Condition" : "Sub-condition"} ${idx + 1} comparison`}
                   className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-800"
                   value={item.operator || "equals"}
                   onChange={(e) => updateRule(idx, { operator: e.target.value })}
@@ -220,6 +222,7 @@ function GroupEditor({ group, onChange, isRoot = false, onRemoveGroup }) {
                 {/* Value input if needed */}
                 {!noVal && (
                   <input
+                    aria-label={`${isRoot ? "Condition" : "Sub-condition"} ${idx + 1} value`}
                     className="flex-1 min-w-[140px] rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-800"
                     placeholder={
                       item.operator?.includes("date")
@@ -255,7 +258,7 @@ function GroupEditor({ group, onChange, isRoot = false, onRemoveGroup }) {
           disabled={rules.length >= 30}
           className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 transition"
         >
-          <Plus className="w-3.5 h-3.5 text-slate-600" /> Add Condition
+          <Plus className="w-3.5 h-3.5 text-slate-600" /> Add condition
         </button>
 
         {isRoot && (

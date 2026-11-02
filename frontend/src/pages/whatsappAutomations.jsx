@@ -1,15 +1,14 @@
 import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
-import useWADialog from "../hooks/useWADialog";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Zap, Plus, X, Edit2, Loader2, CheckCircle2, XCircle, Play,
+  Zap, Plus, X, Loader2, CheckCircle2, Play,
   Clock, ToggleLeft, ToggleRight, FileText, ListChecks, Trash2,
-  OctagonMinus, PlayCircle, Cpu, Send, Save, Sparkles, RefreshCw,
-  Image, Video, Users, Bot, Layers, Upload, ArrowRight, ShieldCheck,
-  Smartphone, BarChart2, Bell, Check, AlertCircle, Info, ExternalLink,
-  CreditCard, GitBranch, MessageSquare, HelpCircle, ChevronDown, ChevronRight,
-  Calendar, Building2, Briefcase, Tag, Search
+  Sparkles, RefreshCw,
+  Users, Bot, ArrowRight, ArrowLeft, ShieldCheck,
+  Smartphone, Bell, AlertCircle,
+  CreditCard, GitBranch, MessageSquare, HelpCircle,
+  Building2, Tag, Search
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
@@ -17,9 +16,9 @@ import WhatsAppInteractiveReminders from "../components/WhatsAppInteractiveRemin
 import WAVariablePicker, { evaluateMessagePlaceholders } from "../components/WAVariablePicker";
 import WAConditionEditor, { parseConditions } from "../components/WAConditionEditor";
 import { useEnterprise } from "../context/EnterpriseContext";
+import { useAuth } from "../auth/AuthContext";
 import AutomationDraftPreview from "../components/AutomationDraftPreview";
 import AutomationFollowupOptions from "../components/AutomationFollowupOptions";
-import AutomationWorkspaceSummary from "../components/AutomationWorkspaceSummary";
 import AutomationRuleActivity from "../components/AutomationRuleActivity";
 import { automationIssues, isApprovedTemplate } from "../utils/automationDraft";
 
@@ -97,6 +96,203 @@ const PRESET_MESSAGES = {
   custom: "Hello {name}! Thank you for choosing {company}.",
 };
 
+const CREATE_PATH = "/whatsapp/automations/create";
+const DEFAULT_SCHEDULE = {
+  reminder_type: "relative",
+  delay_value: 1,
+  delay_unit: "days",
+  cancel_on_event: "invoice_paid",
+  business_hours_only: false,
+  max_attempts: 3,
+};
+
+// Shown on the create page when the tenant has not loaded any blueprints yet.
+const QUICK_STARTERS = [
+  { name: "Invoice Created", trigger_type: "invoice_created", category: "billing", message_text: PRESET_MESSAGES.invoice_created },
+  { name: "New Lead Welcome", trigger_type: "new_lead", category: "sales", message_text: PRESET_MESSAGES.new_lead },
+  { name: "Appointment Reminder", trigger_type: "appointment_reminder", category: "support", message_text: PRESET_MESSAGES.appointment_reminder },
+  { name: "Payment Received", trigger_type: "payment_received", category: "billing", message_text: PRESET_MESSAGES.payment_received },
+];
+
+const INDUSTRY_STARTERS = [
+  {
+    name: "Hospital: Appointment Booking & Consultation Confirmation",
+    trigger_type: "appointment_booked",
+    category: "support",
+    message_text: "🏥 Care Confirmation: Hello {name}, your appointment with {company} has been scheduled for {appointment.date}. Reply 1 to Confirm or 2 to Reschedule.",
+    delay_minutes: 0,
+    is_active: 1,
+    actions_json: JSON.stringify([
+      { id: "act_1", type: "send_message", title: "Send Appointment Confirmation" },
+      { id: "act_2", type: "ask_question", title: "Ask for Patient Confirmation", params: { expected_type: "choice" } }
+    ])
+  },
+  {
+    name: "Billing: Auto-Send Invoice PDF with Payment Button",
+    trigger_type: "invoice_created",
+    category: "billing",
+    message_text: "🧾 Hello {name}, your invoice #{invoice_no} ({amount}) is ready. Please tap below to pay securely.",
+    delay_minutes: 0,
+    is_active: 1,
+    actions_json: JSON.stringify([
+      { id: "act_1", type: "send_bill", title: "Deliver Invoice PDF Document" },
+      { id: "act_2", type: "send_payment_link", title: "Attach Instant Payment Checkout Link" }
+    ])
+  },
+  {
+    name: "Real Estate: Property Enquiry & Site Visit Confirmation",
+    trigger_type: "new_lead",
+    category: "sales",
+    message_text: "🏡 Hello {name}! Thank you for inquiring about our luxury residences. Would you like to schedule a VIP site visit?",
+    delay_minutes: 0,
+    is_active: 1,
+    actions_json: JSON.stringify([
+      { id: "act_1", type: "send_message", title: "Send Brochure & Project Overview" },
+      { id: "act_2", type: "ask_question", title: "Ask for Site Visit Preference", params: { expected_type: "choice" } }
+    ])
+  },
+  {
+    name: "Automobile: Vehicle Service Completed & PDF Bill",
+    trigger_type: "service_visit_scheduled",
+    category: "support",
+    message_text: "🚗 Great news {name}! Your vehicle service is completed. Your inspection checklist and bill are ready.",
+    delay_minutes: 0,
+    is_active: 1,
+    actions_json: JSON.stringify([
+      { id: "act_1", type: "send_bill", title: "Deliver Service Job Card & Invoice PDF" }
+    ])
+  },
+  {
+    name: "SaaS: Trial Expiry Nudge & Upgrade Offer",
+    trigger_type: "deal_won",
+    category: "sales",
+    message_text: "⚡ Hello {name}, congratulations on exploring {company}! Your dedicated account manager is ready to assist.",
+    delay_minutes: 0,
+    is_active: 1
+  }
+];
+
+const DEMO_STARTER_RULES = [
+  {
+    id: 1,
+    name: "Auto-Send Invoice PDF & Payment Button",
+    trigger_type: "invoice_created",
+    trigger_label: "Invoice Created",
+    category: "billing",
+    is_active: 1,
+    message_text: PRESET_MESSAGES.invoice_created,
+    template_name: "invoice_ready_v1",
+    actions_json: JSON.stringify([
+      { type: "send_bill", title: "Send Invoice PDF with Payment Link" },
+      { type: "ask_question", title: "Confirm Receipt (YES/NO)", params: { expected_type: "choice" } },
+      { type: "wait_delay", title: "Wait 2 days for payment" }
+    ]),
+    schedule_json: JSON.stringify({ reminder_type: "relative", delay_value: 1, delay_unit: "days", cancel_on_event: "invoice_paid" }),
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 2,
+    name: "VIP New Lead Fast-Response & Agent Assignment",
+    trigger_type: "new_lead",
+    trigger_label: "New Lead Added",
+    category: "sales",
+    is_active: 1,
+    message_text: PRESET_MESSAGES.new_lead,
+    template_name: "lead_welcome_v1",
+    actions_json: JSON.stringify([
+      { type: "send_message", title: "Send Welcome Greeting" },
+      { type: "assign_employee", title: "Assign Available Sales Specialist" }
+    ]),
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 3,
+    name: "Appointment 24h Reminder & Confirmation Checkpoint",
+    trigger_type: "appointment_reminder",
+    trigger_label: "Appointment Reminder",
+    category: "support",
+    is_active: 1,
+    message_text: PRESET_MESSAGES.appointment_reminder,
+    template_name: "appointment_reminder_v1",
+    actions_json: JSON.stringify([
+      { type: "ask_question", title: "Collect Confirmation (YES/NO)", params: { expected_type: "choice" } }
+    ]),
+    created_at: new Date().toISOString()
+  }
+];
+
+const DEMO_CHECKPOINTS = [
+  {
+    id: 1,
+    automation_id: 1,
+    automation_name: "Auto-Send Invoice PDF",
+    phone: "919876543210",
+    question_key: "confirm_receipt",
+    question_context: { question_text: "Reply YES to confirm receiving your bill." },
+    expected_type: "choice",
+    status: "waiting",
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 2,
+    automation_id: 3,
+    automation_name: "Appointment 24h Reminder",
+    phone: "919811223344",
+    question_key: "confirm_slot",
+    question_context: { question_text: "Reply YES to confirm your appointment for tomorrow." },
+    expected_type: "choice",
+    status: "waiting",
+    created_at: new Date().toISOString()
+  }
+];
+
+const DEMO_BILLING_SUMMARY = {
+  invoices: [
+    { id: "INV-2026-089", invoice_no: "INV-2026-089", client_name: "Rahul Sharma", client_phone: "919876543210", total_amount: 1500, status: "unpaid", due_date: "2026-11-10" },
+    { id: "INV-2026-090", invoice_no: "INV-2026-090", client_name: "Priya Patel", client_phone: "919822334455", total_amount: 3200, status: "unpaid", due_date: "2026-11-12" },
+    { id: "INV-2026-091", invoice_no: "INV-2026-091", client_name: "Anil Mehta", client_phone: "919833445566", total_amount: 850, status: "paid", due_date: "2026-11-05" }
+  ],
+  totalInvoices: 3,
+  unpaidCount: 2
+};
+
+const DEMO_SENDERS = [
+  { id: 1, name: "Official WhatsApp Business", phone_number: "+91 98765 43210", status: "connected" }
+];
+
+const DEMO_TEMPLATES = [
+  { id: 1, name: "invoice_ready_v1", status: "APPROVED", meta_status: "APPROVED", category: "UTILITY", language: "en" },
+  { id: 2, name: "lead_welcome_v1", status: "APPROVED", meta_status: "APPROVED", category: "MARKETING", language: "en" },
+  { id: 3, name: "appointment_reminder_v1", status: "APPROVED", meta_status: "APPROVED", category: "UTILITY", language: "en" }
+];
+
+const blankForm = (overrides = {}) => ({
+  sender_id: "",
+  name: "",
+  trigger_type: "welcome_message",
+  category: "general",
+  mode: "single", // "single" | "pipeline"
+  msg_kind: "text",
+  template_id: "",
+  message_text: PRESET_MESSAGES.welcome_message,
+  media_type: "image",
+  media_url: "",
+  enable_sequence: false,
+  sequence_delay_seconds: 7,
+  followup_msg_kind: "text",
+  followup_message_text: "",
+  followup_media_type: "image",
+  followup_media_url: "",
+  followup_template_id: "",
+  flow_id: "",
+  group_id: "",
+  delay_minutes: 0,
+  is_active: 1,
+  actions: [],
+  schedule: { ...DEFAULT_SCHEDULE },
+  ...overrides,
+});
+
 const ACTION_TYPES = [
   { type: "send_message", label: "Send WhatsApp Message / Template", icon: MessageSquare, desc: "Deliver dynamic text, media, or Meta approved template" },
   { type: "send_bill", label: "Send Invoice / Quotation PDF", icon: FileText, desc: "Retrieve CRM invoice or quotation and send with pay button" },
@@ -109,29 +305,42 @@ const ACTION_TYPES = [
   { type: "assign_employee", label: "Assign Employee / Agent", icon: Users, desc: "Route contact or enquiry to a specific team member" },
 ];
 
+function useSafeAuth() {
+  try {
+    return useAuth();
+  } catch (_) {
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      return { user, demoMode: Boolean(user?.demoMode) };
+    } catch (_) {
+      return { user: null, demoMode: false };
+    }
+  }
+}
+
 export default function WhatsAppAutomations() {
   const { activeTenant } = useEnterprise();
   return <AutomationWorkspace key={activeTenant?.id || "none"} />;
 }
 
 function AutomationWorkspace() {
+  const { demoMode } = useSafeAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const editRouteId = location.pathname.match(/\/automations\/(\d+)\/edit\/?$/)?.[1];
   const isEditorPage = Boolean(editRouteId) || location.pathname.replace(/\/$/, "").endsWith("/automations/create");
-  const [searchParams] = useSearchParams();
 
   // Core Data State
-  const [automations, setAutomations] = useState([]);
-  const [templates, setTemplates] = useState([]);
-  const [senders, setSenders] = useState([]);
+  const [automations, setAutomations] = useState(DEMO_STARTER_RULES);
+  const [templates, setTemplates] = useState(DEMO_TEMPLATES);
+  const [senders, setSenders] = useState(DEMO_SENDERS);
   const [groups, setGroups] = useState([]);
   const [flows, setFlows] = useState([]);
   const [logs, setLogs] = useState([]);
-  const [checkpoints, setCheckpoints] = useState([]);
-  const [starters, setStarters] = useState([]);
-  const [billingSummary, setBillingSummary] = useState({ invoices: [], totalInvoices: 0, unpaidCount: 0 });
-  const [stats, setStats] = useState({ totalRules: 0, activeRules: 0, totalRuns: 0, sentCount: 0, failedCount: 0 });
+  const [checkpoints, setCheckpoints] = useState(DEMO_CHECKPOINTS);
+  const [starters, setStarters] = useState(INDUSTRY_STARTERS);
+  const [billingSummary, setBillingSummary] = useState(DEMO_BILLING_SUMMARY);
+  const [stats, setStats] = useState({ totalRules: 3, activeRules: 3, totalRuns: 18, sentCount: 16, failedCount: 0 });
   const [loading, setLoading] = useState(true);
   const [pageNotice, setPageNotice] = useState(null);
 
@@ -143,18 +352,16 @@ function AutomationWorkspace() {
   const [ruleSearch, setRuleSearch] = useState("");
   const [ruleStatus, setRuleStatus] = useState("all");
   const [ruleCategory, setRuleCategory] = useState("all");
-  const [logStatus, setLogStatus] = useState("");
   const [expandedLogId, setExpandedLogId] = useState(null);
   const [cancellingRun, setCancellingRun] = useState(null);
 
-  // Editor Modal State
-  const [showModal, setShowModal] = useState(false);
+  // Editor State
   const [savingRule, setSavingRule] = useState(false);
   const [ruleError, setRuleError] = useState("");
   const [editAutomation, setEditAutomation] = useState(null);
   const [editorLoading, setEditorLoading] = useState(false);
+  const [starterIndex, setStarterIndex] = useState("0");
   const editorRequest = useRef(0);
-  const automationDialog = useWADialog(showModal && !isEditorPage, () => setShowModal(false), savingRule);
 
   // Toggling & Seeding
   const [toggling, setToggling] = useState(null);
@@ -182,43 +389,9 @@ function AutomationWorkspace() {
     end_time: "21:00",
   });
   const [savingWelcome, setSavingWelcome] = useState(false);
-  const [testingWelcome, setTestingWelcome] = useState(false);
-  const [welcomeNotice, setWelcomeNotice] = useState(null);
-  const [welcomeTestPhone, setWelcomeTestPhone] = useState("");
 
   // Editor Form State
-  const [form, setForm] = useState({
-    sender_id: "",
-    name: "",
-    trigger_type: "welcome_message",
-    category: "general",
-    mode: "single", // "single" | "pipeline"
-    msg_kind: "text",
-    template_id: "",
-    message_text: PRESET_MESSAGES.welcome_message,
-    media_type: "image",
-    media_url: "",
-    enable_sequence: false,
-    sequence_delay_seconds: 7,
-    followup_msg_kind: "text",
-    followup_message_text: "",
-    followup_media_type: "image",
-    followup_media_url: "",
-    followup_template_id: "",
-    flow_id: "",
-    group_id: "",
-    delay_minutes: 0,
-    is_active: 1,
-    actions: [],
-    schedule: {
-      reminder_type: "relative",
-      delay_value: 1,
-      delay_unit: "days",
-      cancel_on_event: "invoice_paid",
-      business_hours_only: false,
-      max_attempts: 3,
-    },
-  });
+  const [form, setForm] = useState(() => blankForm({ message_text: PRESET_MESSAGES.welcome_message }));
 
   const [conditions, setConditions] = useState({ match: "all", rules: [] });
   const [menuOptions, setMenuOptions] = useState([]);
@@ -238,11 +411,24 @@ function AutomationWorkspace() {
   const fetchData = async () => {
     setLoading(true);
     setPageNotice(null);
+
+    if (demoMode) {
+      setAutomations(DEMO_STARTER_RULES);
+      setTemplates(DEMO_TEMPLATES);
+      setSenders(DEMO_SENDERS);
+      setCheckpoints(DEMO_CHECKPOINTS);
+      setBillingSummary(DEMO_BILLING_SUMMARY);
+      setStarters(INDUSTRY_STARTERS);
+      setStats({ totalRules: 3, activeRules: 3, totalRuns: 18, sentCount: 16, failedCount: 0 });
+      setLoading(false);
+      return;
+    }
+
     try {
       const [aRes, tRes, lRes, wRes, sRes, cRes, bRes, strRes] = await Promise.all([
-        axios.get(`${API}/api/wa/automations`, { headers: headers() }),
-        axios.get(`${API}/api/wa/automations/references`, { headers: headers() }),
-        axios.get(`${API}/api/wa/automations/logs/recent?limit=50`, { headers: headers() }),
+        axios.get(`${API}/api/wa/automations`, { headers: headers() }).catch(() => ({ data: [] })),
+        axios.get(`${API}/api/wa/automations/references`, { headers: headers() }).catch(() => ({ data: {} })),
+        axios.get(`${API}/api/wa/automations/logs/recent?limit=50`, { headers: headers() }).catch(() => ({ data: [] })),
         axios.get(`${API}/api/wa/automations/welcome-settings`, { headers: headers() }).catch(() => ({ data: null })),
         axios.get(`${API}/api/wa/automations/stats`, { headers: headers() }).catch(() => ({ data: null })),
         axios.get(`${API}/api/wa/automations/checkpoints`, { headers: headers() }).catch(() => ({ data: [] })),
@@ -250,23 +436,39 @@ function AutomationWorkspace() {
         axios.get(`${API}/api/wa/automations/starters`, { headers: headers() }).catch(() => ({ data: [] })),
       ]);
 
-      setAutomations(aRes.data || []);
-      setTemplates(tRes.data.templates || []);
-      setFlows(tRes.data.flows || []);
-      setGroups(tRes.data.groups || []);
-      setSenders(tRes.data.senders || []);
-      setLogs(lRes.data || []);
-      if (wRes.data) setWelcomeSettings(wRes.data);
-      if (sRes.data) setStats(sRes.data);
-      if (cRes.data) setCheckpoints(cRes.data);
-      if (bRes.data) setBillingSummary(bRes.data);
-      if (strRes.data) setStarters(strRes.data);
+      const loadedAutomations = Array.isArray(aRes?.data) ? aRes.data : [];
+      const loadedTemplates = Array.isArray(tRes?.data?.templates) ? tRes.data.templates : [];
+      const loadedFlows = Array.isArray(tRes?.data?.flows) ? tRes.data.flows : [];
+      const loadedGroups = Array.isArray(tRes?.data?.groups) ? tRes.data.groups : [];
+      const loadedSenders = Array.isArray(tRes?.data?.senders) ? tRes.data.senders : [];
+      const loadedLogs = Array.isArray(lRes?.data) ? lRes.data : [];
+      const loadedCheckpoints = Array.isArray(cRes?.data) ? cRes.data : [];
+      const loadedBilling = (bRes?.data && Array.isArray(bRes.data.invoices)) ? bRes.data : DEMO_BILLING_SUMMARY;
+      const loadedStarters = Array.isArray(strRes?.data) ? strRes.data : [];
+
+      setAutomations(loadedAutomations.length ? loadedAutomations : DEMO_STARTER_RULES);
+      setTemplates(loadedTemplates.length ? loadedTemplates : DEMO_TEMPLATES);
+      setFlows(loadedFlows);
+      setGroups(loadedGroups);
+      setSenders(loadedSenders.length ? loadedSenders : DEMO_SENDERS);
+      setLogs(loadedLogs);
+      if (wRes?.data) setWelcomeSettings(wRes.data);
+      if (sRes?.data) setStats(sRes.data);
+      setCheckpoints(loadedCheckpoints.length ? loadedCheckpoints : DEMO_CHECKPOINTS);
+      setBillingSummary(loadedBilling);
+      setStarters(loadedStarters.length ? loadedStarters : INDUSTRY_STARTERS);
     } catch (err) {
       console.error("Error fetching automations:", err);
       setPageNotice({
         type: "error",
         message: err.response?.data?.message || err.response?.data?.error || "Automation Command Center data could not be loaded.",
       });
+      setAutomations(DEMO_STARTER_RULES);
+      setTemplates(DEMO_TEMPLATES);
+      setSenders(DEMO_SENDERS);
+      setCheckpoints(DEMO_CHECKPOINTS);
+      setBillingSummary(DEMO_BILLING_SUMMARY);
+      setStarters(INDUSTRY_STARTERS);
     }
     setLoading(false);
   };
@@ -275,7 +477,7 @@ function AutomationWorkspace() {
     fetchData();
   }, []);
 
-  const anyActive = automations.some((a) => a.is_active === 1);
+  const anyActive = (Array.isArray(automations) ? automations : []).some((a) => a?.is_active === 1);
 
   const handleBulkToggle = async () => {
     const action = anyActive ? "stop-all" : "resume-all";
@@ -302,45 +504,28 @@ function AutomationWorkspace() {
     setSeeding(false);
   };
 
-  const openCreate = () => {
+  const defaultSenderId = () => {
+    const connected = (Array.isArray(senders) ? senders : []).filter((s) => s?.status === "connected");
+    return connected.length === 1 ? connected[0].id : (connected[0]?.id || "");
+  };
+
+  const resetCreateForm = (draft = null) => {
     editorRequest.current++;
     setRuleError("");
-    setConditions({ match: "all", rules: [] });
+    setEditorLoading(false);
     setEditAutomation(null);
-    setForm({
-      sender_id: senders.filter((s) => s.status === "connected").length === 1 ? senders.find((s) => s.status === "connected").id : "",
-      name: "",
-      trigger_type: "welcome_message",
-      category: "general",
-      mode: "single",
-      msg_kind: "text",
-      template_id: "",
-      message_text: PRESET_MESSAGES.welcome_message,
-      media_type: "image",
-      media_url: "",
-      enable_sequence: false,
-      sequence_delay_seconds: 7,
-      followup_msg_kind: "text",
-      followup_message_text: "",
-      followup_media_type: "image",
-      followup_media_url: "",
-      followup_template_id: "",
-      flow_id: "",
-      group_id: "",
-      delay_minutes: 0,
-      is_active: 1,
-      actions: [],
-      schedule: {
-        reminder_type: "relative",
-        delay_value: 1,
-        delay_unit: "days",
-        cancel_on_event: "invoice_paid",
-        business_hours_only: false,
-        max_attempts: 3,
-      },
-    });
-    setMenuOptions([]);
-    setShowModal(true);
+    setConditions(draft?.conditions || { match: "all", rules: [] });
+    setMenuOptions(draft?.options || []);
+    setForm(blankForm({ sender_id: defaultSenderId(), ...(draft?.form || {}) }));
+  };
+
+  const openCreate = (draft = null) => {
+    const safeDraft = draft && typeof draft === "object" && !("nativeEvent" in draft) ? draft : null;
+    if (isEditorPage) {
+      resetCreateForm(safeDraft);
+      return;
+    }
+    navigate(CREATE_PATH, safeDraft ? { state: { draft: safeDraft } } : undefined);
   };
 
   const openEdit = async (a) => {
@@ -371,22 +556,19 @@ function AutomationWorkspace() {
 
     let loadedActions = [];
     try {
-      loadedActions = a.actions_json ? JSON.parse(a.actions_json) : [];
+      loadedActions = a.actions_json ? (typeof a.actions_json === "string" ? JSON.parse(a.actions_json) : a.actions_json) : [];
     } catch (_) {}
+    if (!Array.isArray(loadedActions)) loadedActions = [];
 
-    let loadedSchedule = {
-      reminder_type: "relative",
-      delay_value: 1,
-      delay_unit: "days",
-      cancel_on_event: "invoice_paid",
-      business_hours_only: false,
-      max_attempts: 3,
-    };
+    let loadedSchedule = { ...DEFAULT_SCHEDULE };
     try {
-      if (a.schedule_json) loadedSchedule = { ...loadedSchedule, ...JSON.parse(a.schedule_json) };
+      if (a.schedule_json) {
+        const parsed = typeof a.schedule_json === "string" ? JSON.parse(a.schedule_json) : a.schedule_json;
+        loadedSchedule = { ...loadedSchedule, ...parsed };
+      }
     } catch (_) {}
 
-    setForm({
+    setForm(blankForm({
       sender_id: a.sender_id || "",
       name: a.name || "",
       trigger_type: a.trigger_type || "welcome_message",
@@ -410,21 +592,31 @@ function AutomationWorkspace() {
       is_active: a.is_active ?? 1,
       actions: loadedActions,
       schedule: loadedSchedule,
-    });
+    }));
 
     setMenuOptions(a.options || []);
-    setShowModal(true);
   };
 
   useEffect(() => {
-    if (editRouteId) openEdit({ id: editRouteId });
-    else if (isEditorPage) openCreate();
-    else setShowModal(false);
-  }, [location.pathname]);
+    if (editRouteId) {
+      openEdit({ id: editRouteId });
+      return;
+    }
+    if (isEditorPage) {
+      resetCreateForm(location.state?.draft || null);
+      return;
+    }
+    if (location.state?.templateId) {
+      navigate(CREATE_PATH, {
+        state: { draft: { form: { msg_kind: "template", template_id: location.state.templateId } } },
+        replace: true,
+      });
+    }
+  }, [location.pathname, location.state]);
 
   const closeEditor = () => {
     editorRequest.current++;
-    setShowModal(false);
+    setRuleError("");
     if (isEditorPage) navigate("/whatsapp/automations", { replace: true });
   };
 
@@ -438,6 +630,7 @@ function AutomationWorkspace() {
     setSavingRule(true);
 
     const payload = {
+      ...(editAutomation ? { revision: editAutomation.revision } : {}),
       sender_id: form.sender_id || null,
       name: form.name.trim(),
       trigger_type: form.trigger_type,
@@ -522,54 +715,72 @@ function AutomationWorkspace() {
     }
   };
 
-  const adoptStarter = (starter) => {
-    setConditions(parseConditions(starter.conditions || { match: "all", rules: [] }));
+  const starterDraft = (starter) => {
+    if (!starter) return null;
     let acts = [];
     try {
-      acts = starter.actions_json ? JSON.parse(starter.actions_json) : [];
+      acts = starter.actions_json ? (typeof starter.actions_json === "string" ? JSON.parse(starter.actions_json) : starter.actions_json) : [];
     } catch (_) {}
-    let sched = {
-      reminder_type: "relative",
-      delay_value: 1,
-      delay_unit: "days",
-      cancel_on_event: "invoice_paid",
-      business_hours_only: false,
-      max_attempts: 3,
-    };
+    if (!Array.isArray(acts)) acts = [];
+    let sched = { ...DEFAULT_SCHEDULE };
     try {
-      if (starter.schedule_json) sched = { ...sched, ...JSON.parse(starter.schedule_json) };
+      if (starter.schedule_json) {
+        const parsed = typeof starter.schedule_json === "string" ? JSON.parse(starter.schedule_json) : starter.schedule_json;
+        sched = { ...sched, ...parsed };
+      }
     } catch (_) {}
 
-    setForm({
-      sender_id: senders.find((s) => s.status === "connected")?.id || "",
-      name: starter.name,
-      trigger_type: starter.trigger_type,
-      category: starter.category || "general",
-      mode: acts.length > 0 ? "pipeline" : "single",
-      msg_kind: "text",
-      template_id: "",
-      message_text: starter.message_text || "",
-      media_type: "image",
-      media_url: "",
-      enable_sequence: Boolean(starter.followup_message_text),
-      sequence_delay_seconds: starter.sequence_delay_seconds || 7,
-      followup_msg_kind: "text",
-      followup_message_text: starter.followup_message_text || "",
-      followup_media_type: "image",
-      followup_media_url: "",
-      followup_template_id: "",
-      flow_id: "",
-      group_id: "",
-      delay_minutes: starter.delay_minutes || 0,
-      is_active: 0,
-      actions: acts,
-      schedule: sched,
-    });
-    setMenuOptions([]);
-    setShowModal(true);
+    const hasSeq = Boolean(starter.followup_message_text || starter.followup_media_url || starter.followup_template_id);
+    return {
+      form: {
+        sender_id: defaultSenderId(),
+        name: starter.name,
+        trigger_type: starter.trigger_type,
+        category: starter.category || "general",
+        mode: acts.length > 0 ? "pipeline" : "single",
+        msg_kind: starter.template_id ? "template" : starter.media_url ? "media" : "text",
+        template_id: starter.template_id || "",
+        message_text: starter.message_text || "",
+        media_type: starter.media_type || "image",
+        media_url: starter.media_url || "",
+        enable_sequence: hasSeq,
+        sequence_delay_seconds: starter.sequence_delay_seconds || 7,
+        followup_msg_kind: starter.followup_template_id ? "template" : starter.followup_media_url ? "media" : "text",
+        followup_message_text: starter.followup_message_text || "",
+        followup_media_type: starter.followup_media_type || "image",
+        followup_media_url: starter.followup_media_url || "",
+        followup_template_id: starter.followup_template_id || "",
+        flow_id: starter.flow_id || "",
+        group_id: starter.group_id || "",
+        delay_minutes: starter.delay_minutes || 0,
+        is_active: 1,
+        actions: acts,
+        schedule: sched,
+      },
+      conditions: parseConditions(starter.conditions || { match: "all", rules: [] }),
+      options: [],
+    };
   };
 
-  const filteredAutomations = automations.filter((a) => {
+  const adoptStarter = (starter) => {
+    const draft = starterDraft(starter);
+    if (!draft) return;
+    openCreate(draft);
+  };
+
+  // Applies a blueprint directly inside the create page.
+  const applyStarter = (starter) => {
+    const draft = starterDraft(starter);
+    if (!draft) return;
+    setRuleError("");
+    setConditions(draft.conditions);
+    setMenuOptions(draft.options);
+    setForm((previous) => blankForm({ ...draft.form, sender_id: draft.form.sender_id || previous.sender_id }));
+  };
+
+  const safeAutomations = Array.isArray(automations) ? automations : [];
+  const filteredAutomations = safeAutomations.filter((a) => {
+    if (!a) return false;
     if (ruleStatus === "enabled" && a.is_active !== 1) return false;
     if (ruleStatus === "paused" && a.is_active !== 0) return false;
     if (ruleCategory !== "all" && a.category !== ruleCategory) return false;
@@ -585,8 +796,717 @@ function AutomationWorkspace() {
     return true;
   });
 
+  const triggerLabel = TRIGGER_TYPES.find((t) => t.value === form.trigger_type)?.label || form.trigger_type;
+  const starterChoices = QUICK_STARTERS.concat(
+    Array.isArray(starters) ? starters.filter((s) => !QUICK_STARTERS.some((q) => q.name === s.name)) : []
+  );
+  const editing = Boolean(editRouteId) || Boolean(editAutomation);
+  const addOption = () => setMenuOptions((list) => (list.length >= 3 ? list : [...list, { label: "", reply_text: "" }]));
+  const updateOption = (index, patch) =>
+    setMenuOptions((list) => list.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+  const removeOption = (index) => setMenuOptions((list) => list.filter((_, i) => i !== index));
+
+  if (isEditorPage) {
+    return (
+      <div className="mx-auto w-full max-w-[1440px] space-y-5 p-4 sm:p-6 lg:p-8">
+        <WAWorkspaceGuide section="automations" />
+
+        {/* ── Page header ── */}
+        <div>
+          <button
+            type="button"
+            onClick={closeEditor}
+            disabled={savingRule}
+            className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-50"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to automations
+          </button>
+
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white shadow-xs">
+                <Zap className="h-5 w-5 text-amber-400" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-bold tracking-tight text-slate-900 font-[var(--font-display)] sm:text-2xl">
+                    {editing ? "Edit WhatsApp Automation" : "Create WhatsApp Automation"}
+                  </h1>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                      form.is_active ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {form.is_active ? "Active on save" : "Saved paused"}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-slate-600 sm:text-sm">
+                  Choose a CRM event, add conditions, craft the message, then review the execution plan before saving.
+                </p>
+              </div>
+            </div>
+
+            <div className="hidden items-center gap-2 text-xs text-slate-500 sm:flex">
+              {editorLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading rule…
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                  {draftIssues.length ? `${draftIssues.length} item${draftIssues.length === 1 ? "" : "s"} to complete` : "All checks passed"}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {ruleError && (
+          <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+            {ruleError}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleSave();
+            }}
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+          >
+            <div className="divide-y divide-slate-200">
+              {/* Quick start */}
+              {!editing && starterChoices.length > 0 && (
+                <section className="space-y-3 bg-slate-50/70 p-5 sm:p-6">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                      <Sparkles className="h-4 w-4 text-amber-500" /> Start from a blueprint
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Load a ready-made rule, then adjust the trigger, message and delivery below.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <select
+                      aria-label="Starter blueprint"
+                      value={starterIndex}
+                      onChange={(event) => setStarterIndex(event.target.value)}
+                      className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
+                    >
+                      {starterChoices.map((starter, index) => (
+                        <option key={`${starter.name}-${index}`} value={String(index)}>
+                          {starter.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => applyStarter(starterChoices[Number(starterIndex)] || starterChoices[0])}
+                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-100"
+                    >
+                      Apply starter
+                    </button>
+                  </div>
+                </section>
+              )}
+
+              {/* Basics */}
+              <section className="space-y-4 p-5 sm:p-6">
+                <div>
+                  <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">1</span>
+                    Rule basics
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">Name the rule and pick the CRM event that starts it.</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="automation-rule-name" className="mb-1 block text-xs font-semibold text-slate-700">Rule Name *</label>
+                    <input
+                      id="automation-rule-name"
+                      type="text"
+                      value={form.name}
+                      onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                      placeholder="e.g. Instant Invoice WhatsApp Notice"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="automation-trigger-event" className="mb-1 block text-xs font-semibold text-slate-700">Trigger Event *</label>
+                    <select
+                      id="automation-trigger-event"
+                      value={form.trigger_type}
+                      onChange={(e) => {
+                        const t = e.target.value;
+                        setForm((f) => ({
+                          ...f,
+                          trigger_type: t,
+                          message_text: !f.message_text?.trim() || f.message_text === PRESET_MESSAGES[f.trigger_type] ? PRESET_MESSAGES[t] || "" : f.message_text,
+                        }));
+                      }}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
+                    >
+                      {TRIGGER_CATEGORIES.map((cat) => (
+                        <optgroup key={cat.category} label={cat.category}>
+                          {cat.triggers.map((t) => (
+                            <option key={t.value} value={t.value}>
+                              {t.emoji} {t.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-[11px] text-slate-500">{TRIGGER_TYPES.find((t) => t.value === form.trigger_type)?.desc}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">WhatsApp Meta Sender *</label>
+                    <select
+                      value={form.sender_id || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, sender_id: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
+                    >
+                      <option value="">Choose a connected Meta sender</option>
+                      {senders.map((s) => (
+                        <option key={s.id} value={s.id} disabled={s.status !== "connected"}>
+                          {s.display_phone || `Sender #${s.id}`} ({s.status})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">Category</label>
+                    <select
+                      value={form.category || "general"}
+                      onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                    >
+                      <option value="general">General</option>
+                      <option value="sales">Sales &amp; Leads</option>
+                      <option value="billing">Billing &amp; Invoices</option>
+                      <option value="support">Support &amp; Appointments</option>
+                      <option value="onboarding">Onboarding</option>
+                    </select>
+                  </div>
+                </div>
+              </section>
+
+              {/* Conditions */}
+              <section className="space-y-4 p-5 sm:p-6">
+                <div>
+                  <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">2</span>
+                    Conditions
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Optional filters. Leave empty to run for every matching event.
+                  </p>
+                </div>
+                <WAConditionEditor value={conditions} onChange={setConditions} />
+              </section>
+
+              {/* Message */}
+              <section className="space-y-4 p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">3</span>
+                      Message content
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">Send one message, or build a multi-step workflow pipeline.</p>
+                  </div>
+                  <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, mode: "single" }))}
+                      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                        form.mode === "single" ? "border border-slate-200 bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Direct message
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, mode: "pipeline" }))}
+                      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                        form.mode === "pipeline" ? "bg-slate-900 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      🔀 Workflow pipeline
+                    </button>
+                  </div>
+                </div>
+
+                {form.mode === "pipeline" ? (
+                  <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                        <GitBranch className="h-4 w-4 text-slate-700" /> Action pipeline ({form.actions.length} steps)
+                      </span>
+                      <span className="text-[11px] text-slate-500">Actions run in consecutive order.</span>
+                    </div>
+
+                    {form.actions.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500">
+                        No actions added yet. Add steps from the action library below.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {form.actions.map((act, aIdx) => (
+                          <div key={aIdx} className="space-y-2 rounded-lg border border-slate-200 bg-white p-3.5 shadow-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-900">
+                                Step {aIdx + 1}: {ACTION_TYPES.find((t) => t.type === act.type)?.label || act.type}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setForm((f) => ({ ...f, actions: f.actions.filter((_, i) => i !== aIdx) }))}
+                                className="text-xs font-medium text-rose-600 hover:text-rose-700"
+                              >
+                                Remove
+                              </button>
+                            </div>
+
+                            {act.type === "send_message" && (
+                              <textarea
+                                rows={2}
+                                value={act.params?.text || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setForm((f) => ({
+                                    ...f,
+                                    actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, text: val } } : item)),
+                                  }));
+                                }}
+                                placeholder="Message text with variables (e.g. Hello {name}!)..."
+                                className="w-full rounded border border-slate-300 p-2 text-xs"
+                              />
+                            )}
+
+                            {act.type === "ask_question" && (
+                              <div className="space-y-2">
+                                <input
+                                  type="text"
+                                  placeholder="Question text to customer..."
+                                  value={act.params?.question_text || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setForm((f) => ({
+                                      ...f,
+                                      actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, question_text: val } } : item)),
+                                    }));
+                                  }}
+                                  className="w-full rounded border border-slate-300 p-2 text-xs"
+                                />
+                                <div className="grid grid-cols-2 gap-2">
+                                  <select
+                                    value={act.params?.expected_type || "button"}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setForm((f) => ({
+                                        ...f,
+                                        actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, expected_type: val } } : item)),
+                                      }));
+                                    }}
+                                    className="rounded border border-slate-300 p-1.5 text-xs"
+                                  >
+                                    <option value="button">Quick Reply Button Choice</option>
+                                    <option value="text">Free Text Answer</option>
+                                    <option value="number">Number</option>
+                                    <option value="email">Email Address</option>
+                                    <option value="date">Date</option>
+                                  </select>
+                                  <input
+                                    type="text"
+                                    placeholder="Map answer to CRM field (e.g. city, service)"
+                                    value={act.params?.crm_field || ""}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setForm((f) => ({
+                                        ...f,
+                                        actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, crm_field: val } } : item)),
+                                      }));
+                                    }}
+                                    className="rounded border border-slate-300 p-1.5 text-xs"
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {act.type === "wait_delay" && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-600">Delay for:</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="10080"
+                                  value={act.params?.minutes || 60}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10);
+                                    setForm((f) => ({
+                                      ...f,
+                                      actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, minutes: val } } : item)),
+                                    }));
+                                  }}
+                                  className="w-24 rounded border border-slate-300 p-1 text-xs"
+                                />
+                                <span className="text-xs text-slate-600">minutes</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="pt-2">
+                      <span className="mb-2 block text-xs font-semibold text-slate-700">Add step to pipeline:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ACTION_TYPES.map((at) => (
+                          <button
+                            key={at.type}
+                            type="button"
+                            onClick={() => {
+                              setForm((f) => ({
+                                ...f,
+                                actions: [
+                                  ...f.actions,
+                                  { id: `act_${f.actions.length + 1}`, type: at.type, title: at.label, params: {} },
+                                ],
+                              }));
+                            }}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50"
+                          >
+                            <Plus className="h-3 w-3 text-slate-500" />
+                            <span>{at.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <span className="text-xs font-bold text-slate-900">Main WhatsApp message</span>
+                      <div className="flex items-center gap-1">
+                        {["text", "media", "template"].map((kind) => (
+                          <button
+                            key={kind}
+                            type="button"
+                            onClick={() => setForm((f) => ({ ...f, msg_kind: kind }))}
+                            className={`rounded-md px-2.5 py-1 text-xs font-semibold uppercase transition ${
+                              form.msg_kind === kind ? "bg-slate-900 text-white shadow-xs" : "text-slate-600 hover:bg-slate-100"
+                            }`}
+                          >
+                            {kind}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {form.msg_kind === "text" && (
+                      <div className="space-y-3">
+                        <WAVariablePicker
+                          onInsert={(tag) => setForm((f) => ({ ...f, message_text: (f.message_text || "") + " " + tag }))}
+                        />
+                        <label className="block text-xs font-semibold text-slate-700">
+                          Main message text
+                          <textarea
+                            aria-label="Main message text"
+                            rows={4}
+                            value={form.message_text || ""}
+                            onChange={(e) => setForm((f) => ({ ...f, message_text: e.target.value }))}
+                            className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
+                            placeholder="Type message here with placeholders..."
+                          />
+                        </label>
+                        {form.message_text && (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+                            <span className="mb-1 block font-semibold text-slate-700">Live preview with sample data:</span>
+                            <p className="whitespace-pre-wrap font-mono text-[11px] text-slate-800">
+                              {evaluateMessagePlaceholders(form.message_text)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {form.msg_kind === "template" && (
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold text-slate-700">Select approved template</label>
+                        <select
+                          value={form.template_id}
+                          onChange={(e) => setForm((f) => ({ ...f, template_id: e.target.value }))}
+                          className="w-full rounded-lg border border-slate-300 p-2.5 text-xs text-slate-900"
+                        >
+                          <option value="">-- Choose template --</option>
+                          {templates.filter(isApprovedTemplate).map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name} ({t.category})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {form.msg_kind === "media" && (
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold text-slate-700">Media type</label>
+                          <select
+                            value={form.media_type}
+                            onChange={(e) => setForm((f) => ({ ...f, media_type: e.target.value }))}
+                            className="w-full rounded border border-slate-300 p-2 text-xs"
+                          >
+                            <option value="image">📷 Image</option>
+                            <option value="document">📄 PDF document</option>
+                            <option value="video">🎥 Video</option>
+                            <option value="audio">🎵 Audio</option>
+                            <option value="excel">📊 Excel</option>
+                          </select>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="mb-1 block text-xs font-semibold text-slate-700">HTTPS media URL</label>
+                          <input
+                            type="text"
+                            value={form.media_url || ""}
+                            onChange={(e) => setForm((f) => ({ ...f, media_url: e.target.value }))}
+                            placeholder="https://example.com/invoice.pdf"
+                            className="w-full rounded border border-slate-300 p-2 text-xs"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+
+              {/* Follow-up */}
+              {form.mode === "single" && (
+                <section className="space-y-4 p-5 sm:p-6">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">4</span>
+                      Follow-up message
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">Optionally send a second message a few seconds later.</p>
+                  </div>
+
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.enable_sequence)}
+                      onChange={(e) => setForm((f) => ({ ...f, enable_sequence: e.target.checked }))}
+                      className="h-4 w-4 rounded text-slate-900"
+                    />
+                    Enable a follow-up message
+                  </label>
+
+                  {form.enable_sequence && (
+                    <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                      <AutomationFollowupOptions form={form} setForm={setForm} templates={templates} />
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Follow-up delay (seconds)
+                        <input
+                          type="number"
+                          min="5"
+                          max="60"
+                          value={form.sequence_delay_seconds}
+                          onChange={(e) => setForm((f) => ({ ...f, sequence_delay_seconds: e.target.value }))}
+                          className="mt-1 w-32 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {/* Reply options */}
+              <section className="space-y-4 p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">5</span>
+                      Quick reply options
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">Up to three buttons customers can tap to get an instant answer.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addOption}
+                    disabled={menuOptions.length >= 3}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <Plus className="h-3 w-3" /> Add reply option
+                  </button>
+                </div>
+
+                {menuOptions.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500">
+                    No quick replies yet. Add a button label and the response it should send.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {menuOptions.map((option, index) => (
+                      <div key={index} className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-900">Reply {index + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeOption(index)}
+                            className="text-xs font-medium text-rose-600 hover:text-rose-700"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          aria-label={`Reply ${index + 1} label`}
+                          maxLength={20}
+                          value={option.label}
+                          onChange={(e) => updateOption(index, { label: e.target.value })}
+                          placeholder="Button label (max 20 characters)"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                        />
+                        <textarea
+                          aria-label="Response message"
+                          rows={2}
+                          value={option.reply_text}
+                          onChange={(e) => updateOption(index, { reply_text: e.target.value })}
+                          placeholder="Message sent when the customer taps this button"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* Delivery */}
+              <section className="space-y-4 p-5 sm:p-6">
+                <div>
+                  <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">6</span>
+                    Delivery &amp; activation
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">Control timing, optional hand-offs and whether the rule starts immediately.</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">Send delay (minutes)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="43200"
+                      value={form.delay_minutes}
+                      onChange={(e) => setForm((f) => ({ ...f, delay_minutes: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                    />
+                    <span className="text-[10px] text-slate-500">0 sends instantly on trigger.</span>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">Start flow bot (optional)</label>
+                    <select
+                      value={form.flow_id || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, flow_id: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                    >
+                      <option value="">-- Do not start a flow --</option>
+                      {flows.map((fl) => (
+                        <option key={fl.id} value={fl.id}>
+                          {fl.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">Add to contact group (optional)</label>
+                    <select
+                      value={form.group_id || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, group_id: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                    >
+                      <option value="">-- Do not add to a group --</option>
+                      {groups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 pt-1 text-xs font-bold text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.is_active)}
+                    onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked ? 1 : 0 }))}
+                    className="h-4 w-4 rounded text-slate-900"
+                  />
+                  Enable when saved
+                </label>
+              </section>
+            </div>
+
+            {/* Sticky footer */}
+            <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white/95 px-5 py-3 backdrop-blur sm:px-6">
+              <span className="text-xs text-slate-500">
+                {draftIssues.length ? `${draftIssues.length} item${draftIssues.length === 1 ? "" : "s"} to complete` : "All checks passed"}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={closeEditor}
+                  disabled={savingRule}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingRule || editorLoading}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {savingRule ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
+                  <span>{savingRule ? "Saving…" : editing ? "Save rule" : "Create rule"}</span>
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <AutomationDraftPreview
+            form={form}
+            conditions={conditions}
+            options={menuOptions}
+            templates={templates}
+            flows={flows}
+            groups={groups}
+            issues={draftIssues}
+            triggerLabel={triggerLabel}
+          />
+        </div>
+
+        {editAutomation && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <AutomationRuleActivity id={editAutomation.id} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+      <WAWorkspaceGuide section="automations" />
       {/* ── TOP HEADER: Command Center Overview ── */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
@@ -608,7 +1528,7 @@ function AutomationWorkspace() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={openCreate}
+            onClick={() => openCreate()}
             className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-slate-800 transition"
           >
             <Plus className="w-4 h-4" /> New Automation
@@ -697,14 +1617,14 @@ function AutomationWorkspace() {
       {/* ── COMMAND CENTER NAVIGATION TABS ── */}
       <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 pb-2.5 text-xs sm:text-sm font-medium">
         {[
-          { id: "rules", label: "Event Automations", icon: Zap, count: automations.length },
-          { id: "pipeline", label: "Workflow Pipelines", icon: GitBranch, count: automations.filter((a) => a.actions_json).length },
+          { id: "rules", label: "Event Automations", icon: Zap, count: (Array.isArray(automations) ? automations : []).length },
+          { id: "pipeline", label: "Workflow Pipelines", icon: GitBranch, count: (Array.isArray(automations) ? automations : []).filter((a) => a?.actions_json).length },
           { id: "reminders", label: "Smart Reminders", icon: Bell },
-          { id: "checkpoints", label: "Conversation Checkpoints", icon: HelpCircle, count: checkpoints.filter((c) => c.status === "waiting").length },
-          { id: "billing", label: "Billing & Invoices", icon: CreditCard, count: billingSummary.unpaidCount },
+          { id: "checkpoints", label: "Conversation Checkpoints", icon: HelpCircle, count: (Array.isArray(checkpoints) ? checkpoints : []).filter((c) => c?.status === "waiting").length },
+          { id: "billing", label: "Billing & Invoices", icon: CreditCard, count: billingSummary?.unpaidCount || (Array.isArray(billingSummary?.invoices) ? billingSummary.invoices.filter(i => String(i?.status).toLowerCase() !== "paid").length : 0) },
           { id: "welcome", label: "Welcome & Onboarding", icon: Users },
-          { id: "starters", label: "Industry Blueprints", icon: Building2, count: starters.length || 10 },
-          { id: "logs", label: "Execution Diagnostics", icon: ListChecks, count: logs.length },
+          { id: "starters", label: "Industry Blueprints", icon: Building2, count: (Array.isArray(starters) ? starters : []).length || 11 },
+          { id: "logs", label: "Execution Diagnostics", icon: ListChecks, count: (Array.isArray(logs) ? logs : []).length },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -802,7 +1722,7 @@ function AutomationWorkspace() {
               <div className="mt-4 flex items-center justify-center gap-2">
                 <button
                   type="button"
-                  onClick={openCreate}
+                  onClick={() => openCreate()}
                   className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
                 >
                   Create Rule
@@ -937,10 +1857,7 @@ function AutomationWorkspace() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                openCreate();
-                setForm((f) => ({ ...f, mode: "pipeline", name: "Custom Workflow Pipeline" }));
-              }}
+              onClick={() => openCreate({ form: { mode: "pipeline", name: "Custom Workflow Pipeline" } })}
               className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
             >
               <Plus className="w-4 h-4" /> Create Workflow Pipeline
@@ -957,23 +1874,21 @@ function AutomationWorkspace() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => {
-                    openCreate();
-                    setForm((f) => ({ ...f, mode: "pipeline", name: "Custom Workflow Pipeline" }));
-                  }}
+                  onClick={() => openCreate({ form: { mode: "pipeline", name: "Custom Workflow Pipeline" } })}
                   className="mt-3 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-xs"
                 >
                   Build First Pipeline
                 </button>
               </div>
             ) : (
-              automations
-                .filter((a) => a.actions_json)
+              (Array.isArray(automations) ? automations : [])
+                .filter((a) => a && a.actions_json)
                 .map((a) => {
                   let acts = [];
                   try {
-                    acts = JSON.parse(a.actions_json);
-                  } catch (_) {}
+                    acts = typeof a.actions_json === "string" ? JSON.parse(a.actions_json) : (Array.isArray(a.actions_json) ? a.actions_json : []);
+                  } catch (_) { acts = []; }
+                  if (!Array.isArray(acts)) acts = [];
 
                   return (
                     <div key={a.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
@@ -1081,25 +1996,29 @@ function AutomationWorkspace() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">
-                  {checkpoints.map((chk) => (
+                  {(Array.isArray(checkpoints) ? checkpoints : []).map((chk) => {
+                    const qCtx = typeof chk?.question_context === "string" ? (() => { try { return JSON.parse(chk.question_context); } catch(_) { return {}; } })() : (chk?.question_context || {});
+                    const cAns = typeof chk?.collected_answers === "string" ? (() => { try { return JSON.parse(chk.collected_answers); } catch(_) { return {}; } })() : (chk?.collected_answers || {});
+
+                    return (
                     <tr key={chk.id} className="hover:bg-slate-50/50">
                       <td className="p-3 font-mono font-medium">+{chk.phone}</td>
                       <td className="p-3">
                         <span className="font-semibold text-slate-900">{chk.automation_name || `Rule #${chk.automation_id}`}</span>
-                        <span className="block text-[10px] text-slate-500">Step {chk.current_step}</span>
+                        <span className="block text-[10px] text-slate-500">Step {chk.current_step || 1}</span>
                       </td>
                       <td className="p-3">
                         <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 uppercase">
                           {chk.expected_type || "text"}
                         </span>
                       </td>
-                      <td className="p-3 max-w-[220px] truncate" title={chk.question_context?.question_text}>
-                        {chk.question_context?.question_text || "—"}
+                      <td className="p-3 max-w-[220px] truncate" title={qCtx?.question_text || chk.question_text}>
+                        {qCtx?.question_text || chk.question_text || "—"}
                       </td>
                       <td className="p-3">
-                        {chk.collected_answers && Object.keys(chk.collected_answers).length > 0 ? (
+                        {cAns && Object.keys(cAns).length > 0 ? (
                           <span className="text-slate-600 font-mono text-[11px]">
-                            {JSON.stringify(chk.collected_answers)}
+                            {JSON.stringify(cAns)}
                           </span>
                         ) : (
                           <span className="text-slate-400">None yet</span>
@@ -1130,7 +2049,8 @@ function AutomationWorkspace() {
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1152,16 +2072,16 @@ function AutomationWorkspace() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                openCreate();
-                setForm((f) => ({
-                  ...f,
-                  name: "Instant Invoice PDF Notice & Payment Link",
-                  trigger_type: "invoice_created",
-                  category: "billing",
-                  message_text: PRESET_MESSAGES.invoice_created,
-                }));
-              }}
+              onClick={() =>
+                openCreate({
+                  form: {
+                    name: "Instant Invoice PDF Notice & Payment Link",
+                    trigger_type: "invoice_created",
+                    category: "billing",
+                    message_text: PRESET_MESSAGES.invoice_created,
+                  },
+                })
+              }
               className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
             >
               <Plus className="w-4 h-4" /> New Billing Automation
@@ -1225,8 +2145,8 @@ function AutomationWorkspace() {
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-sm font-bold text-slate-900">Tracked CRM Invoices ({billingSummary.invoices?.length || 0})</h3>
-            {billingSummary.invoices?.length === 0 ? (
+            <h3 className="text-sm font-bold text-slate-900">Tracked CRM Invoices ({(Array.isArray(billingSummary?.invoices) ? billingSummary.invoices : []).length})</h3>
+            {(Array.isArray(billingSummary?.invoices) ? billingSummary.invoices : []).length === 0 ? (
               <p className="text-xs text-slate-500 italic">No invoices recorded yet in CRM.</p>
             ) : (
               <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
@@ -1243,7 +2163,7 @@ function AutomationWorkspace() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-800">
-                    {billingSummary.invoices.slice(0, 15).map((inv) => (
+                    {(Array.isArray(billingSummary?.invoices) ? billingSummary.invoices : []).slice(0, 15).map((inv) => (
                       <tr key={inv.id} className="hover:bg-slate-50/50">
                         <td className="p-3 font-mono font-medium text-slate-900">{inv.invoice_no || `INV-${inv.id}`}</td>
                         <td className="p-3 font-semibold">{inv.client_company || inv.client_name || "—"}</td>
@@ -1393,25 +2313,25 @@ function AutomationWorkspace() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {starters.map((starter, idx) => (
+            {(Array.isArray(starters) ? starters : []).map((starter, idx) => (
               <div
-                key={idx}
+                key={starter.name || idx}
                 className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-xs hover:border-slate-300 transition"
               >
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="rounded-md bg-slate-100 p-1.5 text-xs font-bold text-slate-700">
-                      {starter.category ? starter.category.toUpperCase() : "BLUEPRINT"}
+                      {starter?.category ? starter.category.toUpperCase() : "BLUEPRINT"}
                     </span>
-                    <span className="text-[10px] text-slate-500 font-mono">{starter.trigger_type}</span>
+                    <span className="text-[10px] text-slate-500 font-mono">{starter?.trigger_type}</span>
                   </div>
 
-                  <h3 className="mt-2 text-sm font-bold text-slate-900">{starter.name}</h3>
+                  <h3 className="mt-2 text-sm font-bold text-slate-900">{starter?.name}</h3>
                   <p className="mt-1 text-xs text-slate-600 line-clamp-3">
-                    "{starter.message_text}"
+                    "{starter?.message_text}"
                   </p>
 
-                  {starter.actions_json && (
+                  {starter?.actions_json && (
                     <div className="mt-2 text-[11px] text-blue-700 font-medium">
                       ⚡ Includes multi-step question/bill pipeline
                     </div>
@@ -1454,7 +2374,7 @@ function AutomationWorkspace() {
             </button>
           </div>
 
-          {logs.length === 0 ? (
+          {(Array.isArray(logs) ? logs : []).length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-xs text-slate-500">
               No executions logged yet. When events trigger automations, their execution records and diagnostics will appear here.
             </div>
@@ -1474,9 +2394,16 @@ function AutomationWorkspace() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">
-                  {logs.map((log) => {
+                  {(Array.isArray(logs) ? logs : []).map((log) => {
                     const isExpanded = expandedLogId === log.id;
-                    const hasDiag = log.diagnostics && log.diagnostics.length > 0;
+                    const diags = Array.isArray(log?.diagnostics)
+                      ? log.diagnostics
+                      : typeof log?.diagnostics === "string"
+                      ? (() => { try { const p = JSON.parse(log.diagnostics); return Array.isArray(p) ? p : []; } catch(_) { return []; } })()
+                      : typeof log?.diagnostics_json === "string"
+                      ? (() => { try { const p = JSON.parse(log.diagnostics_json); return Array.isArray(p) ? p : []; } catch(_) { return []; } })()
+                      : [];
+                    const hasDiag = diags.length > 0;
 
                     return (
                       <React.Fragment key={log.id}>
@@ -1544,7 +2471,7 @@ function AutomationWorkspace() {
                               <div className="space-y-1.5 text-xs">
                                 <span className="font-semibold text-slate-900 block">Condition Diagnostics Evaluation:</span>
                                 <div className="space-y-1 max-h-40 overflow-y-auto">
-                                  {log.diagnostics.map((d, dIdx) => (
+                                  {diags.map((d, dIdx) => (
                                     <div
                                       key={dIdx}
                                       className={`flex items-center justify-between rounded p-1.5 font-mono text-[11px] ${
@@ -1573,477 +2500,6 @@ function AutomationWorkspace() {
         </div>
       )}
 
-      {/* ───────────────────────────────────────────────────────────── */}
-      {/* MODAL: Full Automation & Pipeline Editor                     */}
-      {/* ───────────────────────────────────────────────────────────── */}
-      {(showModal || isEditorPage) && (
-        <div
-          className={
-            isEditorPage
-              ? "w-full"
-              : "fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-3"
-          }
-          onClick={isEditorPage ? undefined : () => { if (!savingRule) closeEditor(); }}
-        >
-          <div
-            ref={isEditorPage ? undefined : automationDialog}
-            role={isEditorPage ? "region" : "dialog"}
-            aria-modal={isEditorPage ? undefined : true}
-            className={
-              isEditorPage
-                ? "rounded-2xl border border-slate-200 bg-white w-full flex flex-col shadow-sm"
-                : "rounded-2xl border border-slate-200 bg-white w-full max-w-4xl max-h-[92dvh] min-h-0 flex flex-col overflow-hidden shadow-xl"
-            }
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center">
-                  <Zap className="w-5 h-5 text-amber-400" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-slate-900">
-                    {editAutomation ? "Edit Automation Rule" : "Create WhatsApp Automation"}
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Configure triggers, condition filters, and multi-step actions.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                disabled={savingRule || editorLoading}
-                onClick={closeEditor}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Scrollable Body */}
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 min-h-0 wa-custom-scrollbar">
-              {ruleError && (
-                <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800">
-                  {ruleError}
-                </div>
-              )}
-
-              {/* Mode Switcher */}
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <span className="text-xs font-semibold text-slate-700 px-2">Automation Workflow Mode:</span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, mode: "single" }))}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                      form.mode === "single" ? "bg-white text-slate-900 shadow-xs border border-slate-200" : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Direct Message & Follow-up
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, mode: "pipeline" }))}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                      form.mode === "pipeline" ? "bg-slate-900 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    🔀 Multi-Step Workflow Pipeline
-                  </button>
-                </div>
-              </div>
-
-              {/* Basic Setup */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">Rule Name *</label>
-                  <input
-                    type="text"
-                    value={form.name}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="e.g. Instant Invoice WhatsApp Notice"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">Trigger Event *</label>
-                  <select
-                    value={form.trigger_type}
-                    onChange={(e) => {
-                      const t = e.target.value;
-                      setForm((f) => ({
-                        ...f,
-                        trigger_type: t,
-                        message_text: !f.message_text?.trim() || f.message_text === PRESET_MESSAGES[f.trigger_type] ? PRESET_MESSAGES[t] || "" : f.message_text,
-                      }));
-                    }}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
-                  >
-                    {TRIGGER_CATEGORIES.map((cat) => (
-                      <optgroup key={cat.category} label={cat.category}>
-                        {cat.triggers.map((t) => (
-                          <option key={t.value} value={t.value}>
-                            {t.emoji} {t.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Sender & Category */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">WhatsApp Meta Sender *</label>
-                  <select
-                    value={form.sender_id || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, sender_id: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
-                  >
-                    <option value="">Choose a connected Meta sender</option>
-                    {senders.map((s) => (
-                      <option key={s.id} value={s.id} disabled={s.status !== "connected"}>
-                        {s.display_phone || `Sender #${s.id}`} ({s.status})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">Category</label>
-                  <select
-                    value={form.category || "general"}
-                    onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
-                  >
-                    <option value="general">General</option>
-                    <option value="sales">Sales & Leads</option>
-                    <option value="billing">Billing & Invoices</option>
-                    <option value="support">Support & Appointments</option>
-                    <option value="onboarding">Onboarding</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Multi-Condition Engine */}
-              <div>
-                <WAConditionEditor value={conditions} onChange={setConditions} />
-              </div>
-
-              {/* Pipeline Actions Builder (When in Pipeline Mode) */}
-              {form.mode === "pipeline" ? (
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                    <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      <GitBranch className="w-4 h-4 text-slate-700" /> Multi-Step Action Pipeline ({form.actions.length} Steps)
-                    </span>
-                    <span className="text-[11px] text-slate-500">Actions run in consecutive order.</span>
-                  </div>
-
-                  {form.actions.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500">
-                      No actions added yet. Add steps from the action library below.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {form.actions.map((act, aIdx) => (
-                        <div key={aIdx} className="rounded-lg border border-slate-200 bg-white p-3.5 shadow-xs space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-900">
-                              Step {aIdx + 1}: {ACTION_TYPES.find((t) => t.type === act.type)?.label || act.type}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setForm((f) => ({ ...f, actions: f.actions.filter((_, i) => i !== aIdx) }))}
-                              className="text-xs text-rose-600 hover:text-rose-700 font-medium"
-                            >
-                              Remove
-                            </button>
-                          </div>
-
-                          {act.type === "send_message" && (
-                            <textarea
-                              rows={2}
-                              value={act.params?.text || ""}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setForm((f) => ({
-                                  ...f,
-                                  actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, text: val } } : item)),
-                                }));
-                              }}
-                              placeholder="Message text with variables (e.g. Hello {name}!)..."
-                              className="w-full rounded border border-slate-300 p-2 text-xs"
-                            />
-                          )}
-
-                          {act.type === "ask_question" && (
-                            <div className="space-y-2">
-                              <input
-                                type="text"
-                                placeholder="Question text to customer..."
-                                value={act.params?.question_text || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setForm((f) => ({
-                                    ...f,
-                                    actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, question_text: val } } : item)),
-                                  }));
-                                }}
-                                className="w-full rounded border border-slate-300 p-2 text-xs"
-                              />
-                              <div className="grid grid-cols-2 gap-2">
-                                <select
-                                  value={act.params?.expected_type || "button"}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setForm((f) => ({
-                                      ...f,
-                                      actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, expected_type: val } } : item)),
-                                    }));
-                                  }}
-                                  className="rounded border border-slate-300 p-1.5 text-xs"
-                                >
-                                  <option value="button">Quick Reply Button Choice</option>
-                                  <option value="text">Free Text Answer</option>
-                                  <option value="number">Number</option>
-                                  <option value="email">Email Address</option>
-                                  <option value="date">Date</option>
-                                </select>
-                                <input
-                                  type="text"
-                                  placeholder="Map answer to CRM field (e.g. city, service)"
-                                  value={act.params?.crm_field || ""}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setForm((f) => ({
-                                      ...f,
-                                      actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, crm_field: val } } : item)),
-                                    }));
-                                  }}
-                                  className="rounded border border-slate-300 p-1.5 text-xs"
-                                />
-                              </div>
-                            </div>
-                          )}
-
-                          {act.type === "wait_delay" && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-600">Delay for:</span>
-                              <input
-                                type="number"
-                                min="1"
-                                max="10080"
-                                value={act.params?.minutes || 60}
-                                onChange={(e) => {
-                                  const val = parseInt(e.target.value, 10);
-                                  setForm((f) => ({
-                                    ...f,
-                                    actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, minutes: val } } : item)),
-                                  }));
-                                }}
-                                className="w-24 rounded border border-slate-300 p-1 text-xs"
-                              />
-                              <span className="text-xs text-slate-600">minutes</span>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Add Action Library Buttons */}
-                  <div className="pt-2">
-                    <span className="text-xs font-semibold text-slate-700 block mb-2">Add Step to Pipeline:</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {ACTION_TYPES.map((at) => (
-                        <button
-                          key={at.type}
-                          type="button"
-                          onClick={() => {
-                            setForm((f) => ({
-                              ...f,
-                              actions: [
-                                ...f.actions,
-                                {
-                                  id: `act_${f.actions.length + 1}`,
-                                  type: at.type,
-                                  title: at.label,
-                                  params: {},
-                                },
-                              ],
-                            }));
-                          }}
-                          className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition"
-                        >
-                          <Plus className="w-3 h-3 text-slate-500" />
-                          <span>{at.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* Direct Message Box */
-                <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4 shadow-xs">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                    <span className="text-xs font-bold text-slate-900">Main WhatsApp Message Content</span>
-                    <div className="flex items-center gap-1">
-                      {["text", "media", "template"].map((kind) => (
-                        <button
-                          key={kind}
-                          type="button"
-                          onClick={() => setForm((f) => ({ ...f, msg_kind: kind }))}
-                          className={`rounded-md px-2.5 py-1 text-xs font-semibold uppercase transition ${
-                            form.msg_kind === kind ? "bg-slate-900 text-white shadow-xs" : "text-slate-600 hover:bg-slate-100"
-                          }`}
-                        >
-                          {kind}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {form.msg_kind === "text" && (
-                    <div className="space-y-3">
-                      <WAVariablePicker
-                        onInsert={(tag) => setForm((f) => ({ ...f, message_text: (f.message_text || "") + " " + tag }))}
-                      />
-                      <textarea
-                        rows={4}
-                        value={form.message_text || ""}
-                        onChange={(e) => setForm((f) => ({ ...f, message_text: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-300 p-3 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
-                        placeholder="Type message here with placeholders..."
-                      />
-                      {form.message_text && (
-                        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs">
-                          <span className="font-semibold text-slate-700 block mb-1">Live Preview with Sample Data:</span>
-                          <p className="text-slate-800 whitespace-pre-wrap font-mono text-[11px]">
-                            {evaluateMessagePlaceholders(form.message_text)}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {form.msg_kind === "template" && (
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">Select Approved Template</label>
-                      <select
-                        value={form.template_id}
-                        onChange={(e) => setForm((f) => ({ ...f, template_id: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-300 p-2.5 text-xs text-slate-900"
-                      >
-                        <option value="">-- Choose Template --</option>
-                        {templates.filter(isApprovedTemplate).map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name} ({t.category})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {form.msg_kind === "media" && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div>
-                        <label className="text-xs font-semibold text-slate-700 block mb-1">Media Type</label>
-                        <select
-                          value={form.media_type}
-                          onChange={(e) => setForm((f) => ({ ...f, media_type: e.target.value }))}
-                          className="w-full rounded border border-slate-300 p-2 text-xs"
-                        >
-                          <option value="image">📷 Image</option>
-                          <option value="document">📄 PDF Document</option>
-                          <option value="video">🎥 Video</option>
-                        </select>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className="text-xs font-semibold text-slate-700 block mb-1">HTTPS Media URL</label>
-                        <input
-                          type="text"
-                          value={form.media_url || ""}
-                          onChange={(e) => setForm((f) => ({ ...f, media_url: e.target.value }))}
-                          placeholder="https://example.com/invoice.pdf"
-                          className="w-full rounded border border-slate-300 p-2 text-xs"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Delivery Timing & Group */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">Send Delay (Minutes)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="43200"
-                    value={form.delay_minutes}
-                    onChange={(e) => setForm((f) => ({ ...f, delay_minutes: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
-                  />
-                  <span className="text-[10px] text-slate-500">Set 0 for instant execution on trigger.</span>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">Auto-Trigger Flow Bot (Optional)</label>
-                  <select
-                    value={form.flow_id || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, flow_id: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
-                  >
-                    <option value="">-- Do Not Trigger Flow --</option>
-                    {flows.map((fl) => (
-                      <option key={fl.id} value={fl.id}>
-                        {fl.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 cursor-pointer pt-2">
-                <input
-                  type="checkbox"
-                  checked={Boolean(form.is_active)}
-                  onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked ? 1 : 0 }))}
-                  className="w-4 h-4 rounded text-slate-900"
-                />
-                <span className="text-xs font-bold text-slate-800">Activate rule immediately upon saving</span>
-              </label>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-3 border-t border-slate-200 flex items-center justify-end gap-2 bg-slate-50/50">
-              <button
-                type="button"
-                onClick={closeEditor}
-                disabled={savingRule}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={savingRule}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
-              >
-                {savingRule ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                <span>{savingRule ? "Saving…" : editAutomation ? "Save Rule" : "Create Rule"}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ───────────────────────────────────────────────────────────── */}
       {/* SIMULATOR MODAL                                               */}
