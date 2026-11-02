@@ -484,6 +484,7 @@ function startServer() {
       await require("./migrations/legacy_employee_memberships").migrate(db);
       await require("./migrations/shared_flows").migrate(require("./config/database"));
       await require("./migrations/automation_workspace").migrate(db);
+      await require("./migrations/automation_command_center").migrate(db);
       await require("./migrations/sender_workspace").migrate(db);
       await require("./services/schemaReadiness").assertReady(db);
       const platformAdmin = await require("./services/platformAdminBootstrap").provisionConfiguredAdmin(db);

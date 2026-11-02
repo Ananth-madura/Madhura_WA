@@ -7,6 +7,19 @@ async function handle(tenant,sender,conversation,messageId,input,isNew=false){
   const [contact]=await q("SELECT phone,name,is_unsubscribed,is_blocked FROM wa_contacts WHERE tenant_id=? AND id=?",[tenant,current.contact_id]);
   if(!contact||contact.is_unsubscribed||contact.is_blocked)return false;
   let phone=String(contact.phone).replace(/\D/g,"");if(phone.length===10)phone="91"+phone;
+
+  // Check for active durable conversational checkpoint (Ask Question / Collect Answer)
+  try {
+    const checkpointService = require("./waAutomationCheckpointService");
+    const checkpoint = await checkpointService.findActiveCheckpoint(tenant, phone);
+    if (checkpoint) {
+      const handled = await checkpointService.resumeCheckpoint(tenant, sender, checkpoint, input, contact);
+      if (handled) return true;
+    }
+  } catch (chkErr) {
+    console.warn("[WA Inbound] Checkpoint resume check error:", chkErr.message);
+  }
+
   const [pending]=await q("SELECT m.automation_id FROM wa_automation_menus m JOIN wa_automations a ON a.id=m.automation_id AND a.tenant_id=m.tenant_id AND a.sender_id=m.sender_id WHERE m.tenant_id=? AND m.sender_id=? AND m.phone=? AND m.created_at>=DATE_SUB(NOW(),INTERVAL 24 HOUR) AND a.is_active=1",[tenant,sender,phone]);
   if(pending){
     const options=await q("SELECT id,label,reply_text FROM wa_automation_options WHERE automation_id=? ORDER BY sort_order,id LIMIT 10",[pending.automation_id]);

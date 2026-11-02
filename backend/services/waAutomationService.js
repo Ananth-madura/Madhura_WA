@@ -583,7 +583,8 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
       if(opts.senderId&&Number(rule.sender_id)!==Number(opts.senderId))continue;
       const ruleSessionKey = opts.sessionKey || eventInfo.sessionKey || rule.created_by || require("./whatsappService").defaultKey;
       const targetChatId = eventInfo.chatId || null;
-      if (!require("./waRuleConditions").matchesConditions(rule.conditions, { ...mergedData, phone: cleanPhone, name: resolvedName })) continue;
+      const condEval = require("./waRuleConditions").evaluateConditionsWithDiagnostics(rule.conditions, { ...mergedData, phone: cleanPhone, name: resolvedName });
+      if (!condEval.matched) continue;
       const rawText = rule.message_text || rule.template_body || "Hello {name}! Thank you for reaching out.";
       const messageText = formatMessagePlaceholders(rawText, resolvedName, mergedData);
 
@@ -592,8 +593,8 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
         // 'scheduled' rather than 'sent' — the old code claimed success before
         // the message had even been attempted.
         const [ins] = await db.promise().query(
-          `INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, scheduled_for, session_key, target_chat_id)
-           VALUES (?, ?, ?, ?, 'scheduled', DATE_ADD(NOW(), INTERVAL ? MINUTE), ?, ?)`,
+          `INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, scheduled_for, session_key, target_chat_id, diagnostics_json)
+           VALUES (?, ?, ?, ?, 'scheduled', DATE_ADD(NOW(), INTERVAL ? MINUTE), ?, ?, ?)`,
           [
             rule.id,
             cleanPhone,
@@ -602,6 +603,7 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
             rule.delay_minutes,
             ruleSessionKey,
             targetChatId,
+            JSON.stringify(condEval.diagnostics),
           ]
         );
         const logId = ins.insertId;
@@ -619,7 +621,7 @@ async function triggerAutomation(triggerType, eventInfo = {}, opts = {}) {
       } else {
         // Execute immediately
         const requestId=`event:${rule.id}:${dedupeKey}:${eventId == null ? Math.floor(Date.now()/AUTOMATION_DEDUPE_TTL_MS) : "record"}`;
-        const result = await executeAutomationSend(rule, cleanPhone, resolvedName, messageText, mergedData, ruleSessionKey, targetChatId,{requestId});
+        const result = await executeAutomationSend(rule, cleanPhone, resolvedName, messageText, mergedData, ruleSessionKey, targetChatId,{requestId, diagnostics: condEval.diagnostics});
         if (!result?.success) {
           if (result?.deliveryUnknown) unknownCount++;
           continue;
@@ -715,6 +717,47 @@ async function runDueAutomationsSweep() {
       }
 
       const rule = { ...row, id: row.rule_id };
+
+      // Check auto-cancellation for smart reminders if underlying event completed (e.g. invoice paid)
+      let cancelReminder = false;
+      let cancelReason = "";
+      if (rule.schedule_json) {
+        try {
+          const sched = JSON.parse(rule.schedule_json);
+          if (sched.cancel_on_event === "invoice_paid" && payload.invoice_no) {
+            const [inv] = await db.promise().query(
+              "SELECT status FROM clientinvoices WHERE tenant_id = ? AND invoice_no = ? LIMIT 1",
+              [rule.tenant_id, payload.invoice_no]
+            );
+            if (inv && inv[0] && String(inv[0].status).toLowerCase() === "paid") {
+              cancelReminder = true;
+              cancelReason = "Invoice marked paid; reminder cancelled automatically";
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (cancelReminder) {
+        await db.promise().query(
+          "UPDATE wa_automation_logs SET status = 'skipped', error = ?, trigger_data = NULL WHERE id = ? AND status = 'scheduled'",
+          [cancelReason, row.log_id]
+        );
+        continue;
+      }
+
+      // Check for multi-action pipeline continuation
+      if (row.execution_type === "pipeline" && Array.isArray(payload.actions)) {
+        const [claim] = await db.promise().query(
+          "UPDATE wa_automation_logs SET status = 'sent', claimed_at = NOW() WHERE id = ? AND status = 'scheduled'",
+          [row.log_id]
+        );
+        if (claim.affectedRows) {
+          await executePipelineActions(rule, payload.actions, payload.nextStep || 0, row.phone, row.contact_name, payload.currentData || {}, row.session_key, { logId: row.log_id });
+          ran++;
+        }
+        continue;
+      }
+
       const messageText = payload.messageText
         || formatMessagePlaceholders(rule.message_text || rule.template_body || "Hello {name}!", row.contact_name, payload);
 
@@ -1053,7 +1096,253 @@ async function maybeSendWelcomeReply(targetPhoneOrJid, contactName, sessionKey, 
   }
 }
 
+async function executePipelineActions(rule, actions, startIndex = 0, cleanPhone, contactName, data = {}, sessionKey = null, execution = {}) {
+  let currentData = { ...data };
+  const waLoadBalancer = require("./waLoadBalancer");
+  const cloudDelivery = require("./automationCloudDelivery");
+  const activeSessionKey = sessionKey || rule.created_by || require("./whatsappService").defaultKey;
+  let lastResult = null;
+
+  for (let i = startIndex; i < actions.length; i++) {
+    const action = actions[i];
+    const stepNumber = i + 1;
+
+    switch (action.type) {
+      case "send_message":
+      case "send_template": {
+        const text = formatMessagePlaceholders(
+          action.params?.text || rule.message_text || "Hello {name}!",
+          contactName,
+          currentData
+        );
+        if (rule.sender_id) {
+          lastResult = await cloudDelivery.send(
+            { tenant_id: rule.tenant_id, sender_id: rule.sender_id, template_id: action.params?.template_id || rule.template_id },
+            cleanPhone,
+            text,
+            currentData,
+            { requestId: `act_${action.id || stepNumber}_${Date.now()}` }
+          );
+        } else {
+          lastResult = await waLoadBalancer.sendTextMessage(cleanPhone, text, activeSessionKey);
+        }
+        break;
+      }
+
+      case "send_bill":
+      case "send_document": {
+        let invoice = null;
+        try {
+          const [invRows] = await db.promise().query(
+            `SELECT * FROM clientinvoices WHERE tenant_id = ? AND (client_company = ? OR client_phone LIKE ?) ORDER BY id DESC LIMIT 1`,
+            [rule.tenant_id, currentData.company || currentData.name || "", `%${cleanPhone.slice(-10)}`]
+          );
+          invoice = invRows && invRows[0];
+        } catch (_) {}
+
+        const invNo = invoice?.invoice_no || currentData.invoice_no || `INV-${Date.now().toString().slice(-6)}`;
+        const invAmount = invoice?.total_amount ?? invoice?.grand_total ?? currentData.amount ?? "0";
+        const dueDate = invoice?.due_date || currentData.due_date || "Immediate";
+
+        const billText = formatMessagePlaceholders(
+          action.params?.caption || `🧾 *Invoice ${invNo}*\nAmount Due: ₹${invAmount}\nDue Date: ${dueDate}\n\nPlease click below to pay or view invoice.`,
+          contactName,
+          { ...currentData, invoice_no: invNo, amount: invAmount, due_date: dueDate }
+        );
+
+        const buttons = [
+          { id: `pay_${invNo}`, text: "💳 Pay Now" },
+          { id: `view_${invNo}`, text: "📄 View Invoice" }
+        ];
+
+        if (rule.sender_id) {
+          lastResult = await cloudDelivery.send(
+            { tenant_id: rule.tenant_id, sender_id: rule.sender_id },
+            cleanPhone,
+            billText,
+            currentData,
+            { buttons, requestId: `bill_${invNo}_${Date.now()}` }
+          );
+        } else {
+          lastResult = await waLoadBalancer.sendTextMessage(cleanPhone, billText, activeSessionKey);
+        }
+        break;
+      }
+
+      case "send_receipt": {
+        const receiptText = formatMessagePlaceholders(
+          action.params?.text || `✅ *Payment Received with Thanks!*\nReceipt for Invoice: ${currentData.invoice_no || "INV"}\nAmount Paid: ₹${currentData.amount || "0"}\nStatus: Verified\nDate: {date_time}`,
+          contactName,
+          currentData
+        );
+        if (rule.sender_id) {
+          lastResult = await cloudDelivery.send(
+            { tenant_id: rule.tenant_id, sender_id: rule.sender_id },
+            cleanPhone,
+            receiptText,
+            currentData,
+            { requestId: `receipt_${Date.now()}` }
+          );
+        } else {
+          lastResult = await waLoadBalancer.sendTextMessage(cleanPhone, receiptText, activeSessionKey);
+        }
+        break;
+      }
+
+      case "send_payment_link": {
+        const payUrl = action.params?.payment_url || `https://pay.madhuracrm.com/pay/${rule.tenant_id}/${currentData.invoice_no || cleanPhone}`;
+        const payText = formatMessagePlaceholders(
+          action.params?.text || `💳 Please use this verified link to make your payment of ₹${currentData.amount || "0"}:\n${payUrl}`,
+          contactName,
+          { ...currentData, payment_link: payUrl }
+        );
+        if (rule.sender_id) {
+          lastResult = await cloudDelivery.send(
+            { tenant_id: rule.tenant_id, sender_id: rule.sender_id },
+            cleanPhone,
+            payText,
+            currentData,
+            { requestId: `paylink_${Date.now()}` }
+          );
+        } else {
+          lastResult = await waLoadBalancer.sendTextMessage(cleanPhone, payText, activeSessionKey);
+        }
+        break;
+      }
+
+      case "start_flow": {
+        const flowId = action.params?.flow_id || rule.flow_id;
+        if (flowId) {
+          try {
+            if (rule.sender_id) {
+              const [convRows] = await db.promise().query(
+                `SELECT c.id FROM conversations c JOIN wa_contacts ct ON ct.id=c.contact_id WHERE c.tenant_id=? AND c.sender_id=? AND (ct.phone=? OR ct.phone LIKE ?) ORDER BY c.id DESC LIMIT 1`,
+                [rule.tenant_id, rule.sender_id, cleanPhone, `%${cleanPhone.slice(-10)}`]
+              );
+              if (convRows && convRows[0]) {
+                await require("./sharedFlowRuntime").start(rule.tenant_id, convRows[0].id, flowId);
+              }
+            } else {
+              const [flowRows] = await db.promise().query(
+                "SELECT * FROM wa_flows WHERE tenant_id=? AND id=? AND status='active' LIMIT 1",
+                [rule.tenant_id, flowId]
+              );
+              if (flowRows.length > 0) {
+                await require("./waFlowEngine").startFlowRun(flowRows[0], cleanPhone, activeSessionKey, "", null, { ...currentData, automation_id: rule.id });
+              }
+            }
+          } catch (flowErr) {
+            console.warn(`[Pipeline] Flow trigger failed:`, flowErr.message);
+          }
+        }
+        break;
+      }
+
+      case "ask_question": {
+        const checkpointService = require("./waAutomationCheckpointService");
+        const questionText = formatMessagePlaceholders(
+          action.params?.question_text || "Please reply with your details:",
+          contactName,
+          currentData
+        );
+        const options = action.params?.options || [];
+        const buttons = Array.isArray(options) && options.length > 0
+          ? options.slice(0, 3).map((opt, idx) => ({ id: `opt_${idx}`, text: String(opt).slice(0, 20) }))
+          : null;
+
+        await checkpointService.createCheckpoint({
+          tenantId: rule.tenant_id,
+          automationId: rule.id,
+          executionId: execution.logId || null,
+          phone: cleanPhone,
+          senderId: rule.sender_id,
+          sessionKey: activeSessionKey,
+          currentStep: stepNumber,
+          checkpointType: "ask_question",
+          expectedType: action.params?.expected_type || "text",
+          questionContext: {
+            question_text: questionText,
+            crm_field: action.params?.crm_field || null,
+            completion_message: action.params?.completion_message || null,
+            options,
+          },
+          collectedAnswers: currentData,
+          timeoutHours: action.params?.timeout_hours || 24,
+        });
+
+        if (rule.sender_id) {
+          lastResult = await cloudDelivery.send(
+            { tenant_id: rule.tenant_id, sender_id: rule.sender_id },
+            cleanPhone,
+            questionText,
+            currentData,
+            { buttons, requestId: `question_${stepNumber}_${Date.now()}` }
+          );
+        } else {
+          lastResult = await waLoadBalancer.sendTextMessage(cleanPhone, questionText, activeSessionKey);
+        }
+
+        return { success: true, checkpointWaiting: true, step: stepNumber };
+      }
+
+      case "update_crm": {
+        if (action.params?.field && action.params?.value !== undefined) {
+          await require("./waAutomationCheckpointService").updateCrmWithAnswer(
+            rule.tenant_id,
+            cleanPhone,
+            action.params.field,
+            formatMessagePlaceholders(String(action.params.value), contactName, currentData)
+          );
+        }
+        break;
+      }
+
+      case "assign_employee": {
+        const agentName = action.params?.agent_name || action.params?.assigned_to;
+        if (agentName) {
+          await db.promise().query(
+            "UPDATE wa_contacts SET assigned_agent_name=? WHERE tenant_id=? AND (phone=? OR phone LIKE ?)",
+            [agentName, rule.tenant_id, cleanPhone, `%${cleanPhone.slice(-10)}`]
+          ).catch(() => {});
+        }
+        break;
+      }
+
+      case "wait_delay": {
+        const delaySeconds = Math.max(5, Number(action.params?.seconds || (Number(action.params?.minutes || 1) * 60)));
+        await db.promise().query(
+          "INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, scheduled_for, execution_step, session_key, execution_type) VALUES (?, ?, ?, ?, 'scheduled', DATE_ADD(NOW(), INTERVAL ? SECOND), ?, ?, 'pipeline')",
+          [rule.id, cleanPhone, contactName, JSON.stringify({ actions, nextStep: stepNumber, currentData }), delaySeconds, stepNumber, activeSessionKey]
+        );
+        return { success: true, scheduledNext: true, delaySeconds, nextStep: stepNumber };
+      }
+    }
+  }
+
+  // Update run count
+  await db.promise().query("UPDATE wa_automations SET run_count = run_count + 1 WHERE id = ?", [rule.id]).catch(() => {});
+
+  // Record log
+  const confirmedId = lastResult ? require("./waInteractive").deliveryMessageId(lastResult) : null;
+  await db.promise().query(
+    "INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, execution_step, session_key, wa_message_id, execution_type, diagnostics_json) VALUES (?, ?, ?, NULL, 'sent', ?, ?, ?, 'pipeline', ?)",
+    [rule.id, cleanPhone, contactName || null, actions.length, activeSessionKey, confirmedId, JSON.stringify(execution.diagnostics || [])]
+  ).catch(() => {});
+
+  return { success: true, result: lastResult };
+}
+
 async function executeAutomationSend(rule, cleanPhone, contactName, messageText, data, sessionKey = null, targetChatId = null, execution = {}) {
+  // If rule has an advanced multi-action pipeline defined, execute it:
+  if (rule.actions_json) {
+    try {
+      const actions = JSON.parse(rule.actions_json);
+      if (Array.isArray(actions) && actions.length > 0) {
+        return await executePipelineActions(rule, actions, 0, cleanPhone, contactName, data || {}, sessionKey, execution);
+      }
+    } catch (_) {}
+  }
+
   // Normalize flexible arguments if messageText is omitted and data object is passed in 4th position:
   let actualMessageText = messageText;
   let actualData = data;
@@ -1290,6 +1579,8 @@ module.exports = {
   updateWelcomeSettings,
   maybeSendWelcomeReply,
   executeAutomationSend,
+  executePipelineActions,
+  executePipelineAction: executePipelineActions,
   runScheduledAutomation,
   runDueAutomationsSweep,
   startAutomationScheduler,

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Sparkles, User, MapPin, Clock, FileText, Briefcase, Shuffle, Plus } from "lucide-react";
+import { Sparkles, User, MapPin, Clock, FileText, Briefcase, Shuffle, Plus, Calendar, ShieldCheck } from "lucide-react";
 
 export const VARIABLE_GROUPS = [
   {
@@ -13,6 +13,46 @@ export const VARIABLE_GROUPS = [
       { tag: "{{company}}", label: "Company Name", sample: "Apex Logistics" },
       { tag: "{{phone}}", label: "Mobile Number", sample: "+91 98765 43210" },
       { tag: "{{email}}", label: "Email Address", sample: "rahul@example.com" },
+    ],
+  },
+  {
+    id: "billing",
+    label: "🧾 Billing & Payments",
+    icon: FileText,
+    color: "hl-badge-warn",
+    variables: [
+      { tag: "{{service}}", label: "Service / Product", sample: "AC AMC Maintenance" },
+      { tag: "{{invoice_no}}", label: "Invoice #", sample: "INV-2026-084" },
+      { tag: "{{amount}}", label: "Due Amount", sample: "₹12,500" },
+      { tag: "{{due_date}}", label: "Due Date", sample: "2026-08-30" },
+      { tag: "{{payment_link}}", label: "Payment Gateway URL", sample: "https://pay.madhuracrm.com/pay/1/INV-084" },
+      { tag: "{{payment.status}}", label: "Payment Status", sample: "Verified" },
+      { tag: "{{agent_name}}", label: "Assigned Executive", sample: "Pooja Mehta" },
+    ],
+  },
+  {
+    id: "crm",
+    label: "🎯 Leads & Sales",
+    icon: Briefcase,
+    color: "hl-badge-info",
+    variables: [
+      { tag: "{{lead.source}}", label: "Lead Source", sample: "Website Inbound" },
+      { tag: "{{lead.status}}", label: "Lead Status", sample: "Qualified" },
+      { tag: "{{deal.stage}}", label: "Deal Pipeline Stage", sample: "Proposal Sent" },
+      { tag: "{{quotation_no}}", label: "Quotation #", sample: "QUO-2026-019" },
+      { tag: "{{amc_contract_no}}", label: "AMC Contract #", sample: "AMC-2026-044" },
+    ],
+  },
+  {
+    id: "appointments",
+    label: "📅 Bookings & Service",
+    icon: Calendar,
+    color: "hl-badge-success",
+    variables: [
+      { tag: "{{service_date}}", label: "Service Date", sample: "12 Sep 2026" },
+      { tag: "{{appointment.date}}", label: "Appointment Date & Time", sample: "15 Sep 2026, 03:00 PM" },
+      { tag: "{{appointment.status}}", label: "Booking Status", sample: "Confirmed" },
+      { tag: "{{technician}}", label: "Assigned Technician", sample: "Senior Engineer Suresh" },
     ],
   },
   {
@@ -42,19 +82,6 @@ export const VARIABLE_GROUPS = [
       { tag: "{{time}}", label: "Current Time", sample: "11:58 AM" },
       { tag: "{{date_time}}", label: "Live Date & Time", sample: "09 Sep 2026, 11:58 AM" },
       { tag: "{{greeting_time}}", label: "Smart Greeting", sample: "Good morning / afternoon" },
-    ],
-  },
-  {
-    id: "billing",
-    label: "🧾 Billing & Service",
-    icon: FileText,
-    color: "hl-badge-warn",
-    variables: [
-      { tag: "{{service}}", label: "Service / Product", sample: "AC AMC Maintenance" },
-      { tag: "{{invoice_no}}", label: "Invoice #", sample: "INV-2026-084" },
-      { tag: "{{amount}}", label: "Due Amount", sample: "₹12,500" },
-      { tag: "{{due_date}}", label: "Due Date", sample: "2026-08-30" },
-      { tag: "{{agent_name}}", label: "Assigned Executive", sample: "Pooja Mehta" },
     ],
   },
   {
@@ -119,10 +146,26 @@ export function evaluateMessagePlaceholders(text, overrides = {}) {
     service: "HVAC Maintenance AMC",
     service_name: "HVAC Maintenance AMC",
     invoice_no: "INV-2026-092",
+    "invoice.number": "INV-2026-092",
     amount: "₹14,800",
+    "invoice.total": "₹14,800",
     due_date: "2026-08-30",
+    "invoice.due_date": "2026-08-30",
+    payment_link: "https://pay.madhuracrm.com/pay/1/INV-2026-092",
+    "payment.link": "https://pay.madhuracrm.com/pay/1/INV-2026-092",
+    "payment.status": "Verified",
+    quotation_no: "QUO-2026-019",
+    "quotation.number": "QUO-2026-019",
+    amc_contract_no: "AMC-2026-044",
     agent_name: "Pooja Mehta",
+    assigned_agent: "Pooja Mehta",
     technician: "Senior Engineer Suresh",
+    service_date: "12 Sep 2026",
+    "appointment.date": "15 Sep 2026, 03:00 PM",
+    "appointment.status": "Confirmed",
+    "lead.source": "Website Inbound",
+    "lead.status": "Qualified",
+    "deal.stage": "Proposal Sent",
 
     // Organization & Branch (Multi-Tenant / Multi-Branch)
     branch_name: "Bangalore Main Branch",
@@ -130,7 +173,6 @@ export function evaluateMessagePlaceholders(text, overrides = {}) {
     branch_city: "Bangalore",
     branch_phone: "+91 80 4123 4567",
     branch_address: "Brigade Road, Bangalore",
-    company_name: "Madhura Enterprise",
     tenant_name: "Madhura Enterprise",
 
     // Time & Date
@@ -152,7 +194,7 @@ export function evaluateMessagePlaceholders(text, overrides = {}) {
     datetime: `${formattedDate}, ${formattedTime}`,
     date_time: `${formattedDate}, ${formattedTime}`,
 
-    // Tomorrow ("tommowe mean tomarrow date and day name and all ways")
+    // Tomorrow
     tomorrow: tomorrowFormatted,
     tomorrow_date: tomorrowFormatted,
     tommowe: tomorrowFormatted,

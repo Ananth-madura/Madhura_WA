@@ -7,7 +7,9 @@ import {
   Clock, ToggleLeft, ToggleRight, FileText, ListChecks, Trash2,
   OctagonMinus, PlayCircle, Cpu, Send, Save, Sparkles, RefreshCw,
   Image, Video, Users, Bot, Layers, Upload, ArrowRight, ShieldCheck,
-  Smartphone, BarChart2, Bell, Check, AlertCircle, Info, ExternalLink
+  Smartphone, BarChart2, Bell, Check, AlertCircle, Info, ExternalLink,
+  CreditCard, GitBranch, MessageSquare, HelpCircle, ChevronDown, ChevronRight,
+  Calendar, Building2, Briefcase, Tag, Search
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
@@ -21,144 +23,181 @@ import AutomationWorkspaceSummary from "../components/AutomationWorkspaceSummary
 import AutomationRuleActivity from "../components/AutomationRuleActivity";
 import { automationIssues, isApprovedTemplate } from "../utils/automationDraft";
 
-const TRIGGER_TYPES = [
-  { value: "welcome_message", label: "Welcome Message", desc: "First inbound message / contact added", emoji: "👋" },
-  { value: "new_lead", label: "New Lead Added", desc: "Triggered when a new lead is added in CRM", emoji: "🎯" },
-  { value: "invoice_created", label: "Invoice Created", desc: "Send invoice PDF & payment link via WhatsApp", emoji: "🧾" },
-  { value: "quotation_created", label: "Quotation / Proposal Created", desc: "Send quotation & proposal details", emoji: "💼" },
-  { value: "amc_created", label: "AMC Contract Created", desc: "Send maintenance agreement confirmation", emoji: "🛡️" },
-  { value: "payment_received", label: "Payment Received", desc: "Instant payment receipt acknowledgement", emoji: "✅" },
-  { value: "payment_due", label: "Payment Due Reminder", desc: "Automated payment reminder before due date", emoji: "💰" },
-  { value: "service_visit_scheduled", label: "Service Visit Scheduled", desc: "Technician appointment confirmation", emoji: "📅" },
-  { value: "walkin_created", label: "Walkin Lead Added", desc: "Shop/office visit thank you & welcome", emoji: "🚶" },
-  { value: "ticket_closed", label: "Service Completed", desc: "Post-resolution feedback request", emoji: "🎫" },
-  { value: "birthday", label: "Birthday Greeting", desc: "Customer birthday wishes & special discount", emoji: "🎂" },
-  { value: "appointment_reminder", label: "Appointment Reminder", desc: "Reminder before scheduled visit", emoji: "🔔" },
-  { value: "lead_followup", label: "Lead Follow-Up Nudge", desc: "Nudge inactive leads after 7 days", emoji: "⏳" },
-  { value: "abandoned_cart", label: "Pending Quotation Recovery", desc: "Recover pending quotes with special offer", emoji: "🛒" },
-  { value: "custom", label: "Custom Background Trigger", desc: "Define custom event background trigger", emoji: "⚡" },
+const TRIGGER_CATEGORIES = [
+  {
+    category: "🎯 Leads & Sales",
+    triggers: [
+      { value: "new_lead", label: "New Lead Added", desc: "Triggered when a new lead is added in CRM", emoji: "🎯" },
+      { value: "lead_status_changed", label: "Lead Status Changed", desc: "Stage progression or lead qualification", emoji: "📈" },
+      { value: "deal_created", label: "Deal Created", desc: "When a new deal enters the pipeline", emoji: "💼" },
+      { value: "deal_won", label: "Deal Won", desc: "Congratulate and send onboarding materials", emoji: "🏆" },
+      { value: "quotation_created", label: "Quotation / Proposal Created", desc: "Send quotation & proposal details", emoji: "📄" },
+      { value: "walkin_created", label: "Walkin Lead Added", desc: "Shop/office visit thank you & welcome", emoji: "🚶" },
+      { value: "lead_followup", label: "Lead Follow-Up Nudge", desc: "Nudge inactive leads after inactivity", emoji: "⏳" },
+      { value: "abandoned_cart", label: "Pending Quotation Recovery", desc: "Recover pending quotes with special offer", emoji: "🛒" },
+    ],
+  },
+  {
+    category: "🧾 Billing & Invoices",
+    triggers: [
+      { value: "invoice_created", label: "Invoice Created", desc: "Send invoice PDF & payment link via WhatsApp", emoji: "🧾" },
+      { value: "invoice_due", label: "Invoice Due Soon", desc: "Upcoming payment reminder 1-3 days prior", emoji: "⏰" },
+      { value: "invoice_overdue", label: "Invoice Overdue Notice", desc: "Urgent recovery notice for unpaid invoices", emoji: "⚠️" },
+      { value: "payment_received", label: "Payment Received", desc: "Instant payment receipt acknowledgement", emoji: "✅" },
+      { value: "payment_due", label: "Payment Due Reminder", desc: "Automated payment reminder before due date", emoji: "💰" },
+      { value: "amc_created", label: "AMC Contract Created", desc: "Send maintenance agreement confirmation", emoji: "🛡️" },
+    ],
+  },
+  {
+    category: "📅 Appointments & Support",
+    triggers: [
+      { value: "appointment_booked", label: "Appointment Booked", desc: "Booking confirmation with date/time", emoji: "📅" },
+      { value: "appointment_reminder", label: "Appointment Reminder", desc: "Reminder before scheduled visit", emoji: "🔔" },
+      { value: "service_visit_scheduled", label: "Technician Dispatch", desc: "Technician appointment confirmation", emoji: "🛠️" },
+      { value: "ticket_created", label: "Support Ticket Raised", desc: "Acknowledgement with ticket ID", emoji: "🎫" },
+      { value: "ticket_closed", label: "Service Completed", desc: "Post-resolution feedback request", emoji: "⭐" },
+      { value: "birthday", label: "Birthday Greeting", desc: "Customer birthday wishes & special discount", emoji: "🎂" },
+    ],
+  },
+  {
+    category: "💬 Inbound & General",
+    triggers: [
+      { value: "welcome_message", label: "Welcome Message", desc: "First inbound message / contact added", emoji: "👋" },
+      { value: "incoming_message", label: "Keyword / Inbound Match", desc: "Triggered on matching customer keywords", emoji: "💬" },
+      { value: "custom", label: "Custom Background Trigger", desc: "Define custom event background trigger", emoji: "⚡" },
+    ],
+  },
 ];
+
+const TRIGGER_TYPES = TRIGGER_CATEGORIES.flatMap((c) => c.triggers);
 
 const PRESET_MESSAGES = {
   welcome_message: "Hello {name}! Welcome to {company}. Thank you for connecting with us. How can we help you today?",
   new_lead: "Hi {name}! 👋 Thank you for your inquiry regarding {service}. Our team will contact you shortly!",
+  lead_status_changed: "Hi {name}, your inquiry status has been updated to *{lead.status}*. Let us know if you need assistance!",
+  deal_created: "Hello {name}, your deal proposal for {service} is active. Our specialist will guide you through the next steps.",
+  deal_won: "🎉 Congratulations {name}! Welcome onboard with {company}. Your onboarding package is ready.",
   invoice_created: "Hello {name}, your invoice *{invoice_no}* for amount *{amount}* has been generated. Due Date: {due_date}. Thank you for choosing {company}!",
+  invoice_due: "Hi {name}, gentle reminder that invoice *{invoice_no}* ({amount}) is due on *{due_date}*. Please tap below to pay securely.",
+  invoice_overdue: "⚠️ *Urgent Notice:* Dear {name}, invoice *{invoice_no}* ({amount}) is past its due date ({due_date}). Please settle immediately to avoid interruption.",
   quotation_created: "Hello {name}, your quotation proposal *{quotation_no}* for *{service}* (Total: {amount}) has been generated. Let us know if you have any questions!",
   amc_created: "🛡️ *AMC Contract Active:* Dear {name}, your maintenance contract *{amc_contract_no}* for {service} is active until {due_date}. Thank you for trusting {company}!",
   payment_received: "Dear {name}, thank you! We received your payment of *{amount}* for invoice *{invoice_no}* on {date}.",
   payment_due: "Hi {name}, gentle reminder that payment for invoice *{invoice_no}* ({amount}) is due on *{due_date}*. Please reply if you need invoice copy.",
+  appointment_booked: "📅 *Appointment Confirmed:* Hello {name}, your consultation is booked for *{appointment.date}*. Reply CONFIRM to verify.",
   service_visit_scheduled: "📅 *Service Visit Confirmed:* Hi {name}, our technician has been scheduled for your *{service}* on *{service_date}*. Thank you!",
   walkin_created: "Hi {name}! Thank you for visiting {company} today regarding {service}. It was a pleasure meeting you. Feel free to message us anytime!",
+  ticket_created: "Hello {name}, your support ticket regarding {service} has been logged. Our helpdesk team is reviewing it.",
   ticket_closed: "Hi {name}, your service request regarding {service} has been resolved. We would love your feedback!",
   birthday: "🎉 Happy Birthday {name}! 🎂 Team {company} wishes you a wonderful year. Enjoy 15% OFF on your next service!",
   appointment_reminder: "Hi {name}, gentle reminder for your upcoming appointment with {company} on {date}. Reply CONFIRM to confirm.",
   lead_followup: "Hi {name}, following up regarding your interest in {service}. Let us know if you'd like a quick demo or technical call!",
   abandoned_cart: "Hi {name}, you have a pending quotation for {service}! Complete your inquiry today for priority scheduling.",
+  incoming_message: "Hello {name}! Thank you for reaching out to {company}. How may we assist you today?",
   custom: "Hello {name}! Thank you for choosing {company}.",
 };
 
-const PLACEHOLDERS = [
-  { tag: "{name}", label: "Name" },
-  { tag: "{tomorrow}", label: "Tomorrow Date" },
-  { tag: "{tomorrow_day}", label: "Tomorrow Day Name" },
-  { tag: "{day}", label: "Today's Day" },
-  { tag: "{date}", label: "Today's Date" },
-  { tag: "{time}", label: "Live Time" },
-  { tag: "{date_time}", label: "Date & Time" },
-  { tag: "{greeting_time}", label: "Smart Greeting" },
-  { tag: "{company}", label: "Company" },
-  { tag: "{service}", label: "Service / AMC" },
-  { tag: "{invoice_no}", label: "Invoice #" },
-  { tag: "{quotation_no}", label: "Quotation #" },
-  { tag: "{amc_contract_no}", label: "AMC Contract #" },
-  { tag: "{amount}", label: "Amount (₹)" },
-  { tag: "{due_date}", label: "Due Date" },
-  { tag: "{service_date}", label: "Service Date" },
-  { tag: "{city}", label: "City / Area" },
+const ACTION_TYPES = [
+  { type: "send_message", label: "Send WhatsApp Message / Template", icon: MessageSquare, desc: "Deliver dynamic text, media, or Meta approved template" },
+  { type: "send_bill", label: "Send Invoice / Quotation PDF", icon: FileText, desc: "Retrieve CRM invoice or quotation and send with pay button" },
+  { type: "send_receipt", label: "Send Payment Receipt", icon: CheckCircle2, desc: "Send verified payment receipt with timestamp and invoice ID" },
+  { type: "send_payment_link", label: "Send Payment Link", icon: CreditCard, desc: "Send verified payment URL for instant online settlement" },
+  { type: "start_flow", label: "Start Conversational Flow Bot", icon: Bot, desc: "Launch an active visual conversational flow" },
+  { type: "ask_question", label: "Ask Customer Question (Checkpoint)", icon: HelpCircle, desc: "Collect text, number, date or button choice and wait for response" },
+  { type: "wait_delay", label: "Wait / Delay Duration", icon: Clock, desc: "Durable delay before advancing to the next action step" },
+  { type: "update_crm", label: "Update CRM Record", icon: Tag, desc: "Update lead status, stage, custom field or contact notes" },
+  { type: "assign_employee", label: "Assign Employee / Agent", icon: Users, desc: "Route contact or enquiry to a specific team member" },
 ];
 
 export default function WhatsAppAutomations() {
-  const {activeTenant}=useEnterprise();
-  return <AutomationWorkspace key={activeTenant?.id||"none"}/>;
+  const { activeTenant } = useEnterprise();
+  return <AutomationWorkspace key={activeTenant?.id || "none"} />;
 }
 
 function AutomationWorkspace() {
   const location = useLocation();
   const navigate = useNavigate();
-  const editRouteId=location.pathname.match(/\/automations\/(\d+)\/edit\/?$/)?.[1];
-  const isEditorPage = Boolean(editRouteId)||location.pathname.replace(/\/$/, "").endsWith("/automations/create");
+  const editRouteId = location.pathname.match(/\/automations\/(\d+)\/edit\/?$/)?.[1];
+  const isEditorPage = Boolean(editRouteId) || location.pathname.replace(/\/$/, "").endsWith("/automations/create");
   const [searchParams] = useSearchParams();
+
+  // Core Data State
   const [automations, setAutomations] = useState([]);
   const [templates, setTemplates] = useState([]);
-  const [senders,setSenders]=useState([]);
-  const [editorLoading,setEditorLoading]=useState(false);
-  const editorRequest=useRef(0);
-  const [ruleSearch,setRuleSearch]=useState("");
-  const [ruleStatus,setRuleStatus]=useState("all");
-  const [logStatus,setLogStatus]=useState("");
-  const [sampleEvent,setSampleEvent]=useState('{"name":"Sample customer","amount":1500,"service":"Consultation"}');
+  const [senders, setSenders] = useState([]);
   const [groups, setGroups] = useState([]);
   const [flows, setFlows] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [checkpoints, setCheckpoints] = useState([]);
+  const [starters, setStarters] = useState([]);
+  const [billingSummary, setBillingSummary] = useState({ invoices: [], totalInvoices: 0, unpaidCount: 0 });
   const [stats, setStats] = useState({ totalRules: 0, activeRules: 0, totalRuns: 0, sentCount: 0, failedCount: 0 });
   const [loading, setLoading] = useState(true);
   const [pageNotice, setPageNotice] = useState(null);
-  const [activeTab, setActiveTab] = useState("rules"); // "rules" | "welcome" | "logs"
 
-  // Modal State
+  // Active Command Center Tab:
+  // "rules" | "pipeline" | "reminders" | "checkpoints" | "billing" | "welcome" | "starters" | "logs"
+  const [activeTab, setActiveTab] = useState("rules");
+
+  // Filter & Search State
+  const [ruleSearch, setRuleSearch] = useState("");
+  const [ruleStatus, setRuleStatus] = useState("all");
+  const [ruleCategory, setRuleCategory] = useState("all");
+  const [logStatus, setLogStatus] = useState("");
+  const [expandedLogId, setExpandedLogId] = useState(null);
+  const [cancellingRun, setCancellingRun] = useState(null);
+
+  // Editor Modal State
   const [showModal, setShowModal] = useState(false);
   const [savingRule, setSavingRule] = useState(false);
   const [ruleError, setRuleError] = useState("");
-  const automationDialog = useWADialog(showModal && !isEditorPage, () => setShowModal(false), savingRule);
   const [editAutomation, setEditAutomation] = useState(null);
+  const [editorLoading, setEditorLoading] = useState(false);
+  const editorRequest = useRef(0);
+  const automationDialog = useWADialog(showModal && !isEditorPage, () => setShowModal(false), savingRule);
+
+  // Toggling & Seeding
   const [toggling, setToggling] = useState(null);
+  const [bulkToggling, setBulkToggling] = useState(false);
   const [seeding, setSeeding] = useState(false);
 
   // Test Modal
   const [testModal, setTestModal] = useState(null);
   const [testPhone, setTestPhone] = useState("");
   const [testName, setTestName] = useState("Rahul Sharma");
-  const [testLoading, setTestLoading] = useState(false);
+  const [testingTrigger, setTestingTrigger] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
-  // CRM Trigger Simulator Modal State
-  const [showSimulateModal, setShowSimulateModal] = useState(false);
-  const [simTriggerType, setSimTriggerType] = useState("new_lead");
-  const [simPhone, setSimPhone] = useState("");
-  const [simName, setSimName] = useState("Rahul Sharma");
-
-  const [simLoading, setSimLoading] = useState(false);
-  const [simResult, setSimResult] = useState(null);
-  const [showExplainer, setShowExplainer] = useState(false);
-
-  // Welcome Auto-Reply Settings (Disabled by default for safety)
+  // Welcome Auto-Reply Settings
   const [welcomeSettings, setWelcomeSettings] = useState({
-    enabled: false,
+    enabled: 0,
     welcome_type: "text",
-    welcome_text: "Hello {name}! Welcome to Madhura Tech. Thank you for reaching out to us. How can we help you today?",
+    welcome_text: "Hello {name}! Welcome to {company}.",
     welcome_buttons: [],
     welcome_footer: "",
+    template_id: null,
     cooldown_hours: 24,
-    working_hours_only: false,
+    working_hours_only: 0,
     start_time: "09:00",
     end_time: "21:00",
   });
-  const [welcomeSaving, setWelcomeSaving] = useState(false);
+  const [savingWelcome, setSavingWelcome] = useState(false);
+  const [testingWelcome, setTestingWelcome] = useState(false);
+  const [welcomeNotice, setWelcomeNotice] = useState(null);
   const [welcomeTestPhone, setWelcomeTestPhone] = useState("");
-  const [welcomeSender,setWelcomeSender]=useState("");
-  const [welcomeTestLoading, setWelcomeTestLoading] = useState(false);
-  const [welcomeTestResult, setWelcomeTestResult] = useState(null);
 
-  // Form State
+  // Editor Form State
   const [form, setForm] = useState({
+    sender_id: "",
     name: "",
     trigger_type: "welcome_message",
-    msg_kind: "text", // 'text' | 'media' | 'template'
+    category: "general",
+    mode: "single", // "single" | "pipeline"
+    msg_kind: "text",
     template_id: "",
-    message_text: "",
+    message_text: PRESET_MESSAGES.welcome_message,
     media_type: "image",
     media_url: "",
-    // Sequence / 2nd Step Settings
     enable_sequence: false,
     sequence_delay_seconds: 7,
     followup_msg_kind: "text",
@@ -166,60 +205,68 @@ function AutomationWorkspace() {
     followup_media_type: "image",
     followup_media_url: "",
     followup_template_id: "",
-    // Cross Module Linkage
     flow_id: "",
     group_id: "",
     delay_minutes: 0,
     is_active: 1,
+    actions: [],
+    schedule: {
+      reminder_type: "relative",
+      delay_value: 1,
+      delay_unit: "days",
+      cancel_on_event: "invoice_paid",
+      business_hours_only: false,
+      max_attempts: 3,
+    },
   });
 
-  const [menuOptions, setMenuOptions] = useState([]);
   const [conditions, setConditions] = useState({ match: "all", rules: [] });
-  const [bulkToggling, setBulkToggling] = useState(false);
-  const [uploadingMedia, setUploadingMedia] = useState(false);
-  const [uploadingFollowupMedia, setUploadingFollowupMedia] = useState(false);
+  const [menuOptions, setMenuOptions] = useState([]);
+  const [draftIssues, setDraftIssues] = useState([]);
 
-  const headers = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
-  const anyActive = automations.some((a) => a.is_active);
-  const draftIssues = automationIssues(form, conditions, menuOptions, templates, flows, senders);
-  const [starterTrigger, setStarterTrigger] = useState("invoice_created");
-  useEffect(()=>{
-    const connected=senders.filter(sender=>sender.status==="connected");
-    if(!editRouteId&&isEditorPage&&connected.length===1)setForm(previous=>previous.sender_id?previous:{...previous,sender_id:connected[0].id});
-  },[senders,isEditorPage,editRouteId]);
-  useEffect(()=>{
-    const tab=searchParams.get("tab");if(["rules","welcome","logs","reminders"].includes(tab))setActiveTab(tab);
-  },[searchParams]);
-  useEffect(()=>{
-    if(activeTab!=="logs")return undefined;
-    let active=true;
-    const refresh=async()=>{try{const [result,summary]=await Promise.all([axios.get(`${API}/api/wa/automations/logs/recent`,{params:{limit:100,status:logStatus||undefined,automation_id:searchParams.get("rule")||undefined}}),axios.get(`${API}/api/wa/automations/stats`)]);if(active){setLogs(result.data);setStats(summary.data);}}catch(error){if(active)setPageNotice({type:"error",message:error.response?.data?.error||"Execution logs could not be refreshed."});}};
-    refresh();const timer=setInterval(refresh,15000);return()=>{active=false;clearInterval(timer);};
-  },[activeTab,logStatus,searchParams]);
+  // Live issue validation
+  useEffect(() => {
+    const issues = automationIssues(form, conditions, menuOptions, templates, flows, senders);
+    setDraftIssues(issues);
+  }, [form, conditions, menuOptions, templates, flows, senders]);
+
+  const headers = () => {
+    const token = localStorage.getItem("token");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
   const fetchData = async () => {
     setLoading(true);
     setPageNotice(null);
     try {
-      const [aRes, tRes, lRes, wRes, gRes, fRes, sRes] = await Promise.all([
+      const [aRes, tRes, lRes, wRes, sRes, cRes, bRes, strRes] = await Promise.all([
         axios.get(`${API}/api/wa/automations`, { headers: headers() }),
         axios.get(`${API}/api/wa/automations/references`, { headers: headers() }),
-        axios.get(`${API}/api/wa/automations/logs/recent?limit=40`, { headers: headers() }),
+        axios.get(`${API}/api/wa/automations/logs/recent?limit=50`, { headers: headers() }),
         axios.get(`${API}/api/wa/automations/welcome-settings`, { headers: headers() }).catch(() => ({ data: null })),
-        Promise.resolve({data:null}),
-        Promise.resolve({data:null}),
         axios.get(`${API}/api/wa/automations/stats`, { headers: headers() }).catch(() => ({ data: null })),
+        axios.get(`${API}/api/wa/automations/checkpoints`, { headers: headers() }).catch(() => ({ data: [] })),
+        axios.get(`${API}/api/wa/automations/billing/summary`, { headers: headers() }).catch(() => ({ data: { invoices: [] } })),
+        axios.get(`${API}/api/wa/automations/starters`, { headers: headers() }).catch(() => ({ data: [] })),
       ]);
+
       setAutomations(aRes.data || []);
-      setTemplates(tRes.data.templates || []);setFlows(tRes.data.flows||[]);setGroups(tRes.data.groups||[]);setSenders(tRes.data.senders||[]);
+      setTemplates(tRes.data.templates || []);
+      setFlows(tRes.data.flows || []);
+      setGroups(tRes.data.groups || []);
+      setSenders(tRes.data.senders || []);
       setLogs(lRes.data || []);
       if (wRes.data) setWelcomeSettings(wRes.data);
-      if (gRes.data) setGroups(gRes.data || []);
-      if (fRes.data) setFlows(fRes.data || []);
       if (sRes.data) setStats(sRes.data);
+      if (cRes.data) setCheckpoints(cRes.data);
+      if (bRes.data) setBillingSummary(bRes.data);
+      if (strRes.data) setStarters(strRes.data);
     } catch (err) {
       console.error("Error fetching automations:", err);
-      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Automation data could not be loaded. Retry to reconnect." });
+      setPageNotice({
+        type: "error",
+        message: err.response?.data?.message || err.response?.data?.error || "Automation Command Center data could not be loaded.",
+      });
     }
     setLoading(false);
   };
@@ -227,6 +274,8 @@ function AutomationWorkspace() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const anyActive = automations.some((a) => a.is_active === 1);
 
   const handleBulkToggle = async () => {
     const action = anyActive ? "stop-all" : "resume-all";
@@ -236,7 +285,7 @@ function AutomationWorkspace() {
       await axios.post(`${API}/api/wa/automations/${action}`, {}, { headers: headers() });
       await fetchData();
     } catch (err) {
-      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Automation rules could not be updated." });
+      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Failed to update rules." });
     }
     setBulkToggling(false);
   };
@@ -246,9 +295,9 @@ function AutomationWorkspace() {
     try {
       const { data } = await axios.post(`${API}/api/wa/automations/seed`, {}, { headers: headers() });
       await fetchData();
-      setPageNotice({ type: "success", message: `${data.count ?? 0} prebuilt automation rules installed.` });
+      setPageNotice({ type: "success", message: `${data.count ?? 0} industry automation blueprints installed successfully.` });
     } catch (err) {
-      setPageNotice({ type: "error", message: err.response?.data?.error || err.response?.data?.message || err.message || "Prebuilt automations could not be installed." });
+      setPageNotice({ type: "error", message: err.response?.data?.error || "Failed to install blueprints." });
     }
     setSeeding(false);
   };
@@ -259,9 +308,11 @@ function AutomationWorkspace() {
     setConditions({ match: "all", rules: [] });
     setEditAutomation(null);
     setForm({
-      sender_id:senders.filter(sender=>sender.status==="connected").length===1?senders.find(sender=>sender.status==="connected").id:"",
+      sender_id: senders.filter((s) => s.status === "connected").length === 1 ? senders.find((s) => s.status === "connected").id : "",
       name: "",
       trigger_type: "welcome_message",
+      category: "general",
+      mode: "single",
       msg_kind: "text",
       template_id: "",
       message_text: PRESET_MESSAGES.welcome_message,
@@ -278,82 +329,69 @@ function AutomationWorkspace() {
       group_id: "",
       delay_minutes: 0,
       is_active: 1,
+      actions: [],
+      schedule: {
+        reminder_type: "relative",
+        delay_value: 1,
+        delay_unit: "days",
+        cancel_on_event: "invoice_paid",
+        business_hours_only: false,
+        max_attempts: 3,
+      },
     });
     setMenuOptions([]);
     setShowModal(true);
   };
 
-  // Open the create-rule editor as a full page at /whatsapp/automations/create
-  // instead of a popup modal, so the flow is deep-linkable and deployable.
-  const openCreatePage = () => {
-    setRuleError("");
-    setConditions({ match: "all", rules: [] });
-    setEditAutomation(null);
-    setForm({
-      sender_id:senders.filter(sender=>sender.status==="connected").length===1?senders.find(sender=>sender.status==="connected").id:"",
-      name: "",
-      trigger_type: "welcome_message",
-      msg_kind: "text",
-      template_id: "",
-      message_text: PRESET_MESSAGES.welcome_message,
-      media_type: "image",
-      media_url: "",
-      enable_sequence: false,
-      sequence_delay_seconds: 7,
-      followup_msg_kind: "text",
-      followup_message_text: "",
-      followup_media_type: "image",
-      followup_media_url: "",
-      followup_template_id: "",
-      flow_id: "",
-      group_id: "",
-      delay_minutes: 0,
-      is_active: 1,
-    });
-    setMenuOptions([]);
-    navigate("/whatsapp/automations/create");
-  };
-
-  // Deep-link entry: /whatsapp/automations/create opens the full-page editor.
-  useEffect(() => {
-    if(editRouteId)openEdit({id:editRouteId});
-    else if (isEditorPage) openCreate();
-    else setShowModal(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
-
-  useEffect(() => {
-    const templateId = location.state?.templateId;
-    if (!templateId || loading) return;
-    const template = templates.find(item => String(item.id) === String(templateId));
-    if (template) {
-      setEditAutomation(null);
-      setRuleError("");
-      setForm(previous => ({ ...previous, name: "", msg_kind: "template", template_id: template.id }));
-      setShowModal(true);
-    } else {
-      setPageNotice({ type: "error", message: "The selected template is unavailable. Refresh templates and try again." });
-    }
-    navigate(location.pathname, { replace: true, state: null });
-  }, [location.state, location.pathname, loading, templates, navigate]);
-
   const openEdit = async (a) => {
-    if(!isEditorPage){navigate(`/whatsapp/automations/${a.id}/edit`);return;}
-    const ticket=++editorRequest.current;setEditAutomation(null);setEditorLoading(true);
-    try{a=(await axios.get(`${API}/api/wa/automations/${a.id}`,{headers:headers()})).data;if(ticket!==editorRequest.current)return;}catch(error){if(ticket!==editorRequest.current)return;setRuleError(error.response?.data?.error||"Could not load this rule. Return to the list and retry.");setEditorLoading(false);return;}
+    if (!isEditorPage) {
+      navigate(`/whatsapp/automations/${a.id}/edit`);
+      return;
+    }
+    const ticket = ++editorRequest.current;
+    setEditAutomation(null);
+    setEditorLoading(true);
+    try {
+      a = (await axios.get(`${API}/api/wa/automations/${a.id}`, { headers: headers() })).data;
+      if (ticket !== editorRequest.current) return;
+    } catch (error) {
+      if (ticket !== editorRequest.current) return;
+      setRuleError(error.response?.data?.error || "Could not load this rule.");
+      setEditorLoading(false);
+      return;
+    }
     setEditorLoading(false);
     setRuleError("");
     setConditions(parseConditions(a.conditions));
     setEditAutomation(a);
+
     const hasSeq = Boolean(a.followup_message_text || a.followup_media_url || a.followup_template_id);
     const msgKind = a.template_id ? "template" : a.media_type && a.media_url ? "media" : "text";
     const followKind = a.followup_template_id ? "template" : a.followup_media_type && a.followup_media_url ? "media" : "text";
 
+    let loadedActions = [];
+    try {
+      loadedActions = a.actions_json ? JSON.parse(a.actions_json) : [];
+    } catch (_) {}
+
+    let loadedSchedule = {
+      reminder_type: "relative",
+      delay_value: 1,
+      delay_unit: "days",
+      cancel_on_event: "invoice_paid",
+      business_hours_only: false,
+      max_attempts: 3,
+    };
+    try {
+      if (a.schedule_json) loadedSchedule = { ...loadedSchedule, ...JSON.parse(a.schedule_json) };
+    } catch (_) {}
+
     setForm({
-      sender_id:a.sender_id||"",
-      revision:a.revision,
-      name: a.name,
-      trigger_type: a.trigger_type,
+      sender_id: a.sender_id || "",
+      name: a.name || "",
+      trigger_type: a.trigger_type || "welcome_message",
+      category: a.category || "general",
+      mode: loadedActions.length > 0 ? "pipeline" : "single",
       msg_kind: msgKind,
       template_id: a.template_id || "",
       message_text: a.message_text || "",
@@ -369,42 +407,21 @@ function AutomationWorkspace() {
       flow_id: a.flow_id || "",
       group_id: a.group_id || "",
       delay_minutes: a.delay_minutes || 0,
-      is_active: a.is_active,
+      is_active: a.is_active ?? 1,
+      actions: loadedActions,
+      schedule: loadedSchedule,
     });
-    setMenuOptions([]);
+
+    setMenuOptions(a.options || []);
     setShowModal(true);
-    setMenuOptions((a.options||[]).map(option=>({label:option.label,reply_text:option.reply_text})));
   };
 
-  const handleToggle = async (a) => {
-    setToggling(a.id);
-    try {
-      await axios.post(`${API}/api/wa/automations/${a.id}/toggle`, {}, { headers: headers() });
-      setAutomations((prev) =>
-        prev.map((item) => (item.id === a.id ? { ...item, is_active: item.is_active ? 0 : 1 } : item))
-      );
-    } catch (err) {
-      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "The rule could not be updated." });
-    }
-    setToggling(null);
-  };
+  useEffect(() => {
+    if (editRouteId) openEdit({ id: editRouteId });
+    else if (isEditorPage) openCreate();
+    else setShowModal(false);
+  }, [location.pathname]);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this automation rule?")) return;
-    try {
-      await axios.delete(`${API}/api/wa/automations/${id}`, { headers: headers() });
-      fetchData();
-    } catch (err) {
-      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "The rule could not be deleted." });
-    }
-  };
-
-  const insertPlaceholder = (field, tag) => {
-    setForm((prev) => ({ ...prev, [field]: (prev[field] || "") + (prev[field] ? " " : "") + tag }));
-  };
-
-  // Close the rule editor and, when it was opened via the /create deep link,
-  // return to the automations list page.
   const closeEditor = () => {
     editorRequest.current++;
     setShowModal(false);
@@ -412,18 +429,19 @@ function AutomationWorkspace() {
   };
 
   const handleSave = async () => {
-    if (savingRule||editorLoading) return;
-    if(editRouteId&&String(editAutomation?.id)!==String(editRouteId)){setRuleError("This saved rule has not loaded. Return to the list and reopen it before saving.");return;}
+    if (savingRule || editorLoading) return;
     setRuleError("");
-    if (draftIssues.length) { setRuleError(draftIssues.join(" ")); return; }
+    if (draftIssues.length) {
+      setRuleError(draftIssues.join(" "));
+      return;
+    }
     setSavingRule(true);
 
     const payload = {
-      sender_id:form.sender_id||null,
-      revision:form.revision,
-      options:menuOptions,
+      sender_id: form.sender_id || null,
       name: form.name.trim(),
       trigger_type: form.trigger_type,
+      category: form.category || "general",
       template_id: form.msg_kind === "template" ? form.template_id || null : null,
       message_text: form.msg_kind !== "template" ? form.message_text : null,
       media_type: form.msg_kind === "media" ? form.media_type : null,
@@ -438,901 +456,1114 @@ function AutomationWorkspace() {
       delay_minutes: parseInt(form.delay_minutes, 10) || 0,
       conditions,
       is_active: form.is_active ? 1 : 0,
+      options: menuOptions,
+      actions_json: form.mode === "pipeline" && form.actions.length > 0 ? JSON.stringify(form.actions) : null,
+      schedule_json: form.schedule ? JSON.stringify(form.schedule) : null,
     };
 
     try {
-      let automationId = editAutomation?.id;
       if (editAutomation) {
         await axios.put(`${API}/api/wa/automations/${editAutomation.id}`, payload, { headers: headers() });
       } else {
-        const { data } = await axios.post(`${API}/api/wa/automations`, payload, { headers: headers() });
-        automationId = data.id;
-        setEditAutomation({ id: automationId });
+        await axios.post(`${API}/api/wa/automations`, payload, { headers: headers() });
       }
+      await fetchData();
       closeEditor();
-      fetchData();
+      setPageNotice({ type: "success", message: `Automation rule "${form.name}" saved successfully!` });
     } catch (err) {
-      setRuleError(err.response?.data?.error || "The automation could not be fully saved. Retry to finish saving this rule.");
-    } finally {
-      setSavingRule(false);
+      setRuleError(err.response?.data?.error || err.message || "Failed to save rule.");
+    }
+    setSavingRule(false);
+  };
+
+  const handleToggle = async (a) => {
+    setToggling(a.id);
+    try {
+      await axios.post(`${API}/api/wa/automations/${a.id}/toggle`, {}, { headers: headers() });
+      await fetchData();
+    } catch (err) {
+      setPageNotice({ type: "error", message: err.response?.data?.error || "Could not toggle automation." });
+    }
+    setToggling(null);
+  };
+
+  const handleDelete = async (a) => {
+    if (!window.confirm(`Delete automation rule "${a.name}"? This cannot be undone.`)) return;
+    try {
+      await axios.delete(`${API}/api/wa/automations/${a.id}`, { headers: headers() });
+      await fetchData();
+      setPageNotice({ type: "success", message: `Rule "${a.name}" deleted.` });
+    } catch (err) {
+      setPageNotice({ type: "error", message: err.response?.data?.error || "Could not delete automation." });
     }
   };
 
-  const handleTestTrigger = async () => {
-    if (!testPhone.trim() || !testModal) return;
-    setTestLoading(true);
-    setTestResult(null);
-
+  const handleCancelRun = async (log) => {
+    if (!window.confirm(`Cancel scheduled dispatch for ${log.phone}?`)) return;
+    setCancellingRun(log.id);
     try {
-      const { data } = await axios.post(
-        `${API}/api/wa/automations/${testModal.id}/trigger`,
-        { phone: testPhone.trim(), contact_name: testName.trim(),request_id:crypto.randomUUID() },
-        { headers: headers()}
+      await axios.post(`${API}/api/wa/automations/${log.automation_id}/executions/${log.id}/cancel`, {}, { headers: headers() });
+      await fetchData();
+      setPageNotice({ type: "success", message: `Scheduled dispatch #${log.id} cancelled.` });
+    } catch (err) {
+      setPageNotice({ type: "error", message: err.response?.data?.error || "Could not cancel execution." });
+    }
+    setCancellingRun(null);
+  };
+
+  const handleCancelCheckpoint = async (chk) => {
+    if (!window.confirm(`Cancel waiting checkpoint for ${chk.phone}?`)) return;
+    try {
+      await axios.post(`${API}/api/wa/automations/checkpoints/${chk.id}/cancel`, {}, { headers: headers() });
+      await fetchData();
+      setPageNotice({ type: "success", message: `Checkpoint for ${chk.phone} cancelled.` });
+    } catch (err) {
+      setPageNotice({ type: "error", message: err.response?.data?.error || "Could not cancel checkpoint." });
+    }
+  };
+
+  const adoptStarter = (starter) => {
+    setConditions(parseConditions(starter.conditions || { match: "all", rules: [] }));
+    let acts = [];
+    try {
+      acts = starter.actions_json ? JSON.parse(starter.actions_json) : [];
+    } catch (_) {}
+    let sched = {
+      reminder_type: "relative",
+      delay_value: 1,
+      delay_unit: "days",
+      cancel_on_event: "invoice_paid",
+      business_hours_only: false,
+      max_attempts: 3,
+    };
+    try {
+      if (starter.schedule_json) sched = { ...sched, ...JSON.parse(starter.schedule_json) };
+    } catch (_) {}
+
+    setForm({
+      sender_id: senders.find((s) => s.status === "connected")?.id || "",
+      name: starter.name,
+      trigger_type: starter.trigger_type,
+      category: starter.category || "general",
+      mode: acts.length > 0 ? "pipeline" : "single",
+      msg_kind: "text",
+      template_id: "",
+      message_text: starter.message_text || "",
+      media_type: "image",
+      media_url: "",
+      enable_sequence: Boolean(starter.followup_message_text),
+      sequence_delay_seconds: starter.sequence_delay_seconds || 7,
+      followup_msg_kind: "text",
+      followup_message_text: starter.followup_message_text || "",
+      followup_media_type: "image",
+      followup_media_url: "",
+      followup_template_id: "",
+      flow_id: "",
+      group_id: "",
+      delay_minutes: starter.delay_minutes || 0,
+      is_active: 0,
+      actions: acts,
+      schedule: sched,
+    });
+    setMenuOptions([]);
+    setShowModal(true);
+  };
+
+  const filteredAutomations = automations.filter((a) => {
+    if (ruleStatus === "enabled" && a.is_active !== 1) return false;
+    if (ruleStatus === "paused" && a.is_active !== 0) return false;
+    if (ruleCategory !== "all" && a.category !== ruleCategory) return false;
+    if (ruleSearch.trim()) {
+      const q = ruleSearch.toLowerCase();
+      return (
+        a.name?.toLowerCase().includes(q) ||
+        a.trigger_type?.toLowerCase().includes(q) ||
+        a.message_text?.toLowerCase().includes(q) ||
+        a.template_name?.toLowerCase().includes(q)
       );
-      setTestResult({ success: true, message: [data.message,...(data.warnings||[])].join(" ") });
-      fetchData();
-    } catch (err) {
-      setTestResult({ success: false, message: err.response?.data?.error || "Trigger failed" });
     }
-    setTestLoading(false);
-  };
-  const cancelExecution=async log=>{
-    try{await axios.post(`${API}/api/wa/automations/${log.automation_id}/executions/${log.id}/cancel`,{},{headers:headers()});setLogs(previous=>previous.map(row=>row.id===log.id?{...row,status:"skipped",error:"Cancelled by an authorized employee"}:row));}
-    catch(error){setPageNotice({type:"error",message:error.response?.data?.error||"Could not cancel this execution. Refresh its current status."});}
-  };
-
-  const handleSimulateTrigger = async () => {
-    setSimLoading(true);
-    setSimResult(null);
-    try {
-      const { data } = await axios.post(
-        `${API}/api/wa/automations/simulate-trigger`,
-        {
-          trigger_type: simTriggerType,
-          phone: simPhone.trim(),
-          contact_name: simName.trim(),
-          send_real_message: false,
-          custom_data: JSON.parse(sampleEvent),
-        },
-        { headers: headers() }
-      );
-      setSimResult(data);
-
-    } catch (err) {
-      setSimResult({
-        success: false,
-        error: err.response?.data?.error || err.message,
-      });
-    }
-    setSimLoading(false);
-  };
-
-  const handleSaveWelcomeSettings = async () => {
-    setWelcomeSaving(true);
-    try {
-      const { data } = await axios.put(`${API}/api/wa/automations/welcome-settings`, welcomeSettings, { headers: headers() });
-      setWelcomeSettings(data);
-      setPageNotice({ type: "success", message: "Welcome reply settings saved." });
-    } catch (err) {
-      setPageNotice({ type: "error", message: err.response?.data?.error || err.response?.data?.message || "Welcome reply settings could not be saved." });
-    }
-    setWelcomeSaving(false);
-  };
-
-  const handleTestWelcome = async () => {
-    if (!welcomeTestPhone.trim()) return;
-    setWelcomeTestLoading(true);
-    setWelcomeTestResult(null);
-    try {
-      const { data } = await axios.post(`${API}/api/wa/automations/test-welcome`, { phone: welcomeTestPhone, sender_id:welcomeSender||undefined }, { headers: headers() });
-      setWelcomeTestResult({
-        success: true,
-        message: `Welcome message sent via ${data.engineUsed || "WhatsApp"}`,
-        // native === false means no Cloud API sender was available, so the
-        // customer received the numbered-text version, not tappable buttons.
-        warning:
-          welcomeSettings.welcome_type === "buttons" && data.native === false
-            ? "Sent as numbered text — native buttons need the WhatsApp Cloud API connected."
-            : null,
-      });
-    } catch (err) {
-      setWelcomeTestResult({ success: false, message: err.response?.data?.error || "Send failed" });
-    }
-    setWelcomeTestLoading(false);
-  };
+    return true;
+  });
 
   return (
-    <div className="hl-page">
-      {!isEditorPage && <>
-      <WAWorkspaceGuide section="automations" />
-      <AutomationWorkspaceSummary stats={stats} senders={senders} templates={templates} navigate={navigate} onLogs={()=>setActiveTab("logs")}/>
-      {/* Header Banner */}
-      <div className="hl-commandbar hl-card flex-col md:flex-row md:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 p-4 sm:p-5">
-        <div className="flex items-center gap-3.5 min-w-0">
-          <div className="w-12 h-12 flex items-center justify-center shrink-0">
-            <Zap size={26} />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h1 className="hl-title">Event automations</h1>
-              <span className="hl-badge hl-badge-accent">
-                {automations.filter(rule=>rule.is_active).length} Enabled rules
-              </span>
+    <div className="space-y-6 max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+      {/* ── TOP HEADER: Command Center Overview ── */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-slate-200">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs">
+              <Zap className="w-5 h-5 text-amber-400" />
             </div>
-            <p className="hl-subtitle mt-0.5">
-              Hands-off background rules: Automatic invoice notices, instant payment receipts, lead greetings, and AMC alerts.
-            </p>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 font-[var(--font-display)]">
+                WhatsApp Automation Command Center
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-600">
+                Unified orchestration for Event Automations, Workflow Pipelines, Flow Bots, Smart Reminders & Billing.
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="hl-actions flex-wrap">
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => {
-              setSimResult(null);
-              setShowSimulateModal(true);
-            }}
-            className="hl-btn-secondary"
+            type="button"
+            onClick={openCreate}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-slate-800 transition"
           >
-            <PlayCircle size={15} />
-            <span>⚡ Test Any CRM Trigger</span>
+            <Plus className="w-4 h-4" /> New Automation
           </button>
 
           <button
-            onClick={handleSeedPrebuilt}
-            disabled={seeding}
-            className="hl-btn-secondary"
-          >
-            {seeding ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} className="" />}
-            <span>Load 12 Prebuilt Smart Rules</span>
-          </button>
-
-          <button
+            type="button"
             onClick={handleBulkToggle}
             disabled={bulkToggling || automations.length === 0}
-            className={` ${
-              anyActive
-                ? "hl-btn-danger-ghost"
-                : "hl-btn-secondary"
-            }`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50 transition"
           >
-            {bulkToggling ? <Loader2 size={14} className="animate-spin" /> : anyActive ? <OctagonMinus size={14} /> : <PlayCircle size={14} />}
+            {anyActive ? <ToggleRight className="w-4 h-4 text-emerald-600" /> : <ToggleLeft className="w-4 h-4 text-slate-400" />}
             <span>{anyActive ? "Pause All" : "Resume All"}</span>
           </button>
 
           <button
-            onClick={openCreatePage}
-            className="hl-btn-primary"
+            type="button"
+            onClick={fetchData}
+            disabled={loading}
+            className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 shadow-xs hover:bg-slate-50 transition"
+            title="Refresh workspace data"
           >
-            <Plus size={16} />
-            <span>Create Automation Rule</span>
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>
 
       {pageNotice && (
-        <div role={pageNotice.type === "error" ? "alert" : "status"} className="hl-card flex flex-wrap items-center justify-between gap-3 p-3 text-sm" style={{ borderColor: pageNotice.type === "error" ? "var(--color-error)" : "var(--color-success)", color: pageNotice.type === "error" ? "var(--color-error)" : "var(--color-success)" }}>
-          <span className="min-w-0">{pageNotice.message}</span>
-          <div className="flex flex-wrap gap-2">
-            {pageNotice.type === "error" && <button type="button" className="hl-btn-secondary" onClick={fetchData}>Retry</button>}
-            <button type="button" className="hl-btn-secondary" onClick={() => setPageNotice(null)} aria-label="Dismiss message">Dismiss</button>
+        <div
+          role="alert"
+          className={`flex items-center justify-between rounded-lg p-3 text-sm ${
+            pageNotice.type === "error" ? "bg-rose-50 text-rose-800 border border-rose-200" : "bg-emerald-50 text-emerald-800 border border-emerald-200"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {pageNotice.type === "error" ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+            <span>{pageNotice.message}</span>
           </div>
+          <button type="button" onClick={() => setPageNotice(null)} className="text-xs opacity-75 hover:opacity-100">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
-      {/* Metrics Summary Row */}
-      <div className="hl-kpis mb-6">
-        <div className="hl-kpi flex items-center gap-3 p-3 sm:p-4 min-w-0">
-          <div className="w-10 h-10 flex items-center justify-center shrink-0">
-            <Zap size={20} />
-          </div>
-          <div>
-            <div className="hl-kpi-num">{stats.totalRules}</div>
-            <div className="hl-kpi-label">Configured Rules</div>
-          </div>
+      {/* ── METRIC STAT CARDS ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Total Rules</span>
+          <p className="mt-1 text-2xl font-bold text-slate-900">{stats.totalRules || automations.length}</p>
+          <span className="text-[10px] text-slate-500">{stats.activeRules || 0} active now</span>
         </div>
 
-        <div className="hl-kpi flex items-center gap-3 p-3 sm:p-4 min-w-0">
-          <div className="w-10 h-10 flex items-center justify-center shrink-0">
-            <ShieldCheck size={20} />
-          </div>
-          <div>
-            <div className="hl-kpi-num">{stats.activeRules}</div>
-            <div className="hl-kpi-label">Active (Listening)</div>
-          </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Executions</span>
+          <p className="mt-1 text-2xl font-bold text-slate-900">{stats.totalRuns || 0}</p>
+          <span className="text-[10px] text-emerald-600 font-medium">{stats.sentCount || 0} delivered</span>
         </div>
 
-        <div className="hl-kpi flex items-center gap-3 p-3 sm:p-4 min-w-0">
-          <div className="w-10 h-10 flex items-center justify-center shrink-0">
-            <Send size={20} />
-          </div>
-          <div>
-            <div className="hl-kpi-num">{stats.totalRuns}</div>
-            <div className="hl-kpi-label">Rule Runs</div>
-          </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Scheduled / Waiting</span>
+          <p className="mt-1 text-2xl font-bold text-amber-600">{stats.scheduledCount || 0}</p>
+          <span className="text-[10px] text-slate-500">Due queue</span>
         </div>
 
-        <div className="hl-kpi flex items-center gap-3 p-3 sm:p-4 min-w-0">
-          <div className="w-10 h-10 flex items-center justify-center shrink-0">
-            <CheckCircle2 size={20} />
-          </div>
-          <div>
-            <div className="hl-kpi-num">{stats.sentCount}</div>
-            <div className="hl-kpi-label">Accepted by Sender</div>
-          </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Checkpoints</span>
+          <p className="mt-1 text-2xl font-bold text-blue-600">{checkpoints.filter((c) => c.status === "waiting").length}</p>
+          <span className="text-[10px] text-slate-500">Pending answers</span>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Unpaid Invoices</span>
+          <p className="mt-1 text-2xl font-bold text-rose-600">{billingSummary.unpaidCount || 0}</p>
+          <span className="text-[10px] text-slate-500">Auto-recovery</span>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Delivery Health</span>
+          <p className="mt-1 text-2xl font-bold text-emerald-600">
+            {stats.totalRuns ? `${Math.round(((stats.sentCount || 0) / (stats.totalRuns || 1)) * 100)}%` : "100%"}
+          </p>
+          <span className="text-[10px] text-slate-500">{stats.failedCount || 0} failures</span>
         </div>
       </div>
 
-      {/* Educational Explainer Banner */}
-      {showExplainer && (
-        <div className="hl-card mb-4 sm:mb-6 p-4 sm:p-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 pointer-events-none hidden sm:block">
-            <Cpu size={140} />
-          </div>
-
-          <div className="flex items-start justify-between gap-3 sm:gap-4 relative z-10 mb-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 flex items-center justify-center shrink-0">
-                <Sparkles size={22} />
-              </div>
-              <div className="min-w-0">
-                <h2 className="hl-title flex items-center gap-2 flex-wrap">
-                  <span>How WhatsApp Automations Work</span>
-                  <span className="hl-badge hl-badge-success">
-                    ⚡ Automatic Dispatch & Recovery
-                  </span>
-                </h2>
-                <p className="hl-subtitle mt-0.5">
-                  Automations trigger automatically whenever staff performs actions inside the CRM database.
-                </p>
-              </div>
-            </div>
-
+      {/* ── COMMAND CENTER NAVIGATION TABS ── */}
+      <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 pb-2.5 text-xs sm:text-sm font-medium">
+        {[
+          { id: "rules", label: "Event Automations", icon: Zap, count: automations.length },
+          { id: "pipeline", label: "Workflow Pipelines", icon: GitBranch, count: automations.filter((a) => a.actions_json).length },
+          { id: "reminders", label: "Smart Reminders", icon: Bell },
+          { id: "checkpoints", label: "Conversation Checkpoints", icon: HelpCircle, count: checkpoints.filter((c) => c.status === "waiting").length },
+          { id: "billing", label: "Billing & Invoices", icon: CreditCard, count: billingSummary.unpaidCount },
+          { id: "welcome", label: "Welcome & Onboarding", icon: Users },
+          { id: "starters", label: "Industry Blueprints", icon: Building2, count: starters.length || 10 },
+          { id: "logs", label: "Execution Diagnostics", icon: ListChecks, count: logs.length },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
             <button
-              onClick={() => setShowExplainer(false)}
-              className="hl-btn-secondary p-1"
-              title="Dismiss banner"
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 whitespace-nowrap transition ${
+                isActive ? "bg-slate-900 text-white shadow-xs font-semibold" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              }`}
             >
-              <X size={18} />
+              <Icon className="w-4 h-4" />
+              <span>{tab.label}</span>
+              {tab.count !== undefined && tab.count > 0 && (
+                <span
+                  className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                    isActive ? "bg-slate-800 text-amber-300" : "bg-slate-200 text-slate-700"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              )}
             </button>
-          </div>
-
-          {/* 3 Module Architecture Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-3.5 relative z-10">
-            <div className="hl-card p-4 space-y-2 min-w-0">
-              <div className="flex items-center justify-between hl-section-label gap-2 flex-wrap">
-                <span>⚡ 1. CRM Automations</span>
-                <span className="hl-badge hl-badge-accent">Set &amp; Forget</span>
-              </div>
-              <p className="hl-subtitle">
-                Triggered by <strong>CRM Database Events</strong> (Invoices created, payments received, lead added, AMC expiry). Sends personal updates on your configured schedule when a sender is connected.
-              </p>
-              <div className="hl-id p-2">
-                New Invoice ➔ Auto Send PDF &amp; Pay Link
-              </div>
-            </div>
-
-            <div className="hl-card p-4 space-y-2 min-w-0">
-              <div className="flex items-center justify-between hl-section-label gap-2 flex-wrap">
-                <span>📢 2. Bulk Campaigns</span>
-                <span className="hl-badge hl-badge-info">1-to-Many Blast</span>
-              </div>
-              <p className="hl-subtitle">
-                <strong>Outbound Marketing Broadcasts</strong> send to your selected contacts using templates, media and configured sending intervals.
-              </p>
-              <div className="hl-id p-2">
-                Diwali Offer ➔ Send to 500 Walkin Leads
-              </div>
-            </div>
-
-            <div className="hl-card p-4 space-y-2 min-w-0">
-              <div className="flex items-center justify-between hl-section-label gap-2 flex-wrap">
-                <span>🔀 3. Chatbot Flows</span>
-                <span className="hl-badge hl-badge-success">Interactive Bot</span>
-              </div>
-              <p className="hl-subtitle">
-                <strong>24/7 Conversational State Machine</strong>. When customer sends "Hi" or taps a button, the bot asks qualifying questions and books appointments.
-              </p>
-              <div className="hl-id p-2">
-                Customer types "1" ➔ Shows Price Menu
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Navigation Tabs */}
-      <div className="hl-tabs flex items-center gap-2 mb-6 pb-2">
-        <button
-          onClick={() => setActiveTab("rules")}
-          className={`hl-tab flex items-center gap-2 ${
-            activeTab === "rules" ? "is-active" : ""
-          }`}
-        >
-          <Zap size={15} />
-          <span>Event Trigger Rules ({automations.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("welcome")}
-          className={`hl-tab flex items-center gap-2 ${
-            activeTab === "welcome" ? "is-active" : ""
-          }`}
-        >
-          <Users size={15} />
-          <span>Welcome Auto-Reply & Cooldown</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("reminders")}
-          className={`hl-tab flex items-center gap-2 ${
-            activeTab === "reminders" ? "is-active" : ""
-          }`}
-        >
-          <Bell size={15} />
-          <span>🔔 Interactive Reminders & 2-Way Confirmations</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("logs")}
-          className={`hl-tab flex items-center gap-2 ${
-            activeTab === "logs" ? "is-active" : ""
-          }`}
-        >
-          <ListChecks size={15} />
-          <span>Execution Audit Logs ({logs.length})</span>
-        </button>
+          );
+        })}
       </div>
 
-      {/* ── TAB 4: Interactive Reminders & 2-Way Confirmations ── */}
-      {activeTab === "reminders" && (
-        <WhatsAppInteractiveReminders />
-      )}
-
-      {/* ── TAB 1: Rules List ── */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* TAB 1: EVENT AUTOMATIONS                                      */}
+      {/* ───────────────────────────────────────────────────────────── */}
       {activeTab === "rules" && (
-        <>
-          <div className="flex flex-wrap gap-3 mb-4"><label className="text-sm flex-1 min-w-0">Find a rule<input className="hl-input w-full p-2 mt-1" value={ruleSearch} onChange={event=>setRuleSearch(event.target.value)} placeholder="Name, event or template"/></label><label className="text-sm">Rule status<select className="hl-select block p-2 mt-1" value={ruleStatus} onChange={event=>setRuleStatus(event.target.value)}><option value="all">All rules</option><option value="enabled">Enabled</option><option value="paused">Paused</option></select></label></div>
-          {loading ? (
-            <div className="flex justify-center py-20">
-              <Loader2 size={36} className="animate-spin" />
-            </div>
-          ) : automations.length === 0 ? (
-            <div className="hl-card hl-empty text-center py-16 p-8 max-w-lg mx-auto">
-              <Zap size={48} className="mx-auto mb-3" />
-              <h3 className="hl-empty-title">No Automation Rules Configured</h3>
-              <p className="hl-subtitle mt-1 mb-5">
-                Install 10 prebuilt automated rules (Invoice notice, Payment receipt, AMC alerts, Lead greetings) with 1 click.
-              </p>
-              <button
-                onClick={handleSeedPrebuilt}
-                className="hl-btn-primary flex items-center gap-2 mx-auto"
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search rules by name, event, template..."
+                  value={ruleSearch}
+                  onChange={(e) => setRuleSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-800"
+                />
+              </div>
+
+              <select
+                value={ruleStatus}
+                onChange={(e) => setRuleStatus(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none"
               >
-                <Sparkles size={15} />
-                <span>Load Prebuilt Rules</span>
+                <option value="all">All Statuses</option>
+                <option value="enabled">Active Only</option>
+                <option value="paused">Paused Only</option>
+              </select>
+
+              <select
+                value={ruleCategory}
+                onChange={(e) => setRuleCategory(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none"
+              >
+                <option value="all">All Categories</option>
+                <option value="sales">Sales & Leads</option>
+                <option value="billing">Billing & Invoices</option>
+                <option value="support">Support & Appointments</option>
+                <option value="onboarding">Onboarding</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSeedPrebuilt}
+                disabled={seeding}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 transition"
+              >
+                <Building2 className="w-3.5 h-3.5 text-slate-600" />
+                <span>{seeding ? "Installing…" : "Install All Industry Blueprints"}</span>
               </button>
             </div>
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+            </div>
+          ) : filteredAutomations.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                <Zap className="w-6 h-6 text-slate-400" />
+              </div>
+              <h3 className="text-base font-semibold text-slate-800">No automation rules found</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                Create a customized trigger rule or install industry starter blueprints to get started.
+              </p>
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
+                >
+                  Create Rule
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("starters")}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50"
+                >
+                  Browse Blueprints
+                </button>
+              </div>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {automations.filter(rule=>(ruleStatus==="all"||Boolean(rule.is_active)===(ruleStatus==="enabled"))&&`${rule.name} ${rule.trigger_type} ${rule.template_name||""}`.toLowerCase().includes(ruleSearch.toLowerCase())).map((a) => {
-                const tr = TRIGGER_TYPES.find((t) => t.value === a.trigger_type) || { emoji: "⚡", label: a.trigger_type };
-                const hasSeq = Boolean(a.followup_message_text || a.followup_media_url || a.followup_template_name);
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredAutomations.map((a) => {
+                const isEnabled = a.is_active === 1;
+                const isTogglingThis = toggling === a.id;
+                const trig = TRIGGER_TYPES.find((t) => t.value === a.trigger_type);
+                const hasPipeline = Boolean(a.actions_json);
 
                 return (
                   <div
                     key={a.id}
-                    className="hl-card flex flex-col justify-between p-5 group"
+                    className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:border-slate-300 transition"
                   >
                     <div>
-                      {/* Top Bar: Trigger emoji badge & toggle */}
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <span className="hl-badge hl-badge-accent inline-flex items-center gap-1.5">
-                          <span>{tr.emoji}</span>
-                          <span>{tr.label}</span>
-                        </span>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{trig?.emoji || "⚡"}</span>
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                              {a.trigger_label || a.trigger_type}
+                            </span>
+                            <h3 className="text-sm font-semibold text-slate-900 line-clamp-1">{a.name}</h3>
+                          </div>
+                        </div>
 
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => { setTestModal(a); setTestResult(null); }}
-                            className="hl-btn-secondary p-1.5"
-                            title="Test trigger"
-                          >
-                            <Play size={14} />
-                          </button>
-                          <button
-                            onClick={() => openEdit(a)}
-                            className="hl-btn-secondary p-1.5"
-                            title="Edit rule"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(a.id)}
-                            className="hl-btn-danger-ghost p-1.5"
-                            title="Delete rule"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggle(a)}
+                          disabled={isTogglingThis}
+                          className="text-slate-400 hover:text-slate-700 transition"
+                          title={isEnabled ? "Click to pause" : "Click to activate"}
+                        >
+                          {isEnabled ? (
+                            <ToggleRight className="w-6 h-6 text-emerald-600" />
+                          ) : (
+                            <ToggleLeft className="w-6 h-6 text-slate-400" />
+                          )}
+                        </button>
+                      </div>
+
+                      <div className="mt-3 space-y-1.5 text-xs text-slate-600">
+                        {hasPipeline ? (
+                          <div className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                            <GitBranch className="w-3.5 h-3.5" /> Multi-Step Workflow Pipeline
+                          </div>
+                        ) : (
+                          <p className="line-clamp-2 text-slate-600 italic">
+                            "{a.template_name ? `Template: ${a.template_name}` : a.message_text || "No message content"}"
+                          </p>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-500">
+                          {a.delay_minutes > 0 && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> {a.delay_minutes}m delay
+                            </span>
+                          )}
+                          {a.sender_phone && (
+                            <span className="flex items-center gap-1">
+                              <Smartphone className="w-3 h-3" /> {a.sender_phone}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <Play className="w-3 h-3 text-slate-400" /> {a.run_count || 0} runs
+                          </span>
                         </div>
                       </div>
-
-                      <h3 className="hl-empty-title line-clamp-1">
-                        {a.name}
-                      </h3>
-
-                      <p className="hl-subtitle mt-2 p-2.5 line-clamp-3">
-                        {a.template_body || a.message_text || "Automated template send"}
-                      </p>
-
-                      {/* Multi-Step & Linking Badges */}
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {hasSeq && (
-                          <span className="hl-badge hl-badge-info flex items-center gap-1">
-                            <Layers size={10} />
-                            <span>Step 2 ({a.sequence_delay_seconds || 7}s delay)</span>
-                          </span>
-                        )}
-
-                        {a.group_name && (
-                          <span className="hl-badge hl-badge-info flex items-center gap-1">
-                            <Users size={10} />
-                            <span>{a.group_name}</span>
-                          </span>
-                        )}
-
-                        {a.flow_name && (
-                          <span className="hl-badge hl-badge-success flex items-center gap-1">
-                            <Bot size={10} />
-                            <span>{a.flow_name}</span>
-                          </span>
-                        )}
-
-                        {a.option_count > 0 && (
-                          <span className="hl-badge hl-badge-success">
-                            🔘 {a.option_count} Quick Options
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Details row */}
-                      <div className="mt-4 pt-3 border-t flex items-center justify-between hl-subtitle">
-                        <span>Delay: {a.delay_minutes > 0 ? `${a.delay_minutes}m` : "Instant"}</span>
-                        <span className="hl-badge hl-badge-accent">{a.run_count || 0} executions</span>
-                      </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t flex items-center justify-between">
-                      <button
-                        onClick={() => handleToggle(a)}
-                        disabled={toggling === a.id}
-                        className={`hl-badge flex items-center gap-1.5 px-3 py-1.5 ${
-                          a.is_active
-                            ? "hl-badge-success"
-                            : ""
-                        }`}
-                      >
-                        {a.is_active ? <ToggleRight size={18} className="" /> : <ToggleLeft size={18} />}
-                        <span>{a.is_active ? "Active" : "Paused"}</span>
-                      </button>
+                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTestModal(a);
+                            setTestResult(null);
+                          }}
+                          className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                        >
+                          Simulate
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(a)}
+                          className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                        >
+                          Edit
+                        </button>
+                      </div>
 
                       <button
-                        onClick={() => { setTestModal(a); setTestResult(null); }}
-                        className="hl-btn-secondary flex items-center gap-1"
+                        type="button"
+                        onClick={() => handleDelete(a)}
+                        className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
+                        title="Delete rule"
                       >
-                        <Play size={12} />
-                        <span>Test Send</span>
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-3 text-xs"><button className="underline" type="button" onClick={()=>navigate(`/whatsapp/automations?tab=logs&rule=${a.id}`)}>View executions</button>{a.flow_id&&<button className="underline" type="button" onClick={()=>navigate(`/whatsapp/flows/build/${a.flow_id}`)}>Open linked flow</button>}{a.template_id&&<button className="underline" type="button" onClick={()=>navigate(`/whatsapp/templates/${a.template_id}/edit`)}>Open template</button>}</div>
-                    <AutomationRuleActivity id={a.id}/>
                   </div>
                 );
               })}
             </div>
           )}
-        </>
+        </div>
       )}
 
-      {/* ── TAB 2: Welcome Auto-Reply Settings ── */}
-      {activeTab === "welcome" && (
-        <div className="hl-card p-6 max-w-3xl mx-auto space-y-6">
-          <label className="block text-sm">Sender for welcome test<select className="hl-select w-full p-2 mt-1" value={welcomeSender} onChange={event=>setWelcomeSender(event.target.value)}><option value="">Choose a connected sender</option>{senders.filter(sender=>sender.status==="connected").map(sender=><option key={sender.id} value={sender.id}>{sender.display_phone}</option>)}</select></label>
-          <div className="hl-card p-4 flex items-start gap-3">
-            <ShieldCheck className="mt-0.5 shrink-0" size={20} />
-            <div className="hl-subtitle space-y-1.5">
-              <p className="hl-empty-title flex items-center gap-2">
-                <span>Safe User-Initiated Welcome Engine</span>
-                <span className="hl-badge hl-badge-success">
-                  🛡️ Anti-Spam & Quarantine Protected
-                </span>
-              </p>
-              <ul className="list-disc list-inside space-y-0.5 hl-subtitle">
-                <li><strong>Connecting a WhatsApp number will NEVER send messages.</strong> Historic and synced messages are safely quarantined.</li>
-                <li>Triggers <strong>ONLY</strong> when a customer sends the first incoming message to start a conversation.</li>
-                <li><strong>Bulk campaigns are isolated:</strong> Replies to promotional broadcasts will never trigger this welcome message.</li>
-                <li>If your company or staff contacted the customer in the last 24h, the welcome greeting is suppressed.</li>
-                <li>Guaranteed <strong>one-time delivery</strong> per contact according to the cooldown window below.</li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between border-b pb-4">
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* TAB 2: WORKFLOW PIPELINES                                     */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {activeTab === "pipeline" && (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-200">
             <div>
-              <h2 className="hl-title">Welcome replies & cooldown</h2>
-              <p className="hl-subtitle mt-0.5">Greets new contacts on their first inbound message with strict one-time cooldown protection</p>
+              <h2 className="text-base font-bold text-slate-900">Multi-Step Automation Pipelines</h2>
+              <p className="text-xs text-slate-600">
+                Connect triggers, condition gates, document delivery, Flow Bots, customer questioning, and CRM updates in a single durable pipeline.
+              </p>
             </div>
-
             <button
-              onClick={() => setWelcomeSettings((s) => ({ ...s, enabled: !s.enabled }))}
-              className={`hl-badge flex items-center gap-2 px-4 py-2 ${
-                welcomeSettings.enabled
-                  ? "hl-badge-success"
-                  : ""
-              }`}
+              type="button"
+              onClick={() => {
+                openCreate();
+                setForm((f) => ({ ...f, mode: "pipeline", name: "Custom Workflow Pipeline" }));
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
             >
-              <span className={`w-2.5 h-2.5 rounded-full ${welcomeSettings.enabled ? "animate-pulse" : ""}`} />
-              <span>{welcomeSettings.enabled ? "Active (Auto-Reply ON)" : "Disabled (Safe Mode)"}</span>
+              <Plus className="w-4 h-4" /> Create Workflow Pipeline
             </button>
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="hl-section-label block">Welcome Message Copy</label>
-                <span className="hl-id">Dynamic Multi-Keywords</span>
-              </div>
-              <WAVariablePicker
-                onInsert={(tag) => setWelcomeSettings((s) => ({ ...s, welcome_text: (s.welcome_text || "") + " " + tag }))}
-                className="mb-2"
-              />
-              <textarea
-                rows={3}
-                value={welcomeSettings.welcome_text || ""}
-                onChange={(e) => setWelcomeSettings((s) => ({ ...s, welcome_text: e.target.value }))}
-                className="hl-input w-full p-3"
-                placeholder="Hello {name}! Welcome to Madhura Tech..."
-              />
-            </div>
-
-            {/* Message Type: plain text vs REAL tappable WhatsApp buttons */}
-            <div>
-              <label className="hl-section-label block mb-1.5">Welcome Message Type</label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { key: "text", label: "Plain Text", hint: "Simple greeting, no options" },
-                  { key: "buttons", label: "Tappable Buttons", hint: "Native WhatsApp reply buttons" },
-                ].map((opt) => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() =>
-                      setWelcomeSettings((s) => ({
-                        ...s,
-                        welcome_type: opt.key,
-                        // Seed one button so switching to 'buttons' is never an invalid save
-                        welcome_buttons:
-                          opt.key === "buttons" && !(s.welcome_buttons || []).length
-                            ? [{ id: "welcome_services", title: "Our Services" }]
-                            : s.welcome_buttons || [],
-                      }))
-                    }
-                    className={`hl-tab text-left p-3 ${
-                      (welcomeSettings.welcome_type || "text") === opt.key
-                        ? "is-active"
-                        : ""
-                    }`}
-                  >
-                    <span className="hl-section-label block">{opt.label}</span>
-                    <span className="hl-subtitle block mt-0.5">{opt.hint}</span>
-                  </button>
-                ))}
-              </div>
-              {welcomeSettings.welcome_type === "buttons" && (
-                <p className="hl-badge hl-badge-accent px-2.5 py-1.5 mt-2">
-                  Native buttons are delivered by the <strong>WhatsApp Cloud API</strong>. If only a QR/web session is
-                  connected, the same message is delivered as a numbered text menu instead — customers still get it.
+          <div className="grid grid-cols-1 gap-4">
+            {automations.filter((a) => a.actions_json).length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+                <GitBranch className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                <h3 className="text-sm font-semibold text-slate-800">No multi-step pipelines created yet</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  Multi-step pipelines allow chaining templates, bills, Flow Bots, question checkpoints, and CRM actions.
                 </p>
-              )}
-            </div>
-
-            {welcomeSettings.welcome_type === "buttons" && (
-              <div className="hl-card space-y-3 p-3.5">
-                <div className="flex items-center justify-between">
-                  <label className="hl-section-label block">
-                    Reply Buttons ({(welcomeSettings.welcome_buttons || []).length}/3)
-                  </label>
-                  <button
-                    type="button"
-                    disabled={(welcomeSettings.welcome_buttons || []).length >= 3}
-                    onClick={() =>
-                      setWelcomeSettings((s) => ({
-                        ...s,
-                        welcome_buttons: [
-                          ...(s.welcome_buttons || []),
-                          { id: `welcome_opt_${(s.welcome_buttons || []).length + 1}`, title: "" },
-                        ],
-                      }))
-                    }
-                    className="hl-btn-secondary px-2.5 py-1 flex items-center gap-1"
-                  >
-                    <Plus size={12} /> Add Button
-                  </button>
-                </div>
-
-                {(welcomeSettings.welcome_buttons || []).map((btn, idx) => (
-                  <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-start">
-                    <div>
-                      <label className="hl-section-label block mb-0.5">Title (shown)</label>
-                      <input
-                        value={btn.title || ""}
-                        maxLength={20}
-                        onChange={(e) =>
-                          setWelcomeSettings((s) => {
-                            const btns = [...(s.welcome_buttons || [])];
-                            btns[idx] = { ...btns[idx], title: e.target.value };
-                            return { ...s, welcome_buttons: btns };
-                          })
-                        }
-                        className="hl-input w-full px-2.5 py-1.5"
-                        placeholder="Check my quote"
-                      />
-                      <span className="hl-subtitle">{(btn.title || "").length}/20 chars</span>
-                    </div>
-                    <div>
-                      <label className="hl-section-label block mb-0.5">Action ID (stable)</label>
-                      <input
-                        value={btn.id || ""}
-                        onChange={(e) =>
-                          setWelcomeSettings((s) => {
-                            const btns = [...(s.welcome_buttons || [])];
-                            // Keep ids machine-safe: automations key on these, not on the title
-                            btns[idx] = { ...btns[idx], id: e.target.value.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase() };
-                            return { ...s, welcome_buttons: btns };
-                          })
-                        }
-                        className="hl-input hl-id w-full px-2.5 py-1.5"
-                        placeholder="quote_view"
-                      />
-                      <span className="hl-subtitle">Never renamed when the title changes</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setWelcomeSettings((s) => ({
-                          ...s,
-                          welcome_buttons: (s.welcome_buttons || []).filter((_, i) => i !== idx),
-                        }))
-                      }
-                      className="hl-btn-danger-ghost mt-5 p-1.5"
-                      title="Remove button"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                ))}
-
-                <div>
-                  <label className="hl-section-label block mb-0.5">Footer (optional)</label>
-                  <input
-                    value={welcomeSettings.welcome_footer || ""}
-                    maxLength={60}
-                    onChange={(e) => setWelcomeSettings((s) => ({ ...s, welcome_footer: e.target.value }))}
-                    className="hl-input w-full px-2.5 py-1.5"
-                    placeholder="Madhura Tech • Reply MENU anytime"
-                  />
-                  <span className="hl-subtitle">{(welcomeSettings.welcome_footer || "").length}/60 chars</span>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    openCreate();
+                    setForm((f) => ({ ...f, mode: "pipeline", name: "Custom Workflow Pipeline" }));
+                  }}
+                  className="mt-3 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-xs"
+                >
+                  Build First Pipeline
+                </button>
               </div>
-            )}
+            ) : (
+              automations
+                .filter((a) => a.actions_json)
+                .map((a) => {
+                  let acts = [];
+                  try {
+                    acts = JSON.parse(a.actions_json);
+                  } catch (_) {}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <div>
-                <label className="hl-section-label block mb-1">
-                  Cooldown Period: {welcomeSettings.cooldown_hours === 0 ? "Only Once (Lifetime)" : `${welcomeSettings.cooldown_hours || 24} Hours`}
-                </label>
-                <input
-                  type="range"
-                  min={0}
-                  max={72}
-                  step={6}
-                  value={welcomeSettings.cooldown_hours != null ? welcomeSettings.cooldown_hours : 24}
-                  onChange={(e) => setWelcomeSettings((s) => ({ ...s, cooldown_hours: parseInt(e.target.value, 10) }))}
-                  className="w-full"
-                />
-                <p className="hl-subtitle mt-1">
-                  {welcomeSettings.cooldown_hours === 0
-                    ? "Lifetime protection: Customer will receive the welcome greeting only once in their lifetime."
-                    : `Prevents sending duplicate welcome messages to the same customer within ${welcomeSettings.cooldown_hours || 24} hours.`}
-                </p>
-              </div>
-
-              <div>
-                <label className="hl-section-label block mb-1">Business Working Hours Filter</label>
-                <div className="flex items-center gap-2 mt-1">
-                  <input
-                    type="checkbox"
-                    id="wh_only"
-                    checked={welcomeSettings.working_hours_only || false}
-                    onChange={(e) => setWelcomeSettings((s) => ({ ...s, working_hours_only: e.target.checked }))}
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="wh_only" className="hl-subtitle">Restricted to working hours only</label>
-                </div>
-                {welcomeSettings.working_hours_only && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <input
-                      type="time"
-                      value={welcomeSettings.start_time || "09:00"}
-                      onChange={(e) => setWelcomeSettings((s) => ({ ...s, start_time: e.target.value }))}
-                      className="hl-input hl-id px-2.5 py-1"
-                    />
-                    <span className="hl-subtitle">to</span>
-                    <input
-                      type="time"
-                      value={welcomeSettings.end_time || "21:00"}
-                      onChange={(e) => setWelcomeSettings((s) => ({ ...s, end_time: e.target.value }))}
-                      className="hl-input hl-id px-2.5 py-1"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Live Message Preview — mirrors how WhatsApp renders the bubble */}
-            <div className="hl-card p-3.5">
-              <div className="flex items-center justify-between">
-                <span className="hl-section-label">Live Customer Preview</span>
-                <span className="hl-subtitle">UI preview only — not a live send</span>
-              </div>
-              <div className="hl-card mt-2 p-3">
-                <p className="hl-subtitle whitespace-pre-line">
-                  {evaluateMessagePlaceholders(welcomeSettings.welcome_text || "Hello {name}! Welcome to Madhura Tech.")}
-                </p>
-
-                {welcomeSettings.welcome_type === "buttons" && welcomeSettings.welcome_footer && (
-                  <p className="hl-subtitle mt-1.5">{welcomeSettings.welcome_footer}</p>
-                )}
-
-                {welcomeSettings.welcome_type === "buttons" &&
-                  (welcomeSettings.welcome_buttons || []).filter((b) => b.title).length > 0 && (
-                    <div className="mt-2.5 -mx-3 -mb-3">
-                      {(welcomeSettings.welcome_buttons || [])
-                        .filter((b) => b.title)
-                        .map((b, i) => (
-                          <div
-                            key={i}
-                            className="border-t py-2 text-center hl-section-label"
-                            title={`Action ID: ${b.id || "(none)"}`}
-                          >
-                            {b.title}
+                  return (
+                    <div key={a.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-lg bg-slate-100 p-2 text-slate-800 font-bold text-xs">
+                            {a.trigger_label}
+                          </span>
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-900">{a.name}</h3>
+                            <span className="text-[11px] text-slate-500">{acts.length} pipeline step(s)</span>
                           </div>
-                        ))}
-                    </div>
-                  )}
-              </div>
+                        </div>
 
-              {welcomeSettings.welcome_type === "buttons" && (
-                <p className="hl-subtitle mt-2">
-                  Taps return the <strong>Action ID</strong>, not the label — so renaming a button never breaks an automation.
-                </p>
-              )}
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(a)}
+                            className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            Edit Pipeline
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggle(a)}
+                            className="text-xs font-medium text-slate-600"
+                          >
+                            {a.is_active ? (
+                              <span className="text-emerald-600 font-semibold">Active</span>
+                            ) : (
+                              <span className="text-slate-400 font-semibold">Paused</span>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Visual Flow Steps */}
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                          <span className="font-semibold text-slate-800">Trigger:</span>{" "}
+                          <span className="text-slate-600">{a.trigger_label}</span>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
+
+                        {acts.map((act, idx) => (
+                          <React.Fragment key={idx}>
+                            <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-2xs">
+                              <span className="font-bold text-slate-900">Step {idx + 1}:</span>{" "}
+                              <span className="text-slate-700">{act.title || act.type}</span>
+                            </div>
+                            {idx < acts.length - 1 && <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* TAB 3: SMART REMINDERS                                        */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {activeTab === "reminders" && <WhatsAppInteractiveReminders />}
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* TAB 4: CONVERSATION CHECKPOINTS                               */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {activeTab === "checkpoints" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Durable Conversational Checkpoints</h2>
+              <p className="text-xs text-slate-600">
+                In-flight customer questions awaiting answers. Persisted across server restarts and correlated with incoming WhatsApp replies.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={fetchData}
+              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Refresh Checkpoints
+            </button>
+          </div>
+
+          {checkpoints.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-xs text-slate-500">
+              No conversational checkpoints waiting. When a rule executes "Ask Customer Question", pending responses appear here.
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 font-semibold text-slate-700">
+                  <tr>
+                    <th className="p-3">Customer Phone</th>
+                    <th className="p-3">Automation / Step</th>
+                    <th className="p-3">Expected Type</th>
+                    <th className="p-3">Question Context</th>
+                    <th className="p-3">Collected Answers</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-800">
+                  {checkpoints.map((chk) => (
+                    <tr key={chk.id} className="hover:bg-slate-50/50">
+                      <td className="p-3 font-mono font-medium">+{chk.phone}</td>
+                      <td className="p-3">
+                        <span className="font-semibold text-slate-900">{chk.automation_name || `Rule #${chk.automation_id}`}</span>
+                        <span className="block text-[10px] text-slate-500">Step {chk.current_step}</span>
+                      </td>
+                      <td className="p-3">
+                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 uppercase">
+                          {chk.expected_type || "text"}
+                        </span>
+                      </td>
+                      <td className="p-3 max-w-[220px] truncate" title={chk.question_context?.question_text}>
+                        {chk.question_context?.question_text || "—"}
+                      </td>
+                      <td className="p-3">
+                        {chk.collected_answers && Object.keys(chk.collected_answers).length > 0 ? (
+                          <span className="text-slate-600 font-mono text-[11px]">
+                            {JSON.stringify(chk.collected_answers)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">None yet</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            chk.status === "waiting"
+                              ? "bg-amber-100 text-amber-800"
+                              : chk.status === "resumed" || chk.status === "completed"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {chk.status}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right">
+                        {chk.status === "waiting" && (
+                          <button
+                            type="button"
+                            onClick={() => handleCancelCheckpoint(chk)}
+                            className="rounded px-2 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* TAB 5: BILLING & INVOICES                                     */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {activeTab === "billing" && (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-200">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">CRM Billing & Invoice Automations</h2>
+              <p className="text-xs text-slate-600">
+                Automate invoice PDF delivery, payment links, verified receipts, and overdue balance recovery via WhatsApp.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                openCreate();
+                setForm((f) => ({
+                  ...f,
+                  name: "Instant Invoice PDF Notice & Payment Link",
+                  trigger_type: "invoice_created",
+                  category: "billing",
+                  message_text: PRESET_MESSAGES.invoice_created,
+                }));
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
+            >
+              <Plus className="w-4 h-4" /> New Billing Automation
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Invoice PDF Delivery</span>
+              <p className="mt-1 text-sm font-semibold text-slate-900">Send Invoice on Generation</p>
+              <p className="mt-1 text-xs text-slate-600">
+                Automatically dispatches generated CRM invoices to clients with interactive payment buttons.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  const starter = starters.find((s) => s.trigger_type === "invoice_created");
+                  if (starter) adoptStarter(starter);
+                }}
+                className="mt-3 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Configure Action
+              </button>
             </div>
 
-            <div className="pt-4 border-t flex justify-end">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Payment Due Reminder</span>
+              <p className="mt-1 text-sm font-semibold text-slate-900">1-3 Days Prior Due Date</p>
+              <p className="mt-1 text-xs text-slate-600">
+                Sends automated payment reminder with direct payment link; automatically cancels if invoice is paid.
+              </p>
               <button
-                onClick={handleSaveWelcomeSettings}
-                disabled={welcomeSaving}
-                className="hl-btn-primary flex items-center gap-1.5"
+                type="button"
+                onClick={() => {
+                  const starter = starters.find((s) => s.trigger_type === "payment_due");
+                  if (starter) adoptStarter(starter);
+                }}
+                className="mt-3 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
               >
-                {welcomeSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                <span>Save Welcome Settings</span>
+                Configure Action
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Verified Settlement</span>
+              <p className="mt-1 text-sm font-semibold text-slate-900">Payment Receipt Acknowledgement</p>
+              <p className="mt-1 text-xs text-slate-600">
+                Instantly issues an official verified receipt via WhatsApp once webhook or accounts confirms payment.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  const starter = starters.find((s) => s.trigger_type === "payment_received");
+                  if (starter) adoptStarter(starter);
+                }}
+                className="mt-3 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Configure Action
               </button>
             </div>
           </div>
 
-          {/* Test Welcome Send */}
-          <div className="hl-card p-4 space-y-3">
-            <h3 className="hl-section-label uppercase">Test Welcome Reply on Real Phone</h3>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={welcomeTestPhone}
-                onChange={(e) => setWelcomeTestPhone(e.target.value)}
-                placeholder="Enter 10-digit mobile number..."
-                className="hl-input hl-id flex-1 px-3 py-2"
-              />
-              <button
-                onClick={handleTestWelcome}
-                disabled={!welcomeTestPhone.trim() || welcomeTestLoading}
-                className="hl-btn-primary flex items-center gap-1.5"
-              >
-                {welcomeTestLoading ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                <span>Send Test</span>
-              </button>
-            </div>
-            {welcomeTestResult && (
-              <div className="space-y-1">
-                <p className={`hl-badge ${welcomeTestResult.success ? "hl-badge-success" : "hl-badge-error"}`}>
-                  {welcomeTestResult.message}
-                </p>
-                {welcomeTestResult.warning && (
-                  <p className="hl-badge hl-badge-accent px-2.5 py-1.5">
-                    ⚠️ {welcomeTestResult.warning}
-                  </p>
-                )}
+          <div className="space-y-3">
+            <h3 className="text-sm font-bold text-slate-900">Tracked CRM Invoices ({billingSummary.invoices?.length || 0})</h3>
+            {billingSummary.invoices?.length === 0 ? (
+              <p className="text-xs text-slate-500 italic">No invoices recorded yet in CRM.</p>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 font-semibold text-slate-700">
+                    <tr>
+                      <th className="p-3">Invoice #</th>
+                      <th className="p-3">Client / Company</th>
+                      <th className="p-3">Phone</th>
+                      <th className="p-3">Amount</th>
+                      <th className="p-3">Due Date</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 text-right">Instant Dispatch</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-800">
+                    {billingSummary.invoices.slice(0, 15).map((inv) => (
+                      <tr key={inv.id} className="hover:bg-slate-50/50">
+                        <td className="p-3 font-mono font-medium text-slate-900">{inv.invoice_no || `INV-${inv.id}`}</td>
+                        <td className="p-3 font-semibold">{inv.client_company || inv.client_name || "—"}</td>
+                        <td className="p-3 font-mono text-slate-600">{inv.client_phone || "—"}</td>
+                        <td className="p-3 font-bold text-slate-900">₹{inv.total_amount ?? inv.grand_total ?? "0"}</td>
+                        <td className="p-3 text-slate-600">{inv.due_date || "—"}</td>
+                        <td className="p-3">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              String(inv.status).toLowerCase() === "paid"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-rose-100 text-rose-800"
+                            }`}
+                          >
+                            {inv.status || "unpaid"}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!inv.client_phone) {
+                                alert("No phone number attached to this invoice.");
+                                return;
+                              }
+                              setTestPhone(inv.client_phone.replace(/\D/g, ""));
+                              const invRule = automations.find((a) => a.trigger_type === "invoice_created") || automations[0];
+                              if (invRule) {
+                                setTestModal(invRule);
+                              } else {
+                                alert("Please create an invoice automation rule first.");
+                              }
+                            }}
+                            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            Send WhatsApp
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ── TAB 3: Execution Audit Logs ── */}
-      {activeTab === "logs" && (
-        <div className="hl-card p-6">
-          <div className="flex items-center justify-between mb-4">
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* TAB 6: WELCOME AUTO-REPLY                                     */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {activeTab === "welcome" && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs space-y-6 max-w-3xl">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-200">
             <div>
-              <h2 className="hl-title">Automation audit log</h2>
-              <label className="block text-xs mt-2">Execution status<select className="hl-select p-2 ml-2" value={logStatus} onChange={event=>setLogStatus(event.target.value)}><option value="">All statuses</option>{["scheduled","sending","sent","failed","skipped","unknown"].map(status=><option key={status}>{status}</option>)}</select></label>
-              <p className="hl-subtitle">Live feed of all automated messages triggered by CRM events</p>
+              <h2 className="text-base font-bold text-slate-900">Welcome Auto-Reply & Cooldown</h2>
+              <p className="text-xs text-slate-600">
+                Greet new or returning customers on their first message with dynamic variables or interactive buttons.
+              </p>
             </div>
-            <button onClick={fetchData} className="hl-btn-secondary p-2">
-              <RefreshCw size={15} />
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(welcomeSettings.enabled)}
+                onChange={(e) => setWelcomeSettings((w) => ({ ...w, enabled: e.target.checked ? 1 : 0 }))}
+                className="w-4 h-4 rounded text-slate-900"
+              />
+              <span className="text-xs font-bold text-slate-800">Enable Auto-Reply</span>
+            </label>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Greeting Message Text</label>
+              <textarea
+                rows={4}
+                value={welcomeSettings.welcome_text || ""}
+                onChange={(e) => setWelcomeSettings((w) => ({ ...w, welcome_text: e.target.value }))}
+                className="w-full rounded-lg border border-slate-300 p-3 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none"
+                placeholder="Hello {name}! Welcome to {company}..."
+              />
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                Supports placeholders: <code>{"{name}"}</code>, <code>{"{company}"}</code>, <code>{"{greeting_time}"}</code>.
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Cooldown Duration (Hours)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="720"
+                  value={welcomeSettings.cooldown_hours || 24}
+                  onChange={(e) => setWelcomeSettings((w) => ({ ...w, cooldown_hours: parseInt(e.target.value, 10) }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-800 shadow-xs"
+                />
+                <span className="text-[10px] text-slate-500">Wait this long before greeting the same phone number again.</span>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Working Hours Only</label>
+                <select
+                  value={welcomeSettings.working_hours_only ? "1" : "0"}
+                  onChange={(e) => setWelcomeSettings((w) => ({ ...w, working_hours_only: e.target.value === "1" ? 1 : 0 }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-800 shadow-xs"
+                >
+                  <option value="0">24/7 (Always Send)</option>
+                  <option value="1">Business Hours Only (09:00 - 21:00 IST)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-between border-t border-slate-100">
+              <button
+                type="button"
+                onClick={async () => {
+                  setSavingWelcome(true);
+                  try {
+                    await axios.put(`${API}/api/wa/automations/welcome-settings`, welcomeSettings, { headers: headers() });
+                    setPageNotice({ type: "success", message: "Welcome settings updated successfully." });
+                  } catch (err) {
+                    setPageNotice({ type: "error", message: err.response?.data?.error || "Could not save welcome settings." });
+                  }
+                  setSavingWelcome(false);
+                }}
+                disabled={savingWelcome}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
+              >
+                {savingWelcome ? "Saving…" : "Save Welcome Settings"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* TAB 7: INDUSTRY BLUEPRINTS                                    */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {activeTab === "starters" && (
+        <div className="space-y-4">
+          <div className="pb-2 border-b border-slate-200">
+            <h2 className="text-base font-bold text-slate-900">Industry Automation Starter Blueprints</h2>
+            <p className="text-xs text-slate-600">
+              Pre-configured, production-ready workflows built for hospitals, real estate, education, restaurants, SaaS, and service businesses.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {starters.map((starter, idx) => (
+              <div
+                key={idx}
+                className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-xs hover:border-slate-300 transition"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-md bg-slate-100 p-1.5 text-xs font-bold text-slate-700">
+                      {starter.category ? starter.category.toUpperCase() : "BLUEPRINT"}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">{starter.trigger_type}</span>
+                  </div>
+
+                  <h3 className="mt-2 text-sm font-bold text-slate-900">{starter.name}</h3>
+                  <p className="mt-1 text-xs text-slate-600 line-clamp-3">
+                    "{starter.message_text}"
+                  </p>
+
+                  {starter.actions_json && (
+                    <div className="mt-2 text-[11px] text-blue-700 font-medium">
+                      ⚡ Includes multi-step question/bill pipeline
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => adoptStarter(starter)}
+                    className="w-full rounded-lg bg-slate-900 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition"
+                  >
+                    Adopt This Blueprint
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* TAB 8: EXECUTION DIAGNOSTICS & LOGS                           */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {activeTab === "logs" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Execution Timeline & Diagnostics</h2>
+              <p className="text-xs text-slate-600">
+                Detailed audit trail of all evaluated triggers, condition outcomes, and Meta delivery statuses.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={fetchData}
+              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Refresh Logs
             </button>
           </div>
 
           {logs.length === 0 ? (
-            <div className="hl-empty text-center py-14">
-              <ListChecks size={36} className="mx-auto mb-2" />
-              <p className="hl-section-label">No automation triggers executed yet.</p>
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-xs text-slate-500">
+              No executions logged yet. When events trigger automations, their execution records and diagnostics will appear here.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="hl-table w-full min-w-[640px] text-left">
-                <thead>
-                  <tr className="border-b">
-                    <th className="py-2.5 px-3">Rule Name</th>
-                    <th className="py-2.5 px-3">Trigger Type</th>
-                    <th className="py-2.5 px-3">Recipient</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3">Execution details</th>
-                    <th className="py-2.5 px-3">Executed At</th>
+            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 font-semibold text-slate-700">
+                  <tr>
+                    <th className="p-3">Execution ID</th>
+                    <th className="p-3">Automation</th>
+                    <th className="p-3">Phone</th>
+                    <th className="p-3">Contact</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3">Meta Message ID</th>
+                    <th className="p-3">Timestamp / Scheduled</th>
+                    <th className="p-3 text-right">Diagnostics</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
+                <tbody className="divide-y divide-slate-100 text-slate-800">
                   {logs.map((log) => {
-                    let triggerData = {};
-                    try {
-                      triggerData = typeof log.trigger_data === "string" ? JSON.parse(log.trigger_data) : (log.trigger_data || {});
-                    } catch (_) {}
+                    const isExpanded = expandedLogId === log.id;
+                    const hasDiag = log.diagnostics && log.diagnostics.length > 0;
 
                     return (
-                      <tr key={log.id} className="">
-                        <td className="py-3 px-3"><button className="underline" type="button" onClick={()=>navigate(`/whatsapp/automations/${log.automation_id}/edit`)}>{log.automation_name || "Automation"}</button></td>
-                        <td className="py-3 px-3 hl-section-label">{log.trigger_type}</td>
-                        <td className="py-3 px-3 hl-id">
-                          +{log.phone}
-                          {log.contact_name && <span className="hl-subtitle block">{log.contact_name}</span>}
-                        </td>
-                        <td className="py-3 px-3">
-                          <span
-                            className={`hl-badge px-2 py-0.5 uppercase ${
-                              log.status === "sent" ? "hl-badge-success" : ["scheduled", "sending", "unknown", "skipped"].includes(log.status) ? "hl-badge-warning" : "hl-badge-error"
-                            }`}
-                          >
-                            {log.status}
-                          </span>
-                          {log.status === "unknown" && <span className="hl-subtitle block">Check delivery before retrying</span>}
-                          {log.status==="scheduled"&&<button type="button" className="block underline text-xs mt-1" onClick={()=>cancelExecution(log)}>Cancel scheduled send</button>}
-                        </td>
-                        <td className="py-3 px-3 max-w-xs truncate hl-id">
-                          <span>Step {log.execution_step || triggerData.step || 1}</span>
-                          {log.status === "scheduled" && log.scheduled_for && <span className="hl-subtitle block">Due {new Date(log.scheduled_for).toLocaleString("en-IN")}</span>}
-                          {log.error && <span className="hl-subtitle block" title={log.error}>{log.error}</span>}
-                          {log.wa_message_id && <span className="hl-subtitle block" title={log.wa_message_id}>{log.wa_message_id}</span>}
-                        </td>
-                        <td className="py-3 px-3 hl-id">
-                          {log.sent_at ? new Date(log.sent_at).toLocaleString("en-IN") : "-"}
-                        </td>
-                      </tr>
+                      <React.Fragment key={log.id}>
+                        <tr className="hover:bg-slate-50/50">
+                          <td className="p-3 font-mono font-bold text-slate-700">#{log.id}</td>
+                          <td className="p-3">
+                            <span className="font-semibold text-slate-900">{log.automation_name || `Rule #${log.automation_id}`}</span>
+                            <span className="block text-[10px] text-slate-500">{log.trigger_type}</span>
+                          </td>
+                          <td className="p-3 font-mono text-slate-600">+{log.phone}</td>
+                          <td className="p-3">{log.contact_name || "—"}</td>
+                          <td className="p-3">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                log.status === "sent"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : log.status === "scheduled"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : log.status === "skipped"
+                                  ? "bg-slate-100 text-slate-600"
+                                  : "bg-rose-100 text-rose-800"
+                              }`}
+                            >
+                              {log.status}
+                            </span>
+                          </td>
+                          <td className="p-3 font-mono text-[11px] text-slate-500 max-w-[140px] truncate">
+                            {log.wa_message_id || "—"}
+                          </td>
+                          <td className="p-3 text-slate-500 text-[11px]">
+                            {log.status === "scheduled"
+                              ? `Due: ${new Date(log.scheduled_for).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                              : log.sent_at
+                              ? new Date(log.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                              : "—"}
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              {log.status === "scheduled" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelRun(log)}
+                                  disabled={cancellingRun === log.id}
+                                  className="rounded px-2 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50"
+                                >
+                                  Cancel
+                                </button>
+                              )}
+                              {hasDiag && (
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                                  className="rounded px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+                                >
+                                  {isExpanded ? "Hide" : "Details"}
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+
+                        {isExpanded && hasDiag && (
+                          <tr className="bg-slate-50/70">
+                            <td colSpan={8} className="p-3 border-t border-slate-200">
+                              <div className="space-y-1.5 text-xs">
+                                <span className="font-semibold text-slate-900 block">Condition Diagnostics Evaluation:</span>
+                                <div className="space-y-1 max-h-40 overflow-y-auto">
+                                  {log.diagnostics.map((d, dIdx) => (
+                                    <div
+                                      key={dIdx}
+                                      className={`flex items-center justify-between rounded p-1.5 font-mono text-[11px] ${
+                                        d.passed ? "bg-emerald-50 text-emerald-900" : "bg-rose-50 text-rose-900"
+                                      }`}
+                                    >
+                                      <span>
+                                        <strong>{d.field}</strong> {d.operator} expected: <code>{JSON.stringify(d.expectedValue)}</code> (actual: <code>{JSON.stringify(d.actualValue)}</code>)
+                                      </span>
+                                      <span className="font-bold">{d.passed ? "PASSED" : "FAILED"}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                {log.error && <p className="text-xs text-rose-600 font-semibold mt-1">Error: {log.error}</p>}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
@@ -1342,53 +1573,104 @@ function AutomationWorkspace() {
         </div>
       )}
 
-      </>}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* MODAL: Full Automation & Pipeline Editor                     */}
+      {/* ───────────────────────────────────────────────────────────── */}
       {(showModal || isEditorPage) && (
-        <div className={isEditorPage ? "w-full" : "fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3"} onClick={isEditorPage ? undefined : () => { if (!savingRule) closeEditor(); }}>
-          <div ref={isEditorPage ? undefined : automationDialog} role={isEditorPage ? "region" : "dialog"} aria-modal={isEditorPage ? undefined : true} aria-label={editAutomation ? "Edit automation" : "Create automation"} className={isEditorPage ? "hl-card w-full min-w-0 flex flex-col" : "hl-card w-full max-w-3xl max-h-[92dvh] min-h-0 flex flex-col overflow-hidden"} onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b flex items-center justify-between">
+        <div
+          className={
+            isEditorPage
+              ? "w-full"
+              : "fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-3"
+          }
+          onClick={isEditorPage ? undefined : () => { if (!savingRule) closeEditor(); }}
+        >
+          <div
+            ref={isEditorPage ? undefined : automationDialog}
+            role={isEditorPage ? "region" : "dialog"}
+            aria-modal={isEditorPage ? undefined : true}
+            className={
+              isEditorPage
+                ? "rounded-2xl border border-slate-200 bg-white w-full flex flex-col shadow-sm"
+                : "rounded-2xl border border-slate-200 bg-white w-full max-w-4xl max-h-[92dvh] min-h-0 flex flex-col overflow-hidden shadow-xl"
+            }
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 flex items-center justify-center">
-                  <Zap size={18} />
+                <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center">
+                  <Zap className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  {isEditorPage ? <h1 className="hl-title">{editRouteId?"Edit WhatsApp Automation":"Create WhatsApp Automation"}</h1> : <h2 className="hl-title">{editAutomation ? "Edit Automation Rule" : "Create WhatsApp Automation"}</h2>}
-                  <p className="hl-subtitle">Choose an event, define who qualifies, and configure messages and follow-ups.</p>
+                  <h2 className="text-base font-bold text-slate-900">
+                    {editAutomation ? "Edit Automation Rule" : "Create WhatsApp Automation"}
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Configure triggers, condition filters, and multi-step actions.
+                  </p>
                 </div>
               </div>
-              <button disabled={savingRule||editorLoading} aria-label="Close automation editor" onClick={closeEditor} className="hl-btn-secondary p-1">
-                <X size={20} />
+              <button
+                type="button"
+                disabled={savingRule || editorLoading}
+                onClick={closeEditor}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className={isEditorPage ? "grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] min-w-0" : "contents"}>
-            <div className={isEditorPage ? "p-4 sm:p-6 space-y-5 min-w-0" : "p-4 sm:p-6 overflow-y-auto space-y-5 flex-1 min-h-0 wa-custom-scrollbar overscroll-contain"}>
-              {ruleError && <p role="alert" className="wa-form-error">{ruleError}</p>}
-              {isEditorPage && <>
-                {pageNotice && <p role="alert" className="wa-form-error">{pageNotice.message}<button type="button" className="hl-btn-secondary ml-2" onClick={fetchData}>Retry loading</button></p>}
-                <nav aria-label="Automation configuration sections" className="flex flex-wrap gap-3 text-xs">{[["setup","Event"],["message","Message"],["followup","Follow-up"],["conditions","Conditions"],["delivery","Delivery"]].map(([id,label])=><a className="underline underline-offset-4" key={id} href={`#automation-${id}`}>{label}</a>)}</nav>
-                <section className="border rounded-lg p-4 space-y-3" aria-label="Automation starters"><h2 className="font-semibold">Start with a business event</h2><p className="text-xs">Apply a starter to replace the event and main message. Conditions, follow-ups and delivery settings stay editable.</p><div className="flex flex-wrap gap-2"><select aria-label="Automation starter" className="hl-select p-2 flex-1 min-w-0" value={starterTrigger} onChange={event=>setStarterTrigger(event.target.value)}>{TRIGGER_TYPES.map(trigger=><option key={trigger.value} value={trigger.value}>{trigger.label}</option>)}</select><button type="button" className="hl-btn-secondary" onClick={()=>{if(form.message_text?.trim()&&form.message_text!==PRESET_MESSAGES[form.trigger_type]&&!window.confirm("Replace the current event and main message with this starter?"))return;setForm(previous=>({...previous,name:previous.name||TRIGGER_TYPES.find(trigger=>trigger.value===starterTrigger)?.label||"",trigger_type:starterTrigger,msg_kind:"text",message_text:PRESET_MESSAGES[starterTrigger]||""}));}}>Apply starter</button></div></section>
-              </>}
-              <label className="block text-sm">WhatsApp sender<select className="hl-select w-full p-2 mt-1" value={form.sender_id||""} onChange={event=>setForm(previous=>({...previous,sender_id:event.target.value}))}><option value="">Choose a connected Meta sender</option>{senders.map(sender=><option key={sender.id} value={sender.id} disabled={sender.status!=="connected"}>{sender.display_phone||`Sender ${sender.id}`} · {sender.status}</option>)}</select><small className="block mt-1">Rules use this organization's selected Meta number. <button className="underline" type="button" onClick={()=>navigate("/whatsapp/accounts")}>Manage senders</button></small></label>
-              {editorLoading&&<p role="status">Loading the saved rule and its reply options…</p>}
-              <div id="automation-setup" className="grid grid-cols-1 sm:grid-cols-2 gap-4 scroll-mt-6">
+            {/* Scrollable Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 min-h-0 wa-custom-scrollbar">
+              {ruleError && (
+                <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800">
+                  {ruleError}
+                </div>
+              )}
+
+              {/* Mode Switcher */}
+              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-2">
+                <span className="text-xs font-semibold text-slate-700 px-2">Automation Workflow Mode:</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, mode: "single" }))}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      form.mode === "single" ? "bg-white text-slate-900 shadow-xs border border-slate-200" : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Direct Message & Follow-up
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, mode: "pipeline" }))}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      form.mode === "pipeline" ? "bg-slate-900 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    🔀 Multi-Step Workflow Pipeline
+                  </button>
+                </div>
+              </div>
+
+              {/* Basic Setup */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="automation-rule-name" className="hl-section-label block mb-1">Rule Name *</label>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Rule Name *</label>
                   <input
-                    id="automation-rule-name"
                     type="text"
                     value={form.name}
                     onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                     placeholder="e.g. Instant Invoice WhatsApp Notice"
-                    className="hl-input w-full px-3.5 py-2.5"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
                     required
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="automation-trigger-event" className="hl-section-label block mb-1">Trigger Event *</label>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Trigger Event *</label>
                   <select
-                    id="automation-trigger-event"
                     value={form.trigger_type}
                     onChange={(e) => {
                       const t = e.target.value;
@@ -1398,242 +1680,354 @@ function AutomationWorkspace() {
                         message_text: !f.message_text?.trim() || f.message_text === PRESET_MESSAGES[f.trigger_type] ? PRESET_MESSAGES[t] || "" : f.message_text,
                       }));
                     }}
-                    className="hl-select w-full px-3 py-2.5"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
                   >
-                    {TRIGGER_TYPES.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.emoji} {t.label}
+                    {TRIGGER_CATEGORIES.map((cat) => (
+                      <optgroup key={cat.category} label={cat.category}>
+                        {cat.triggers.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.emoji} {t.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Sender & Category */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">WhatsApp Meta Sender *</label>
+                  <select
+                    value={form.sender_id || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, sender_id: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
+                  >
+                    <option value="">Choose a connected Meta sender</option>
+                    {senders.map((s) => (
+                      <option key={s.id} value={s.id} disabled={s.status !== "connected"}>
+                        {s.display_phone || `Sender #${s.id}`} ({s.status})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Category</label>
+                  <select
+                    value={form.category || "general"}
+                    onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                  >
+                    <option value="general">General</option>
+                    <option value="sales">Sales & Leads</option>
+                    <option value="billing">Billing & Invoices</option>
+                    <option value="support">Support & Appointments</option>
+                    <option value="onboarding">Onboarding</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Multi-Condition Engine */}
+              <div>
+                <WAConditionEditor value={conditions} onChange={setConditions} />
+              </div>
+
+              {/* Pipeline Actions Builder (When in Pipeline Mode) */}
+              {form.mode === "pipeline" ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                    <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <GitBranch className="w-4 h-4 text-slate-700" /> Multi-Step Action Pipeline ({form.actions.length} Steps)
+                    </span>
+                    <span className="text-[11px] text-slate-500">Actions run in consecutive order.</span>
+                  </div>
+
+                  {form.actions.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500">
+                      No actions added yet. Add steps from the action library below.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {form.actions.map((act, aIdx) => (
+                        <div key={aIdx} className="rounded-lg border border-slate-200 bg-white p-3.5 shadow-xs space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-900">
+                              Step {aIdx + 1}: {ACTION_TYPES.find((t) => t.type === act.type)?.label || act.type}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setForm((f) => ({ ...f, actions: f.actions.filter((_, i) => i !== aIdx) }))}
+                              className="text-xs text-rose-600 hover:text-rose-700 font-medium"
+                            >
+                              Remove
+                            </button>
+                          </div>
+
+                          {act.type === "send_message" && (
+                            <textarea
+                              rows={2}
+                              value={act.params?.text || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((f) => ({
+                                  ...f,
+                                  actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, text: val } } : item)),
+                                }));
+                              }}
+                              placeholder="Message text with variables (e.g. Hello {name}!)..."
+                              className="w-full rounded border border-slate-300 p-2 text-xs"
+                            />
+                          )}
+
+                          {act.type === "ask_question" && (
+                            <div className="space-y-2">
+                              <input
+                                type="text"
+                                placeholder="Question text to customer..."
+                                value={act.params?.question_text || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setForm((f) => ({
+                                    ...f,
+                                    actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, question_text: val } } : item)),
+                                  }));
+                                }}
+                                className="w-full rounded border border-slate-300 p-2 text-xs"
+                              />
+                              <div className="grid grid-cols-2 gap-2">
+                                <select
+                                  value={act.params?.expected_type || "button"}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setForm((f) => ({
+                                      ...f,
+                                      actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, expected_type: val } } : item)),
+                                    }));
+                                  }}
+                                  className="rounded border border-slate-300 p-1.5 text-xs"
+                                >
+                                  <option value="button">Quick Reply Button Choice</option>
+                                  <option value="text">Free Text Answer</option>
+                                  <option value="number">Number</option>
+                                  <option value="email">Email Address</option>
+                                  <option value="date">Date</option>
+                                </select>
+                                <input
+                                  type="text"
+                                  placeholder="Map answer to CRM field (e.g. city, service)"
+                                  value={act.params?.crm_field || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setForm((f) => ({
+                                      ...f,
+                                      actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, crm_field: val } } : item)),
+                                    }));
+                                  }}
+                                  className="rounded border border-slate-300 p-1.5 text-xs"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {act.type === "wait_delay" && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-600">Delay for:</span>
+                              <input
+                                type="number"
+                                min="1"
+                                max="10080"
+                                value={act.params?.minutes || 60}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value, 10);
+                                  setForm((f) => ({
+                                    ...f,
+                                    actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, minutes: val } } : item)),
+                                  }));
+                                }}
+                                className="w-24 rounded border border-slate-300 p-1 text-xs"
+                              />
+                              <span className="text-xs text-slate-600">minutes</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add Action Library Buttons */}
+                  <div className="pt-2">
+                    <span className="text-xs font-semibold text-slate-700 block mb-2">Add Step to Pipeline:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {ACTION_TYPES.map((at) => (
+                        <button
+                          key={at.type}
+                          type="button"
+                          onClick={() => {
+                            setForm((f) => ({
+                              ...f,
+                              actions: [
+                                ...f.actions,
+                                {
+                                  id: `act_${f.actions.length + 1}`,
+                                  type: at.type,
+                                  title: at.label,
+                                  params: {},
+                                },
+                              ],
+                            }));
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                        >
+                          <Plus className="w-3 h-3 text-slate-500" />
+                          <span>{at.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Direct Message Box */
+                <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4 shadow-xs">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <span className="text-xs font-bold text-slate-900">Main WhatsApp Message Content</span>
+                    <div className="flex items-center gap-1">
+                      {["text", "media", "template"].map((kind) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          onClick={() => setForm((f) => ({ ...f, msg_kind: kind }))}
+                          className={`rounded-md px-2.5 py-1 text-xs font-semibold uppercase transition ${
+                            form.msg_kind === kind ? "bg-slate-900 text-white shadow-xs" : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          {kind}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {form.msg_kind === "text" && (
+                    <div className="space-y-3">
+                      <WAVariablePicker
+                        onInsert={(tag) => setForm((f) => ({ ...f, message_text: (f.message_text || "") + " " + tag }))}
+                      />
+                      <textarea
+                        rows={4}
+                        value={form.message_text || ""}
+                        onChange={(e) => setForm((f) => ({ ...f, message_text: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-300 p-3 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
+                        placeholder="Type message here with placeholders..."
+                      />
+                      {form.message_text && (
+                        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs">
+                          <span className="font-semibold text-slate-700 block mb-1">Live Preview with Sample Data:</span>
+                          <p className="text-slate-800 whitespace-pre-wrap font-mono text-[11px]">
+                            {evaluateMessagePlaceholders(form.message_text)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {form.msg_kind === "template" && (
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">Select Approved Template</label>
+                      <select
+                        value={form.template_id}
+                        onChange={(e) => setForm((f) => ({ ...f, template_id: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-300 p-2.5 text-xs text-slate-900"
+                      >
+                        <option value="">-- Choose Template --</option>
+                        {templates.filter(isApprovedTemplate).map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name} ({t.category})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {form.msg_kind === "media" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1">Media Type</label>
+                        <select
+                          value={form.media_type}
+                          onChange={(e) => setForm((f) => ({ ...f, media_type: e.target.value }))}
+                          className="w-full rounded border border-slate-300 p-2 text-xs"
+                        >
+                          <option value="image">📷 Image</option>
+                          <option value="document">📄 PDF Document</option>
+                          <option value="video">🎥 Video</option>
+                        </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-semibold text-slate-700 block mb-1">HTTPS Media URL</label>
+                        <input
+                          type="text"
+                          value={form.media_url || ""}
+                          onChange={(e) => setForm((f) => ({ ...f, media_url: e.target.value }))}
+                          placeholder="https://example.com/invoice.pdf"
+                          className="w-full rounded border border-slate-300 p-2 text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Delivery Timing & Group */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Send Delay (Minutes)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="43200"
+                    value={form.delay_minutes}
+                    onChange={(e) => setForm((f) => ({ ...f, delay_minutes: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                  />
+                  <span className="text-[10px] text-slate-500">Set 0 for instant execution on trigger.</span>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Auto-Trigger Flow Bot (Optional)</label>
+                  <select
+                    value={form.flow_id || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, flow_id: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                  >
+                    <option value="">-- Do Not Trigger Flow --</option>
+                    {flows.map((fl) => (
+                      <option key={fl.id} value={fl.id}>
+                        {fl.name}
                       </option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              {/* Step 1: Main Message Box */}
-              <div id="automation-message" className="hl-card p-4 space-y-3 scroll-mt-6">
-                <div className="flex items-center justify-between">
-                  <span className="hl-section-label flex items-center gap-1.5">
-                    <span>Main WhatsApp message</span>
-                  </span>
-
-                  <div className="flex items-center gap-1.5">
-                    {["text", "media", "template"].map((kind) => (
-                      <button
-                        key={kind}
-                        type="button"
-                        onClick={() => setForm((f) => ({ ...f, msg_kind: kind }))}
-                        className={`hl-tab px-2.5 py-1 uppercase ${
-                          form.msg_kind === kind ? "is-active" : ""
-                        }`}
-                        aria-pressed={form.msg_kind === kind}
-                      >
-                        {kind}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {form.msg_kind === "text" && (
-                  <div className="space-y-2">
-                    <WAVariablePicker
-                      onInsert={(tag) => setForm((f) => ({ ...f, message_text: (f.message_text || "") + " " + tag }))}
-                    />
-
-                    <textarea
-                      rows={4}
-                      aria-label="Main message text"
-                      maxLength={4096}
-                      value={form.message_text || ""}
-                      onChange={(e) => setForm((f) => ({ ...f, message_text: e.target.value }))}
-                      className="hl-input w-full p-3 resize-none"
-                      placeholder="Type dynamic message here, e.g. Hello {{name}}! Your invoice {{invoice_no}} for {{amount}} is due on {{due_date}}..."
-                    />
-
-                    {form.message_text && !isEditorPage && (
-                      <div className="hl-card p-3 space-y-1">
-                        <div className="flex items-center justify-between hl-section-label">
-                          <span className="flex items-center gap-1"><Sparkles size={11} /> Live Preview:</span>
-                          <span className="hl-id">Dynamic Per Recipient</span>
-                        </div>
-                        <div className="hl-id p-2 whitespace-pre-wrap">
-                          {evaluateMessagePlaceholders(form.message_text)}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {form.msg_kind === "media" && (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div>
-                        <label className="hl-section-label block">Media Type</label>
-                        <select
-                          value={form.media_type}
-                          onChange={(e) => setForm((f) => ({ ...f, media_type: e.target.value }))}
-                          className="hl-select w-full p-2"
-                        >
-                          <option value="image">📷 Image (PNG, JPG, WEBP)</option>
-                          <option value="video">🎥 Video (MP4, MOV, 3GP)</option>
-                          <option value="audio">🎵 Audio / Voice (MP3, WAV, OGG)</option>
-                          <option value="document">📄 PDF / Word Document</option>
-                          <option value="excel">📊 Excel / Spreadsheet (XLSX, CSV)</option>
-                        </select>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className="hl-section-label block">Public HTTPS media URL</label>
-                        <input
-                          type="text"
-                          value={form.media_url || ""}
-                          onChange={(e) => setForm((f) => ({ ...f, media_url: e.target.value }))}
-                          placeholder="https://madhuratech.com/catalog.pdf"
-                          className="hl-input hl-id w-full p-2"
-                        />
-                      </div>
-                    </div>
-
-                    <textarea
-                      rows={2}
-                      value={form.message_text || ""}
-                      onChange={(e) => setForm((f) => ({ ...f, message_text: e.target.value }))}
-                      className="hl-input w-full p-2.5 resize-none"
-                      placeholder="Optional Media Caption..."
-                    />
-                  </div>
-                )}
-
-                {form.msg_kind === "template" && (
-                  <div className="space-y-2">
-                    <label className="hl-section-label block mb-1">Select Approved WhatsApp Template</label>
-                    <select
-                      value={form.template_id}
-                      onChange={(e) => setForm((f) => ({ ...f, template_id: e.target.value }))}
-                      className="hl-select w-full p-2.5"
-                    >
-                      <option value="">-- Choose Template --</option>
-                      {templates.filter(isApprovedTemplate).map((t) => (
-                        <option key={t.id} value={t.id}>{t.name} ({t.category})</option>
-                      ))}
-                    </select>
-
-                    {form.template_id && !isEditorPage && (() => {
-                      const tmpl = templates.find(t => String(t.id) === String(form.template_id));
-                      if (!tmpl) return null;
-                      return (
-                        <div className="hl-card p-3 space-y-1">
-                          <div className="flex items-center justify-between hl-section-label">
-                            <span className="flex items-center gap-1"><Sparkles size={11} /> Template Evaluated Preview:</span>
-                            <span className="hl-id">Dynamic Live</span>
-                          </div>
-                          <div className="hl-id p-2 whitespace-pre-wrap">
-                            {evaluateMessagePlaceholders(tmpl.body || "")}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
-
-              {/* Step 2: Multi-Message Sequence (Anti-Ban Paced Follow-up) */}
-              <div id="automation-followup" className="hl-card p-4 space-y-3 scroll-mt-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="enable_seq"
-                      checked={form.enable_sequence}
-                      onChange={(e) => setForm((f) => ({ ...f, enable_sequence: e.target.checked }))}
-                      className="w-4 h-4"
-                    />
-                    <label htmlFor="enable_seq" className="hl-section-label cursor-pointer">
-                      Enable a follow-up message
-                    </label>
-                  </div>
-
-                  {form.enable_sequence && (
-                    <span className="hl-badge hl-badge-info">
-                      {form.sequence_delay_seconds || 7}s after the main message
-                    </span>
-                  )}
-                </div>
-
-                {form.enable_sequence && (
-                  <div className="space-y-3 pt-2">
-                    <div>
-                      <label className="hl-section-label block mb-1">
-                        Pacing Delay Gap ({form.sequence_delay_seconds || 7} seconds)
-                      </label>
-                      <input
-                        type="range"
-                        min={5}
-                        max={60}
-                        value={form.sequence_delay_seconds || 7}
-                        onChange={(e) => setForm((f) => ({ ...f, sequence_delay_seconds: parseInt(e.target.value, 10) }))}
-                        className="w-full"
-                      />
-                    </div>
-
-                    <AutomationFollowupOptions form={form} setForm={setForm} templates={templates} />
-                  </div>
-                )}
-              </div>
-
-              {/* Cross-Module Linkages: Contact Group & Chatbot Flow */}
-              <div id="automation-conditions" className="scroll-mt-6"><WAConditionEditor value={conditions} onChange={setConditions} /></div>
-              <section className="hl-card p-4 space-y-3" aria-label="Customer reply options"><h2 className="font-semibold text-sm">Customer reply options</h2><p className="text-xs">Offer up to three choices and configure the response for each. Native buttons require a compatible Meta sender; other delivery paths may show numbered choices.</p>{menuOptions.map((option,index)=><div key={index} className="border rounded p-3 space-y-2"><label className="block text-xs">Reply {index+1} label<input className="hl-input w-full p-2 mt-1" maxLength={20} value={option.label} onChange={event=>setMenuOptions(previous=>previous.map((item,i)=>i===index?{...item,label:event.target.value}:item))}/></label><label className="block text-xs">Response message<textarea className="hl-input w-full p-2 mt-1" maxLength={4096} value={option.reply_text} onChange={event=>setMenuOptions(previous=>previous.map((item,i)=>i===index?{...item,reply_text:event.target.value}:item))}/></label><button type="button" className="hl-btn-secondary" onClick={()=>setMenuOptions(previous=>previous.filter((_,i)=>i!==index))}>Remove reply {index+1}</button></div>)}<button type="button" className="hl-btn-secondary" disabled={menuOptions.length>=3} onClick={()=>setMenuOptions(previous=>[...previous,{label:"",reply_text:""}])}>Add reply option</button></section>
-              <div id="automation-delivery" className="scroll-mt-6 space-y-4">
-              <label className="block text-sm space-y-1">
-                <span>Delay before sending (minutes)</span>
-                <input type="number" min="0" max="43200" step="1" className="hl-input w-full p-2" value={form.delay_minutes} onChange={(e) => setForm((f) => ({ ...f, delay_minutes: e.target.value }))} />
+              <label className="flex items-center gap-2 cursor-pointer pt-2">
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.is_active)}
+                  onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked ? 1 : 0 }))}
+                  className="w-4 h-4 rounded text-slate-900"
+                />
+                <span className="text-xs font-bold text-slate-800">Activate rule immediately upon saving</span>
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 hl-card">
-                <div>
-                  <label className="hl-section-label block mb-1 flex items-center gap-1">
-                    <Users size={12} className="" />
-                    <span>Auto-Enroll into Contact Group</span>
-                  </label>
-                  <select
-                    value={form.group_id || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, group_id: e.target.value }))}
-                    className="hl-input w-full p-2"
-                  >
-                    <option value="">-- Do Not Enroll in Group --</option>
-                    {groups.map((g) => (
-                      <option key={g.id} value={g.id}>{g.name} ({g.total_contacts || 0} contacts)</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="hl-section-label block mb-1 flex items-center gap-1">
-                    <Bot size={12} className="" />
-                    <span>Auto-Trigger Chatbot Flow</span>
-                  </label>
-                  <select
-                    value={form.flow_id || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, flow_id: e.target.value }))}
-                    className="hl-input w-full p-2"
-                  >
-                    <option value="">-- Do Not Trigger Flow --</option>
-                    {flows.filter(flow=>flow.status==="active"||String(flow.id)===String(form.flow_id)).map((fl) => (
-                      <option key={fl.id} value={fl.id} disabled={fl.status!=="active"}>{fl.name}{fl.status!=="active"?" (publish before use)":""}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <label className="flex items-start gap-3 border rounded p-4 text-sm"><input type="checkbox" checked={Boolean(form.is_active)} onChange={event=>setForm(previous=>({...previous,is_active:event.target.checked?1:0}))}/><span><strong>Enable when saved</strong><small className="block mt-1">{form.is_active?"This rule can run on matching events after saving.":"Save paused, then enable it from the automation list when ready."}</small></span></label>
-              </div>
-            </div>
-            {isEditorPage&&<AutomationDraftPreview form={form} conditions={conditions} options={menuOptions} templates={templates} flows={flows} groups={groups} issues={draftIssues} triggerLabel={TRIGGER_TYPES.find(trigger=>trigger.value===form.trigger_type)?.label}/>}
             </div>
 
-            <div className="flex gap-3 p-4 border-t">
+            {/* Modal Footer */}
+            <div className="px-6 py-3 border-t border-slate-200 flex items-center justify-end gap-2 bg-slate-50/50">
               <button
                 type="button"
                 onClick={closeEditor}
                 disabled={savingRule}
-                className="hl-btn-secondary flex-1 py-2.5"
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50"
               >
                 Cancel
               </button>
@@ -1641,231 +2035,103 @@ function AutomationWorkspace() {
                 type="button"
                 onClick={handleSave}
                 disabled={savingRule}
-                className="hl-btn-primary flex-1 py-2.5 flex items-center justify-center gap-1.5"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
               >
-                <CheckCircle2 size={15} />
-                <span>{savingRule ? "Saving…" : editAutomation ? "Save rule" : "Create rule"}</span>
+                {savingRule ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                <span>{savingRule ? "Saving…" : editAutomation ? "Save Rule" : "Create Rule"}</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── MODAL: Test Trigger on Real Phone ── */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* SIMULATOR MODAL                                               */}
+      {/* ───────────────────────────────────────────────────────────── */}
       {testModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setTestModal(null)}>
-          <div className="hl-card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 flex items-center justify-center">
-                  <Play size={16} />
-                </div>
-                <div>
-                  <h3 className="hl-empty-title">Test Send Automation</h3>
-                  <p className="hl-subtitle truncate max-w-[220px]">{testModal.name}</p>
-                </div>
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-3"
+          onClick={() => setTestModal(null)}
+        >
+          <div
+            className="rounded-2xl border border-slate-200 bg-white w-full max-w-lg p-6 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Simulate Rule Execution</h3>
+                <p className="text-xs text-slate-500">{testModal.name}</p>
               </div>
-              <button onClick={() => setTestModal(null)} className="hl-btn-secondary p-1">
-                <X size={18} />
+              <button
+                type="button"
+                onClick={() => setTestModal(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
-                <label className="hl-section-label block mb-1">Target 10-Digit Mobile Number</label>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Test Recipient Phone</label>
                 <input
                   type="text"
                   value={testPhone}
                   onChange={(e) => setTestPhone(e.target.value)}
                   placeholder="e.g. 9876543210"
-                  className="hl-input hl-id w-full px-3.5 py-2.5"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
                 />
               </div>
 
               <div>
-                <label className="hl-section-label block mb-1">Simulated Contact Name</label>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Simulated Customer Name</label>
                 <input
                   type="text"
                   value={testName}
                   onChange={(e) => setTestName(e.target.value)}
-                  placeholder="e.g. Rahul Sharma"
-                  className="hl-input w-full px-3.5 py-2.5"
+                  placeholder="Rahul Sharma"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
                 />
               </div>
 
-              {testModal && (testModal.message_text || testModal.template_body) && (
-                <div className="hl-card p-3 space-y-1">
-                  <div className="flex items-center justify-between hl-section-label">
-                    <span className="flex items-center gap-1"><Sparkles size={11} /> Evaluated Message Preview:</span>
-                    <span className="hl-id">Dynamic Preview</span>
-                  </div>
-                  <div className="hl-id p-2 whitespace-pre-wrap">
-                    {evaluateMessagePlaceholders(testModal.message_text || testModal.template_body || "", { name: testName || "Customer" })}
-                  </div>
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={async () => {
+                  setTestingTrigger(true);
+                  try {
+                    const res = await axios.post(
+                      `${API}/api/wa/automations/simulate-trigger`,
+                      {
+                        trigger_type: testModal.trigger_type,
+                        contact_name: testName,
+                        custom_data: { name: testName, phone: testPhone, amount: 6500, city: "Mumbai" },
+                      },
+                      { headers: headers() }
+                    );
+                    setTestResult(res.data);
+                  } catch (err) {
+                    alert(err.response?.data?.error || "Simulation failed.");
+                  }
+                  setTestingTrigger(false);
+                }}
+                disabled={testingTrigger}
+                className="w-full rounded-lg bg-slate-900 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
+              >
+                {testingTrigger ? "Evaluating…" : "Run Diagnostic Simulation"}
+              </button>
 
               {testResult && (
-                <div className={`hl-badge p-3 ${testResult.success ? "hl-badge-success" : "hl-badge-error"}`}>
-                  {testResult.message}
-                </div>
-              )}
-
-              <div className="flex gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setTestModal(null)}
-                  className="hl-btn-secondary flex-1 py-2"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={handleTestTrigger}
-                  disabled={!testPhone.trim() || testLoading}
-                  className="hl-btn-primary flex-1 py-2 flex items-center justify-center gap-1.5"
-                >
-                  {testLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                  <span>Execute Send</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── MODAL: CRM Trigger Simulator & Test Runner ── */}
-      {showSimulateModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowSimulateModal(false)}>
-          <div className="hl-card w-full max-w-2xl max-h-[90dvh] overflow-y-auto p-4 sm:p-6 wa-custom-scrollbar overscroll-contain" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5 border-b pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 flex items-center justify-center">
-                  <PlayCircle size={22} />
-                </div>
-                <div>
-                  <h3 className="hl-title">Test a CRM event</h3>
-                  <p className="hl-subtitle">Test how WhatsApp rules respond to CRM database events</p>
-                </div>
-              </div>
-              <button onClick={() => setShowSimulateModal(false)} className="hl-btn-secondary p-1">
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="hl-section-label block mb-1">Select CRM Event to Simulate</label>
-                  <select
-                    value={simTriggerType}
-                    onChange={(e) => setSimTriggerType(e.target.value)}
-                    className="hl-select w-full px-3 py-2.5"
-                  >
-                    {TRIGGER_TYPES.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.emoji} {t.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="hl-section-label block mb-1">Simulated Customer Name</label>
-                  <input
-                    type="text"
-                    value={simName}
-                    onChange={(e) => setSimName(e.target.value)}
-                    placeholder="e.g. Rahul Sharma"
-                    className="hl-input w-full px-3.5 py-2.5"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="hl-section-label block mb-1">
-                  Test WhatsApp Number (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={simPhone}
-                  onChange={(e) => setSimPhone(e.target.value)}
-                  placeholder="e.g. 9876543210 (Leave blank for simulation only)"
-                  className="hl-input hl-id w-full px-3.5 py-2.5"
-                />
-              </div>
-
-              <label className="block text-sm">Sample event data (JSON)<textarea className="hl-input w-full p-3 mt-1 font-mono text-xs" rows={7} value={sampleEvent} onChange={event=>setSampleEvent(event.target.value)} maxLength={16000}/></label>
-              <p className="text-xs">Read-only simulation. Use a rule's Test Send action to send to an eligible contact.</p>
-
-              <div className="flex justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowSimulateModal(false)}
-                  className="hl-btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSimulateTrigger}
-                  disabled={simLoading}
-                  className="hl-btn-primary flex items-center gap-2"
-                >
-                  {simLoading ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                  <span>Run Event Simulation</span>
-                </button>
-              </div>
-
-              {/* Simulation Results Output Panel */}
-              {simResult && (
-                <div className="hl-card mt-5 p-4 space-y-4">
-                  <div className="flex items-center justify-between border-b pb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full animate-pulse"></span>
-                      <h4 className="hl-section-label">
-                        Simulation Result: {simResult.matched_rules_count || 0} Rule(s) Matched
-                      </h4>
-                    </div>
-                    {simResult.real_message_dispatched && (
-                      <span className="hl-badge hl-badge-success">
-                        ✅ Live Message Dispatched
-                      </span>
-                    )}
+                <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 space-y-2 text-xs">
+                  <span className="font-semibold text-slate-900 block">Simulation Diagnostic Outcome:</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        testResult.matched_rules_count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                      }`}
+                    >
+                      {testResult.matched_rules_count > 0 ? "Conditions Matched" : "Conditions Filtered Out"}
+                    </span>
                   </div>
-
-                  {simResult.evaluated_rules?.length === 0 ? (
-                    <div className="hl-empty py-4 text-center">
-                      <AlertCircle size={20} className="mx-auto mb-1" />
-                      <p className="hl-empty-title">No active rules configured for "{simTriggerType}"</p>
-                      <p className="hl-subtitle mt-1">Create an automation rule for this trigger or click "Load 12 Prebuilt Smart Rules".</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {simResult.evaluated_rules?.map((r, rIdx) => (
-                        <div key={rIdx} className="hl-card p-3 space-y-2">
-                          <div className="flex items-center justify-between hl-subtitle">
-                            <span className="hl-badge hl-badge-accent">Rule: {r.name}</span>
-                            <span className="hl-id">Delay: {r.delay_minutes > 0 ? `${r.delay_minutes}m` : "Instant"}</span>
-                          </div>
-
-                          <div className="hl-card p-3 whitespace-pre-line">
-                            <div className="hl-section-label mb-1">1️⃣ Step 1 Output Message:</div>
-                            {r.step1_text}
-                          </div>
-
-                          {r.step2_followup_text && (
-                            <div className="hl-card p-3 whitespace-pre-line">
-                              <div className="hl-section-label mb-1">
-                                2️⃣ Step 2 Follow-Up Message (after {r.sequence_delay_seconds}s):
-                              </div>
-                              {r.step2_followup_text}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>

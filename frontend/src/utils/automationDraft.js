@@ -14,7 +14,11 @@ export function automationIssues(form, conditions, options, templates, flows, se
         const url = new URL(form[`${prefix}media_url`]);
         if (url.protocol !== "https:" || url.username || url.password) throw new Error();
       } catch (_) { issues.push(`${label}: enter a public HTTPS media URL.`); }
-    } else if (!String(form[`${prefix}message_text`] || "").trim()) issues.push(`${label}: enter message text.`);
+    } else if (!String(form[`${prefix}message_text`] || "").trim()) {
+      if (!form.actions_json && (!form.actions || !form.actions.length)) {
+        issues.push(`${label}: enter message text or configure workflow actions.`);
+      }
+    }
   };
   message("", form.msg_kind, "Main message");
   if (form.flow_id && !flows.some(flow => String(flow.id) === String(form.flow_id) && flow.status === "active")) issues.push("Choose a published, active flow.");
@@ -39,18 +43,25 @@ export function eventField(data, field) {
 export function sampleMatches(conditions, data) {
   const rules = conditions.rules || [];
   if (!rules.length) return true;
-  const compare = rule => {
-    const actual = eventField(data, rule.field || ""), exists = actual != null && actual !== "";
-    if (rule.operator === "exists") return exists;
-    if (rule.operator === "not_exists") return !exists;
+  const compare = (item) => {
+    if (item.rules || item.match) return sampleMatches(item, data);
+    const actual = eventField(data, item.field || ""), exists = actual != null && actual !== "";
+    if (item.operator === "exists" || item.operator === "is_not_empty") return exists;
+    if (item.operator === "not_exists" || item.operator === "is_empty") return !exists;
     if (!exists) return false;
-    const a = String(actual).toLowerCase(), b = String(rule.value ?? "").toLowerCase();
-    if (rule.operator === "equals") return a === b;
-    if (rule.operator === "not_equals") return a !== b;
-    if (rule.operator === "contains") return a.includes(b);
-    const x = Number(actual), y = Number(rule.value);
-    if (!Number.isFinite(x) || !Number.isFinite(y) || String(rule.value ?? "").trim() === "") return false;
-    return { gt: x > y, gte: x >= y, lt: x < y, lte: x <= y }[rule.operator] === true;
+    const a = String(actual).toLowerCase(), b = String(item.value ?? "").toLowerCase();
+    if (item.operator === "equals") return a === b;
+    if (item.operator === "not_equals") return a !== b;
+    if (item.operator === "contains") return a.includes(b);
+    if (item.operator === "not_contains") return !a.includes(b);
+    const x = Number(actual), y = Number(item.value);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      if (item.operator === "gt") return x > y;
+      if (item.operator === "gte") return x >= y;
+      if (item.operator === "lt") return x < y;
+      if (item.operator === "lte") return x <= y;
+    }
+    return false;
   };
   return conditions.match === "any" ? rules.some(compare) : rules.every(compare);
 }
