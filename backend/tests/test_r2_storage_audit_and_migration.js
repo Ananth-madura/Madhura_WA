@@ -200,6 +200,49 @@ async function runTestSuite() {
   console.log("   [PASS] Zero WhatsApp chat transcripts or text stored in Cloudflare R2.");
   console.log("   [PASS] Browser IndexedDB (SociaWhatsAppLocal) remains the sole authoritative store for message content.");
 
+  // ── TEST 7: WhatsApp Media Cloudflare R2 Streaming & Cross-Device Availability ────
+  console.log("\n7. Testing WhatsApp Media Cloudflare R2 Streaming and Cross-Device Availability...");
+
+  // Verify waPrivacy.mediaStorageEnabled() with WA_PERSIST_MEDIA=1
+  process.env.WA_PERSIST_MEDIA = "1";
+  assert.strictEqual(waPrivacy.mediaStorageEnabled(), true, "Media storage must be enabled when WA_PERSIST_MEDIA=1 or R2 is active");
+  console.log("   [PASS] waPrivacy.mediaStorageEnabled() activated.");
+
+  // Verify SQL redaction preserves media_url and media_filename while redacting message_text
+  const redacted = waPrivacy.redactChatWrite(
+    "INSERT INTO wa_message_logs (phone, message_text, media_url, media_filename) VALUES (?, ?, ?, ?)",
+    ["919876543210", "Confidential message body", "/api/v2/wa/media-stream/tenants/1/wa-media/photo_123.jpg", "photo_123.jpg"]
+  );
+  assert.strictEqual(redacted.params[1], null, "message_text must remain strictly redacted to NULL for local-first privacy");
+  assert.strictEqual(redacted.params[2], "/api/v2/wa/media-stream/tenants/1/wa-media/photo_123.jpg", "media_url must be preserved");
+  assert.strictEqual(redacted.params[3], "photo_123.jpg", "media_filename must be preserved");
+  console.log("   [PASS] Automatic SQL redaction preserves media URLs while protecting chat text privacy.");
+
+  // Insert test media message log
+  const mediaMsgId = "media_wamid_" + Date.now();
+  const mockR2Url = "/api/v2/wa/media-stream/tenants/1/wa-media/test_photo.jpg";
+  await sql.query(
+    "INSERT INTO wa_message_logs (tenant_id, wa_message_id, phone, direction, message_type, status, message_text, media_url, media_filename, media_mime_type) VALUES (1, ?, '919876543210', 'outbound', 'image', 'sent', ?, ?, 'test_photo.jpg', 'image/jpeg')",
+    [mediaMsgId, "Sample caption text", mockR2Url]
+  );
+
+  // Simulate Device B loading this chat 4 days later:
+  const [deviceBQuery] = await sql.query(
+    "SELECT wa_message_id, message_text, media_url, media_filename, media_mime_type FROM wa_message_logs WHERE wa_message_id = ?",
+    [mediaMsgId]
+  );
+  assert(deviceBQuery.length > 0, "Message log must exist");
+  assert.strictEqual(deviceBQuery[0].message_text, null, "Device B: message_text is not stored in MySQL (kept in local IndexedDB)");
+  assert.strictEqual(deviceBQuery[0].media_url, mockR2Url, "Device B: media_url points directly to R2 media-stream proxy");
+  assert.strictEqual(deviceBQuery[0].media_filename, "test_photo.jpg", "Device B: filename is available");
+  assert.strictEqual(deviceBQuery[0].media_mime_type, "image/jpeg", "Device B: MIME type is available");
+  console.log("   [PASS] Cross-device retrieval simulation: Device B can render the MediaBubble 4 days later via R2 streaming URL without MySQL storing any LONGBLOB binary data.");
+
+  // Clean up
+  await sql.query("DELETE FROM wa_message_logs WHERE wa_message_id = ?", [mediaMsgId]);
+  delete process.env.WA_PERSIST_MEDIA;
+  console.log("   [PASS] Test media records cleaned up.");
+
   console.log("\n================================================================================");
   console.log("       ALL CLOUDFLARE R2 & MYSQL AUDIT TESTS PASSED SUCCESSFULLY!               ");
   console.log("================================================================================\n");

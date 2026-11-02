@@ -203,10 +203,15 @@ async function memberChatStatus(req) {
 async function recordCloudSend(req, chatId, phone, messageId, body, type = "text", extra = {}) {
   const sessionKey = logSessionKey(req);
   const persistContent = require("../services/waChatPrivacy").serverChatStorageEnabled();
+  const mediaStorage = require("../services/waChatPrivacy").mediaStorageEnabled();
+  const mediaUrl = mediaStorage ? (extra.mediaUrl || null) : null;
+  const mediaFilename = mediaStorage ? (extra.filename || null) : null;
+  const mediaMimeType = mediaStorage ? (extra.mimetype || null) : null;
+
   await db.promise().query(
-    `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
-     VALUES (?, ?, 'outbound', ?, ?, ?, 'sent', NOW())`,
-    [sessionKey, phone, type, persistContent ? body : null, messageId]
+    `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, media_url, media_filename, media_mime_type, status, created_at)
+     VALUES (?, ?, 'outbound', ?, ?, ?, ?, ?, ?, 'sent', NOW())`,
+    [sessionKey, phone, type, persistContent ? body : null, messageId, mediaUrl, mediaFilename, mediaMimeType]
   ).catch((err) => console.warn("[Cloud Send] History recording failed:", err.message));
   const contactTenantId = await require("../services/waContactTenancy").tenantForContactWrite({
     req,
@@ -1137,6 +1142,46 @@ router.post("/assign-agent", async (req, res) => {
   }
 });
 
+router.get("/media-stream/*", async (req, res) => {
+  const rawKey = req.params[0];
+  if (!rawKey) return res.status(400).json({ error: "Storage key required" });
+  const storageKey = decodeURIComponent(rawKey);
+  if (storageKey.includes("..")) return res.status(400).json({ error: "Invalid storage key" });
+
+  const r2Storage = require("../services/r2StorageService");
+  if (r2Storage.isConfigured()) {
+    try {
+      const streamObj = await r2Storage.getMediaStream(storageKey);
+      if (streamObj?.Body) {
+        if (streamObj.ContentType) res.setHeader("Content-Type", streamObj.ContentType);
+        if (streamObj.ContentLength) res.setHeader("Content-Length", String(streamObj.ContentLength));
+        res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        return streamObj.Body.pipe(res);
+      }
+    } catch (err) {
+      if (err.name !== "NoSuchKey" && err.$metadata?.httpStatusCode !== 404) {
+        console.warn(`[Media Stream] R2 fetch error for ${storageKey}:`, err.message);
+      }
+    }
+  }
+
+  const fs = require("node:fs");
+  const { cloudMediaDir, mediaDir } = require("../config/runtimePaths");
+  const filename = path.basename(storageKey);
+  const localCandidates = [
+    path.join(cloudMediaDir, filename),
+    path.join(mediaDir, filename),
+  ];
+  for (const candidate of localCandidates) {
+    if (fs.existsSync(candidate)) {
+      return res.sendFile(candidate);
+    }
+  }
+
+  return res.status(404).json({ error: "Media not found" });
+});
+
 router.get("/chat/:chatId/media/:messageId", async (req, res) => {
   try {
     const media = await s(req).getMediaForMessage(
@@ -1195,8 +1240,37 @@ router.post("/send-media-upload", messageSendLimiter, privateAttachmentUpload.si
     const type = req.body.mediaType || (req.file.mimetype.startsWith("image/") ? "image" : req.file.mimetype.startsWith("video/") ? "video" : req.file.mimetype.startsWith("audio/") ? "audio" : "document");
     const session = s(req);
     let result;
+
+    const r2Storage = require("../services/r2StorageService");
+    let r2MediaUrl = null;
+    let r2StorageKey = null;
+    const tenantId = req.user?.tenant_id || 1;
+    if (r2Storage.isConfigured()) {
+      const ext = path.extname(req.file.originalname) || ".bin";
+      const safeFilename = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
+      r2StorageKey = r2Storage.tenantKey(tenantId, "wa-media", safeFilename);
+      await r2Storage.uploadPrivateObject(req.file.buffer, r2StorageKey, req.file.mimetype, {
+        originalName: req.file.originalname,
+        chatId,
+      });
+      r2MediaUrl = `/api/v2/wa/media-stream/${r2StorageKey}`;
+    }
+
     if (session?.ready) {
-      result = await session.sendMediaMessage(chatId, `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`, type, "", req.file.originalname, { idempotencyKey });
+      result = await session.sendMediaMessage(
+        chatId,
+        r2MediaUrl || `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`,
+        type,
+        "",
+        req.file.originalname,
+        { idempotencyKey }
+      );
+      if (r2MediaUrl && result?.id) {
+        await db.promise().query(
+          "UPDATE wa_message_logs SET media_url = ?, media_filename = ?, media_mime_type = ? WHERE wa_message_id = ?",
+          [r2MediaUrl, req.file.originalname, req.file.mimetype, result.id]
+        ).catch(() => {});
+      }
     } else {
       const cloud = await require("../services/waConfigHelper").cloudClientForUser(req.user?.id || mgr.defaultKey);
       if (!cloud.isConfigured()) return res.status(503).json({ error: "Connect QR/Web or configure Cloud API before sending an attachment." });
@@ -1206,10 +1280,21 @@ router.post("/send-media-upload", messageSendLimiter, privateAttachmentUpload.si
       const id = require("../services/waInteractive").deliveryMessageId(sent);
       if (!id) throw Object.assign(new Error("Attachment delivery could not be confirmed."), { deliveryUnknown: true });
       result = { success: true, id };
-      await recordCloudSend(req, chatId, String(chatId).replace(/\D/g, ""), id, req.file.originalname, type, { hasMedia: true, filename: req.file.originalname, mimetype: req.file.mimetype }).catch(() => {});
+      await recordCloudSend(req, chatId, String(chatId).replace(/\D/g, ""), id, req.file.originalname, type, {
+        hasMedia: true,
+        filename: req.file.originalname,
+        mimetype: req.file.mimetype,
+        mediaUrl: r2MediaUrl,
+      }).catch(() => {});
     }
     await require("../services/waBotGate").pauseBot(chatId, undefined, "manual attachment reply", req.user?.id).catch(() => {});
-    res.json({ success: true, id: result.id, filename: req.file.originalname, mimetype: req.file.mimetype });
+    res.json({
+      success: true,
+      id: result.id,
+      mediaUrl: r2MediaUrl,
+      filename: req.file.originalname,
+      mimetype: req.file.mimetype
+    });
   } catch (error) { res.status(error.deliveryUnknown ? 504 : 502).json({ error: error.message, deliveryUnknown: !!error.deliveryUnknown }); }
 });
 

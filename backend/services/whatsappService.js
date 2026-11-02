@@ -2702,7 +2702,7 @@ class WhatsAppService {
   async _getMediaForMessage(chatId, messageId, serializedId, cloudMediaId = null) {
     const { mediaDir, cloudMediaDir } = require("../config/runtimePaths");
     const { cachedMedia, saveMediaMetadata } = require("./waMediaMetadata");
-    const persist = require("./waChatPrivacy").serverChatStorageEnabled();
+    const persist = require("./waChatPrivacy").mediaStorageEnabled();
     const cacheDir = path.join(mediaDir, this.key);
     const safeId = String(messageId).replace(/[^a-zA-Z0-9_-]/g, "");
     if (!messageId || !safeId) throw new Error("A message ID is required to load media.");
@@ -2739,7 +2739,7 @@ class WhatsAppService {
           try { metadata = typeof saved?.metadata === "string" ? JSON.parse(saved.metadata) : saved?.metadata || {}; } catch (_) {}
           const mediaId = cloudMediaId || saved?.media_id || metadata.image?.id || metadata.document?.id || metadata.video?.id || metadata.audio?.id || metadata.sticker?.id;
           if (!mediaId) throw new Error("The Cloud media ID is missing from this message.");
-          return await waCloud.downloadMedia(mediaId, { persist });
+          return await waCloud.downloadMedia(mediaId, { persist, tenantId: this.tenantId || 1 });
         } catch (error) { throw new Error(`Cloud attachment could not be loaded: ${error.response?.data?.error?.message || error.message}`); }
       }
       throw new Error("WhatsApp Web session not connected");
@@ -2774,6 +2774,28 @@ class WhatsAppService {
     }
     const safeExt = (ext || "bin").replace(/[^a-zA-Z0-9]/g, "");
     const filename = `${safeId}.${safeExt}`;
+    const r2Storage = require("./r2StorageService");
+
+    if (r2Storage.isConfigured()) {
+      const storageKey = r2Storage.tenantKey(this.tenantId || 1, "wa-media", filename);
+      await r2Storage.uploadPrivateObject(Buffer.from(media.data, "base64"), storageKey, media.mimetype, {
+        messageId: safeId,
+        filename: media.filename || filename,
+      });
+      const mediaStreamUrl = `/api/v2/wa/media-stream/${storageKey}`;
+      await db.promise().query(
+        "UPDATE wa_message_logs SET media_url = ?, media_filename = ?, media_mime_type = ? WHERE wa_message_id = ? AND (session_key = ? OR session_key IS NULL)",
+        [mediaStreamUrl, media.filename || filename, media.mimetype, messageId, this.key]
+      ).catch(() => {});
+      return {
+        url: mediaStreamUrl,
+        storageKey,
+        storageProvider: "r2",
+        filename: media.filename || filename,
+        mimetype: media.mimetype,
+      };
+    }
+
     fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(path.join(cacheDir, filename), Buffer.from(media.data, "base64"));
     saveMediaMetadata(path.join(cacheDir, filename), { filename: media.filename || filename, mimetype: media.mimetype });
@@ -2989,12 +3011,13 @@ class WhatsAppService {
     }
 
     const logText = filename || caption || `[${mediaType}]`;
+    const r2MediaUrl = typeof mediaUrl === "string" && !mediaUrl.startsWith("data:") ? mediaUrl : null;
     try {
       const db = require("../config/database");
       await db.promise().query(
-        `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at)
-         VALUES (?, ?, 'outbound', ?, ?, ?, 'sent', NOW())`,
-        [this.key, cleanPhone, mediaType || "document", logText, msgId]
+        `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, media_url, media_filename, status, created_at)
+         VALUES (?, ?, 'outbound', ?, ?, ?, ?, ?, 'sent', NOW())`,
+        [this.key, cleanPhone, mediaType || "document", logText, msgId, r2MediaUrl, filename || logText]
       );
     } catch (e) {
       console.error("DB log outbound media error:", e.message);

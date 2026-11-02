@@ -418,16 +418,49 @@ class WhatsAppCloudApi {
    * Meta requires two authenticated hops: media id -> temporary URL -> bytes.
    * Returns { url, filename, mimetype } with a URL this server can serve.
    */
-  async downloadMedia(mediaId, { persist = require("./waChatPrivacy").serverChatStorageEnabled() } = {}) {
+  async downloadMedia(mediaId, { persist = require("./waChatPrivacy").mediaStorageEnabled(), tenantId = 1 } = {}) {
     if (!this.isConfigured()) throw new Error("WhatsApp Cloud API not configured");
     if (!mediaId) throw new Error("mediaId required");
 
     const fs = require("fs");
     const path = require("path");
-    // Cloud-API inbound media cache. Routed through runtimePaths so it lands in
-    // the persistent data dir on the VPS, not in the disposable deploy dir.
-    const { cloudMediaDir: cacheDir } = require("../config/runtimePaths");
     const safeId = String(mediaId).replace(/[^a-zA-Z0-9_-]/g, "");
+    const r2Storage = require("./r2StorageService");
+
+    // 1. If R2 is configured and storage is enabled, upload to Cloudflare R2
+    if (persist && r2Storage.isConfigured()) {
+      const meta = await this.getMediaUrl(mediaId);
+      if (!meta?.url) throw new Error("Media URL not returned by WhatsApp");
+
+      const bin = await axios.get(meta.url, {
+        headers: { Authorization: `Bearer ${this.accessToken}` },
+        responseType: "arraybuffer",
+        maxContentLength: 50 * 1024 * 1024,
+        timeout: 30000,
+      });
+
+      const mimetype = meta.mime_type || bin.headers["content-type"] || "application/octet-stream";
+      const ext = mimeToExtension(mimetype, (mimetype.split("/")[1] || "bin").split(";")[0]);
+      const safeExt = (ext || "bin").replace(/[^a-zA-Z0-9]/g, "");
+      const filename = `${safeId}.${safeExt}`;
+      const storageKey = r2Storage.tenantKey(tenantId, "wa-media", filename);
+
+      await r2Storage.uploadPrivateObject(Buffer.from(bin.data), storageKey, mimetype, {
+        mediaId: safeId,
+        filename,
+      });
+
+      return {
+        url: `/api/v2/wa/media-stream/${storageKey}`,
+        storageKey,
+        storageProvider: "r2",
+        filename,
+        mimetype,
+      };
+    }
+
+    // 2. Fallback to local cache if R2 not configured
+    const { cloudMediaDir: cacheDir } = require("../config/runtimePaths");
 
     try {
       const hit = persist && require("./waMediaMetadata").cachedMedia(cacheDir, safeId, "/uploads/wa-media/cloud");

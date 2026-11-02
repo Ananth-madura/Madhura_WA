@@ -388,6 +388,47 @@ app.use("/api/wa/ai", require("./routes/waAiRoutes"));
 app.use("/api/wa/payments", require("./routes/waPaymentsRoutes"));
 app.use("/api/wa/drip", require("./routes/waDripRoutes"));
 app.use("/api/wa/reminders", require("./routes/waReminderRoutes"));
+app.get("/api/v2/wa/media-stream/*", async (req, res) => {
+  const rawKey = req.params[0];
+  if (!rawKey) return res.status(400).json({ error: "Storage key required" });
+  const storageKey = decodeURIComponent(rawKey);
+  if (storageKey.includes("..")) return res.status(400).json({ error: "Invalid storage key" });
+
+  const r2Storage = require("./services/r2StorageService");
+  if (r2Storage.isConfigured()) {
+    try {
+      const streamObj = await r2Storage.getMediaStream(storageKey);
+      if (streamObj?.Body) {
+        if (streamObj.ContentType) res.setHeader("Content-Type", streamObj.ContentType);
+        if (streamObj.ContentLength) res.setHeader("Content-Length", String(streamObj.ContentLength));
+        res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        return streamObj.Body.pipe(res);
+      }
+    } catch (err) {
+      if (err.name !== "NoSuchKey" && err.$metadata?.httpStatusCode !== 404) {
+        console.warn(`[Media Stream] R2 fetch error for ${storageKey}:`, err.message);
+      }
+    }
+  }
+
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const { cloudMediaDir, mediaDir } = require("./config/runtimePaths");
+  const filename = path.basename(storageKey);
+  const localCandidates = [
+    path.join(cloudMediaDir, filename),
+    path.join(mediaDir, filename),
+  ];
+  for (const candidate of localCandidates) {
+    if (fs.existsSync(candidate)) {
+      return res.sendFile(candidate);
+    }
+  }
+
+  return res.status(404).json({ error: "Media not found" });
+});
+
 app.use("/api/storage", require("./routes/r2Routes"));
 
 // ── Removed: unauthenticated test hooks ──────────────────────────────────────

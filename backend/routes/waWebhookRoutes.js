@@ -379,10 +379,10 @@ async function processIncomingMessage(msg, metadata, contacts = [], account = nu
   } catch (_) {}
 
   // Eager background media download for Meta Cloud attachments
-  if (cloudMediaId && require("../services/waChatPrivacy").serverChatStorageEnabled()) {
+  if (cloudMediaId && require("../services/waChatPrivacy").mediaStorageEnabled()) {
     (async () => {
       try {
-        const downloaded = await wa.downloadMedia(cloudMediaId);
+        const downloaded = await wa.downloadMedia(cloudMediaId, { persist: true, tenantId: sharedSender?.tenant_id || 1 });
         if (downloaded?.url) {
           await db.promise().query(
             "UPDATE wa_message_logs SET media_url = ?, media_filename = COALESCE(?, media_filename), media_mime_type = COALESCE(?, media_mime_type) WHERE wa_message_id = ?",

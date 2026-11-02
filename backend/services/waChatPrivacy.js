@@ -1,5 +1,6 @@
 "use strict";
 const serverChatStorageEnabled = () => process.env.WA_SERVER_CHAT_STORAGE === "1";
+const mediaStorageEnabled = () => serverChatStorageEnabled() || process.env.WA_PERSIST_MEDIA === "1" || require("./r2StorageService").isConfigured();
 const PRIVATE_COLUMNS = {
   conversations: new Set(["last_message_text", "subject"]),
   wa_message_logs: new Set(["message_text", "metadata", "interactive_payload", "media_url", "media_filename"]),
@@ -8,6 +9,13 @@ const PRIVATE_COLUMNS = {
   wa_flow_run_events: new Set(["payload"]),
   wa_interactive_reminders: new Set(["response_text"]),
 };
+
+function getPrivateColumns(table) {
+  if (table === "wa_message_logs" && mediaStorageEnabled()) {
+    return new Set(["message_text", "metadata", "interactive_payload"]);
+  }
+  return PRIVATE_COLUMNS[table];
+}
 // Split SQL expressions without splitting function arguments or quoted strings.
 function splitExpressions(text) {
   const result = []; let start = 0, depth = 0, quote = null;
@@ -29,7 +37,7 @@ function redactChatWrite(sql, params = []) {
   const insert = sql.match(/INSERT\s+(?:IGNORE\s+)?INTO\s+`?(\w+)`?\s*\(([^)]+)\)\s*VALUES\s*/i);
   const update = sql.match(/UPDATE\s+`?(\w+)`?\s+SET\s+([\s\S]+?)(?=\s+WHERE\s+|$)/i);
   const table = (insert?.[1] || update?.[1] || '').toLowerCase();
-  const privateColumns = PRIVATE_COLUMNS[table];
+  const privateColumns = getPrivateColumns(table);
   if (!privateColumns) return { sql, params };
   const values = Array.isArray(params) ? [...params] : [];
   if (insert) {
@@ -67,4 +75,4 @@ function redactChatWrite(sql, params = []) {
   });
   return { sql: sql.slice(0, update.index) + update[0].replace(update[2], assignments.join(',')) + sql.slice(update.index + update[0].length), params: values };
 }
-module.exports = { serverChatStorageEnabled, redactChatWrite };
+module.exports = { serverChatStorageEnabled, mediaStorageEnabled, redactChatWrite };
