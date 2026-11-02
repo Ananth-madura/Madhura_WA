@@ -38,7 +38,7 @@ function createReconciler(db){
       await q("UPDATE tenants SET plan = ?, plan_status = 'active', pending_plan_id = NULL, max_branches = ?, max_seats = ?, max_senders = ?, max_monthly_messages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",[order.plan_id,plan.max_branches,plan.max_seats,plan.max_senders,plan.max_monthly_messages,tenantId]);
       // Free-plan switches do not repeatedly mint promotional wallet credits.
       if(!free){
-        const grant={growth:500,business:2500,enterprise:10000}[order.plan_id]||100;
+        const grant=Number(plan.ai_credit_grant ?? ({growth:500,business:2500,enterprise:10000}[order.plan_id]||100));
         await q("INSERT IGNORE INTO wallet_accounts (tenant_id, currency, credit_type, balance, reserved_balance) VALUES (?, 'INR', 'ai_credits', 0, 0)",[tenantId]);
         await q("UPDATE wallet_accounts SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND credit_type = 'ai_credits'",[grant,tenantId]);
         const [account]=await q("SELECT id, balance FROM wallet_accounts WHERE tenant_id = ? AND credit_type = 'ai_credits' LIMIT 1",[tenantId]);

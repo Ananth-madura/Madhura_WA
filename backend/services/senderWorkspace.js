@@ -157,7 +157,7 @@ function createService(db, transport = axios) {
     if (row.status === "disconnected" || !row.encrypted_token) throw failure("Reconnect this sender before checking its status", 409);
     let metadata;
     try { metadata = await inspectAssets(row.waba_id, row.phone_number_id, decrypt(row.encrypted_token)); }
-    catch (error) { await q("UPDATE wa_senders SET health_error=? WHERE tenant_id=? AND id=?", [error.message.slice(0, 255), tenant, id]); throw error; }
+    catch (error) { await q("UPDATE wa_senders SET health_error=? WHERE tenant_id=? AND id=? AND revision=?", [error.message.slice(0, 255), tenant, id, row.revision]); throw error; }
     return transaction(async query => {
       await tenantLock(query, tenant); const current = await sender(tenant, id, query, true);
       if (current.revision !== row.revision) throw failure("Sender settings changed during the status check. Check again.", 409);

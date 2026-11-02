@@ -26,7 +26,7 @@ async function getPlans() {
   return plans.map((p) => ({
     ...p,
     price:new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0}).format(Number(p.price_inr)),
-    billing:Number(p.price_inr)===0?"Free plan":"/ 30 days",
+    billing:Number(p.price_inr)===0?"Free plan":"/ 30 days, excluding GST",
     maxSenders:p.max_senders,maxBranches:p.max_branches,maxSeats:p.max_seats,maxMonthlyMessages:p.max_monthly_messages,maxContacts:p.max_contacts,
     features: typeof p.features_json === "string" ? JSON.parse(p.features_json) : p.features_json || [],
   }));

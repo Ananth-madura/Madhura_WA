@@ -199,6 +199,7 @@ async function migrate() {
     console.log(
       `ℹ️ [Migration] ${MIGRATION_NAME} already at version ${appliedVersion} - skipping (bump SCHEMA_VERSION to re-run)`
     );
+    await require("./profit_pricing").migrate(db);
     return;
   }
 
@@ -797,111 +798,9 @@ async function migrate() {
   }
 
   // 18. Seed Plans Catalog (Master Blueprint Section 8)
-  const plansCatalog = [
-    {
-      id: "free",
-      name: "Free Trial",
-      badge: "Trial",
-      price_inr: 0,
-      billing_interval: "month",
-      max_branches: 1,
-      max_seats: 2,
-      max_senders: 1,
-      max_monthly_messages: 500,
-      max_contacts: 100,
-      features: JSON.stringify([
-        "1 Branch (Head Office)",
-        "2 Staff Seats",
-        "1 WhatsApp Number",
-        "500 Outbound Messages/Month",
-        "Live Shared Inbox",
-        "Keyword Auto-Replies"
-      ]),
-    },
-    {
-      id: "starter",
-      name: "Starter Plan",
-      badge: "Popular",
-      price_inr: 1499,
-      billing_interval: "month",
-      max_branches: 1,
-      max_seats: 5,
-      max_senders: 1,
-      max_monthly_messages: 5000,
-      max_contacts: 2500,
-      features: JSON.stringify([
-        "1 Branch",
-        "5 Staff Seats",
-        "1 Connected Meta WhatsApp Number",
-        "5,000 Outbound Messages/Month",
-        "Visual Chatbot Flow Builder",
-        "Bulk Campaign Scheduler",
-        "Meta Cloud API Support"
-      ]),
-    },
-    {
-      id: "growth",
-      name: "Growth Plan",
-      badge: "Recommended",
-      price_inr: 3999,
-      billing_interval: "month",
-      max_branches: 3,
-      max_seats: 15,
-      max_senders: 3,
-      max_monthly_messages: 25000,
-      max_contacts: 25000,
-      features: JSON.stringify([
-        "Up to 3 Branches (Multi-Branch Routing)",
-        "15 Staff Seats",
-        "3 Connected WhatsApp Numbers",
-        "25,000 Outbound Messages/Month",
-        "Smart AI Neural Replies & RAG",
-        "Team Queues & SLA Tracking",
-        "Priority 24/7 Support"
-      ]),
-    },
-    {
-      id: "business",
-      name: "Business Plan",
-      badge: "Scale",
-      price_inr: 9999,
-      billing_interval: "month",
-      max_branches: 10,
-      max_seats: 50,
-      max_senders: 10,
-      max_monthly_messages: 100000,
-      max_contacts: 100000,
-      features: JSON.stringify([
-        "Up to 10 Branches",
-        "50 Staff Seats",
-        "10 Connected WhatsApp Numbers",
-        "100,000 Outbound Messages/Month",
-        "Advanced Branch Routing & Queues",
-        "Custom Roles & Audit Trails",
-        "API & Webhook Access"
-      ]),
-    },
-    {
-      id: "enterprise",
-      name: "Enterprise Plan",
-      badge: "Enterprise",
-      price_inr: 24999,
-      billing_interval: "month",
-      max_branches: 50,
-      max_seats: 200,
-      max_senders: 50,
-      max_monthly_messages: 500000,
-      max_contacts: 500000,
-      features: JSON.stringify([
-        "Unlimited Branches",
-        "Unlimited Seats",
-        "Dedicated Meta Cloud WABA Setup",
-        "500,000+ Outbound Messages/Month",
-        "Dedicated Account Manager",
-        "Custom Integrations & SLA"
-      ]),
-    },
-  ];
+  const plansCatalog = Object.values(require("../services/planCatalog").PLANS).map(plan => ({
+    ...plan, features: plan.features_json,
+  }));
 
   for (const p of plansCatalog) {
     await runSafe(
@@ -1014,6 +913,7 @@ async function migrate() {
     [MIGRATION_NAME, SCHEMA_VERSION, MIGRATION_NAME, SCHEMA_VERSION]
   );
 
+  await require("./profit_pricing").migrate(db);
   console.log("🎉 Enterprise Multi-Tenant & Multi-Branch Migration Completed Successfully!");
 }
 

@@ -625,7 +625,7 @@ export default function Landing() {
       if (lower.includes("demo") || lower.includes("meeting") || lower.includes("call")) {
         replyText = "Super! I have locked in our slot and attached the meeting link to your workspace calendar.";
       } else if (lower.includes("price") || lower.includes("pricing") || lower.includes("cost") || lower.includes("rate")) {
-        replyText = "Here are our transparent enterprise plans: Starter (₹1,499), Growth (₹3,499), and Unlimited Enterprise. All include multi-branch isolation!";
+        replyText = "Our plans are Free (₹0), Starter (₹2,499), Growth (₹5,999, recommended), Business (₹17,499), and Enterprise (from ₹49,999) per month, excluding GST. WhatsApp message charges are separate. Enterprise includes 50 branches, 150 seats and 50 numbers; larger deployments need a quote.";
       } else if (lower.includes("branch") || lower.includes("employee") || lower.includes("code")) {
         replyText = "Yes! Each branch can have its own employees with access codes (`WA-XXXXXX`), isolated live chat, and dedicated WhatsApp sender lines.";
       }

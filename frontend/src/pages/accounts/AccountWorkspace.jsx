@@ -108,7 +108,7 @@ export function Workspace({ enterprise }) {
     const data = await saveSender("post", "/meta/onboarding/complete", { ...result, isShared: true, branchIds: branches.filter(b => b.status === "active").map(b => Number(b.id)) });
     if (alive.current) navigate({ sender: String(data.id), connect: null });
   }, "WhatsApp connection saved. Review branch routing and webhook setup.");
-  return <main className="ac-workspace" aria-labelledby="accounts-title">
+  return <section className="ac-workspace" aria-labelledby="accounts-title">
     <header className="ac-header"><div><p className="ac-context">{activeTenant.name} / WhatsApp</p><h1 id="accounts-title">Accounts</h1><p>Connect numbers, route conversations and configure your assistant.</p></div>
       <div className="ac-actions"><button disabled={loading || Boolean(busy)} onClick={() => run("refresh", refresh, "Sender list refreshed.")}>Refresh</button>{admin && <button className="ac-primary" disabled={Boolean(busy)} onClick={() => navigate({ connect: "1", tab: null })}>Connect number</button>}</div></header>
     <nav className="ac-tabs" aria-label="Account sections"><Link aria-current={tab === "senders" ? "page" : undefined} to="?tab=senders">WhatsApp numbers</Link><Link aria-current={tab === "assistant" ? "page" : undefined} to="?tab=assistant">Business assistant</Link><Link to="/whatsapp/automations">Automations</Link><Link to="/whatsapp/flows">Workflow builder</Link><Link to="/whatsapp/templates">Templates</Link><Link to="/whatsapp">Inbox</Link></nav>
@@ -142,5 +142,5 @@ export function Workspace({ enterprise }) {
         {admin && sender.status !== "disconnected" && <section className="ac-detail-section"><h3>Disconnect number</h3><p>Disconnecting pauses its scheduled automations and removes branch routing. Conversation history stays available.</p>{confirm ? <div className="ac-actions"><button className="ac-danger" disabled={Boolean(busy)} onClick={() => run("disconnect", async () => { await request("delete", `/meta/senders/${sender.id}`); await refresh(); }, "Number disconnected. Linked scheduled automations were paused.")}>Confirm disconnect</button><button disabled={Boolean(busy)} onClick={() => setConfirm(false)}>Keep connected</button></div> : <button className="ac-danger" disabled={Boolean(busy)} onClick={() => setConfirm(true)}>Disconnect number</button>}</section>}
       </>}</section></div>
     </>}
-  </main>;
+  </section>;
 }

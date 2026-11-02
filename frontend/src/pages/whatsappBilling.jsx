@@ -369,7 +369,7 @@ export default function WABilling() {
                         <span className="text-2xl font-extrabold text-white">
                           ₹{Number(p.price_inr).toLocaleString("en-IN")}
                         </span>
-                        <span className="text-xs text-slate-400"> / month</span>
+                        <span className="text-xs text-slate-400"> / 30 days, excluding GST</span>
                       </div>
 
                       <ul className="space-y-2 text-xs text-slate-300 pt-3 border-t border-slate-800">

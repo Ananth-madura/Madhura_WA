@@ -23,10 +23,10 @@ async function runTests() {
   // 2. Check Plan details and limits
   const freePlan = tenantPlanService.getPlan("free");
   assert.equal(freePlan.maxSenders, 1, "Free plan should allow 1 sender");
-  assert.equal(freePlan.maxMonthlyMessages, 500, "Free plan should allow 500 messages");
+  assert.equal(freePlan.maxMonthlyMessages, 1000, "Free plan should have a 1,000-message operational ceiling");
 
   const growthPlan = tenantPlanService.getPlan("growth");
-  assert.equal(growthPlan.maxSenders, 10, "Growth plan should allow 10 senders");
+  assert.equal(growthPlan.maxSenders, 3, "Growth plan should allow 3 senders");
   assert.equal(growthPlan.aiReplies, true, "Growth plan should have AI replies enabled");
 
   // 3. Ensure Table & Default Tenant creation
@@ -45,14 +45,14 @@ async function runTests() {
   assert(newTenant.id, "Created tenant must have an ID");
   assert.equal(newTenant.name, "Acme Global Retail");
   assert.equal(newTenant.plan, "growth");
-  assert.equal(newTenant.max_senders, 10);
-  assert.equal(newTenant.max_monthly_messages, 25000);
+  assert.equal(newTenant.max_senders, 3);
+  assert.equal(newTenant.max_monthly_messages, 50000);
 
   // 5. Test Switching / Upgrading Plan
   const upgradedTenant = await tenantPlanService.switchTenantPlan(newTenant.id, "enterprise");
   assert.equal(upgradedTenant.plan, "enterprise");
   assert.equal(upgradedTenant.max_senders, 50);
-  assert.equal(upgradedTenant.max_monthly_messages, 100000);
+  assert.equal(upgradedTenant.max_monthly_messages, 1000000);
 
   // 6. Test Tenant Usage Query
   const usage = await tenantPlanService.getTenantUsage(newTenant.id);

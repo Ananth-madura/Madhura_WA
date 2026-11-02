@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MADHURA — pricing &amp; profit, visualised</title>
+<style>
+  :root{
+    --paper:#F5F5F5; --paper-2:#FFFFFF; --ink:#202C52; --ink-2:#667085;
+    --rule:#E8E8E8; --accent:#FCBD16; --focus:#E9AA00;
+    --shell:#050E2F; --shell-2:#2B385F;
+    --display:'Poppins','Segoe UI',system-ui,sans-serif;
+    --body:'Inter','Segoe UI',system-ui,sans-serif;
+    --mono:'JetBrains Mono','Cascadia Mono',Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);
+       font-size:16px;line-height:1.62;-webkit-font-smoothing:antialiased}
+
+  /* ---------- shell ---------- */
+  .band{background:var(--shell);color:#fff;padding:clamp(40px,7vw,88px) clamp(18px,4vw,40px)}
+  .band .wrap{max-width:1080px;margin:auto}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+          color:var(--accent);margin:0 0 18px}
+  h1{font-family:var(--display);font-weight:600;font-size:clamp(30px,5vw,52px);line-height:1.08;
+     letter-spacing:-.028em;margin:0 0 18px;max-width:20ch}
+  .band p{color:#C9D1E4;max-width:62ch;margin:0 0 8px}
+  .band .meta{font-family:var(--mono);font-size:12px;color:#8B97B8;margin-top:28px;
+              display:flex;flex-wrap:wrap;gap:8px 22px}
+  .band .meta b{color:#fff;font-weight:500}
+
+  main{max-width:1080px;margin:auto;padding:clamp(32px,5vw,64px) clamp(18px,4vw,40px) 96px}
+
+  /* ---------- sections ---------- */
+  section{margin:0 0 clamp(48px,7vw,88px);scroll-margin-top:24px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+           color:var(--ink-2);margin:0 0 10px;display:flex;align-items:center;gap:10px}
+  .eyebrow::after{content:"";flex:1;height:1px;background:var(--rule)}
+  h2{font-family:var(--display);font-weight:600;font-size:clamp(22px,3vw,31px);line-height:1.18;
+     letter-spacing:-.022em;margin:0 0 12px;max-width:30ch}
+  .lede{color:var(--ink-2);max-width:70ch;margin:0 0 24px}
+  .card{background:var(--paper-2);border:1px solid var(--rule);border-radius:10px;
+        padding:clamp(16px,3vw,28px)}
+  .card + .card{margin-top:16px}
+
+  /* ---------- table ---------- */
+  .scroll{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:620px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.04em;
+     text-transform:uppercase;color:var(--ink-2)}
+  td.num,th.num{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:none}
+  .star{color:var(--ink);font-weight:600}
+  .dim{color:var(--ink-2)}
+
+  /* ---------- chips ---------- */
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
+  .chip{font-family:var(--mono);font-size:11.5px;letter-spacing:.02em;padding:5px 11px;
+        border:1px solid var(--rule);border-radius:999px;background:var(--paper-2);color:var(--ink-2)}
+  .chip.hot{background:var(--accent);border-color:var(--accent);color:var(--ink);font-weight:600}
+
+  /* ---------- svg ---------- */
+  figure{margin:0}
+  svg{display:block;width:100%;height:auto;overflow:visible}
+  figcaption{font-size:13px;color:var(--ink-2);margin-top:14px;max-width:76ch}
+  .grid-line{stroke:var(--rule);stroke-width:1}
+  .axis-text{font-family:var(--mono);font-size:10.5px;fill:var(--ink-2)}
+  .axis-label{font-family:var(--mono);font-size:10.5px;fill:var(--ink-2);letter-spacing:.06em;
+              text-transform:uppercase}
+  .series-a{fill:none;stroke:var(--ink);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+  .series-b{fill:none;stroke:var(--focus);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round;
+            stroke-dasharray:7 5}
+  .marker-dot{fill:var(--accent);stroke:var(--ink);stroke-width:2}
+  .ref-line{stroke:var(--ink);stroke-width:1;stroke-dasharray:4 4;opacity:.45}
+
+  /* ---------- mind map ---------- */
+  .mm-node{fill:var(--paper-2);stroke:var(--ink);stroke-width:1.25}
+  .mm-root{fill:var(--shell);stroke:var(--shell)}
+  .mm-branch{fill:var(--paper);stroke:var(--ink);stroke-width:1.5}
+  .mm-text{font-family:var(--body);font-size:12.5px;fill:var(--ink)}
+  .mm-root-text{font-family:var(--display);font-size:15px;font-weight:600;fill:#fff}
+  .mm-branch-text{font-family:var(--display);font-size:12.5px;font-weight:600;fill:var(--ink)}
+  .mm-link{fill:none;stroke:var(--ink-2);stroke-width:1.2;opacity:.55}
+  .mm-link.hot{stroke:var(--focus);opacity:1;stroke-width:1.8}
+
+  /* ---------- flow ---------- */
+  .flow-box{fill:var(--paper-2);stroke:var(--ink);stroke-width:1.4;rx:8}
+  .flow-box.solid{fill:var(--shell);stroke:var(--shell)}
+  .flow-box.tint{fill:#FFF8E4;stroke:var(--focus)}
+  .flow-title{font-family:var(--display);font-size:13px;font-weight:600;fill:var(--ink)}
+  .flow-title.inv{fill:#fff}
+  .flow-sub{font-family:var(--body);font-size:11px;fill:var(--ink-2)}
+  .flow-sub.inv{fill:#B9C3DA}
+  .flow-edge{fill:none;stroke:var(--ink-2);stroke-width:1.4;marker-end:url(#arrow)}
+  .flow-edge.money{stroke:var(--focus);marker-end:url(#arrow-y)}
+
+  /* ---------- waterfall ---------- */
+  .wf-bar{fill:var(--paper)}
+  .wf-bar.up{fill:var(--shell)}
+  .wf-bar.end{fill:var(--accent)}
+  .wf-label{font-family:var(--mono);font-size:9.5px;fill:var(--ink-2)}
+  .wf-val{font-family:var(--mono);font-size:9.5px;fill:var(--ink);font-weight:500}
+
+  /* ---------- misc ---------- */
+  .note{border-left:3px solid var(--focus);background:#FFFBF0;padding:12px 18px;
+        font-size:14.5px;color:var(--ink);margin:18px 0 0;max-width:74ch}
+  .note b{font-weight:600}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+  .stat{background:var(--paper-2);border:1px solid var(--rule);border-radius:10px;padding:20px}
+  .stat .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+           color:var(--ink-2);margin:0 0 6px}
+  .stat .v{font-family:var(--display);font-size:26px;font-weight:600;letter-spacing:-.02em;
+           line-height:1.1;margin:0 0 4px}
+  .stat .d{font-size:13px;color:var(--ink-2);margin:0}
+  .stat.hero{background:var(--shell);border-color:var(--shell)}
+  .stat.hero .k{color:#8B97B8}
+  .stat.hero .v{color:#fff}
+  .stat.hero .d{color:#B9C3DA}
+
+  footer{border-top:1px solid var(--rule);padding-top:24px;color:var(--ink-2);font-size:13px;
+         max-width:78ch}
+  code{font-family:var(--mono);font-size:.9em;background:var(--paper);padding:1px 5px;border-radius:4px}
+
+  @media(max-width:620px){
+    table{font-size:13px;min-width:520px}
+    th,td{padding:9px 10px}
+  }
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<div class="band">
+  <div class="wrap">
+    <p class="kicker">MADHURA · pricing model · 30 Oct 2026</p>
+    <h1>Three meters, one ladder, ten levers.</h1>
+    <p>This is the visual companion to <code style="background:#141F45;color:#DCE3F2">price.md</code> and
+       <code style="background:#141F45;color:#DCE3F2">profit.md</code>. Every number below comes from the
+       same model that produced those documents — nothing here is illustrative.</p>
+    <div class="meta">
+      <span>Blended variable cost <b>C = ₹2,438</b></span>
+      <span>Target <b>35% net</b></span>
+      <span>Reached at <b>171 customers</b></span>
+      <span>Meta India <b>₹0.8631 / ₹0.115</b></span>
+    </div>
+  </div>
+</div>
+
+<main>
+
+<!-- ============ 1. MIND MAP ============ -->
+<section id="mindmap">
+  <p class="eyebrow">01 · the whole model on one page</p>
+  <h2>Mind map</h2>
+  <p class="lede">Five branches hold everything: what you sell, at what price, how you move the number,
+     what you must not do, and what you measure. Anything not on this map is not part of the pricing decision.</p>
+  <div class="card">
+    <figure>
+      <div id="mindmap-svg"></div>
+      <figcaption>The yellow links are the two branches that carry most of the profit — Business/Enterprise
+        repricing and expansion revenue. Start there.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ 2. MONEY FLOW ============ -->
+<section id="flow">
+  <p class="eyebrow">02 · where the money goes</p>
+  <h2>Money-flow diagram</h2>
+  <p class="lede">One customer, three separate payments. The subscription carries the margin; the wallet is
+     a pass-through by design; AI credits are the second margin engine.</p>
+  <div class="card">
+    <figure>
+      <div id="flow-svg"></div>
+      <figcaption>Never bundle these. The moment messages are included in the subscription price, a marketing
+        campaign at ₹0.8631/message can consume more than the entire plan revenue.</figcaption>
+    </figure>
+  </div>
+  <div class="grid2" style="margin-top:16px">
+    <div class="stat"><p class="k">Subscription</p><p class="v">~79%</p>
+      <p class="d">Gross margin after all levers. This is the business.</p></div>
+    <div class="stat"><p class="k">Message wallet</p><p class="v">0%</p>
+      <p class="d">Deliberate. It is the trust differentiator, not a profit centre.</p></div>
+    <div class="stat"><p class="k">AI credits</p><p class="v">74%</p>
+      <p class="d">At ₹0.50 sold / ₹0.13 cost. Second-highest margin product.</p></div>
+  </div>
+</section>
+
+<!-- ============ 3. PLAN LADDER ============ -->
+<section id="ladder">
+  <p class="eyebrow">03 · the ladder</p>
+  <h2>Plan ladder &amp; the P* behind each rung</h2>
+  <p class="lede">Two ladders exist. <code>price.md</code> optimises for trust and volume;
+     <code>profit.md</code> optimises for speed to 35% net. The gap is concentrated in two tiers, not five.</p>
+  <div class="chips">
+    <span class="chip">C = ₹2,438 blended</span>
+    <span class="chip">e = 1.7 Growth</span>
+    <span class="chip">e = 1.2 Business</span>
+    <span class="chip hot">Enterprise is the real error</span>
+  </div>
+  <div class="card scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Tier</th>
+          <th class="num">price.md</th>
+          <th class="num">profit.md</th>
+          <th class="num">P* (steady state)</th>
+          <th>Read</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><b>Free</b></td><td class="num">₹0</td><td class="num">₹0</td><td class="num dim">—</td>
+            <td class="dim">Distribution channel. The wall is the empty wallet.</td></tr>
+        <tr><td><b>Starter</b></td><td class="num">₹1,999</td><td class="num">₹2,499</td><td class="num">₹806</td>
+            <td class="dim">Deliberately above optimum. It is a decoy that makes Growth look correct.</td></tr>
+        <tr><td><b>Growth</b> ⭐</td><td class="num">₹4,999</td><td class="num">₹5,999</td><td class="num">₹4,129</td>
+            <td>Above steady-state optimum <i>on purpose</i> — time-to-profit, not margin per account.</td></tr>
+        <tr><td><b>Business</b></td><td class="num">₹11,999</td><td class="num">₹17,499</td><td class="num">₹18,756</td>
+            <td>Almost exactly optimal. This tier was already close to right.</td></tr>
+        <tr><td><b>Enterprise</b></td><td class="num">₹34,999</td><td class="num">₹49,999</td><td class="num">₹1,22,590</td>
+            <td><b>Underpriced ~2.5×.</b> ₹49,999 is a floor, not a price.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <b>Why P* is not the price you charge.</b> P* = e(C − E)/(e − 1) answers "what maximises this month's
+    margin given the customers I already have". You do not have them. §05 shows what happens when demand
+    responds to price — the two answers differ by about ₹1,900.
+  </div>
+</section>
+
+<!-- ============ 4. PRICE VS PROFIT ============ -->
+<section id="curve">
+  <p class="eyebrow">04 · the central trade-off</p>
+  <h2>Price vs profit</h2>
+  <p class="lede">Two curves. The solid one is what most models show you. The dashed one is what actually
+     happens, because customers respond to price.</p>
+  <div class="card">
+    <figure>
+      <div id="curve-svg"></div>
+      <figcaption>
+        <b>Solid</b> — EBITDA holding the customer count at 200 regardless of price. It rises forever, which is
+        nonsense. <b>Dashed</b> — EBITDA when customer count responds to price at e = 1.7. It falls the whole way
+        across the tested range. The yellow marker is the shipped ₹5,999.
+      </figcaption>
+    </figure>
+  </div>
+  <div class="note">
+    <b>The resolution.</b> The dashed curve is still falling at ₹3,600, the lowest price tested — so the
+    steady-state optimum is somewhere at or below ₹3,599. But that optimum assumes you already hold
+    <b>477 customers</b>. You reach 200 in ~27 months and 477 in ~37. A price cut does not make acquisition
+    40% faster, so the low-price optimum is unreachable in the time that matters. Launch at ₹5,999; hold
+    ₹4,100 as the discount floor.
+  </div>
+</section>
+
+<!-- ============ 5. WATERFALL ============ -->
+<section id="waterfall">
+  <p class="eyebrow">05 · what the levers are worth</p>
+  <h2>Lever waterfall — ₹1.52L to ₹8.50L</h2>
+  <p class="lede">Monthly EBITDA at 200 customers, starting from the <code>price.md</code> configuration and
+     applying each lever in sequence. Sequential deltas sum to the final number; standalone deltas do not.</p>
+  <div class="card">
+    <figure>
+      <div id="waterfall-svg"></div>
+      <figcaption>Price accounts for roughly half the swing. Cost and expansion split the other half —
+        which is why "just charge more" is an incomplete strategy.</figcaption>
+    </figure>
+  </div>
+  <div class="grid2" style="margin-top:16px">
+    <div class="stat hero"><p class="k">End state · 200 customers</p><p class="v">41.3%</p>
+      <p class="d">Net margin, up from 10.4% on the price.md configuration.</p></div>
+    <div class="stat"><p class="k">Monthly swing</p><p class="v">+₹6.98L</p>
+      <p class="d">EBITDA per month at the same customer count.</p></div>
+    <div class="stat"><p class="k">Annual swing</p><p class="v">+₹83.8L</p>
+      <p class="d">No new customers required for any of it.</p></div>
+  </div>
+</section>
+
+<!-- ============ 6. MARGIN CURVE ============ -->
+<section id="margin">
+  <p class="eyebrow">06 · the binding constraint</p>
+  <h2>Margin vs customer count</h2>
+  <p class="lede">35% net is not a pricing problem. It is a customer-count problem — pricing only changes
+     how many customers you need.</p>
+  <div class="card">
+    <figure>
+      <div id="margin-svg"></div>
+      <figcaption>Fixed costs of ₹6.5L + ₹45k per 100 customers are what make the left side of this curve
+        negative. No price on any ladder fixes 60 customers.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ 7. CUSTOMERS NEEDED ============ -->
+<section id="need">
+  <p class="eyebrow">07 · the number that decides</p>
+  <h2>Customers needed for 35% net</h2>
+  <p class="lede">Vary the Growth price, hold every other tier and every lever fixed. Lower price needs more
+     customers; the curve flattens fast after ₹5,499.</p>
+  <div class="card">
+    <figure>
+      <div id="need-svg"></div>
+      <figcaption>From ₹4,999 to ₹5,999 the requirement falls by only 12 customers. From ₹5,999 to ₹9,999 it
+        falls by 36 — but those 36 customers take far longer to find.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ 8. DECISION TREE ============ -->
+<section id="decision">
+  <p class="eyebrow">08 · which document do you ship</p>
+  <h2>Decision tree</h2>
+  <p class="lede">One question decides it. Everything else is noise.</p>
+  <div class="card">
+    <figure>
+      <div id="tree-svg"></div>
+      <figcaption>Both paths keep all ten levers. The only thing at stake is the Growth list price —
+        the smallest lever in the stack.</figcaption>
+    </figure>
+  </div>
+  <div class="grid2" style="margin-top:16px">
+    <div class="stat"><p class="k">Ship profit.md when</p><p class="v" style="font-size:19px">Margin is the metric</p>
+      <p class="d">You have traction and need the business to stand on its own. 171 customers to 35%.</p></div>
+    <div class="stat"><p class="k">Ship price.md when</p><p class="v" style="font-size:19px">Logos are the metric</p>
+      <p class="d">You are raising and need growth rate plus case studies. 281 customers to 35%.</p></div>
+  </div>
+  <div class="note">
+    <b>Why §07 shows 183 and not 281.</b> That chart varies the Growth price only, holding Business and Enterprise
+    at the profit.md values. The full price.md ladder — every tier cheaper — needs 281 customers for the same margin.
+    Both numbers are correct; they answer different questions.
+  </div>
+</section>
+
+<!-- ============ 9. GUARDRAILS ============ -->
+<section id="guardrails">
+  <p class="eyebrow">09 · where this breaks</p>
+  <h2>Guardrails</h2>
+  <p class="lede">Profit-seeking has a failure mode in a referral market. These are the moves that look
+     accretive on a spreadsheet and cost more than they earn.</p>
+  <div class="card scroll">
+    <table>
+      <thead><tr><th style="width:34%">Temptation</th><th>Why it backfires</th></tr></thead>
+      <tbody>
+        <tr><td><b>Growth at ₹9,999</b></td>
+            <td>Needs 135 customers instead of 171, but takes roughly 10 months longer to find them. Total profit falls.</td></tr>
+        <tr><td><b>Marking up Meta messages</b></td>
+            <td>The one credible differentiator against AiSensy (~24%) and Interakt (~10%). Losing it for 5% margin is a bad trade.</td></tr>
+        <tr><td><b>Zero message grant on Starter</b></td>
+            <td>Kills activation. The grant is marketing spend, not COGS. ₹100 buys a first campaign.</td></tr>
+        <tr><td><b>Gating template pre-flight</b></td>
+            <td>Turns a pricing decision into an outage. Free users blast bad templates and you own the support ticket.</td></tr>
+        <tr><td><b>Annual discount past 20%</b></td>
+            <td>You are buying cash with margin. Past 20% you are financing churn, not preventing it.</td></tr>
+        <tr><td><b>Pricing for 60% net</b></td>
+            <td>At 500 customers the model says 60%. Spend it on growth instead — 35% at 3× growth beats 60% at 1×.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 10. ASSUMPTIONS ============ -->
+<section id="assumptions">
+  <p class="eyebrow">10 · what is measured vs modelled</p>
+  <h2>Assumptions register</h2>
+  <p class="lede">This model is directionally right and precisely wrong until these are replaced with real data.</p>
+  <div class="card scroll">
+    <table>
+      <thead><tr><th>Assumption</th><th class="num">Value</th><th>Confidence</th><th>How to replace it</th></tr></thead>
+      <tbody>
+        <tr><td>Price elasticity</td><td class="num">1.7 / 1.2</td><td>Low</td><td>60-day price test on new signups</td></tr>
+        <tr><td>Blended variable cost C</td><td class="num">₹2,438</td><td>Medium</td><td>Real infra + support after 30 days</td></tr>
+        <tr><td>Expansion revenue E</td><td class="num">₹738</td><td>Low</td><td>Instrument the four add-on prompts</td></tr>
+        <tr><td>AI cost per reply</td><td class="num">₹0.13</td><td>Low</td><td>Token logs from production</td></tr>
+        <tr><td>Fixed costs</td><td class="num">₹6.5L + ₹45k/100</td><td>Low</td><td>Actual payroll</td></tr>
+        <tr><td>Monthly churn</td><td class="num">2.6%</td><td>Low</td><td>Cohort data after 90 days</td></tr>
+        <tr><td>CAC</td><td class="num">₹7,500</td><td>Low</td><td>Channel attribution</td></tr>
+        <tr><td>Meta India rates</td><td class="num">₹0.8631 / ₹0.115</td><td><b>High</b></td><td>Verified against Meta's card, 1 Oct 2026</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <b>Do not present this as a forecast.</b> It is a decision tool: it tells you which lever is worth pulling,
+    not what next year looks like. The three numbers that would change the recommendation most are
+    elasticity, E, and CAC.
+  </div>
+</section>
+
+<footer>
+  Companion to <code>price.md</code> (baseline ladder) and <code>profit.md</code> (profit-optimised ladder).
+  Model constants: C = ₹2,438 blended · fixed ₹6.5L + ₹45k per 100 customers · churn 2.6% · CAC ₹7,500 ·
+  AI ₹0.13 cost / ₹0.50 price · gateway 2.36%. No CDN, no tracking, no network requests.
+</footer>
+
+</main>
+
+<script>
+"use strict";
+
+/* ============================================================
+   helpers
+   ============================================================ */
+const NS = "http://www.w3.org/2000/svg";
+const el = (t, a = {}) => {
+  const n = document.createElementNS(NS, t);
+  for (const k in a) n.setAttribute(k, a[k]);
+  return n;
+};
+const text = (x, y, s, cls, extra = {}) => {
+  const t = el("text", { x, y, class: cls, ...extra });
+  t.textContent = s;
+  return t;
+};
+const inr = n => "₹" + Math.round(n).toLocaleString("en-IN");
+const inrL = n => "₹" + (n / 100000).toFixed(1) + "L";
+
+function svgRoot(w, h, label) {
+  const s = el("svg", {
+    viewBox: `0 0 ${w} ${h}`,
+    role: "img",
+    "aria-label": label,
+    preserveAspectRatio: "xMidYMid meet"
+  });
+  return s;
+}
+
+/* ============================================================
+   01 · MIND MAP
+   ============================================================ */
+(function mindmap() {
+  const host = document.getElementById("mindmap-svg");
+
+  const data = [
+    {
+      name: "Meters",
+      hot: false,
+      leaves: [
+        "Subscription — software, per branch",
+        "Message wallet — Meta at cost",
+        "AI credits — compute, 74% GM",
+        "Never bundle message counts"
+      ]
+    },
+    {
+      name: "Ladder",
+      hot: true,
+      leaves: [
+        "Free ₹0 — distribution channel",
+        "Starter ₹2,499 — decoy",
+        "Growth ₹5,999 — the anchor",
+        "Business ₹17,499 — at P*",
+        "Enterprise ₹59,999 — floor"
+      ]
+    },
+    {
+      name: "Levers",
+      hot: true,
+      leaves: [
+        "Business + Enterprise repricing",
+        "AI cost ₹0.20 → ₹0.13",
+        "Add-on attach 55%",
+        "Top-up fee ₹49 under ₹5k",
+        "CAC ₹11k → ₹7.5k"
+      ]
+    },
+    {
+      name: "Guardrails",
+      hot: false,
+      leaves: [
+        "Never mark up Meta messages",
+        "Never gate pre-flight or consent",
+        "Never discount past 20% annual",
+        "Never price for 60% net"
+      ]
+    },
+    {
+      name: "Metrics",
+      hot: false,
+      leaves: [
+        "Net margin ≥ 35%",
+        "Customers to 35% — 175",
+        "Time-to-35% — 27 months",
+        "LTV:CAC 3–5× (not 42×)"
+      ]
+    }
+  ];
+
+  const W = 1000;
+  const rowH = 30;
+  const leafStartX = 470;
+  const branchX = 300;
+  const rootX = 40;
+
+  // vertical layout
+  let y = 26;
+  const blocks = data.map(b => {
+    const top = y;
+    const height = b.leaves.length * rowH;
+    y += height + 26;
+    return { ...b, top, height };
+  });
+  const H = y + 6;
+
+  const svg = svgRoot(W, H, "Mind map of the MADHURA pricing model");
+
+  // root
+  const rootMid = H / 2;
+  const rootH = 64;
+  const rootW = 170;
+  svg.appendChild(el("rect", {
+    x: rootX, y: rootMid - rootH / 2, width: rootW, height: rootH,
+    rx: 10, class: "mm-root"
+  }));
+  const rt1 = text(rootX + rootW / 2, rootMid - 4, "MADHURA", "mm-root-text", { "text-anchor": "middle" });
+  const rt2 = text(rootX + rootW / 2, rootMid + 15, "pricing model", "mm-root-text",
+    { "text-anchor": "middle", "font-size": "11.5", "font-weight": "400", opacity: ".8" });
+  svg.appendChild(rt1); svg.appendChild(rt2);
+
+  blocks.forEach(b => {
+    const midY = b.top + b.height / 2;
+
+    // root -> branch curve
+    const p = el("path", {
+      d: `M${rootX + rootW},${rootMid} C${rootX + rootW + 60},${rootMid} ${branchX - 60},${midY} ${branchX},${midY}`,
+      class: "mm-link" + (b.hot ? " hot" : "")
+    });
+    svg.appendChild(p);
+
+    // branch node
+    const bw = 132, bh = 34;
+    svg.appendChild(el("rect", {
+      x: branchX, y: midY - bh / 2, width: bw, height: bh, rx: 7, class: "mm-branch"
+    }));
+    svg.appendChild(text(branchX + bw / 2, midY + 4.5, b.name, "mm-branch-text", { "text-anchor": "middle" }));
+
+    // leaves
+    b.leaves.forEach((leaf, i) => {
+      const ly = b.top + i * rowH + rowH / 2;
+      const p2 = el("path", {
+        d: `M${branchX + bw},${midY} C${branchX + bw + 50},${midY} ${leafStartX - 50},${ly} ${leafStartX},${ly}`,
+        class: "mm-link" + (b.hot ? " hot" : "")
+      });
+      svg.appendChild(p2);
+
+      svg.appendChild(el("circle", {
+        cx: leafStartX - 3, cy: ly, r: 2.6, fill: b.hot ? "#E9AA00" : "#667085", opacity: b.hot ? 1 : ".6"
+      }));
+      svg.appendChild(text(leafStartX + 10, ly + 4.2, leaf, "mm-text"));
+    });
+  });
+
+  host.appendChild(svg);
+})();
+
+/* ============================================================
+   02 · MONEY FLOW
+   ============================================================ */
+(function moneyflow() {
+  const host = document.getElementById("flow-svg");
+  const W = 1000, H = 430;
+  const svg = svgRoot(W, H, "Money flow from customer to Meta, infrastructure and LLM provider");
+
+  const defs = el("defs");
+  defs.innerHTML = `
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto">
+      <path d="M0 0 L7.5 3.5 L0 7" fill="none" stroke="#667085" stroke-width="1.3"/>
+    </marker>
+    <marker id="arrow-y" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto">
+      <path d="M0 0 L7.5 3.5 L0 7" fill="none" stroke="#E9AA00" stroke-width="1.6"/>
+    </marker>`;
+  svg.appendChild(defs);
+
+  function box(x, y, w, h, title, sub, kind) {
+    const cls = "flow-box" + (kind ? " " + kind : "");
+    svg.appendChild(el("rect", { x, y, width: w, height: h, rx: 8, class: cls }));
+    const tcls = kind === "solid" ? "flow-title inv" : "flow-title";
+    const scls = kind === "solid" ? "flow-sub inv" : "flow-sub";
+    svg.appendChild(text(x + w / 2, y + (sub ? h / 2 - 3 : h / 2 + 4), title, tcls, { "text-anchor": "middle" }));
+    if (sub) svg.appendChild(text(x + w / 2, y + h / 2 + 14, sub, scls, { "text-anchor": "middle" }));
+  }
+
+  function edge(x1, y1, x2, y2, cls) {
+    svg.appendChild(el("path", { d: `M${x1},${y1} L${x2},${y2}`, class: cls || "flow-edge" }));
+  }
+
+  // customer
+  box(20, 175, 150, 74, "Customer", "pays INR", "solid");
+
+  // three meters
+  box(250, 40, 190, 74, "① Subscription", "software · per branch");
+  box(250, 175, 190, 74, "② Message wallet", "prepaid · ₹1 = ₹1", "tint");
+  box(250, 310, 190, 74, "③ AI credits", "per AI reply");
+
+  // cost sinks
+  box(760, 40, 210, 74, "Infra · support", "gateway 2.36%");
+  box(760, 175, 210, 74, "Meta Cloud API", "₹0.8631 / ₹0.115", "tint");
+  box(760, 310, 210, 74, "LLM provider", "₹0.13 / reply");
+
+  // profit
+  box(520, 175, 180, 74, "Gross profit", "≈79% blended", "solid");
+
+  // edges
+  edge(170, 212, 246, 212, "flow-edge money");
+  edge(440, 77, 520, 190);
+  edge(440, 212, 518, 212, "flow-edge money");
+  edge(440, 347, 520, 234);
+  edge(700, 77, 756, 77);
+  edge(700, 212, 756, 212, "flow-edge money");
+  edge(700, 347, 756, 347);
+  edge(610, 175, 610, 120, "flow-edge");
+  edge(610, 249, 610, 305, "flow-edge");
+
+  // labels on edges
+  svg.appendChild(text(196, 200, "Razorpay", "axis-text", { "text-anchor": "middle" }));
+  svg.appendChild(text(468, 110, "margin", "axis-text", { "text-anchor": "start" }));
+  svg.appendChild(text(468, 296, "margin", "axis-text", { "text-anchor": "start" }));
+  svg.appendChild(text(478, 200, "no margin", "axis-text", { "text-anchor": "middle" }));
+
+  // footer note
+  svg.appendChild(text(20, 412,
+    "Message wallet is a pass-through on purpose — it is the trust differentiator, not a revenue line.",
+    "axis-text"));
+
+  host.appendChild(svg);
+})();
+
+/* ============================================================
+   03 · PRICE vs PROFIT
+   ============================================================ */
+(function priceCurve() {
+  const host = document.getElementById("curve-svg");
+
+  // modelled data — all tiers scaled together, all profit.md levers on
+  const fixedN = [
+    [3600,107014],[4000,230940],[4400,354866],[4800,478792],[5200,602718],[5600,726644],
+    [6000,850570],[6400,974496],[6800,1098422],[7200,1222348],[7600,1346274],[8000,1470200],
+    [8400,1594126],[8800,1718052],[9200,1841978],[9600,1965905],[10000,2089831],[10400,2213757],
+    [10800,2337683],[11200,2461609],[11600,2585535],[12000,2709461]
+  ];
+  const demand = [
+    [3600,1142950],[4000,1103858],[4400,1024495],[4800,995548],[5200,927038],[5600,863691],
+    [6000,850120],[6400,795906],[6800,745642],[7200,698947],[7600,655476],[8000,614917],
+    [8400,576994],[8800,541459],[9200,553094],[9600,521705],[10000,492120],[10400,464183],
+    [10800,437759],[11200,412724],[11600,388969],[12000,366395]
+  ];
+
+  const W = 1000, H = 420;
+  const P = { l: 78, r: 26, t: 30, b: 58 };
+  const xMin = 3600, xMax = 12000;
+  const yMin = 0, yMax = 2800000;
+
+  const X = v => P.l + (v - xMin) / (xMax - xMin) * (W - P.l - P.r);
+  const Y = v => H - P.b - (v - yMin) / (yMax - yMin) * (H - P.t - P.b);
+
+  const svg = svgRoot(W, H, "EBITDA versus Growth price, two scenarios");
+
+  // grid + y axis
+  for (let v = 0; v <= 28; v += 4) {
+    const yv = v * 100000;
+    const y = Y(yv);
+    svg.appendChild(el("line", { x1: P.l, y1: y, x2: W - P.r, y2: y, class: "grid-line" }));
+    svg.appendChild(text(P.l - 12, y + 3.5, v === 0 ? "₹0" : v + "L", "axis-text", { "text-anchor": "end" }));
+  }
+
+  // x axis ticks
+  [4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000].forEach(v => {
+    const x = X(v);
+    svg.appendChild(el("line", { x1: x, y1: H - P.b, x2: x, y2: H - P.b + 5, stroke: "#E8E8E8" }));
+    svg.appendChild(text(x, H - P.b + 20, "₹" + (v / 1000) + "k", "axis-text", { "text-anchor": "middle" }));
+  });
+
+  const path = pts => pts.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ");
+
+  svg.appendChild(el("path", { d: path(fixedN), class: "series-a" }));
+  svg.appendChild(el("path", { d: path(demand), class: "series-b" }));
+
+  // shipped price marker
+  const shipped = demand.find(p => p[0] === 6000);
+  svg.appendChild(el("line", { x1: X(6000), y1: H - P.b, x2: X(6000), y2: Y(shipped[1]), class: "ref-line" }));
+  svg.appendChild(el("circle", { cx: X(6000), cy: Y(shipped[1]), r: 6, class: "marker-dot" }));
+  svg.appendChild(text(X(6000) + 14, Y(shipped[1]) - 6, "shipped ₹5,999", "axis-text",
+    { "text-anchor": "start", "font-weight": "600", fill: "#202C52" }));
+
+  // left-edge annotation: still falling at the lowest price tested
+  const left = demand[0];
+  svg.appendChild(el("circle", { cx: X(left[0]), cy: Y(left[1]), r: 4, fill: "#E9AA00" }));
+  svg.appendChild(text(X(left[0]) + 12, Y(left[1]) - 10,
+    "still falling at ₹3,600 — the lowest price tested", "axis-text",
+    { "text-anchor": "start", "font-weight": "600", fill: "#202C52" }));
+
+  // axis labels
+  svg.appendChild(text((P.l + W - P.r) / 2, H - 12, "Growth price / month", "axis-label", { "text-anchor": "middle" }));
+  svg.appendChild(text(14, (P.t + H - P.b) / 2, "EBITDA / month", "axis-label",
+    { "text-anchor": "middle", transform: `rotate(-90 14 ${(P.t + H - P.b) / 2})` }));
+
+  // legend
+  const lx = W - P.r - 250, ly = P.t + 8;
+  svg.appendChild(el("line", { x1: lx, y1: ly, x2: lx + 26, y2: ly, class: "series-a" }));
+  svg.appendChild(text(lx + 34, ly + 4, "customers held at 200", "axis-text"));
+  svg.appendChild(el("line", { x1: lx, y1: ly + 18, x2: lx + 26, y2: ly + 18, class: "series-b" }));
+  svg.appendChild(text(lx + 34, ly + 22, "customers respond to price", "axis-text"));
+
+  host.appendChild(svg);
+})();
+
+/* ============================================================
+   04 · WATERFALL
+   ============================================================ */
+(function waterfall() {
+  const host = document.getElementById("waterfall-svg");
+
+  const steps = [
+    ["price.md", 151990, 0, "start"],
+    ["Business + Ent +46%", 513258, 361268, "up"],
+    ["Growth + Starter", 630426, 117168, "up"],
+    ["AI price + cost", 687891, 57465, "up"],
+    ["Top-up fee ₹49", 717291, 29400, "up"],
+    ["Add-on attach 55%", 760531, 43240, "up"],
+    ["AI attach 40%", 784211, 23680, "up"],
+    ["CAC ₹7.5k", 796211, 12000, "up"],
+    ["Churn 2.6%", 817211, 21000, "up"],
+    ["Support −35%", 836881, 19670, "up"],
+    ["Annual 30%", 850261, 13380, "up"],
+    ["profit.md", 850261, 0, "end"]
+  ];
+
+  const W = 1000, H = 430;
+  const P = { l: 66, r: 16, t: 26, b: 118 };
+  const yMax = 900000;
+  const Y = v => H - P.b - (v / yMax) * (H - P.t - P.b);
+  const colW = (W - P.l - P.r) / steps.length;
+  const barW = colW * 0.6;
+
+  const svg = svgRoot(W, H, "Waterfall of EBITDA contributions from each pricing lever");
+
+  for (let v = 0; v <= 900000; v += 200000) {
+    const y = Y(v);
+    svg.appendChild(el("line", { x1: P.l, y1: y, x2: W - P.r, y2: y, class: "grid-line" }));
+    svg.appendChild(text(P.l - 10, y + 3.5, v === 0 ? "₹0" : (v / 100000) + "L", "axis-text", { "text-anchor": "end" }));
+  }
+
+  let running = 0;
+  steps.forEach((s, i) => {
+    const [label, endVal, delta, kind] = s;
+    const x = P.l + i * colW + (colW - barW) / 2;
+    let yTop, h;
+
+    if (kind === "start") {
+      running = endVal;
+      yTop = Y(endVal); h = Y(0) - Y(endVal);
+    } else if (kind === "end") {
+      yTop = Y(endVal); h = Y(0) - Y(endVal);
+    } else {
+      const from = running, to = running + delta;
+      yTop = Y(to); h = Y(from) - Y(to);
+      running = to;
+    }
+
+    const cls = kind === "start" ? "wf-bar" : kind === "end" ? "wf-bar end" : "wf-bar up";
+    svg.appendChild(el("rect", { x, y: yTop, width: barW, height: Math.max(h, 1.5), rx: 2, class: cls }));
+
+    // connector
+    if (i < steps.length - 1) {
+      const nextRunning = kind === "end" ? endVal : running;
+      const yConn = kind === "start" ? Y(endVal) : Y(nextRunning);
+      svg.appendChild(el("line", {
+        x1: x + barW, y1: yConn, x2: x + colW, y2: yConn,
+        stroke: "#667085", "stroke-width": "1", "stroke-dasharray": "2 3", opacity: ".6"
+      }));
+    }
+
+    // value
+    const vLabel = kind === "start" || kind === "end"
+      ? inrL(endVal)
+      : "+" + inrL(delta);
+    svg.appendChild(text(x + barW / 2, yTop - 7, vLabel, "wf-val", { "text-anchor": "middle" }));
+
+    // rotated label
+    const lx = x + barW / 2;
+    const ly = H - P.b + 14;
+    svg.appendChild(text(lx, ly, label, "wf-label", {
+      "text-anchor": "end",
+      transform: `rotate(-42 ${lx} ${ly})`
+    }));
+  });
+
+  svg.appendChild(text(P.l, H - 8, "Sequential contributions — these sum to the final number.", "axis-text"));
+
+  host.appendChild(svg);
+})();
+
+/* ============================================================
+   05 · MARGIN CURVE
+   ============================================================ */
+(function marginCurve() {
+  const host = document.getElementById("margin-svg");
+
+  const pts = [
+    [40,-91.5],[60,-35.3],[80,-7.1],[100,9.7],[125,19.7],[150,29.3],[175,36.1],
+    [200,41.3],[250,46.7],[300,51.8],[400,57.0],[500,60.2]
+  ];
+
+  const W = 1000, H = 400;
+  const P = { l: 70, r: 26, t: 30, b: 56 };
+  const xMin = 40, xMax = 500, yMin = -100, yMax = 70;
+
+  const X = v => P.l + (v - xMin) / (xMax - xMin) * (W - P.l - P.r);
+  const Y = v => H - P.b - (v - yMin) / (yMax - yMin) * (H - P.t - P.b);
+
+  const svg = svgRoot(W, H, "Net margin versus customer count");
+
+  for (let v = -100; v <= 60; v += 20) {
+    const y = Y(v);
+    svg.appendChild(el("line", { x1: P.l, y1: y, x2: W - P.r, y2: y, class: "grid-line" }));
+    svg.appendChild(text(P.l - 10, y + 3.5, v + "%", "axis-text", { "text-anchor": "end" }));
+  }
+  [40,100,150,200,250,300,400,500].forEach(v => {
+    svg.appendChild(text(X(v), H - P.b + 18, v, "axis-text", { "text-anchor": "middle" }));
+  });
+
+  // zero line
+  svg.appendChild(el("line", { x1: P.l, y1: Y(0), x2: W - P.r, y2: Y(0), stroke: "#202C52", "stroke-width": "1", opacity: ".45" }));
+
+  // 35% target line
+  svg.appendChild(el("line", { x1: P.l, y1: Y(35), x2: W - P.r, y2: Y(35), class: "ref-line" }));
+  svg.appendChild(text(W - P.r - 4, Y(35) - 8, "35% target", "axis-text",
+    { "text-anchor": "end", "font-weight": "600", fill: "#202C52" }));
+
+  // area fill
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ");
+  const area = line + ` L${X(500)},${Y(0)} L${X(40)},${Y(0)} Z`;
+  svg.appendChild(el("path", { d: area, fill: "#202C52", opacity: ".06" }));
+  svg.appendChild(el("path", { d: line, class: "series-a" }));
+
+  // key markers
+  [[100,9.7],[175,36.1],[200,41.3]].forEach(([n, m]) => {
+    svg.appendChild(el("circle", { cx: X(n), cy: Y(m), r: 5, class: "marker-dot" }));
+    svg.appendChild(text(X(n), Y(m) - 13, n + " → " + m + "%", "axis-text",
+      { "text-anchor": "middle", "font-weight": "600", fill: "#202C52" }));
+  });
+
+  svg.appendChild(text((P.l + W - P.r) / 2, H - 10, "Customers", "axis-label", { "text-anchor": "middle" }));
+  svg.appendChild(text(14, (P.t + H - P.b) / 2, "Net margin", "axis-label",
+    { "text-anchor": "middle", transform: `rotate(-90 14 ${(P.t + H - P.b) / 2})` }));
+
+  host.appendChild(svg);
+})();
+
+/* ============================================================
+   06 · CUSTOMERS NEEDED
+   ============================================================ */
+(function needBars() {
+  const host = document.getElementById("need-svg");
+
+  const data = [
+    [3999,208],[4499,201],[4999,183],[5499,177],[5999,171],
+    [6499,165],[6999,160],[7999,151],[9999,135]
+  ];
+
+  const W = 1000, H = 340;
+  const P = { l: 64, r: 20, t: 28, b: 56 };
+  const maxV = 220;
+  const colW = (W - P.l - P.r) / data.length;
+  const barW = colW * 0.56;
+  const Y = v => H - P.b - (v / maxV) * (H - P.t - P.b);
+
+  const svg = svgRoot(W, H, "Customers required for 35 percent net margin by Growth price");
+
+  for (let v = 0; v <= 200; v += 50) {
+    const y = Y(v);
+    svg.appendChild(el("line", { x1: P.l, y1: y, x2: W - P.r, y2: y, class: "grid-line" }));
+    svg.appendChild(text(P.l - 10, y + 3.5, v, "axis-text", { "text-anchor": "end" }));
+  }
+
+  data.forEach(([price, need], i) => {
+    const x = P.l + i * colW + (colW - barW) / 2;
+    const y = Y(need);
+    const h = Y(0) - y;
+    const shipped = price === 5999;
+
+    svg.appendChild(el("rect", {
+      x, y, width: barW, height: h, rx: 3,
+      fill: shipped ? "#FCBD16" : "#202C52",
+      opacity: shipped ? 1 : 0.82
+    }));
+
+    svg.appendChild(text(x + barW / 2, y - 8, need, "wf-val", {
+      "text-anchor": "middle", "font-size": "11"
+    }));
+    svg.appendChild(text(x + barW / 2, H - P.b + 18, "₹" + (price / 1000) + "k", "axis-text",
+      { "text-anchor": "middle", "font-weight": shipped ? "600" : "400" }));
+
+    if (shipped) {
+      svg.appendChild(text(x + barW / 2, H - P.b + 34, "shipped", "axis-text",
+        { "text-anchor": "middle", "font-size": "9.5", "font-weight": "600" }));
+    }
+  });
+
+  svg.appendChild(text((P.l + W - P.r) / 2, H - 8, "Growth price / month", "axis-label", { "text-anchor": "middle" }));
+  svg.appendChild(text(14, (P.t + H - P.b) / 2, "Customers", "axis-label",
+    { "text-anchor": "middle", transform: `rotate(-90 14 ${(P.t + H - P.b) / 2})` }));
+
+  host.appendChild(svg);
+})();
+
+/* ============================================================
+   07 · DECISION TREE
+   ============================================================ */
+(function decisionTree() {
+  const host = document.getElementById("tree-svg");
+
+  const W = 1000, H = 420;
+  const svg = svgRoot(W, H, "Decision tree for choosing between the price.md and profit.md ladders");
+
+  const defs = el("defs");
+  defs.innerHTML = `
+    <marker id="tarrow" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto">
+      <path d="M0 0 L7.5 3.5 L0 7" fill="none" stroke="#667085" stroke-width="1.4"/>
+    </marker>`;
+  svg.appendChild(defs);
+
+  function node(x, y, w, h, title, sub, kind) {
+    const fill = kind === "root" ? "#050E2F" : kind === "hot" ? "#FCBD16" : "#FFFFFF";
+    const stroke = kind === "root" ? "#050E2F" : kind === "hot" ? "#FCBD16" : "#202C52";
+    const tc = kind === "root" ? "#FFFFFF" : "#202C52";
+    const sc = kind === "root" ? "#B9C3DA" : "#667085";
+    svg.appendChild(el("rect", { x, y, width: w, height: h, rx: 9, fill, stroke, "stroke-width": "1.5" }));
+    svg.appendChild(text(x + w / 2, y + (sub ? h / 2 - 4 : h / 2 + 5), title,
+      "", { "text-anchor": "middle", fill: tc, "font-family": "Poppins,'Segoe UI',sans-serif",
+            "font-size": "14", "font-weight": "600" }));
+    if (sub) svg.appendChild(text(x + w / 2, y + h / 2 + 15, sub,
+      "", { "text-anchor": "middle", fill: sc, "font-family": "Inter,'Segoe UI',sans-serif", "font-size": "11.5" }));
+  }
+
+  function edge(x1, y1, x2, y2) {
+    const my = (y1 + y2) / 2;
+    svg.appendChild(el("path", {
+      d: `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`,
+      fill: "none", stroke: "#667085", "stroke-width": "1.4", "marker-end": "url(#tarrow)"
+    }));
+  }
+
+  // root question
+  node(340, 24, 320, 62, "Is margin the metric,", "or are logos the metric?", "root");
+
+  // two answers
+  node(150, 150, 260, 62, "Margin", "you need to stand alone", "hot");
+  node(590, 150, 260, 62, "Logos", "you are raising", "plain");
+
+  edge(430, 86, 280, 150);
+  edge(570, 86, 720, 150);
+
+  // outcomes
+  node(90, 280, 290, 74, "Ship profit.md", "Growth ₹5,999 · 171 customers");
+  node(560, 280, 350, 74, "Ship price.md Growth", "+ all ten profit.md levers");
+
+  edge(280, 212, 235, 280);
+  edge(720, 212, 735, 280);
+
+  // footnote
+  svg.appendChild(text(90, 388,
+    "Both paths keep every lever. Only the Growth list price differs — the smallest lever in the stack.",
+    "axis-text"));
+
+  host.appendChild(svg);
+})();
+</script>
+</body>
+</html>

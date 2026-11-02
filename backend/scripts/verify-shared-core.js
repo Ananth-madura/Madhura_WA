@@ -11,6 +11,7 @@ if(args.has("--integration")&&(!Number.isInteger(port)||port<1024||port>65535||p
   console.error("Set INBOX_TEST_MYSQL_PORT to an isolated local test instance, for example 13307. The default database port is refused.");process.exit(2);
 }
 const suites=["test_capacity_controls.js","test_production_preflight.js","test_shared_flow_definition.js","test_flow_customization.js","test_quick_reminders.js","test_quick_reminders_service.js","test_reminder_schema_heal.js","test_enquiry_service.js","test_shared_flow_lifecycle.js","test_wa_webhook_auth.js","test_wa_privacy_and_receipts.js","test_razorpay_security.js","test_keep_alive.js","test_schema_readiness.js"];
+suites.push("test_profit_pricing.js");
 suites.push("test_automation_tenant_scope.js");
 suites.push("test_client_portal.js");
 suites.push("test_inbox_outbound_validation.js");

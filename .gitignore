@@ -60,3 +60,9 @@ scratch/team-chat-upload.txt
 scratch/team-chat-avatar.png
 scratch/team-inbox-*.png
 scratch/customer-ops-*.png
+scratch/account-browser/
+scratch/account-integration-build/
+scratch/account-mysql/
+scratch/account-*.log
+scratch/account-*.png
+scratch/accounts-app-*.png

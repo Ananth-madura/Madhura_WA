@@ -1,95 +1,6 @@
 const db = require("../config/database");
 
-const PLANS = {
-  free: {
-    id: "free",
-    name: "Free Tier",
-    badge: "Free",
-    price: "₹0",
-    billing: "Free forever",
-    maxSenders: 1,
-    maxMonthlyMessages: 500,
-    maxContacts: 100,
-    features: [
-      "1 Connected WhatsApp Number",
-      "500 Outbound Messages/Month",
-      "Live Chat Inbox & History",
-      "Standard Message Templates",
-      "Basic Keyword Auto-Reply",
-      "Web Session Engine Access"
-    ],
-    aiReplies: false,
-    flows: false,
-    senderPools: false,
-  },
-  starter: {
-    id: "starter",
-    name: "Starter Plan",
-    badge: "Popular",
-    price: "₹1,499",
-    billing: "per month",
-    maxSenders: 3,
-    maxMonthlyMessages: 5000,
-    maxContacts: 2500,
-    features: [
-      "3 Connected WhatsApp Numbers",
-      "5,000 Outbound Messages/Month",
-      "Full Visual Chatbot Flow Builder",
-      "Automated Reminders & Invoices",
-      "Bulk Campaign Scheduler & CSV Import",
-      "Anti-Ban Humanized Pacing Presets",
-      "Meta Cloud API + Web Engine Support"
-    ],
-    aiReplies: false,
-    flows: true,
-    senderPools: false,
-  },
-  growth: {
-    id: "growth",
-    name: "Growth Plan",
-    badge: "Recommended",
-    price: "₹3,999",
-    billing: "per month",
-    maxSenders: 10,
-    maxMonthlyMessages: 25000,
-    maxContacts: 25000,
-    features: [
-      "10 Connected WhatsApp Numbers",
-      "25,000 Outbound Messages/Month",
-      "Smart AI Neural Replies (OpenAI)",
-      "Multi-Sender Pool Load Balancing",
-      "Visual Chatbot Flow Builder",
-      "Automated Drip Sequences & Followups",
-      "Interactive List & Button Messages",
-      "Priority 24/7 SLA Support"
-    ],
-    aiReplies: true,
-    flows: true,
-    senderPools: true,
-  },
-  enterprise: {
-    id: "enterprise",
-    name: "Enterprise Plan",
-    badge: "Enterprise",
-    price: "₹9,999",
-    billing: "per month",
-    maxSenders: 50,
-    maxMonthlyMessages: 100000,
-    maxContacts: 100000,
-    features: [
-      "50+ Connected WhatsApp Numbers",
-      "100,000+ Outbound Messages/Month",
-      "Dedicated Meta Cloud API Engine Setup",
-      "Unlimited Team Members & Agents",
-      "Real-Time Webhook & CRM REST API",
-      "Dedicated IP & Phone Isolation",
-      "Custom SLA & Dedicated Account Manager"
-    ],
-    aiReplies: true,
-    flows: true,
-    senderPools: true,
-  }
-};
+const { PLANS } = require("./planCatalog");
 
 function queryAsync(sql, params = []) {
   return new Promise((resolve, reject) => {
@@ -125,8 +36,8 @@ async function ensureTenantsTable() {
           slug TEXT UNIQUE,
           plan TEXT DEFAULT 'growth',
           plan_status TEXT DEFAULT 'active',
-          max_senders INTEGER DEFAULT 10,
-          max_monthly_messages INTEGER DEFAULT 25000,
+          max_senders INTEGER DEFAULT 3,
+          max_monthly_messages INTEGER DEFAULT 50000,
           ai_replies_enabled INTEGER DEFAULT 1,
           flows_enabled INTEGER DEFAULT 1,
           sender_pools_enabled INTEGER DEFAULT 1,
@@ -139,8 +50,8 @@ async function ensureTenantsTable() {
           slug VARCHAR(100) UNIQUE,
           plan VARCHAR(50) DEFAULT 'growth',
           plan_status VARCHAR(50) DEFAULT 'active',
-          max_senders INT DEFAULT 10,
-          max_monthly_messages INT DEFAULT 25000,
+          max_senders INT DEFAULT 3,
+          max_monthly_messages INT DEFAULT 50000,
           ai_replies_enabled TINYINT(1) DEFAULT 1,
           flows_enabled TINYINT(1) DEFAULT 1,
           sender_pools_enabled TINYINT(1) DEFAULT 1,
@@ -157,9 +68,9 @@ async function ensureTenantsTable() {
     if (!rows || rows.length === 0) {
       const seedSql = db.isSqlite
         ? `INSERT OR IGNORE INTO tenants (id, name, slug, plan, plan_status, max_senders, max_monthly_messages, ai_replies_enabled, flows_enabled, sender_pools_enabled)
-           VALUES (1, 'Madhura Tech CRM Workspace', 'madhura-primary', 'growth', 'active', 10, 25000, 1, 1, 1)`
+           VALUES (1, 'Madhura Tech CRM Workspace', 'madhura-primary', 'growth', 'active', 3, 50000, 1, 1, 1)`
         : `INSERT IGNORE INTO tenants (id, name, slug, plan, plan_status, max_senders, max_monthly_messages, ai_replies_enabled, flows_enabled, sender_pools_enabled)
-           VALUES (1, 'Madhura Tech CRM Workspace', 'madhura-primary', 'growth', 'active', 10, 25000, 1, 1, 1)`;
+           VALUES (1, 'Madhura Tech CRM Workspace', 'madhura-primary', 'growth', 'active', 3, 50000, 1, 1, 1)`;
       await queryAsync(seedSql);
     }
   } catch (err) {
@@ -194,8 +105,8 @@ async function getTenantById(tenantId = 1) {
     slug: "default",
     plan: "growth",
     plan_status: "active",
-    max_senders: 10,
-    max_monthly_messages: 25000,
+    max_senders: PLANS.growth.maxSenders,
+    max_monthly_messages: PLANS.growth.maxMonthlyMessages,
     planMeta: PLANS.growth,
   };
 }

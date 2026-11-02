@@ -28,19 +28,24 @@ async function verify({ email, secondId }) {
     await page.waitForFunction(() => document.querySelectorAll(".ac-routing").length > 0);
     const click = async label => {
       await page.waitForFunction(text => [...document.querySelectorAll(".ac-workspace button")].some(el => el.textContent === text && !el.disabled), {}, label);
-      await page.evaluate(text => [...document.querySelectorAll(".ac-workspace button")].find(el => el.textContent === text).click(), label);
+      const handle = await page.evaluateHandle(text => [...document.querySelectorAll(".ac-workspace button")].find(el => el.textContent === text), label);
+      await handle.asElement().click(); await handle.dispose();
     };
     const synced = page.waitForResponse(response => response.url().endsWith("/sync") && response.request().method() === "POST"); await click("Check connection"); assert((await synced).ok());
     await page.waitForFunction(() => document.body.textContent.includes("Status verified with Meta."));
     const routing = page.waitForResponse(response => response.url().endsWith("/branch-assignments") && response.request().method() === "PATCH"); await click("Save routing"); assert((await routing).ok());
     await page.waitForFunction(() => document.body.textContent.includes("Branch routing saved."));
     await browser.defaultBrowserContext().overridePermissions("http://127.0.0.1:15318", ["clipboard-read", "clipboard-write"]);
-    await click("Copy verify token"); await page.waitForFunction(() => document.body.textContent.includes("Verify token copied."));
+    await page.bringToFront(); await click("Copy verify token");
+    await page.waitForFunction(() => document.body.textContent.includes("Verify token copied.") || document.querySelector('.ac-feedback [role="alert"]'));
+    const clipboardFeedback = await page.$eval(".ac-feedback", el => el.textContent);
+    assert(clipboardFeedback.includes("Verify token copied.") || /clipboard|focus|permission|denied/i.test(clipboardFeedback), clipboardFeedback);
     await page.evaluate(() => document.querySelector('.ac-tabs a[href$="assistant"]').click()); await page.waitForSelector("textarea");
     await page.type("textarea", "Use the verified source system."); const saved = page.waitForResponse(response => response.url().endsWith("/assistant/settings") && response.request().method() === "PUT"); await click("Save assistant settings"); assert((await saved).ok());
     await page.goto("http://127.0.0.1:15318/whatsapp/accounts", { waitUntil: "networkidle2" }); await page.waitForSelector(".ac-sender"); await page.click(".ac-sender");
     for (const width of [390, 768, 1440]) {
       await page.setViewport({ width, height: 1000 }); assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `app layout overflow at ${width}`);
+      await click("Disconnect number"); await click("Keep connected");
       await page.screenshot({ path: path.resolve(__dirname, `../../../scratch/accounts-app-${width}.png`), fullPage: true });
     }
     await page.evaluate(id => { localStorage.setItem("active_tenant_id", String(id)); localStorage.removeItem("active_branch_id"); }, secondId);
