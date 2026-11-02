@@ -46,10 +46,12 @@ function createInboxService(database) {
       clauses.push(`EXISTS (SELECT 1 FROM sender_branch_assignments sba WHERE sba.tenant_id = ${alias}.tenant_id AND sba.sender_id = ${alias}.sender_id AND sba.branch_id = ${alias}.branch_id)`);
       if (!permitted.length) clauses.push("1 = 0");
       else { clauses.push(`${alias}.branch_id IN (${permitted.map(() => "?").join(",")})`); params.push(...permitted); }
-      if (req.userRole !== "branch_manager") { clauses.push(`${alias}.owner_user_id = ?`); params.push(req.user.id); }
       if (req.userRole !== "branch_manager") {
-        clauses.push(`(NOT EXISTS (SELECT 1 FROM staff_sender_assignments a WHERE a.tenant_id = ${alias}.tenant_id AND a.user_id = ?) OR EXISTS (SELECT 1 FROM staff_sender_assignments a WHERE a.tenant_id = ${alias}.tenant_id AND a.user_id = ? AND a.sender_id = ${alias}.sender_id))`);
-        params.push(req.user.id, req.user.id);
+        clauses.push(`(
+          (${alias}.owner_user_id = ? AND (NOT EXISTS (SELECT 1 FROM staff_sender_assignments a WHERE a.tenant_id = ${alias}.tenant_id AND a.user_id = ?) OR EXISTS (SELECT 1 FROM staff_sender_assignments a WHERE a.tenant_id = ${alias}.tenant_id AND a.user_id = ? AND a.sender_id = ${alias}.sender_id)))
+          OR EXISTS (SELECT 1 FROM wa_conversation_shares wcs WHERE wcs.tenant_id = ${alias}.tenant_id AND wcs.conversation_id = ${alias}.id AND wcs.shared_with_user_id = ? AND wcs.status = 'active' AND (wcs.expires_at IS NULL OR wcs.expires_at > CURRENT_TIMESTAMP))
+        )`);
+        params.push(req.user.id, req.user.id, req.user.id, req.user.id);
       }
     }
     return { sql: clauses.join(" AND "), params };
@@ -176,8 +178,9 @@ function createInboxService(database) {
         (NOT EXISTS (SELECT 1 FROM staff_sender_assignments a WHERE a.tenant_id = o.tenant_id AND a.user_id = o.user_id)
           OR EXISTS (SELECT 1 FROM staff_sender_assignments a WHERE a.tenant_id = o.tenant_id AND a.user_id = o.user_id AND a.sender_id = ?)) AND EXISTS
         (SELECT 1 FROM staff_branch_memberships m WHERE m.tenant_id = o.tenant_id AND m.user_id = o.user_id AND m.branch_id = ?))
-      OR (o.role = 'branch_manager' AND EXISTS (SELECT 1 FROM staff_branch_memberships m WHERE m.tenant_id = o.tenant_id AND m.user_id = o.user_id AND m.branch_id = ?)))`,
-    [row.tenant_id, row.owner_user_id, row.sender_id, row.branch_id, row.branch_id]);
+      OR (o.role = 'branch_manager' AND EXISTS (SELECT 1 FROM staff_branch_memberships m WHERE m.tenant_id = o.tenant_id AND m.user_id = o.user_id AND m.branch_id = ?))
+      OR EXISTS (SELECT 1 FROM wa_conversation_shares wcs WHERE wcs.tenant_id = o.tenant_id AND wcs.conversation_id = ? AND wcs.shared_with_user_id = o.user_id AND wcs.status = 'active' AND (wcs.expires_at IS NULL OR wcs.expires_at > CURRENT_TIMESTAMP) AND EXISTS (SELECT 1 FROM staff_branch_memberships m WHERE m.tenant_id = o.tenant_id AND m.user_id = o.user_id AND m.branch_id = ?)))`,
+    [row.tenant_id, row.owner_user_id, row.sender_id, row.branch_id, row.branch_id, row.id, row.branch_id]);
     return {users:members.map(member => Number(member.user_id)),current};
   }
   async function recipients(row){return (await audience(row)).users;}

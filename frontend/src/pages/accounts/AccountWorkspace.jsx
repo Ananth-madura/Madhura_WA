@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { API } from "../../config/api";
 import { useEnterprise } from "../../context/EnterpriseContext";
 import { metaSignup } from "./metaSignup";
+import TeamAccessWorkspace from "./TeamAccessWorkspace";
 import "./accounts.css";
 
 const message = error => error.response?.data?.message || error.message || "The request failed. Try again.";
@@ -82,7 +83,7 @@ export function Workspace({ enterprise }) {
   useEffect(() => { refresh().catch(e => { if (alive.current) setError(message(e)); }); }, [refresh]);
   const selectedId = params.get("sender");
   const sender = senders.find(row => String(row.id) === selectedId) || null;
-  const tab = params.get("tab") === "assistant" ? "assistant" : "senders";
+  const tab = params.get("tab") === "assistant" ? "assistant" : params.get("tab") === "assign" || params.get("tab") === "team-access" ? "assign" : "senders";
   const connecting = params.get("connect") === "1";
   const navigate = patch => { const next = new URLSearchParams(params); Object.entries(patch).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key)); setParams(next); };
   useEffect(() => {
@@ -111,10 +112,10 @@ export function Workspace({ enterprise }) {
   return <section className="ac-workspace" aria-labelledby="accounts-title">
     <header className="ac-header"><div><p className="ac-context">{activeTenant.name} / WhatsApp</p><h1 id="accounts-title">Accounts</h1><p>Connect numbers, route conversations and configure your assistant.</p></div>
       <div className="ac-actions"><button disabled={loading || Boolean(busy)} onClick={() => run("refresh", refresh, "Sender list refreshed.")}>Refresh</button>{admin && <button className="ac-primary" disabled={Boolean(busy)} onClick={() => navigate({ connect: "1", tab: null })}>Connect number</button>}</div></header>
-    <nav className="ac-tabs" aria-label="Account sections"><Link aria-current={tab === "senders" ? "page" : undefined} to="?tab=senders">WhatsApp numbers</Link><Link aria-current={tab === "assistant" ? "page" : undefined} to="?tab=assistant">Business assistant</Link><Link to="/whatsapp/automations">Automations</Link><Link to="/whatsapp/flows">Workflow builder</Link><Link to="/whatsapp/templates">Templates</Link><Link to="/whatsapp">Inbox</Link></nav>
+    <nav className="ac-tabs" aria-label="Account sections"><Link aria-current={tab === "senders" ? "page" : undefined} to="?tab=senders">WhatsApp numbers</Link><Link aria-current={tab === "assign" ? "page" : undefined} to="?tab=assign">Assign & Team Access</Link><Link aria-current={tab === "assistant" ? "page" : undefined} to="?tab=assistant">Business assistant</Link><Link to="/whatsapp/automations">Automations</Link><Link to="/whatsapp/flows">Workflow builder</Link><Link to="/whatsapp/templates">Templates</Link><Link to="/whatsapp">Inbox</Link></nav>
     <div className="ac-feedback" aria-live="polite">{notice && <p role="status">{notice}</p>}{error && <p className="ac-error" role="alert">{error}</p>}</div>
     {!admin && <p>Connection settings are managed by your organization owner or administrator.</p>}
-    {tab === "assistant" ? <div className="ac-panel ac-assistant"><Assistant request={request} run={run} busy={busy} admin={admin} /></div> : <>
+    {tab === "assistant" ? <div className="ac-panel ac-assistant"><Assistant request={request} run={run} busy={busy} admin={admin} /></div> : tab === "assign" ? <TeamAccessWorkspace enterprise={enterprise} request={request} admin={admin} /> : <>
       <div className="ac-summary" aria-label="Sender totals">{setup ? <><span><strong>{senders.length}</strong> numbers</span><span><strong>{senders.filter(s => s.status === "connected").length}</strong> connected</span><span><strong>{senders.filter(s => s.health_error || s.status !== "connected").length}</strong> need attention</span></> : <span>{loading ? "Loading connection counts…" : "Connection counts unavailable"}</span>}<span>Organization routing · {branches.length} branches</span></div>
       {connecting && admin && <section className="ac-panel ac-connect" aria-labelledby="connect-title"><div className="ac-section-heading"><h2 id="connect-title">Connect a WhatsApp number</h2><button disabled={Boolean(busy)} onClick={() => { setConnection(emptyConnection); navigate({ connect: null }); }}>Close connection form</button></div>
         <p>Use Meta signup or credentials from your WhatsApp Business app.</p>

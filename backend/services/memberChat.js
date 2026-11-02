@@ -121,6 +121,41 @@ async function findAssignedChat(req, chatId) {
       status: conversation.status || "open",
       senderId: conversation.sender_id || null,
       branchId: conversation.branch_id || null,
+      isShared: false,
+    };
+  }
+
+  const [shared] = await query(
+    `SELECT c.id AS conversation_id, c.status, c.sender_id, c.branch_id,
+            c.owner_user_id, ct.id AS contact_id, ct.phone, ct.name,
+            ct.profile_pic_url, ct.avatar_url, ct.unread_count,
+            s.permission_level, u_owner.first_name AS owner_name
+       FROM wa_conversation_shares s
+       JOIN conversations c ON c.id = s.conversation_id AND c.tenant_id = s.tenant_id
+       JOIN wa_contacts ct ON ct.id = c.contact_id AND ct.tenant_id = c.tenant_id
+       LEFT JOIN users u_owner ON u_owner.id = c.owner_user_id
+      WHERE s.tenant_id = ? AND s.shared_with_user_id = ? AND s.status = 'active'
+        AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)
+        AND ct.phone LIKE ?
+      ORDER BY c.id DESC LIMIT 1`,
+    [req.tenantId, req.user.id, `%${key}`]
+  );
+  if (shared) {
+    return {
+      source: "shared",
+      conversationId: shared.conversation_id,
+      contactId: shared.contact_id,
+      phone: digits(shared.phone),
+      name: shared.name || "",
+      profilePicUrl: shared.profile_pic_url || shared.avatar_url || null,
+      unreadCount: Number(shared.unread_count) || 0,
+      status: shared.status || "open",
+      senderId: shared.sender_id || null,
+      branchId: shared.branch_id || null,
+      isShared: true,
+      sharePermission: shared.permission_level,
+      ownerUserId: shared.owner_user_id,
+      ownerName: shared.owner_name,
     };
   }
 
@@ -223,7 +258,7 @@ function lastMessageFrom(contact, log) {
  * database, so the list is fast and works while the browser session is down.
  */
 async function listChats(req, liveChats = []) {
-  const [conversations, contacts] = await Promise.all([
+  const [conversations, contacts, sharedConversations] = await Promise.all([
     query(
       `SELECT c.id AS conversation_id, c.status, ct.id AS contact_id, ct.phone, ct.name,
               ct.profile_pic_url, ct.avatar_url, ct.unread_count, ct.last_message_text,
@@ -244,6 +279,20 @@ async function listChats(req, liveChats = []) {
         LIMIT 100`,
       [req.tenantId, req.user.id]
     ),
+    query(
+      `SELECT c.id AS conversation_id, c.status, ct.id AS contact_id, ct.phone, ct.name,
+              ct.profile_pic_url, ct.avatar_url, ct.unread_count, ct.last_message_text,
+              ct.last_message_at, s.permission_level, u_owner.first_name AS owner_name
+         FROM wa_conversation_shares s
+         JOIN conversations c ON c.id = s.conversation_id AND c.tenant_id = s.tenant_id
+         JOIN wa_contacts ct ON ct.id = c.contact_id AND ct.tenant_id = c.tenant_id
+         LEFT JOIN users u_owner ON u_owner.id = c.owner_user_id
+        WHERE s.tenant_id = ? AND s.shared_with_user_id = ? AND s.status = 'active'
+          AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)
+        ORDER BY ct.last_message_at DESC, c.id DESC
+        LIMIT 100`,
+      [req.tenantId, req.user.id]
+    ),
   ]);
 
   // One row per phone: a contact can be both conversation-owned and directly
@@ -251,11 +300,17 @@ async function listChats(req, liveChats = []) {
   const byPhone = new Map();
   for (const row of contacts) {
     const key = phoneKey(row.phone);
-    if (key) byPhone.set(key, { ...row, conversation_id: null, status: "open" });
+    if (key) byPhone.set(key, { ...row, conversation_id: null, status: "open", isShared: false });
   }
   for (const row of conversations) {
     const key = phoneKey(row.phone);
-    if (key) byPhone.set(key, row);
+    if (key) byPhone.set(key, { ...row, isShared: false });
+  }
+  for (const row of sharedConversations) {
+    const key = phoneKey(row.phone);
+    if (key && !byPhone.has(key)) {
+      byPhone.set(key, { ...row, isShared: true, sharePermission: row.permission_level, ownerName: row.owner_name });
+    }
   }
   if (!byPhone.size) return [];
 
@@ -317,6 +372,9 @@ async function listChats(req, liveChats = []) {
       conversationId: row.conversation_id || null,
       status: row.status || "open",
       memberScoped: true,
+      isShared: Boolean(row.isShared),
+      sharePermission: row.sharePermission || null,
+      ownerName: row.ownerName || null,
     });
   }
 

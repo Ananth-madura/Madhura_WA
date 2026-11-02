@@ -4,8 +4,10 @@ const db = require("../config/database");
 const { verifyToken } = require("../middleware/authMiddleware");
 const { requireTenantContext } = require("../middleware/tenantMiddleware");
 const { createInboxService } = require("../services/sharedInboxService");
+const { createConversationShareService } = require("../services/conversationShareService");
 const { serverChatStorageEnabled } = require("../services/waChatPrivacy");
 const inbox = createInboxService(db);
+const shareService = createConversationShareService(db);
 const outbound = require("../services/inboxOutbound").createInboxOutbound(db);
 const multer = require("multer");
 const attachmentUpload = multer({storage:multer.memoryStorage(),limits:{fileSize:require("../services/inboxOutbound").MAX_UPLOAD,files:1,fields:12,fieldSize:32768}});
@@ -39,33 +41,97 @@ router.get("/conversations", handle(async (req, res) => {
   let where = access.sql;
   if (req.query.status !== "all") { where += " AND c.status = ?"; params.push(req.query.status || "open"); }
   if (req.query.branch_id && req.query.branch_id !== "all") { where += " AND c.branch_id = ?"; params.push(Number(req.query.branch_id)); }
+  if (req.query.sender_id && req.query.sender_id !== "all") { where += " AND c.sender_id = ?"; params.push(Number(req.query.sender_id)); }
   if (req.query.search) { where += " AND (ct.name LIKE ? OR ct.phone LIKE ?)"; params.push(`%${String(req.query.search).slice(0,100)}%`, `%${String(req.query.search).slice(0,100)}%`); }
-  const activity=req.query.sort==="activity"||String(req.query.before||"").startsWith("v1.");
-  if(activity&&req.query.before){
-    const cursor=require("../services/inboxCursor").decode(req.query.before);
-    if(cursor.at===null){where+=" AND c.updated_at IS NULL AND c.id < ?";params.push(cursor.id);}
-    else{where+=" AND (c.updated_at < ? OR (c.updated_at = ? AND c.id < ?) OR c.updated_at IS NULL)";params.push(cursor.at,cursor.at,cursor.id);}
-  }else if(!activity){const before=Number(req.query.before);if(before>0){where+=" AND c.id < ?";params.push(before);}}
+
+  const filter = req.query.filter || req.query.tab;
+  if (filter === "shared_with_me") {
+    where += " AND EXISTS (SELECT 1 FROM wa_conversation_shares wcs WHERE wcs.tenant_id = c.tenant_id AND wcs.conversation_id = c.id AND wcs.shared_with_user_id = ? AND wcs.status = 'active' AND (wcs.expires_at IS NULL OR wcs.expires_at > CURRENT_TIMESTAMP))";
+    params.push(req.user.id);
+  } else if (filter === "shared_by_me") {
+    where += " AND c.owner_user_id = ? AND EXISTS (SELECT 1 FROM wa_conversation_shares wcs WHERE wcs.tenant_id = c.tenant_id AND wcs.conversation_id = c.id AND wcs.status = 'active' AND (wcs.expires_at IS NULL OR wcs.expires_at > CURRENT_TIMESTAMP))";
+    params.push(req.user.id);
+  } else if (filter === "assigned_to_me" || filter === "my") {
+    where += " AND c.owner_user_id = ?";
+    params.push(req.user.id);
+  } else if (filter === "unassigned") {
+    where += " AND c.owner_user_id IS NULL";
+  }
+
+  const activity = req.query.sort === "activity" || String(req.query.before || "").startsWith("v1.");
+  if (activity && req.query.before) {
+    const cursor = require("../services/inboxCursor").decode(req.query.before);
+    if (cursor.at === null) { where += " AND c.updated_at IS NULL AND c.id < ?"; params.push(cursor.id); }
+    else { where += " AND (c.updated_at < ? OR (c.updated_at = ? AND c.id < ?) OR c.updated_at IS NULL)"; params.push(cursor.at, cursor.at, cursor.id); }
+  } else if (!activity) {
+    const before = Number(req.query.before);
+    if (before > 0) { where += " AND c.id < ?"; params.push(before); }
+  }
   const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
   const rows = await inbox.query(`SELECT c.id, c.tenant_id, c.sender_id, c.contact_id, c.branch_id, c.owner_user_id, c.status,
-    c.last_message_at, c.updated_at, c.service_window_expires_at, c.automation_mode, c.automation_error, ct.name AS contact_name, ct.phone AS contact_phone, s.display_phone AS sender_phone
+    c.last_message_at, c.updated_at, c.service_window_expires_at, c.automation_mode, c.automation_error, ct.name AS contact_name, ct.phone AS contact_phone, s.display_phone AS sender_phone,
+    u_owner.first_name AS owner_name,
+    (SELECT COUNT(*) FROM wa_conversation_shares wcs WHERE wcs.tenant_id = c.tenant_id AND wcs.conversation_id = c.id AND wcs.status = 'active' AND (wcs.expires_at IS NULL OR wcs.expires_at > CURRENT_TIMESTAMP)) AS collaborator_count,
+    (SELECT wcs.permission_level FROM wa_conversation_shares wcs WHERE wcs.tenant_id = c.tenant_id AND wcs.conversation_id = c.id AND wcs.shared_with_user_id = ? AND wcs.status = 'active' AND (wcs.expires_at IS NULL OR wcs.expires_at > CURRENT_TIMESTAMP) LIMIT 1) AS my_share_permission
     FROM conversations c JOIN wa_contacts ct ON ct.id = c.contact_id AND ct.tenant_id = c.tenant_id
-    JOIN wa_senders s ON s.id = c.sender_id AND s.tenant_id = c.tenant_id WHERE ${where} ORDER BY ${activity?"c.updated_at DESC, c.id DESC":"c.id DESC"} LIMIT ?`, [...params, limit]);
-  const last=rows[rows.length-1];
-  res.json({ success: true, conversations: rows, nextCursor: rows.length === limit ? (activity?require("../services/inboxCursor").encode(last):last.id) : null, chatStorage: serverChatStorageEnabled() ? "server" : "device", canManage: inbox.isAdmin(req) || req.userRole === "branch_manager",canSend:!["read_only","campaign_only"].includes(req.waAccessLevel) });
+    JOIN wa_senders s ON s.id = c.sender_id AND s.tenant_id = c.tenant_id
+    LEFT JOIN users u_owner ON u_owner.id = c.owner_user_id
+    WHERE ${where} ORDER BY ${activity ? "c.updated_at DESC, c.id DESC" : "c.id DESC"} LIMIT ?`, [req.user.id, ...params, limit]);
+  const last = rows[rows.length - 1];
+  res.json({
+    success: true,
+    conversations: rows.map(r => ({
+      ...r,
+      is_shared_with_me: Boolean(r.my_share_permission),
+      is_owner: Number(r.owner_user_id) === Number(req.user.id)
+    })),
+    nextCursor: rows.length === limit ? (activity ? require("../services/inboxCursor").encode(last) : last.id) : null,
+    chatStorage: serverChatStorageEnabled() ? "server" : "device",
+    canManage: inbox.isAdmin(req) || req.userRole === "branch_manager",
+    canSend: !["read_only", "campaign_only"].includes(req.waAccessLevel)
+  });
 }));
 
-router.get("/conversations/:id", handle(async (req,res)=>{
-  const row=await inbox.conversation(req,req.params.id);
-  const fields=["id","tenant_id","sender_id","contact_id","branch_id","owner_user_id","status","last_message_at","service_window_expires_at","automation_mode","automation_error","contact_name","contact_phone"];
-  res.json({success:true,conversation:Object.fromEntries(fields.map(field=>[field,row[field]]))});
+router.get("/conversations/:id", handle(async (req, res) => {
+  const row = await inbox.conversation(req, req.params.id);
+  const fields = ["id", "tenant_id", "sender_id", "contact_id", "branch_id", "owner_user_id", "status", "last_message_at", "service_window_expires_at", "automation_mode", "automation_error", "contact_name", "contact_phone"];
+  const conv = Object.fromEntries(fields.map(field => [field, row[field]]));
+
+  const [owner] = row.owner_user_id
+    ? await inbox.query("SELECT id, first_name AS name, email, department FROM users WHERE id = ?", [row.owner_user_id])
+    : [null];
+
+  const myAccess = await shareService.getUserAccess(req.tenantId, row.id, req.user.id, req.userRole, req.waAccessLevel);
+  const allShares = await shareService.getConversationShares(req.tenantId, row.id);
+  const activeCollaborators = allShares.filter(s => s.effective_status === "active");
+
+  res.json({
+    success: true,
+    conversation: {
+      ...conv,
+      owner,
+      my_access: myAccess,
+      collaborators: activeCollaborators
+    }
+  });
 }));
+
 router.get("/conversations/:id/messages", handle(async (req, res) => {
   const row = await inbox.conversation(req, req.params.id);
   const messages = await inbox.query(`SELECT wa_message_id AS id, direction, message_type AS type, status, created_at,
-    media_id AS cloudMediaId, sent_by AS sentBy, ${serverChatStorageEnabled() ? "message_text AS body" : "NULL AS body"}
+    media_id AS cloudMediaId, sent_by AS sentBy, author_id AS authorId, author_name AS authorName,
+    ${serverChatStorageEnabled() ? "message_text AS body" : "NULL AS body"}
     FROM wa_message_logs WHERE tenant_id = ? AND conversation_id = ? ORDER BY wa_message_logs.id DESC LIMIT 100`, [req.tenantId, row.id]);
-  res.json({ success: true, messages: messages.map(item => ({ ...item, isMe: item.direction === "outbound", timestamp: Math.floor(new Date(item.created_at).getTime() / 1000), contentAvailable: item.body !== null })), chatStorage: serverChatStorageEnabled() ? "server" : "device" });
+  res.json({
+    success: true,
+    messages: messages.map(item => ({
+      ...item,
+      isMe: item.direction === "outbound",
+      timestamp: Math.floor(new Date(item.created_at).getTime() / 1000),
+      contentAvailable: item.body !== null
+    })),
+    chatStorage: serverChatStorageEnabled() ? "server" : "device"
+  });
 }));
 router.get("/conversations/:id/templates",handle(async(req,res)=>res.json({templates:await outbound.catalog(req,req.params.id)})));
 router.post("/conversations/:id/send",messageSendLimiter,attachmentUpload.single("file"),handle(async(req,res)=>{
@@ -96,6 +162,9 @@ router.patch("/conversations/:id/contact", handle(async (req, res) => {
 
 router.post("/conversations/:id/reply", messageSendLimiter, handle(async (req, res) => {
   const row = await inbox.conversation(req, req.params.id);
+  const access = await shareService.getUserAccess(req.tenantId, row.id, req.user.id, req.userRole, req.waAccessLevel);
+  if (!access || !access.canReply) throw fail("You do not have permission to reply to this conversation", 403);
+
   const text = String(req.body.text || "").trim();
   const requestId = String(req.body.requestId || "");
   if (!text || text.length > 4096 || !/^[a-zA-Z0-9_-]{8,100}$/.test(requestId)) throw fail("A message up to 4096 characters and a unique requestId are required");
@@ -125,14 +194,14 @@ router.post("/conversations/:id/reply", messageSendLimiter, handle(async (req, r
     throw fail(uncertain ? "Delivery is unknown. Do not resend automatically." : "WhatsApp rejected the send", uncertain ? 504 : 502);
   }
   // A confirmed provider send remains successful even if local metadata persistence fails.
+  const authorName = req.user.name || req.user.first_name || "Staff";
   try {
     await inbox.query("UPDATE wa_inbox_send_requests SET status = 'sent', provider_id = ? WHERE tenant_id = ? AND request_id = ?", [providerId, req.tenantId, requestId]);
-    await inbox.query(`INSERT INTO wa_message_logs (tenant_id, conversation_id, sender_id, phone, direction, message_type, message_text, wa_message_id, status)
-      VALUES (?, ?, ?, ?, 'outbound', 'text', ?, ?, 'sent')`, [req.tenantId, row.id, row.sender_id, row.contact_phone, text, providerId]);
-    await inbox.query("UPDATE wa_message_logs SET sent_by='employee' WHERE tenant_id=? AND wa_message_id=?",[req.tenantId,providerId]);
+    await inbox.query(`INSERT INTO wa_message_logs (tenant_id, conversation_id, sender_id, phone, direction, message_type, message_text, wa_message_id, status, sent_by, author_id, author_name)
+      VALUES (?, ?, ?, ?, 'outbound', 'text', ?, ?, 'sent', 'employee', ?, ?)`, [req.tenantId, row.id, row.sender_id, row.contact_phone, text, providerId, req.user.id, authorName]);
     await inbox.query("UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND id = ?", [req.tenantId, row.id]);
   } catch (error) { console.error("[SharedInbox] Confirmed send metadata could not be saved:", error.code || "DB_ERROR"); }
-  const message = { id: providerId, body: text, isMe: true, sentBy:"employee", status: "sent", timestamp: Math.floor(Date.now()/1000), type: "text" };
+  const message = { id: providerId, body: text, isMe: true, sentBy: "employee", authorId: req.user.id, authorName, status: "sent", timestamp: Math.floor(Date.now() / 1000), type: "text" };
   await inbox.emit(req.app.get("io"), row, "inbox_message", { message }).catch(() => {});
   res.json({ success: true, message });
 }));
@@ -284,6 +353,136 @@ router.patch("/routing/employees/:userId", handle(async (req, res) => {
   });
   await inbox.retryUnassigned(req);
   res.json({ success: true });
+}));
+
+// --- Conversation Sharing & Collaboration Endpoints ---
+router.get("/conversations/:id/shares", handle(async (req, res) => {
+  await inbox.conversation(req, req.params.id);
+  const shares = await shareService.getConversationShares(req.tenantId, Number(req.params.id));
+  res.json({ success: true, shares });
+}));
+
+router.get("/conversations/:id/share-candidates", handle(async (req, res) => {
+  await inbox.conversation(req, req.params.id);
+  const candidates = await shareService.getShareCandidates(req.tenantId, Number(req.params.id), req.query.search);
+  res.json({ success: true, candidates });
+}));
+
+router.post("/conversations/:id/shares", handle(async (req, res) => {
+  const row = await inbox.conversation(req, req.params.id);
+  const access = await shareService.getUserAccess(req.tenantId, row.id, req.user.id, req.userRole, req.waAccessLevel);
+  if (!access || !access.canShare) throw fail("You do not have permission to share this conversation", 403);
+
+  const { userIds, permissionLevel, reason, expiresAt } = req.body;
+  const result = await shareService.shareConversation(
+    req.tenantId,
+    row.id,
+    req.user.id,
+    {
+      userIds,
+      permissionLevel: permissionLevel || "responder",
+      reason,
+      expiresAt
+    },
+    req.app.get("io")
+  );
+
+  await inbox.emit(req.app.get("io"), row, "inbox_changed", {}).catch(() => {});
+  res.status(201).json(result);
+}));
+
+router.patch("/conversations/:id/shares/:shareId", handle(async (req, res) => {
+  const row = await inbox.conversation(req, req.params.id);
+  const access = await shareService.getUserAccess(req.tenantId, row.id, req.user.id, req.userRole, req.waAccessLevel);
+  if (!access || !access.canManageCollaborators) throw fail("You do not have permission to modify collaborators", 403);
+
+  const { permissionLevel, expiresAt } = req.body;
+  const result = await shareService.updateShare(
+    req.tenantId,
+    row.id,
+    Number(req.params.shareId),
+    req.user.id,
+    {
+      permissionLevel,
+      expiresAt
+    },
+    req.app.get("io")
+  );
+
+  await inbox.emit(req.app.get("io"), row, "inbox_changed", {}).catch(() => {});
+  res.json(result);
+}));
+
+router.delete("/conversations/:id/shares/:shareId", handle(async (req, res) => {
+  const row = await inbox.conversation(req, req.params.id);
+  const access = await shareService.getUserAccess(req.tenantId, row.id, req.user.id, req.userRole, req.waAccessLevel);
+  if (!access || !access.canManageCollaborators) throw fail("You do not have permission to revoke collaborator access", 403);
+
+  const result = await shareService.revokeShare(
+    req.tenantId,
+    row.id,
+    Number(req.params.shareId),
+    req.user.id,
+    req.app.get("io")
+  );
+
+  await inbox.emit(req.app.get("io"), row, "inbox_changed", {}).catch(() => {});
+  res.json(result);
+}));
+
+router.get("/conversations/:id/timeline", handle(async (req, res) => {
+  await inbox.conversation(req, req.params.id);
+  const timeline = await shareService.getConversationTimeline(req.tenantId, Number(req.params.id), Number(req.query.limit) || 50);
+  res.json({ success: true, timeline });
+}));
+
+// --- Multi-Number Team Assignment Endpoints (/accounts page) ---
+router.get("/routing/number-assignments", handle(async (req, res) => {
+  if (!inbox.isAdmin(req) && req.userRole !== "branch_manager") throw fail("Administrator or Manager required", 403);
+  const data = await shareService.getNumberAssignmentsOverview(req.tenantId);
+  res.json({ success: true, ...data });
+}));
+
+router.post("/routing/senders/:senderId/assignments", handle(async (req, res) => {
+  if (!inbox.isAdmin(req)) throw fail("Organization administrator required", 403);
+  const { userIds, permissions } = req.body;
+  const result = await shareService.updateSenderTeamAssignments(
+    req.tenantId,
+    Number(req.params.senderId),
+    req.user.id,
+    {
+      userIds,
+      permissions
+    }
+  );
+  res.json(result);
+}));
+
+router.delete("/routing/senders/:senderId/assignments/:userId", handle(async (req, res) => {
+  if (!inbox.isAdmin(req)) throw fail("Organization administrator required", 403);
+  const senderId = Number(req.params.senderId);
+  const userId = Number(req.params.userId);
+  await inbox.transaction(async q => {
+    await q("DELETE FROM staff_sender_assignments WHERE tenant_id = ? AND sender_id = ? AND user_id = ?", [req.tenantId, senderId, userId]);
+    await q("INSERT INTO wa_workspace_audit (tenant_id, actor_id, action, subject_user_id, details) VALUES (?, ?, 'sender.team_assignment_removed', ?, ?)", [
+      req.tenantId,
+      req.user.id,
+      userId,
+      JSON.stringify({ senderId, userId })
+    ]);
+  });
+  res.json({ success: true });
+}));
+
+router.get("/routing/audit", handle(async (req, res) => {
+  if (!inbox.isAdmin(req) && req.userRole !== "branch_manager") throw fail("Administrator or Manager required", 403);
+  const audit = await shareService.getAuditLog(req.tenantId, {
+    limit: Number(req.query.limit) || 50,
+    offset: Number(req.query.offset) || 0,
+    employeeId: req.query.employee_id ? Number(req.query.employee_id) : null,
+    action: req.query.action || null
+  });
+  res.json({ success: true, ...audit });
 }));
 
 router.use((error,req,res,next)=>{

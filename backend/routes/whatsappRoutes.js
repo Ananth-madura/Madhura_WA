@@ -48,6 +48,12 @@ router.use(async (req, res, next) => {
 
   try {
     const access = await memberChat.assertChat(req, target);
+    if (access.isShared && access.sharePermission === "viewer" && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !req.path.endsWith("/read")) {
+      return res.status(403).json({
+        code: "CHAT_VIEW_ONLY",
+        error: "You have view-only collaborator access to this conversation.",
+      });
+    }
     req.memberChat = {
       ...access,
       sessionKey: await memberChat.sessionKeyForPhone(req, target),
@@ -67,6 +73,9 @@ router.use(async (req, res, next) => {
 async function assertMemberChatBody(req, chatId) {
   if (memberChat.isWorkspaceAdmin(req)) return;
   const access = await memberChat.assertChat(req, chatId);
+  if (access.isShared && access.sharePermission === "viewer") {
+    throw Object.assign(new Error("You have view-only collaborator access to this conversation."), { status: 403, code: "CHAT_VIEW_ONLY" });
+  }
   req.memberChat = {
     ...access,
     sessionKey: await memberChat.sessionKeyForPhone(req, chatId),

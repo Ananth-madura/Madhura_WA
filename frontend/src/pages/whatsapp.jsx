@@ -62,6 +62,7 @@ import {
   Columns,
   Upload,
   GitBranch,
+  Eye,
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
@@ -81,6 +82,7 @@ import WAConfigPrompt from "../components/WAConfigPrompt";
 import WAContactAvatar from "../components/WAContactAvatar";
 import WAReminderSheet, { reminderPhoneForChat } from "../components/WAReminderSheet";
 import ChatReminderBar from "../components/ChatReminderBar";
+import WAConversationShareModal from "../components/WAConversationShareModal";
 import { formatReminderTime, parseReminderCommand } from "../utils/reminderTime";
 import "./whatsapp-inbox.css";
 
@@ -556,6 +558,7 @@ export default function WhatsAppPage() {
   const [branchEmployeesLoading, setBranchEmployeesLoading] = useState(false);
   const [transferNote, setTransferNote] = useState("");
   const [transferSubmitting, setTransferSubmitting] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const fetchBranchEmployees = useCallback(async (branchId) => {
     if (!branchId) {
@@ -1272,11 +1275,19 @@ export default function WhatsAppPage() {
       fetchStatus();
     };
 
+    const handleConversationAccessChanged = () => {
+      fetchChats(true);
+    };
+
     socket.on("wa_qr", handleWaQr);
     socket.on("wa_authenticated", handleWaReady);
     socket.on("wa_ready", handleWaReady);
     socket.on("wa_connected", handleWaReady);
     socket.on("wa_disconnected", handleWaDisconnected);
+    socket.on("conversation_shared", handleConversationAccessChanged);
+    socket.on("conversation_share_revoked", handleConversationAccessChanged);
+    socket.on("conversation_collaborator_updated", handleConversationAccessChanged);
+    socket.on("inbox_access_changed", handleConversationAccessChanged);
 
     return () => {
       socket.off("wa_qr", handleWaQr);
@@ -1284,6 +1295,10 @@ export default function WhatsAppPage() {
       socket.off("wa_ready", handleWaReady);
       socket.off("wa_connected", handleWaReady);
       socket.off("wa_disconnected", handleWaDisconnected);
+      socket.off("conversation_shared", handleConversationAccessChanged);
+      socket.off("conversation_share_revoked", handleConversationAccessChanged);
+      socket.off("conversation_collaborator_updated", handleConversationAccessChanged);
+      socket.off("inbox_access_changed", handleConversationAccessChanged);
     };
   }, [fetchStatus, fetchChats, fetchAccountDetails]);
 
@@ -3822,6 +3837,15 @@ export default function WhatsAppPage() {
   }, [chats]);
 
   const allChatsList = deduplicatedChats;
+  const sharedWithMeChatsList = deduplicatedChats.filter(
+    (c) => Boolean(c.isShared || c.is_shared_with_me || c.my_share_permission)
+  );
+  const sharedByMeChatsList = deduplicatedChats.filter(
+    (c) => Boolean(c.collaborator_count && Number(c.collaborator_count) > 0 && Number(c.owner_user_id) === Number(user?.id))
+  );
+  const assignedToMeChatsList = deduplicatedChats.filter(
+    (c) => !c.isShared && !c.is_shared_with_me
+  );
   const directChatsList = deduplicatedChats.filter((c) => !isGroupChat(c));
   const groupChatsList = deduplicatedChats.filter((c) => isGroupChat(c));
   const unreadChatsList = deduplicatedChats.filter((c) => (c.unreadCount || 0) > 0);
@@ -3835,6 +3859,12 @@ export default function WhatsAppPage() {
   let baseList = allChatsList;
   if (sidebarTab === "all") {
     baseList = allChatsList;
+  } else if (sidebarTab === "shared_with_me") {
+    baseList = sharedWithMeChatsList;
+  } else if (sidebarTab === "shared_by_me") {
+    baseList = sharedByMeChatsList;
+  } else if (sidebarTab === "assigned_to_me") {
+    baseList = assignedToMeChatsList;
   } else if (sidebarTab === "direct") {
     baseList = directChatsList;
   } else if (sidebarTab === "unread") {
@@ -4936,6 +4966,29 @@ export default function WhatsAppPage() {
                 </span>
               </button>
               <button
+                onClick={() => setSidebarTab("shared_with_me")}
+                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "shared_with_me" ? "is-active" : ""}`}
+              >
+                <Users size={12} />
+                <span>Shared with Me</span>
+                {sharedWithMeChatsList.length > 0 && (
+                  <span className="hl-badge hl-badge-accent text-[10px] px-1.5 py-0.2 font-extrabold">
+                    {sharedWithMeChatsList.length}
+                  </span>
+                )}
+              </button>
+              {sharedByMeChatsList.length > 0 && (
+                <button
+                  onClick={() => setSidebarTab("shared_by_me")}
+                  className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "shared_by_me" ? "is-active" : ""}`}
+                >
+                  <span>Shared by Me</span>
+                  <span className="hl-badge text-[10px] px-1.5 py-0.2 font-semibold">
+                    {sharedByMeChatsList.length}
+                  </span>
+                </button>
+              )}
+              <button
                 onClick={() => setSidebarTab("unread")}
                 className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "unread" ? "is-active" : ""}`}
               >
@@ -5100,18 +5153,30 @@ export default function WhatsAppPage() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <span className="font-bold text-sm truncate text-[var(--color-ink)]">
-                          {(() => {
-                            const n = chat.name || "";
-                            if (n.replace(/\D/g, "").length >= 13 || n.includes("@lid")) {
-                              return chat.formattedPhone || formatPhoneNumber(chat.phoneNumber) || "WhatsApp Contact";
-                            }
-                            if (n.startsWith("+91") && n.length === 13) {
-                              return `+91 ${n.slice(3, 8)} ${n.slice(8)}`;
-                            }
-                            return n || chat.formattedPhone || "WhatsApp Contact";
-                          })()}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-bold text-sm truncate text-[var(--color-ink)]">
+                            {(() => {
+                              const n = chat.name || "";
+                              if (n.replace(/\D/g, "").length >= 13 || n.includes("@lid")) {
+                                return chat.formattedPhone || formatPhoneNumber(chat.phoneNumber) || "WhatsApp Contact";
+                              }
+                              if (n.startsWith("+91") && n.length === 13) {
+                                return `+91 ${n.slice(3, 8)} ${n.slice(8)}`;
+                              }
+                              return n || chat.formattedPhone || "WhatsApp Contact";
+                            })()}
+                          </span>
+                          {(chat.isShared || chat.is_shared_with_me) && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-extrabold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
+                              Shared
+                            </span>
+                          )}
+                          {Boolean(chat.collaborator_count && Number(chat.collaborator_count) > 0 && !chat.isShared) && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-slate-500/10 text-slate-500 border border-slate-500/20 shrink-0">
+                              Shared ({chat.collaborator_count})
+                            </span>
+                          )}
+                        </div>
                         <span className="hl-id font-semibold shrink-0">
                           {timeStr}
                         </span>
@@ -5191,6 +5256,11 @@ export default function WhatsAppPage() {
                   <span className="wa-contact-name">
                     <strong>{(() => { const n = selectedChat.name || ""; return n.replace(/\D/g, "").length >= 13 || n.includes("@lid") ? selectedChat.formattedPhone || formatPhoneNumber(selectedChat.phoneNumber) || "WhatsApp Contact" : n || selectedChat.formattedPhone || "WhatsApp Contact"; })()}</strong>
                     <span>{selectedChat.isGroup ? "Group conversation" : contactTyping ? "Typing…" : isContactOnline(selectedChat.id) ? "Online" : selectedChat.formattedPhone || formatPhoneNumber(selectedChat.phoneNumber || selectedChat.id) || "WhatsApp contact"}</span>
+                    {(selectedChat.isShared || selectedChat.is_shared_with_me) && (
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 w-fit">
+                        <Users size={11} /> Collaborator ({selectedChat.sharePermission || "Active"})
+                      </span>
+                    )}
                   </span>
                 </button>
                 <div className="wa-header-actions">
@@ -5371,12 +5441,14 @@ export default function WhatsAppPage() {
                     {isAdminView && <label className="wa-ticket-field wa-assignee-field"><Users size={14} /><select aria-label="Assign conversation" value={assignedAgentName} onChange={event => { const member = teamMembers.find(m => `${m.first_name} ${m.last_name || ""}`.trim() === event.target.value); handleAssignAgent(member?.id || null, event.target.value); }}><option value="">Unassigned</option>{teamMembers.map(m => { const name = `${m.first_name} ${m.last_name || ""}`.trim(); return <option key={m.id} value={name}>{name}</option>; })}</select></label>}
                     <span className="wa-conversation-branch" title="Assigned branch"><GitBranch size={13} />{selectedChat.branch_name || activeBranch?.name || "Head Office"}</span>
                   </div>
+                  <button type="button" className={`wa-header-action ${showShareModal ? "is-active" : ""}`} onClick={() => setShowShareModal(true)} title="Share conversation with colleagues"><Users size={16} /><span>Share</span></button>
                   <button type="button" className={`wa-header-action ${showNotesDrawer ? "is-active" : ""}`} onClick={() => { setShowContactInfoDrawer(false); if (!showNotesDrawer) fetchInternalNotes(selectedChat.id); setShowNotesDrawer(v => !v); }} aria-pressed={showNotesDrawer} title="Team notes"><FileText size={16} /><span>Notes</span>{internalNotes.length > 0 && <span className="wa-note-count">{internalNotes.length}</span>}</button>
                   <button type="button" className={`wa-header-action ${showContactInfoDrawer ? "is-active" : ""}`} onClick={() => { setShowNotesDrawer(false); if (!showContactInfoDrawer) fetchContactCrmDetails(selectedChat.id); setShowContactInfoDrawer(v => !v); }} aria-pressed={showContactInfoDrawer} title="Contact details"><Info size={16} /><span>Details</span></button>
                   <details className="wa-conversation-menu" key={selectedChat.id}>
                     <summary aria-label="More conversation actions" title="More conversation actions"><MoreVertical size={19} /></summary>
                     <div className="wa-conversation-menu-panel" onClick={event => { if (event.target.closest("button")) event.currentTarget.closest("details").removeAttribute("open"); }}>
                       <p>Conversation actions</p>
+                      <button type="button" onClick={() => setShowShareModal(true)}><Users size={16} /> Share conversation</button>
                       <button type="button" onClick={() => setShowTemplatePicker(v => !v)}><FileText size={16} /> Message templates</button>
                       {isAdminView && <button type="button" onClick={openSpeedPinModal}><MessageSquare size={16} /> Manage saved replies</button>}
                       {isAdminView && <button type="button" onClick={() => { const bid = selectedChat.branch_id || activeBranch?.id || branches?.[0]?.id || ""; setTransferTargetBranchId(bid); setTransferTargetUserId(selectedChat.owner_user_id || ""); setTransferNote(""); if (bid) fetchBranchEmployees(bid); setShowTransferBranchModal(true); }}><Forward size={16} /> Transfer conversation</button>}
@@ -5561,6 +5633,12 @@ export default function WhatsAppPage() {
                                 const displayBody = interactiveMenu ? interactiveMenu.body : msg.body;
                                 return (
                                   <>
+                                    {msg.isMe && (msg.authorName || msg.authorId || msg.sentBy === "employee") && (
+                                      <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 mb-1 flex items-center gap-1 opacity-90">
+                                        <span>{msg.authorName || (msg.authorId ? `Agent #${msg.authorId}` : "Staff")}</span>
+                                        <span className="font-normal opacity-70">· {msg.roleInConversation || "Sent"}</span>
+                                      </div>
+                                    )}
                                     {interactiveMenu?.header && <p className="font-semibold mb-1">{interactiveMenu.header}</p>}
                                     {msg.location ? (
                                       <a
@@ -6221,7 +6299,12 @@ export default function WhatsAppPage() {
                 </div>
 
                 {/* Message Input Box — replaced by the recording bar while recording */}
-                {recording ? (
+                {Boolean(selectedChat?.isShared && selectedChat?.sharePermission === "viewer") ? (
+                  <div className="hl-card wa-composer-input flex-1 min-w-[8rem] basis-[10rem] flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-semibold rounded-2xl">
+                    <Eye size={16} />
+                    <span>You have view-only access to this conversation. Message sending is disabled.</span>
+                  </div>
+                ) : recording ? (
                   <div className="hl-card wa-composer-input flex-1 min-w-[8rem] basis-[10rem] flex items-center gap-3 px-4 py-2.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-[var(--color-error)] animate-pulse shrink-0" />
                     <span className="hl-id text-sm tabular-nums">
@@ -6255,27 +6338,29 @@ export default function WhatsAppPage() {
                 )}
 
                 {/* Mic when there's nothing to send, Send arrow once you type — like WhatsApp */}
-                {messageInput.trim() || sending ? (
-                  <button
-                    onClick={handleSend}
-                    disabled={!messageInput.trim() || sending}
-                    className="hl-btn-primary p-2.5 rounded-full font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Send"
-                  >
-                    {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => (recording ? stopRecording(false) : startRecording())}
-                    disabled={mediaSending}
-                    className={`hl-btn-primary p-2.5 rounded-full transition disabled:opacity-50 ${recording
-                      ? "hl-btn-danger-ghost"
-                      : ""
-                      }`}
-                    title={recording ? "Send voice note" : "Record voice note"}
-                  >
-                    {mediaSending ? <Loader2 size={18} className="animate-spin" /> : recording ? <Send size={18} /> : <Mic size={18} />}
-                  </button>
+                {!Boolean(selectedChat?.isShared && selectedChat?.sharePermission === "viewer") && (
+                  messageInput.trim() || sending ? (
+                    <button
+                      onClick={handleSend}
+                      disabled={!messageInput.trim() || sending}
+                      className="hl-btn-primary p-2.5 rounded-full font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Send"
+                    >
+                      {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => (recording ? stopRecording(false) : startRecording())}
+                      disabled={mediaSending}
+                      className={`hl-btn-primary p-2.5 rounded-full transition disabled:opacity-50 ${recording
+                        ? "hl-btn-danger-ghost"
+                        : ""
+                        }`}
+                      title={recording ? "Send voice note" : "Record voice note"}
+                    >
+                      {mediaSending ? <Loader2 size={18} className="animate-spin" /> : recording ? <Send size={18} /> : <Mic size={18} />}
+                    </button>
+                  )
                 )}
               </div>
             </>
@@ -7815,6 +7900,17 @@ export default function WhatsAppPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showShareModal && selectedChat && (
+        <WAConversationShareModal
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          chat={selectedChat}
+          currentUser={user}
+          enterpriseHeaders={enterpriseHeaders}
+          onShareUpdated={() => fetchChats(true)}
+        />
       )}
     </div>
   );
