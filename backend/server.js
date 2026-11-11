@@ -388,10 +388,12 @@ app.use("/api/wa/ai", require("./routes/waAiRoutes"));
 app.use("/api/wa/payments", require("./routes/waPaymentsRoutes"));
 app.use("/api/wa/drip", require("./routes/waDripRoutes"));
 app.use("/api/wa/reminders", require("./routes/waReminderRoutes"));
-app.get("/api/v2/wa/media-stream/*", async (req, res) => {
-  const rawKey = req.params[0];
+app.get("/api/v2/wa/media-stream/*storageKey", async (req, res) => {
+  const rawParam = req.params?.storageKey ?? req.params?.[0];
+  const rawKey = Array.isArray(rawParam) ? rawParam.join("/") : rawParam;
   if (!rawKey) return res.status(400).json({ error: "Storage key required" });
-  const storageKey = decodeURIComponent(rawKey);
+  let storageKey;
+  try { storageKey = decodeURIComponent(rawKey); } catch (_) { return res.status(400).json({ error: "Invalid storage key" }); }
   if (storageKey.includes("..")) return res.status(400).json({ error: "Invalid storage key" });
 
   const r2Storage = require("./services/r2StorageService");

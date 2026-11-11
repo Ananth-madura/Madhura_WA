@@ -1131,10 +1131,12 @@ router.post("/assign-agent", async (req, res) => {
   }
 });
 
-router.get("/media-stream/*", async (req, res) => {
-  const rawKey = req.params[0];
+router.get("/media-stream/*storageKey", async (req, res) => {
+  const rawParam = req.params?.storageKey ?? req.params?.[0];
+  const rawKey = Array.isArray(rawParam) ? rawParam.join("/") : rawParam;
   if (!rawKey) return res.status(400).json({ error: "Storage key required" });
-  const storageKey = decodeURIComponent(rawKey);
+  let storageKey;
+  try { storageKey = decodeURIComponent(rawKey); } catch (_) { return res.status(400).json({ error: "Invalid storage key" }); }
   if (storageKey.includes("..")) return res.status(400).json({ error: "Invalid storage key" });
 
   const r2Storage = require("../services/r2StorageService");
