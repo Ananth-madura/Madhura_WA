@@ -31,7 +31,7 @@
  *   - anything an operator triggers by hand from the CRM
  */
 
-const db = require("../config/database");
+const getDb = () => require("../config/database");
 
 /**
  * Minutes a manual agent reply mutes the bot.
@@ -61,7 +61,7 @@ async function shouldBotEngage(phone, opts = {}) {
 
   let contact = null;
   try {
-    const [rows] = await db.promise().query(
+    const [rows] = await getDb().promise().query(
       `SELECT id, name, is_blocked, is_unsubscribed, ai_enabled, ai_paused_until,
               assigned_agent_id, ticket_status, created_at
          FROM wa_contacts WHERE phone LIKE ? LIMIT 1`,
@@ -128,7 +128,7 @@ async function pauseBot(phone, minutes = DEFAULT_TAKEOVER_MIN, reason = "agent_t
     // Scoped to the calling organization: a phone match on its own would mute
     // the same person for every other tenant on this platform.
     const tenantId = await require("./waContactTenancy").tenantForContactWrite({ sessionKey });
-    const [res] = await db.promise().query(
+    const [res] = await getDb().promise().query(
       "UPDATE wa_contacts SET ai_paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE) WHERE tenant_id = ? AND phone LIKE ?",
       [minutes, tenantId, `%${p10}`]
     );
@@ -148,7 +148,7 @@ async function resumeBot(phone, sessionKey = null) {
   if (!p10) return false;
   try {
     const tenantId = await require("./waContactTenancy").tenantForContactWrite({ sessionKey });
-    await db.promise().query(
+    await getDb().promise().query(
       "UPDATE wa_contacts SET ai_paused_until = NULL WHERE tenant_id = ? AND phone LIKE ?",
       [tenantId, `%${p10}`]
     );
@@ -160,10 +160,66 @@ async function resumeBot(phone, sessionKey = null) {
   }
 }
 
+async function syncConversationTakeover({ db: customDb = null, tenantId = null, phone = null, conversationId = null, paused = true, reason = "agent_takeover", minutes = DEFAULT_TAKEOVER_MIN } = {}) {
+  const database = customDb || getDb();
+  const q = async (sql, params = []) => (await database.promise().query(sql, params))[0];
+  const p10 = last10(phone);
+  const tid = Number(tenantId) || null;
+  const cid = Number(conversationId) || null;
+
+  try {
+    if (p10 && p10.length >= 10) {
+      if (paused) {
+        const sql = database.isSqlite
+          ? `UPDATE wa_contacts SET ai_paused_until = datetime('now', '+' || ? || ' minutes') WHERE ${tid ? "tenant_id = ? AND " : ""}phone LIKE ?`
+          : `UPDATE wa_contacts SET ai_paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE) WHERE ${tid ? "tenant_id = ? AND " : ""}phone LIKE ?`;
+        await q(sql, tid ? [minutes, tid, `%${p10}`] : [minutes, `%${p10}`]).catch(() => {});
+      } else {
+        await q(
+          `UPDATE wa_contacts SET ai_paused_until = NULL WHERE ${tid ? "tenant_id = ? AND " : ""}phone LIKE ?`,
+          tid ? [tid, `%${p10}`] : [`%${p10}`]
+        ).catch(() => {});
+      }
+    }
+
+    let convIds = cid ? [cid] : [];
+    if (!convIds.length && tid && p10 && p10.length >= 10) {
+      const matched = await q(
+        "SELECT c.id FROM conversations c JOIN wa_contacts ct ON ct.id = c.contact_id AND ct.tenant_id = c.tenant_id WHERE c.tenant_id = ? AND ct.phone LIKE ? LIMIT 10",
+        [tid, `%${p10}`]
+      ).catch(() => []);
+      convIds = matched.map((r) => r.id);
+    }
+
+    for (const id of convIds) {
+      if (paused) {
+        await q(
+          `UPDATE conversations SET automation_mode = 'human', automation_version = automation_version + 1, updated_at = CURRENT_TIMESTAMP WHERE ${tid ? "tenant_id = ? AND " : ""}id = ?`,
+          tid ? [tid, id] : [id]
+        ).catch(() => {});
+        await q(
+          `UPDATE wa_flow_runs SET status = 'paused_by_agent', end_reason = ?, ended_at = CURRENT_TIMESTAMP WHERE conversation_id = ? AND status = 'active'`,
+          [String(reason).slice(0, 64), id]
+        ).catch(() => {});
+      } else if (tid) {
+        await q(
+          "UPDATE conversations SET automation_mode = 'assistant', automation_version = automation_version + 1, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND id = ? AND automation_mode = 'human'",
+          [tid, id]
+        ).catch(() => {});
+      }
+    }
+    return true;
+  } catch (err) {
+    console.warn("[WA BotGate] syncConversationTakeover warning:", err.message);
+    return false;
+  }
+}
+
 module.exports = {
   shouldBotEngage,
   botMayReply,
   pauseBot,
   resumeBot,
+  syncConversationTakeover,
   DEFAULT_TAKEOVER_MIN,
 };

@@ -139,6 +139,25 @@ router.post("/conversations/:id/send",messageSendLimiter,attachmentUpload.single
     try{req.body[key]=JSON.parse(req.body[key]);}catch(_){throw fail(`Invalid ${key}`);}
   }
   res.json(await outbound.send(req,req.params.id,req.body,req.file));
+  try {
+    const row = await inbox.conversation(req, req.params.id).catch(() => null);
+    if (row) {
+      require("../services/waBotGate").syncConversationTakeover({
+        tenantId: req.tenantId,
+        phone: row.contact_phone,
+        conversationId: row.id,
+        paused: true,
+        reason: "shared_inbox_send",
+      }).catch(() => {});
+      require("../services/crmWebhookForwarder").forwardOutgoingMessage({
+        tenantId: req.tenantId,
+        sessionKey: String(req.user.id),
+        chatId: `${row.contact_phone}@c.us`,
+        phone: row.contact_phone,
+        message: { id: `out_${Date.now()}`, body: req.body?.text || req.body?.templateName || "Outbound Send", isMe: true, sentBy: "employee", timestamp: Math.floor(Date.now() / 1000), type: req.body?.templateName ? "template" : "text" },
+      });
+    }
+  } catch (_) {}
 }));
 router.post("/conversations/:id/read", handle(async (req, res) => {
   const row = await inbox.conversation(req, req.params.id);
@@ -158,6 +177,32 @@ router.patch("/conversations/:id/contact", handle(async (req, res) => {
   await inbox.query("UPDATE wa_contacts SET name = ?, email = ? WHERE tenant_id = ? AND id = ?", [name, email || null, req.tenantId, row.contact_id]);
   await inbox.emit(req.app.get("io"), row, "inbox_changed", {}).catch(() => {});
   res.json({ success: true });
+}));
+
+router.get("/conversations/:id/crm-context", handle(async (req, res) => {
+  const row = await inbox.conversation(req, req.params.id);
+  const context = await require("../services/chatCrmBridge").getUnifiedContext({
+    tenantId: req.tenantId,
+    phone: row.contact_phone,
+    conversationId: row.id,
+  });
+  res.json({ success: true, ...context });
+}));
+
+router.post("/conversations/:id/crm-action", handle(async (req, res) => {
+  const row = await inbox.conversation(req, req.params.id);
+  const { action, payload = {} } = req.body || {};
+  const result = await require("../services/chatCrmBridge").executeAction({
+    tenantId: req.tenantId,
+    userId: req.user.id,
+    phone: row.contact_phone,
+    conversationId: row.id,
+    customerName: row.contact_name,
+    action,
+    payload,
+  });
+  await inbox.emit(req.app.get("io"), row, "inbox_changed", { crmAction: action }).catch(() => {});
+  res.json(result);
 }));
 
 router.post("/conversations/:id/reply", messageSendLimiter, handle(async (req, res) => {
@@ -202,6 +247,20 @@ router.post("/conversations/:id/reply", messageSendLimiter, handle(async (req, r
     await inbox.query("UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND id = ?", [req.tenantId, row.id]);
   } catch (error) { console.error("[SharedInbox] Confirmed send metadata could not be saved:", error.code || "DB_ERROR"); }
   const message = { id: providerId, body: text, isMe: true, sentBy: "employee", authorId: req.user.id, authorName, status: "sent", timestamp: Math.floor(Date.now() / 1000), type: "text" };
+  require("../services/waBotGate").syncConversationTakeover({
+    tenantId: req.tenantId,
+    phone: row.contact_phone,
+    conversationId: row.id,
+    paused: true,
+    reason: "shared_inbox_reply",
+  }).catch(() => {});
+  require("../services/crmWebhookForwarder").forwardOutgoingMessage({
+    tenantId: req.tenantId,
+    sessionKey: String(req.user.id),
+    chatId: `${row.contact_phone}@c.us`,
+    phone: row.contact_phone,
+    message,
+  });
   await inbox.emit(req.app.get("io"), row, "inbox_message", { message }).catch(() => {});
   res.json({ success: true, message });
 }));

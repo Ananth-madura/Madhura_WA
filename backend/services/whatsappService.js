@@ -1137,100 +1137,10 @@ class WhatsAppService {
             return;
           }
 
-          // ── 🔗 AUTO-CAPTURE: Create CRM lead for first-time inbound WhatsApp contacts ──
+          // Bot automations + CRM capture + External Webhooks via unified pipeline (1-to-1 inbound only)
           if (!msg.fromMe && !isGroup && cleanPhone) {
-            try {
-              const waLeadCapture = require("./waLeadCapture");
-              const contactName = msg._data?.notifyName || msg.notifyName || null;
-              waLeadCapture.captureLeadFromWhatsApp({
-                phone: cleanPhone,
-                sessionKey: this.key,
-                name: contactName || undefined,
-                notes: (liveMsg.body || "").slice(0, 500) || "Customer messaged via WhatsApp",
-                sourceDetail: "WhatsApp Inbound",
-              }).catch(() => {});
-            } catch (_) {}
-          }
-
-          // Bot automations only run on inbound 1-to-1 chats, never on groups
-          if (!msg.fromMe && !isGroup && cleanPhone) {
-            const bodyTrimmed = (msg.body || "").trim().toLowerCase();
-            const OPT_OUT_WORDS = ["stop", "unsubscribe", "optout", "opt out", "stop promo", "cancel", "don't message", "dont message"];
-            const isOptOut = OPT_OUT_WORDS.some((kw) => bodyTrimmed === kw || bodyTrimmed.startsWith(kw));
-
-            if (isOptOut) {
-              try {
-                const db = require("../config/database");
-                // Opt-out is per organization: one business's STOP must not
-                // silence the same person for another business on this
-                // platform, and the campaign rows it suppresses are the ones
-                // this organization queued.
-                const optOutTenantId = await require("./waContactTenancy").tenantForContactWrite({
-                  sessionKey: this.key,
-                });
-                await db.promise().query(
-                  "INSERT IGNORE INTO wa_opt_outs (tenant_id, phone, reason, opt_out_keyword) VALUES (?, ?, 'user_request', ?)",
-                  [optOutTenantId, cleanPhone, bodyTrimmed]
-                );
-                await db.promise().query(
-                  "UPDATE wa_contacts SET is_unsubscribed=1, opt_in_status=0, updated_at=NOW() WHERE tenant_id = ? AND phone LIKE ?",
-                  [optOutTenantId, `%${cleanPhone.slice(-10)}`]
-                );
-                await db.promise().query(
-                  "UPDATE wa_campaign_messages SET status='opted_out', opt_out=1, error='User opted out' WHERE tenant_id = ? AND phone=? AND status='queued'",
-                  [optOutTenantId, cleanPhone]
-                );
-                // Send polite unsubscribe confirmation
-                await this.sendMessage(chatId, "✅ You have been successfully unsubscribed. You will no longer receive promotional messages from us. Reply START anytime to re-subscribe.");
-                return;
-              } catch (_) {}
-            }
-
             const interactiveReplyId = msg.selectedButtonId || msg.selectedRowId || msg.selectedListId || msg._data?.selectedButtonId || msg._data?.selectedRowId || null;
             const contactName = msg._data?.notifyName || msg.notifyName || null;
-
-            // 1. Check if inbound message resolves a pending 2-way interactive confirmation
-            const confirmationHandled = await require("./waConfirmationService").handleInboundConfirmation(cleanPhone, msg.body, interactiveReplyId, this.key, chatId).catch(() => false);
-            if (confirmationHandled) return;
-
-            // 2. Check if customer is requesting their bills / receipts (scoped strictly to their phone)
-            const billHandled = await require("./waCustomerBillingService").handleInboundBillKeyword(cleanPhone, msg.body, this.key).catch(() => false);
-            if (billHandled) return;
-
-            // 3. Check if contact is replying to a bulk campaign (Campaign Isolation)
-            // Scoped to the organization that owns this session, otherwise a reply
-            // is attributed to whichever tenant's campaign contacted that number
-            // most recently.
-            const waCampaignEngine = require("./waCampaignEngine");
-            const replyTenantId = await require("./waContactTenancy").tenantForSessionKey(this.key).catch(() => null);
-            const campaignReply = await waCampaignEngine.checkAndRecordCampaignReply(cleanPhone, msg.body, replyTenantId).catch(() => ({ isCampaignReply: false }));
-            const isCampaignReply = Boolean(campaignReply?.isCampaignReply);
-            if (isCampaignReply) {
-              this.emitWaEvent("wa_campaign_reply", chatId, cleanPhone, {
-                campaignId: campaignReply.campaignId,
-                campaignName: campaignReply.campaignName,
-                flowId: campaignReply.flowId || null,
-                body: msg.body,
-              });
-
-              // Direct Campaign -> Flow Bot Connection: If campaign has a linked flow, launch it!
-              if (campaignReply.flowId) {
-                try {
-                  const db = require("../config/database");
-                  const [cFlows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? AND status = 'active' LIMIT 1", [campaignReply.flowId]);
-                  if (cFlows.length > 0) {
-                    console.log(`🚀 [Campaign -> Flow Bot] Launching linked Flow "${cFlows[0].name}" (#${cFlows[0].id}) for +${cleanPhone}`);
-                    await require("./waFlowEngine").startFlowRun(cFlows[0], cleanPhone, this.key, msg.body, chatId);
-                    return;
-                  }
-                } catch (cfErr) {
-                  console.warn("[Campaign -> Flow Bot] Error launching linked flow:", cfErr.message);
-                }
-              }
-            }
-
-            // Describe any attachment, but DON'T download it yet — the engine
-            // calls resolve() only if the step the customer is on wants a file.
             const inboundMedia = isMedia
               ? {
                   hasMedia: true,
@@ -1241,34 +1151,35 @@ class WhatsAppService {
                 }
               : null;
 
-            // 4. Conversational Flow Engine dispatch
-            const flowHandled = await require("./waFlowEngine").dispatchInbound(
-              cleanPhone,
-              msg.body,
-              interactiveReplyId,
-              this.key,
+            await require("./unifiedChatPipeline").processInbound({
+              channel: "web_session",
+              sessionKey: this.key,
+              phone: cleanPhone,
+              chatId,
+              messageId: liveMsg.id,
+              messageText: msg.body || "",
+              messageType: msg.type || "text",
+              contactName,
+              interactiveId: interactiveReplyId,
+              timestampSec: Math.floor(msgTimestampMs / 1000),
+              bypassStaleGuard: true,
               inboundMedia,
-              { isCampaignReply, isHistoric: false, chatId }
-            ).catch(() => false);
-
-            if (!flowHandled) {
-              // 5. Menu keywords handler
-              const handled = await require("./waMenuHandler").handleMenuReply(cleanPhone, { text: msg.body, buttonReplyId: interactiveReplyId }, this.key).catch(() => false);
-              if (!handled) {
-                // 6. Welcome Auto-Reply (Only when customer initiates conversation, strictly never on campaign replies)
-                const welcomeSent = await require("./waAutomationService").maybeSendWelcomeReply(
-                  chatId || cleanPhone,
-                  contactName,
-                  this.key,
-                  { isCampaignReply }
-                ).catch(() => false);
-
-                // 7. AI Auto-Reply (Only if welcome not sent and not replying to campaign)
-                if (!welcomeSent && !isCampaignReply) {
-                  await require("./waAiReply").maybeAutoReply(chatId || cleanPhone, msg.body, contactName, this.key).catch(() => {});
-                }
-              }
-            }
+              onOptOutConfirm: async () => {
+                await this.sendMessage(
+                  chatId,
+                  "✅ You have been successfully unsubscribed. You will no longer receive promotional messages from us. Reply START anytime to re-subscribe.",
+                  { isManual: false }
+                );
+              },
+              onCampaignReply: async (campaignReply) => {
+                this.emitWaEvent("wa_campaign_reply", chatId, cleanPhone, {
+                  campaignId: campaignReply.campaignId,
+                  campaignName: campaignReply.campaignName,
+                  flowId: campaignReply.flowId || null,
+                  body: msg.body,
+                });
+              },
+            });
           }
         });
       };
@@ -1529,14 +1440,18 @@ class WhatsAppService {
         delete this.messagesFetchCache[chatId];
 
         this.emitWaEvent("wa_message_sent", chatId, cleanPhone, newMsg);
-        try {
-          require("./crmWebhookForwarder").forwardOutgoingMessage({
-            sessionKey: this.key,
-            chatId,
-            phone: cleanPhone,
-            message: newMsg,
-          });
-        } catch (_) {}
+        Promise.resolve()
+          .then(async () => {
+            const tenantId = await require("./waContactTenancy").tenantForSessionKey(this.key).catch(() => null);
+            return require("./crmWebhookForwarder").forwardOutgoingMessage({
+              tenantId,
+              sessionKey: this.key,
+              chatId,
+              phone: cleanPhone,
+              message: newMsg,
+            });
+          })
+          .catch(() => {});
 
         process.nextTick(async () => {
           try {

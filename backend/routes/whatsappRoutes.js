@@ -224,10 +224,24 @@ async function recordCloudSend(req, chatId, phone, messageId, body, type = "text
     [contactTenantId, phone.slice(-10), persistContent ? body : null]
   ).catch(() => {});
   await require("../services/waBotGate").pauseBot(chatId, undefined, "manual cloud reply", sessionKey).catch(() => {});
+  await require("../services/waBotGate").syncConversationTakeover({
+    tenantId: contactTenantId,
+    phone,
+    paused: true,
+    reason: "manual_cloud_reply",
+  }).catch(() => {});
+  const outMessage = { id: messageId, from: "me", body, isMe: true, status: "sent", type, timestamp: Math.floor(Date.now() / 1000), ...extra };
+  require("../services/crmWebhookForwarder").forwardOutgoingMessage({
+    tenantId: contactTenantId,
+    sessionKey,
+    chatId,
+    phone,
+    message: outMessage,
+  });
   const io = req.app?.get("io");
   if (io) io.to(`user:${sessionKey}`).emit("wa_message_sent", {
     chatId, phone, sessionKey,
-    message: { id: messageId, from: "me", body, isMe: true, status: "sent", type, timestamp: Math.floor(Date.now() / 1000), ...extra },
+    message: outMessage,
   });
 }
 
@@ -933,69 +947,44 @@ router.delete("/quick-replies/:id", async (req, res) => {
 // Full CRM context for contact sidebar
 router.get("/contact-crm-details/:phone", async (req, res) => {
   try {
-    const rawPhone = req.params.phone || "";
-    const clean10 = rawPhone.replace(/\D/g, "").slice(-10);
-    const digitsOnly = rawPhone.replace(/\D/g, "");
-
-    const [contacts] = await db.promise().query(
-      "SELECT * FROM wa_contacts WHERE phone LIKE ? OR phone LIKE ? LIMIT 1",
-      [`%${clean10}`, `%${digitsOnly}`]
-    ).catch(() => [[]]);
-    const contact = contacts[0] || null;
-
-    // Fetch linked CRM records
-    const [clients] = await db.promise().query(
-      "SELECT id, name, company_name, email, phone, address, source FROM clients WHERE phone LIKE ? OR phone LIKE ? LIMIT 1",
-      [`%${clean10}`, `%${digitsOnly}`]
-    ).catch(() => [[]]);
-
-    const [telecalls] = await db.promise().query(
-      "SELECT id, customer_name, company_name, mobile_number, status, service, remarks, created_at FROM telecalls WHERE mobile_number LIKE ? ORDER BY id DESC LIMIT 5",
-      [`%${clean10}`]
-    ).catch(() => [[]]);
-
-    const [walkins] = await db.promise().query(
-      "SELECT id, customer_name, company_name, mobile_number, status, purpose, created_at FROM walkins WHERE mobile_number LIKE ? ORDER BY id DESC LIMIT 5",
-      [`%${clean10}`]
-    ).catch(() => [[]]);
-
-    const clientComp = clients[0]?.company_name || clients[0]?.name || telecalls[0]?.company_name || "";
-
-    let invoices = [];
-    let quotations = [];
-    let amcContracts = [];
-
-    if (clientComp) {
-      const [inv] = await db.promise().query(
-        "SELECT id, invoice_no, client_company, total_amount, due_date, status, created_at FROM clientinvoices WHERE client_company = ? OR customer_name = ? ORDER BY id DESC LIMIT 5",
-        [clientComp, clientComp]
-      ).catch(() => [[]]);
-      invoices = inv || [];
-
-      const [quot] = await db.promise().query(
-        "SELECT id, quotation_no, company_name, grand_total, status, created_at FROM quotations WHERE company_name = ? ORDER BY id DESC LIMIT 5",
-        [clientComp]
-      ).catch(() => [[]]);
-      quotations = quot || [];
-
-      const [amc] = await db.promise().query(
-        "SELECT id, contract_title, client_company, total_amount, start_date, end_date, status FROM contracts WHERE client_company = ? ORDER BY id DESC LIMIT 5",
-        [clientComp]
-      ).catch(() => [[]]);
-      amcContracts = amc || [];
-    }
-
-    res.json({
-      contact,
-      client: clients[0] || null,
-      telecalls: telecalls || [],
-      walkins: walkins || [],
-      invoices,
-      quotations,
-      amcContracts,
+    const tenantId =
+      req.tenantId ||
+      req.user?.tenant_id ||
+      (await require("../services/waContactTenancy")
+        .tenantForContactWrite({ req, sessionKey: logSessionKey(req) })
+        .catch(() => null));
+    const data = await require("../services/chatCrmBridge").getUnifiedContext({
+      tenantId,
+      phone: req.params.phone,
+      conversationId: req.query.conversationId ? Number(req.query.conversationId) : null,
     });
+    res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+router.post("/contact-crm-action", async (req, res) => {
+  try {
+    const tenantId =
+      req.tenantId ||
+      req.user?.tenant_id ||
+      (await require("../services/waContactTenancy")
+        .tenantForContactWrite({ req, sessionKey: logSessionKey(req) })
+        .catch(() => null));
+    const { phone, conversationId, customerName, action, payload = {} } = req.body || {};
+    const result = await require("../services/chatCrmBridge").executeAction({
+      tenantId,
+      userId: req.user?.id || null,
+      phone,
+      conversationId,
+      customerName,
+      action,
+      payload,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 

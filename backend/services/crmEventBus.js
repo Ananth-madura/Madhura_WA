@@ -650,5 +650,22 @@ for (const evtName of ["invoice_due", "appointment_booked", "appointment_cancell
   });
 }
 
+for (const whEvent of [
+  "invoice_created", "invoice_due", "quotation_created", "payment_received",
+  "new_lead", "walkin_visit", "walkin_created", "amc_created", "service_visit",
+  "appointment_booked", "appointment_cancelled", "ticket_created", "ticket_closed",
+  "approval_requested", "welcome_onboarding",
+]) {
+  crmEventBus.on(whEvent, (payload) => {
+    const tenantId = Number(payload?.tenantId || payload?.tenant_id);
+    if (!Number.isSafeInteger(tenantId) || tenantId < 1) return;
+    setImmediate(() => {
+      try {
+        require("./crmWebhookForwarder").sendTenantEvent(tenantId, `crm.${whEvent}`, payload).catch(() => {});
+      } catch (_) {}
+    });
+  });
+}
+
 module.exports = crmEventBus;
 module.exports.startCrmRealtimeSweep = startCrmRealtimeSweep;

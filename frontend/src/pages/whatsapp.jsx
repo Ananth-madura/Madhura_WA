@@ -73,6 +73,7 @@ import useWorkspaceAccess from "../hooks/useWorkspaceAccess";
 import { DEMO_STATUS, DEMO_CHATS, DEMO_MESSAGES_MAP } from "../auth/demoData";
 import socket from "../socket/socket";
 import RichMessageContent from "../components/RichMessageContent";
+import ChatCrmInterconnectPanel from "../components/ChatCrmInterconnectPanel";
 import { readLocalMessages, writeLocalMessages, mergeLocalMessages, readLocalMedia, writeLocalMedia, localMediaUrl, localCacheOwner, mediaFromFile } from "../utils/waLocalCache";
 import {
   initializeLocalChatStorage,
@@ -894,6 +895,7 @@ export default function WhatsAppPage() {
 
   // Active bot flow status
   const [activeFlowRun, setActiveFlowRun] = useState(null); // { flowName, currentNode, flowId }
+  const [chatBotPaused, setChatBotPaused] = useState(false);
 
   // Sound & notification toggle
   const [soundEnabled, setSoundEnabled] = useState(() => {
@@ -1707,10 +1709,11 @@ export default function WhatsAppPage() {
       const chatPhone = (chat.phoneNumber || chat.phone || chat.id || "").replace(/\D/g, "");
       if (chatPhone) {
         axios.get(`${API}/api/wa/flows/chat-status`, {
-          params: { phone: chatPhone },
+          params: { phone: chatPhone, conversationId: chat.conversationId || undefined },
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }).then((r) => {
           const run = r.data?.activeRun;
+          setChatBotPaused(Boolean(r.data?.botPaused));
           if (run) {
             setActiveFlowRun({ flowId: run.flowId, flowName: run.flowName, currentNode: run.currentNode, phone: chatPhone, chatId: chat.id });
           } else {
@@ -1875,6 +1878,8 @@ export default function WhatsAppPage() {
       );
 
       // Mark message as delivered/sent in thread
+      setChatBotPaused(true);
+      setActiveFlowRun(null);
       const realId = res.data?.id || res.data?.result?.id || tempId;
       updateLocalMessage(tempId, { id: realId, status: "sent", body: textToSend }).catch(() => {});
       if (realId !== tempId) {
@@ -1945,13 +1950,15 @@ export default function WhatsAppPage() {
     }
   };
 
-  const fetchContactCrmDetails = async (phone) => {
+  const fetchContactCrmDetails = async (phone, conversationId = null) => {
     if (!phone) return;
     const cleanPhone = phone.replace(/\D/g, "").slice(-10);
     setCrmDetailsLoading(true);
     try {
       const token = waUiStorage.getItem("token");
+      const convId = conversationId || selectedChat?.conversationId || undefined;
       const res = await axios.get(`${API}/api/whatsapp/contact-crm-details/${cleanPhone}`, {
+        params: convId ? { conversationId: convId } : undefined,
         headers: { Authorization: `Bearer ${token}` },
       });
       setCrmDetails(res.data);
@@ -1961,6 +1968,8 @@ export default function WhatsAppPage() {
     }
     setCrmDetailsLoading(false);
   };
+  const fetchContactCrmDetailsRef = useRef(fetchContactCrmDetails);
+  fetchContactCrmDetailsRef.current = fetchContactCrmDetails;
 
   const fetchQuickReplies = async () => {
     if(demoMode)return;
@@ -2068,6 +2077,7 @@ export default function WhatsAppPage() {
         chatId: selectedChat.id,
       }, { headers: { Authorization: `Bearer ${token}` } });
       const selFlow = flows.find((f) => String(f.id) === String(flowId));
+      setChatBotPaused(false);
       setActiveFlowRun({
         flowId,
         flowName: selFlow?.name || "Automated Bot Flow",
@@ -2310,17 +2320,23 @@ export default function WhatsAppPage() {
     };
   }, []);
 
-  const handleStopChatBot = async () => {
+  const handleToggleBotPause = async (nextPaused) => {
     const rawPhone = (activeFlowRun?.phone || selectedChat?.phoneNumber || selectedChat?.phone || selectedChat?.id || "").replace(/\D/g, "");
     try {
       const token = waUiStorage.getItem("token");
       await axios.post(`${API}/api/wa/flows/stop-chat-bot`, {
         phone: rawPhone,
         conversationId: selectedChat?.conversationId || null,
-        pauseBot: true,
+        pauseBot: Boolean(nextPaused),
+        resumeAuto: !nextPaused,
       }, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      setChatBotPaused(Boolean(nextPaused));
+      if (nextPaused) setActiveFlowRun(null);
     } catch (_) {}
-    setActiveFlowRun(null);
+  };
+
+  const handleStopChatBot = async () => {
+    await handleToggleBotPause(true);
   };
 
   const handleTriggerFlow = async (flowId) => {
@@ -2338,6 +2354,7 @@ export default function WhatsAppPage() {
         sessionKey: selectedChat.senderSessionKey || undefined,
       }, { headers });
       const selFlow = flows.find((f) => String(f.id) === String(flowId));
+      setChatBotPaused(false);
       setActiveFlowRun({
         flowId,
         flowName: selFlow?.name || "Automated Bot Flow",
@@ -3750,7 +3767,7 @@ export default function WhatsAppPage() {
       setSelectedChat({ id: targetId, name: `+${formatted}`, isGroup: false });
       setShowMobileChat(true);
       fetchMessages(targetId);
-      fetchContactCrmDetails(clean);
+      fetchContactCrmDetailsRef.current?.(clean);
     }
 
     // Typing indicator from contact
@@ -3783,22 +3800,36 @@ export default function WhatsAppPage() {
     socket.on("wa_presence", handlePresence);
     socket.on("wa_user_status", handlePresence);
 
-    // Active flow status
+    // Active flow & takeover status
     const handleFlowAdvanced = (data) => {
-      const { phone, flowName, currentNode, flowId, status: flowStatus } = data || {};
+      const { phone, flowName, currentNode, flowId, status: flowStatus, botPaused: nextPaused } = data || {};
       const activeSel = selectedChatRef.current;
       const sel10 = (activeSel?.id || "").replace(/\D/g, "").slice(-10);
       const evt10 = (phone || "").replace(/\D/g, "").slice(-10);
       if (sel10 && sel10 === evt10) {
+        if (typeof nextPaused === "boolean") setChatBotPaused(nextPaused);
         if (flowStatus === "completed" || flowStatus === "stopped") {
           setActiveFlowRun(null);
-        } else {
+        } else if (flowStatus === "resumed") {
+          setChatBotPaused(false);
+        } else if (flowName || flowId) {
           setActiveFlowRun({ flowName, currentNode, flowId });
+          setChatBotPaused(false);
         }
+      }
+    };
+    const handleCrmRecordUpdated = (data) => {
+      const activeSel = selectedChatRef.current;
+      if (!activeSel) return;
+      const sel10 = (activeSel?.id || "").replace(/\D/g, "").slice(-10);
+      const evt10 = String(data?.phone || "").replace(/\D/g, "").slice(-10);
+      if ((evt10 && sel10 === evt10) || (data?.conversationId && activeSel.conversationId === data.conversationId)) {
+        fetchContactCrmDetailsRef.current?.(activeSel.id, activeSel.conversationId);
       }
     };
     socket.on("wa_flow_advanced", handleFlowAdvanced);
     socket.on("wa_flow_status", handleFlowAdvanced);
+    socket.on("crm_record_updated", handleCrmRecordUpdated);
 
     return () => {
       socket.off("wa_message_received", handleRealtimeUpdate);
@@ -3824,6 +3855,7 @@ export default function WhatsAppPage() {
       socket.off("wa_user_status", handlePresence);
       socket.off("wa_flow_advanced", handleFlowAdvanced);
       socket.off("wa_flow_status", handleFlowAdvanced);
+      socket.off("crm_record_updated", handleCrmRecordUpdated);
     };
   }, [fetchChats, fetchMessages, fetchStatus, fetchAccountDetails, isAdminView]);
 
@@ -4592,6 +4624,25 @@ export default function WhatsAppPage() {
               </div>
             );
           })()}
+
+          <ChatCrmInterconnectPanel
+            API={API}
+            selectedChat={selectedChat}
+            crmDetails={crmDetails}
+            crmDetailsLoading={crmDetailsLoading}
+            activeFlowRun={activeFlowRun}
+            botPaused={chatBotPaused}
+            onRefreshCrm={fetchContactCrmDetails}
+            onToggleBotPause={handleToggleBotPause}
+            onOpenFlowModal={() => {
+              fetchFlows();
+              setShowFlowModal(true);
+            }}
+            getAuthHeaders={() => {
+              const token = waUiStorage.getItem("token");
+              return token ? { Authorization: `Bearer ${token}` } : {};
+            }}
+          />
 
           {/* CRM Invoices, Quotations, and AMC History */}
           <div className="py-2 border-b border-[var(--color-rule)] space-y-3">

@@ -426,158 +426,42 @@ async function processIncomingMessage(msg, metadata, contacts = [], account = nu
     [contactTenantId, contactProfileName || `+${phone}`, phone.slice(-10), persistContent ? messageText : null]
   ).catch(() => {});
 
-  // Shared numbers are handled by their assigned employees; legacy session bots do not own these conversations.
-  if (sharedConversation) {
-    const keyword = String(messageText).trim().toLowerCase();
-    if (OPT_OUT_KEYWORDS.includes(keyword)) {
-      await require("../services/sharedInboxAssistant").pause(sharedSender.tenant_id,sharedConversation.id);
-      await db.promise().query("UPDATE wa_contacts SET is_unsubscribed = 1, opt_in_status = 0 WHERE id = ? AND tenant_id = ?", [sharedConversation.contact_id, sharedSender.tenant_id]);
-      await db.promise().query("INSERT IGNORE INTO wa_opt_outs (tenant_id, phone, reason, opt_out_keyword) VALUES (?, ?, 'user_request', ?)", [sharedSender.tenant_id, phone, keyword]);
-    } else if(msg.type==="text"||msg.type==="interactive"||msg.type==="button") {
-      if(Math.abs(Date.now()-Number(msg.timestamp)*1000)>120000)return;
-      const input=msg.interactive?.button_reply?.id||msg.interactive?.list_reply?.id||msg.button?.payload||messageText;
-      if(await require("../services/automationInbound").handle(sharedSender.tenant_id,sharedSender.id,sharedConversation,msgId,input,sharedConversation.isNew))return;
-      const handled=await require("../services/sharedFlowRuntime").handle(sharedSender.tenant_id,sharedConversation.id,msgId,input,sharedConversation.isNew);
-      if(!handled&&msg.type==="text")require("../services/sharedInboxAssistant").enqueue(sharedSender.tenant_id,sharedConversation.id,msgId,messageText,sharedConversation.isNew);
-    }
-    return;
-  }
+  // Unified real-world pipeline for BOTH Shared Organization Inbox and Legacy/Personal Cloud
+  const webhookTimestampSec = parseInt(msg.timestamp || Math.floor(Date.now() / 1000), 10);
+  const buttonReplyId = msg.interactive?.button_reply?.id;
+  const listReplyId = msg.interactive?.list_reply?.id;
+  const interactiveId = buttonReplyId || listReplyId || msg.button?.payload || null;
+  const resolvedTenantId = sharedSender?.tenant_id ? Number(sharedSender.tenant_id) : (contactTenantId || account?.tenantId || null);
 
-  // ── 🔗 AUTO-CAPTURE: Create CRM lead for first-time inbound WhatsApp Cloud API contacts ──
-  try {
-    const waLeadCapture = require("../services/waLeadCapture");
-    waLeadCapture.captureLeadFromWhatsApp({
-      phone: phone,
-      sessionKey,
-      name: contactProfileName || undefined,
-      notes: "Customer messaged via WhatsApp Cloud API",
-      sourceDetail: "WhatsApp Cloud API Inbound",
-    }).catch(() => {});
-  } catch (_) {}
-
-  // ── 3. Check if contact is replying to a bulk campaign (Campaign Isolation) ──
-  const waCampaignEngine = require("../services/waCampaignEngine");
-  // Scoped to this message's organization: without it the newest campaign row
-  // for that number anywhere in the system wins, so a reply from one tenant's
-  // contact could count toward another tenant's campaign and launch its flow.
-  const campaignReplyTenantId = contactTenantId ?? account?.tenantId ?? null;
-  const campaignReply = await waCampaignEngine.checkAndRecordCampaignReply(phone, messageText, campaignReplyTenantId).catch(() => ({ isCampaignReply: false }));
-  const isCampaignReply = Boolean(campaignReply?.isCampaignReply);
-
-  // ── Opt-out detection ─────────────────────────────────────────────────────
-  const normalized = messageText.trim().toLowerCase();
-  const matchedKeyword = OPT_OUT_KEYWORDS.find(kw => normalized === kw || normalized.startsWith(kw));
-
-  if (matchedKeyword) {
-    try {
-      // Insert into opt-outs table, scoped to the organization the sender
-      // belongs to: opting out of one business must not silence the same
-      // person for a different business sharing this platform.
-      await db.promise().query(
-        `INSERT IGNORE INTO wa_opt_outs (tenant_id, phone, reason, opt_out_keyword) VALUES (?, ?, 'user_request', ?)`,
-        [contactTenantId, phone, matchedKeyword]
-      );
-
-      // Mark contact as unsubscribed in wa_contacts
-      await db.promise().query(
-        `UPDATE wa_contacts SET is_unsubscribed=1, opt_in_status=0, updated_at=NOW() WHERE tenant_id = ? AND phone LIKE ?`,
-        [contactTenantId, `%${phone.slice(-10)}`]
-      );
-
-      // Mark pending campaign messages as opted_out
-      await db.promise().query(
-        `UPDATE wa_campaign_messages SET status='opted_out', opt_out=1, error='User opted out' WHERE tenant_id = ? AND phone=? AND status='queued'`,
-        [contactTenantId, phone]
-      );
-
-      await db.promise().query(
-        "INSERT INTO wa_webhook_events (event_type, wa_message_id, phone, status, payload) VALUES (?, ?, ?, ?, ?)",
-        ["opt_out", msgId, phone, "opted_out", JSON.stringify({ keyword: matchedKeyword, message: messageText })]
-      );
-
-      console.log(`✋ Opt-out recorded for ${phone} (keyword: "${matchedKeyword}")`);
-    } catch (e) {
-      console.error("Opt-out handling error:", e.message);
-    }
-  } else {
-    // ── Stale Webhook Replay Guard ───────────────────────────────────────────
-    const webhookTimestampSec = parseInt(msg.timestamp || Math.floor(Date.now() / 1000), 10);
-    const isStaleWebhook = (Date.now() - (webhookTimestampSec * 1000)) > 120000;
-    if (isStaleWebhook) {
-      console.log(`🛡️ [WA Webhook Guard] Stale webhook message from +${phone} (sent ${new Date(webhookTimestampSec * 1000).toISOString()}) — bypassed automations.`);
-      return;
-    }
-
-    const buttonReplyId = msg.interactive?.button_reply?.id;
-    const listReplyId = msg.interactive?.list_reply?.id;
-    const interactiveId = buttonReplyId || listReplyId || null;
-
-    // 1. Check if inbound message resolves a pending 2-way interactive confirmation
-    const waConfirmation = require("../services/waConfirmationService");
-    const confirmationHandled = await waConfirmation.handleInboundConfirmation(phone, messageText, interactiveId, sessionKey).catch(() => false);
-    if (confirmationHandled) return;
-
-    // 2. Check if customer is requesting their bills / receipts (scoped strictly to their phone)
-    const waBilling = require("../services/waCustomerBillingService");
-    const billHandled = await waBilling.handleInboundBillKeyword(phone, messageText).catch(() => false);
-    if (billHandled) return;
-
-    const waFlowEngine = require("../services/waFlowEngine");
-
-    // If the contact is replying to a bulk campaign with an attached Flow Bot, auto-start that flow
-    if (campaignReply?.flowId) {
-      try {
-        const [flowRows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ? AND status = 'active' LIMIT 1", [campaignReply.flowId]);
-        if (flowRows.length > 0) {
-          console.log(`🤖 [WA Campaign -> Flow] Launching Flow "${flowRows[0].name}" for campaign reply from +${phone}`);
-          await waFlowEngine.startFlowRun(flowRows[0], phone, sessionKey, messageText, `${phone}@c.us`);
-          return;
-        }
-      } catch (fErr) {
-        console.warn(`[WA Campaign -> Flow] Failed to trigger linked flow:`, fErr.message);
+  const mediaId = ["image", "document", "video", "audio", "sticker"].includes(msg.type)
+    ? msg[msg.type]?.id
+    : null;
+  const inboundMedia = mediaId
+    ? {
+        hasMedia: true,
+        type: msg.type,
+        filename: msg[msg.type]?.filename || "",
+        caption: msg[msg.type]?.caption || "",
+        resolve: () => wa.downloadMedia(mediaId),
       }
-    }
+    : null;
 
-    // Attachment descriptor — resolve() downloads lazily, only if a collect_input
-    // step actually wants the file.
-    const mediaId = ["image", "document", "video", "audio", "sticker"].includes(msg.type)
-      ? msg[msg.type]?.id
-      : null;
-    const inboundMedia = mediaId
-      ? {
-          hasMedia: true,
-          type: msg.type,
-          filename: msg[msg.type]?.filename || "",
-          caption: msg[msg.type]?.caption || "",
-          resolve: () => wa.downloadMedia(mediaId),
-        }
-      : null;
-
-    waFlowEngine.dispatchInbound(phone, messageText, interactiveId, sessionKey, inboundMedia, { isCampaignReply, isHistoric: false }).then(async (flowHandled) => {
-      if (flowHandled) return;
-
-      const waMenuHandler = require("../services/waMenuHandler");
-      const menuMsg = {
-        text: messageText,
-        buttonReplyId,
-        listReplyId,
-      };
-      const menuHandled = await waMenuHandler.handleMenuReply(phone, menuMsg, sessionKey).catch(() => false);
-      if (!menuHandled && messageText) {
-        // Welcome Auto-Reply (Guarded: only user-initiated, never on campaign replies)
-        const welcomeSent = await require("../services/waAutomationService").maybeSendWelcomeReply(
-          phone,
-          contactProfileName,
-          sessionKey,
-          { isCampaignReply }
-        ).catch(() => false);
-
-        if (!welcomeSent && !isCampaignReply) {
-          return waAiReply.maybeAutoReply(phone, messageText, contactProfileName, sessionKey);
-        }
-      }
-    }).catch(() => {});
-  }
+  await require("../services/unifiedChatPipeline").processInbound({
+    channel: sharedConversation ? "cloud_shared" : "cloud_personal",
+    tenantId: resolvedTenantId,
+    senderId: sharedSender?.id || null,
+    sharedConversation,
+    sessionKey,
+    phone,
+    chatId,
+    messageId: msgId,
+    messageText,
+    messageType,
+    contactName: contactProfileName,
+    interactiveId,
+    timestampSec: webhookTimestampSec,
+    inboundMedia,
+  });
 }
 
 async function handleStatusUpdate(status, account) {
@@ -595,30 +479,44 @@ async function handleStatusUpdate(status, account) {
 
   await require("../services/waDeliveryReceipts").applyDeliveryReceipt(msgId, statusName, timestamp, errorMsg);
 
-  // Real-time UI live tick update via Socket.io
   const ackMap = { sent: 1, delivered: 2, read: 3, failed: -1 };
+  let resolvedTenantId = account?.tenantId || null;
+
+  // Real-time UI live tick update via Socket.io
   try {
     const app = require("../server");
     const io = app.get && app.get("io");
+    const [sharedRows] = await db.promise().query("SELECT c.* FROM conversations c JOIN wa_message_logs m ON m.conversation_id = c.id AND m.tenant_id = c.tenant_id WHERE m.wa_message_id = ? LIMIT 1", [msgId]);
+    if (sharedRows[0]?.tenant_id) resolvedTenantId = Number(sharedRows[0].tenant_id);
     if (io) {
-      const [sharedRows] = await db.promise().query("SELECT c.* FROM conversations c JOIN wa_message_logs m ON m.conversation_id = c.id AND m.tenant_id = c.tenant_id WHERE m.wa_message_id = ? LIMIT 1", [msgId]);
       if (sharedRows[0]) {
         await require("../services/sharedInboxService").createInboxService(db).emit(io, sharedRows[0], "inbox_message", { message: { id: msgId, status: statusName, ack: ackMap[statusName] || 1 } });
-        return;
-      }
-      io.to(`user:${account.sessionKey}`).emit("wa_message_ack", {
-        phone,
-        message: {
-          id: msgId,
-          serializedId: msgId,
-          status: statusName,
-          ack: ackMap[statusName] || 1,
-        },
-      });
-      if (statusName === "read") {
-        io.to(`user:${account.sessionKey}`).emit("wa_chat_read", { phone, chatId: `${phone}@c.us` });
+      } else {
+        io.to(`user:${account.sessionKey}`).emit("wa_message_ack", {
+          phone,
+          message: {
+            id: msgId,
+            serializedId: msgId,
+            status: statusName,
+            ack: ackMap[statusName] || 1,
+          },
+        });
+        if (statusName === "read") {
+          io.to(`user:${account.sessionKey}`).emit("wa_chat_read", { phone, chatId: `${phone}@c.us` });
+        }
       }
     }
+  } catch (_) {}
+
+  try {
+    require("../services/crmWebhookForwarder").forwardMessageStatus({
+      tenantId: resolvedTenantId,
+      sessionKey: account?.sessionKey,
+      messageId: msgId,
+      status: statusName,
+      ack: ackMap[statusName] || 1,
+      to: phone,
+    });
   } catch (_) {}
 
   // (the wa_webhook_events row was already written by claimEvent above)

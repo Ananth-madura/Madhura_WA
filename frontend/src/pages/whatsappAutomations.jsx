@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   Zap, Plus, X, Loader2, CheckCircle2, Play,
   Clock, ToggleLeft, ToggleRight, FileText, ListChecks, Trash2,
-  Sparkles, RefreshCw,
+  Sparkles, RefreshCw, Webhook,
   Users, Bot, ArrowRight, ArrowLeft, ShieldCheck,
   Smartphone, Bell, AlertCircle,
   CreditCard, GitBranch, MessageSquare, HelpCircle,
@@ -21,6 +21,7 @@ import AutomationDraftPreview from "../components/AutomationDraftPreview";
 import AutomationFollowupOptions from "../components/AutomationFollowupOptions";
 import AutomationRuleActivity from "../components/AutomationRuleActivity";
 import AutomationPipelineParams from "../components/AutomationPipelineParams";
+import ExternalWebhookModal from "../components/ExternalWebhookModal";
 import { automationIssues, isApprovedTemplate } from "../utils/automationDraft";
 
 const TRIGGER_CATEGORIES = [
@@ -385,6 +386,7 @@ function AutomationWorkspace() {
   const [testName, setTestName] = useState("Rahul Sharma");
   const [testingTrigger, setTestingTrigger] = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const [showWebhookModal, setShowWebhookModal] = useState(false);
 
   // Welcome Auto-Reply Settings
   const [welcomeSettings, setWelcomeSettings] = useState({
@@ -1637,6 +1639,15 @@ function AutomationWorkspace() {
 
           <button
             type="button"
+            onClick={() => setShowWebhookModal(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50 transition"
+          >
+            <Webhook className="w-4 h-4 text-slate-700" />
+            <span>External Webhooks</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleBulkToggle}
             disabled={bulkToggling || automations.length === 0}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50 transition"
@@ -2786,6 +2797,13 @@ function AutomationWorkspace() {
           </div>
         </div>
       )}
+
+      <ExternalWebhookModal
+        open={showWebhookModal}
+        onClose={() => setShowWebhookModal(false)}
+        apiBase={API}
+        authHeaders={headers}
+      />
     </div>
   );
 }

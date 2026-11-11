@@ -244,18 +244,35 @@ router.post(
 
       if (req.body.resumeAuto === true) {
         await require("../services/waBotGate").resumeBot(rawPhone, req.user?.id).catch(() => {});
+        await require("../services/waBotGate").syncConversationTakeover({
+          tenantId: req.tenantId,
+          phone: rawPhone,
+          conversationId,
+          paused: false,
+          reason: "manual_resume",
+        }).catch(() => {});
       } else if (req.body.pauseBot !== false) {
         await require("../services/waBotGate").pauseBot(rawPhone, undefined, "manual bot stop", req.user?.id).catch(() => {});
+        await require("../services/waBotGate").syncConversationTakeover({
+          tenantId: req.tenantId,
+          phone: rawPhone,
+          conversationId,
+          paused: true,
+          reason: "manual_bot_stop",
+        }).catch(() => {});
       }
 
       try {
         const io = req.app?.get("io");
         if (io) {
-          io.to(`user:${req.user?.id}`).emit("wa_flow_status", {
+          const evtPayload = {
             phone: rawPhone,
-            flowStatus: "stopped",
+            flowStatus: req.body.resumeAuto === true ? "resumed" : "stopped",
+            botPaused: req.body.resumeAuto !== true,
             conversationId: conversationId || null,
-          });
+          };
+          io.to(`user:${req.user?.id}`).emit("wa_flow_status", evtPayload);
+          io.to(`tenant:${req.tenantId}`).emit("wa_flow_status", evtPayload);
         }
       } catch (_) {}
     }

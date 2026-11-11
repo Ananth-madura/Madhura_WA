@@ -263,10 +263,47 @@ router.get("/chats/:chatId/messages", async (req, res) => {
   }
 });
 
-// ── POST /webhook/configure: Runtime webhook URL setup ──────────────────────
-router.post("/webhook/configure", (req, res) => {
+// ── GET /webhook & POST /webhook/configure: Tenant-scoped external CRM webhook ─
+router.get("/webhook", async (req, res) => {
   try {
-    const { webhookUrl, secret } = req.body || {};
+    const tenantId = req.tenantId || req.user?.tenant_id || null;
+    if (tenantId) {
+      const config = await crmWebhookForwarder.getTenantWebhook(tenantId);
+      return res.json({ success: true, webhook: config });
+    }
+    res.json({
+      success: true,
+      webhook: {
+        configured: Boolean(crmWebhookForwarder.getWebhookUrl()),
+        webhook_url: crmWebhookForwarder.getWebhookUrl(),
+        has_secret: Boolean(crmWebhookForwarder.webhookSecret),
+        is_active: Boolean(crmWebhookForwarder.getWebhookUrl()),
+      },
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.post("/webhook/configure", async (req, res) => {
+  try {
+    const { webhookUrl, secret, events, isActive } = req.body || {};
+    const tenantId = req.tenantId || req.user?.tenant_id || null;
+    if (tenantId) {
+      const saved = await crmWebhookForwarder.configureTenantWebhook(tenantId, {
+        webhookUrl,
+        secret,
+        events,
+        isActive,
+        userId: req.user?.id || null,
+      });
+      return res.json({
+        success: true,
+        message: "CRM Webhook URL configured successfully",
+        webhookUrl: saved?.webhook_url || null,
+        webhook: saved,
+      });
+    }
     crmWebhookForwarder.setWebhookUrl(webhookUrl);
     if (secret) crmWebhookForwarder.webhookSecret = secret;
 
@@ -276,32 +313,52 @@ router.post("/webhook/configure", (req, res) => {
       webhookUrl: crmWebhookForwarder.getWebhookUrl(),
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
-// ── GET /webhook/deliveries: View webhook delivery log ──────────────────────
-router.get("/webhook/deliveries", (req, res) => {
-  res.json({
-    success: true,
-    webhookUrl: crmWebhookForwarder.getWebhookUrl(),
-    deliveries: crmWebhookForwarder.getRecentDeliveries(),
-  });
+// ── GET /webhook/deliveries: View tenant webhook delivery log ───────────────
+router.get("/webhook/deliveries", async (req, res) => {
+  try {
+    const tenantId = req.tenantId || req.user?.tenant_id || null;
+    const deliveries = tenantId
+      ? await crmWebhookForwarder.getTenantDeliveries(tenantId, req.query.limit || 50)
+      : crmWebhookForwarder.getRecentDeliveries();
+    const cfg = tenantId ? await crmWebhookForwarder.getTenantWebhook(tenantId).catch(() => null) : null;
+    res.json({
+      success: true,
+      webhookUrl: cfg?.webhook_url || crmWebhookForwarder.getWebhookUrl(),
+      deliveries,
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
 });
 
 // ── POST /webhook/test: Ping the configured CRM webhook URL ─────────────────
 router.post("/webhook/test", async (req, res) => {
   try {
-    const url = req.body?.webhookUrl || crmWebhookForwarder.getWebhookUrl();
-    if (!url) return res.status(400).json({ success: false, error: "No webhook URL configured to test" });
-
-    const result = await crmWebhookForwarder.sendEvent("test.ping", {
-      message: "Ping from Whatsapp_CRM module",
-      timestamp: new Date().toISOString(),
-    });
-    res.json({ success: result?.success || false, result });
+    const tenantId = req.tenantId || req.user?.tenant_id || null;
+    const result = tenantId
+      ? await crmWebhookForwarder.sendTenantEvent(
+          tenantId,
+          "test.ping",
+          {
+            message: "Ping from Whatsapp_CRM module",
+            timestamp: new Date().toISOString(),
+          },
+          req.body?.webhookUrl ? { webhookUrl: req.body.webhookUrl, secret: req.body?.secret || null } : {}
+        )
+      : await crmWebhookForwarder.sendEvent("test.ping", {
+          message: "Ping from Whatsapp_CRM module",
+          timestamp: new Date().toISOString(),
+        });
+    if (!result) {
+      return res.status(400).json({ success: false, error: "No active webhook URL configured to test" });
+    }
+    res.json({ success: Boolean(result?.success), result });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
@@ -345,15 +402,26 @@ router.post(["/events", "/events/trigger"], async (req, res) => {
       }).catch((e) => ({ success: false, error: e.message }));
     }
 
-    // 3. Optional Direct Flow Bot Trigger
+    // 3. Optional Direct Flow Bot Trigger (supports Shared Inbox + Direct Session)
     let flowResult = null;
     const requestedFlowId = flow_id || flowId;
-    if (requestedFlowId && resolvedPhone) {
-      const waFlowEngine = require("../services/waFlowEngine");
-      const cleanPhone = String(resolvedPhone).replace(/\D/g, "");
-      const [fRows] = await db.promise().query("SELECT * FROM wa_flows WHERE tenant_id=? AND id = ? LIMIT 1", [req.tenantId, requestedFlowId]);
-      if (fRows.length > 0) {
-        flowResult = await waFlowEngine.startFlowRun(fRows[0], cleanPhone, req.body?.sessionKey || null);
+    if (requestedFlowId && (resolvedPhone || req.body?.conversationId)) {
+      const cleanPhone = String(resolvedPhone || "").replace(/\D/g, "");
+      const p10 = cleanPhone.slice(-10);
+      const [convRows] = await db.promise().query(
+        req.body?.conversationId
+          ? "SELECT id FROM conversations WHERE tenant_id = ? AND id = ? LIMIT 1"
+          : "SELECT c.id FROM conversations c JOIN wa_contacts ct ON ct.id=c.contact_id AND ct.tenant_id=c.tenant_id WHERE c.tenant_id = ? AND ct.phone LIKE ? ORDER BY c.id DESC LIMIT 1",
+        [req.tenantId, req.body?.conversationId || `%${p10}`]
+      ).catch(() => [[]]);
+      if (convRows.length) {
+        flowResult = await require("../services/sharedFlowRuntime").start(req.tenantId, convRows[0].id, requestedFlowId, req.user?.id || null);
+      } else if (cleanPhone) {
+        const waFlowEngine = require("../services/waFlowEngine");
+        const [fRows] = await db.promise().query("SELECT * FROM wa_flows WHERE tenant_id=? AND id = ? LIMIT 1", [req.tenantId, requestedFlowId]);
+        if (fRows.length > 0) {
+          flowResult = await waFlowEngine.startFlowRun(fRows[0], cleanPhone, req.body?.sessionKey || null, "", null, { _tenant_id: req.tenantId });
+        }
       }
     }
 
@@ -405,22 +473,40 @@ router.post("/lead", async (req, res) => {
 // ── POST /flow/trigger: Trigger Flow Bot on Demand ──────────────────────────
 router.post("/flow/trigger", async (req, res) => {
   try {
-    const { flowId, flow_id, phone, sessionKey, initialMessage, chatId } = req.body || {};
+    const { flowId, flow_id, phone, sessionKey, initialMessage, chatId, conversationId } = req.body || {};
     const targetId = flowId || flow_id;
-    if (!targetId || !phone) return res.status(400).json({ success: false, error: "flowId and phone are required" });
+    if (!targetId || (!phone && !conversationId)) {
+      return res.status(400).json({ success: false, error: "flowId and phone (or conversationId) are required" });
+    }
 
-    let clean = String(phone).replace(/\D/g, "");
+    let clean = String(phone || "").replace(/\D/g, "");
     if (clean.length === 10) clean = "91" + clean;
 
     const [fRows] = await db.promise().query("SELECT * FROM wa_flows WHERE tenant_id=? AND id = ? LIMIT 1", [req.tenantId, targetId]);
     if (!fRows.length) return res.status(404).json({ success: false, error: "Flow not found" });
 
-    const waFlowEngine = require("../services/waFlowEngine");
-    const result = await waFlowEngine.startFlowRun(fRows[0], clean, sessionKey || null, initialMessage || "", chatId || null);
+    const p10 = clean.slice(-10);
+    const [convRows] = await db.promise().query(
+      conversationId
+        ? "SELECT id FROM conversations WHERE tenant_id = ? AND id = ? LIMIT 1"
+        : "SELECT c.id FROM conversations c JOIN wa_contacts ct ON ct.id=c.contact_id AND ct.tenant_id=c.tenant_id WHERE c.tenant_id = ? AND ct.phone LIKE ? ORDER BY c.id DESC LIMIT 1",
+      [req.tenantId, conversationId || `%${p10}`]
+    ).catch(() => [[]]);
 
-    res.json({ success: true, flow: fRows[0].name, result });
+    if (convRows.length) {
+      const result = await require("../services/sharedFlowRuntime").start(req.tenantId, convRows[0].id, targetId, req.user?.id || null);
+      return res.json({ success: true, flow: fRows[0].name, mode: "shared_inbox", result });
+    }
+
+    const waFlowEngine = require("../services/waFlowEngine");
+    if (clean) await require("../services/waBotGate").resumeBot(clean, sessionKey || req.user?.id).catch(() => {});
+    const result = await waFlowEngine.startFlowRun(fRows[0], clean, sessionKey || null, initialMessage || "", chatId || null, {
+      _tenant_id: req.tenantId,
+    });
+
+    res.json({ success: true, flow: fRows[0].name, mode: "direct_session", result });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
