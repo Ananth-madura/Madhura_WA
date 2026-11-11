@@ -211,6 +211,15 @@ if (!claim.affectedRows) {
   let senderPhone = null;
 
   try {
+    let campaignReservation = null;
+    const meter = require("./usageMeteringService");
+    const numericActor = Number.isInteger(Number(sessionKey)) && Number(sessionKey) > 0 ? Number(sessionKey) : null;
+    try {
+      campaignReservation = await meter.reserveCredits({ tenantId, userId: numericActor, operation: "campaign_message", units: 1, referenceId: `cmp_${campaign_id || 0}_${msgId}` });
+    } catch (mErr) {
+      if (["INSUFFICIENT_CREDITS", "EMPLOYEE_LIMIT_EXCEEDED", "EMPLOYEE_SUSPENDED", "EMPLOYEE_RESTRICTED", "PLAN_INACTIVE"].includes(mErr.code)) throw mErr;
+      campaignReservation = null;
+    }
     const { formatMessagePlaceholders, buildTemplateBodyComponent, lookupCrmDataByPhone } = require("./waAutomationService");
     const crmData = await lookupCrmDataByPhone(phone,tenantId).catch(() => ({}));
     const mergedData = { ...crmData, phone };
@@ -248,6 +257,9 @@ if (!claim.affectedRows) {
     waMessageId = require("./waInteractive").deliveryMessageId(result);
     if (!waMessageId || result?.success === false) throw new Error("The sender did not return a confirmed message ID.");
     senderPhone = result?.senderPhone || null;
+    if (typeof campaignReservation !== "undefined" && campaignReservation?.reservationId) {
+      await require("./usageMeteringService").consumeReservation({ reservationId: campaignReservation.reservationId, tenantId, actualUnits: 1 }).catch(() => {});
+    }
 
     // Success
     await db.promise().query(
@@ -308,6 +320,10 @@ if (!claim.affectedRows) {
     return { success: true, waMessageId, senderPhone };
   } catch (err) {
     const errorMsg = err.response?.data?.error?.message || err.message;
+    try {
+      const mRes = await db.promise().query("SELECT id FROM usage_reservations WHERE tenant_id = ? AND reference_id = ? AND status = 'reserved' LIMIT 1", [tenantId, `cmp_${campaign_id || 0}_${msgId}`]);
+      if (mRes[0]?.[0]?.id) await require("./usageMeteringService").releaseReservation({ reservationId: mRes[0][0].id, tenantId }).catch(() => {});
+    } catch (_) {}
     await db.promise().query(
       `UPDATE wa_campaign_messages SET status=?, error=?, next_retry_at=NULL WHERE id=?`,
       [err.deliveryUnknown ? "unknown" : "failed", err.deliveryUnknown ? `[DELIVERY_UNKNOWN] ${errorMsg}` : errorMsg, msgId]

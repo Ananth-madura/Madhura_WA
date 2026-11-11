@@ -51,3 +51,18 @@ test("pending signup offers payment or an explicit free-plan continuation",async
   await waitFor(()=>expect(mockNavigate).toHaveBeenCalledWith("/whatsapp",{replace:true}));
   expect(axios.post.mock.calls[0][0]).toMatch(/\/billing\/onboarding\/skip$/);expect(openRazorpayCheckout).not.toHaveBeenCalled();
 });
+
+test("billing dashboard displays unified usage ledger and employee credit controls when loaded",async()=>{
+  axios.get.mockImplementation(async url=>{
+    if(url.endsWith("/plans"))return {data:{success:true,plans:[plan]}};
+    if(url.endsWith("/gateway"))return {data:{success:true,configured:true,checkoutEnabled:true,webhookConfigured:true,mode:"test",canManage:true}};
+    if(url.endsWith("/orders"))return {data:{success:true,orders:[]}};
+    if(url.endsWith("/usage-summary"))return {data:{success:true,reconciliation:[{creditType:"ai_credits",storedBalance:935,reservedBalance:0,balanced:true}],byOperation:[{meter_key:"ai_reply",total_units:12,total_credits:12}],recentLedger:[]}};
+    if(url.endsWith("/employee-usage"))return {data:{success:true,employees:[{user_id:5,name:"Employee A",role:"agent",actions_count:15,ai_credits_used:12,messages_sent:30,allow_ai:1,allow_campaigns:1,is_suspended:0}]}};
+    return {data:{success:true,organization:{plan:"growth",internal_access:false},wallets:{ai_credits:{balance:935}}}};
+  });
+  render(<WABilling/>);
+  await screen.findByText(/Unified Usage Ledger & Employee Controls/);
+  expect(await screen.findByText("Employee A")).toBeTruthy();
+  expect(screen.getByRole("button",{name:"Set Limits"})).toBeTruthy();
+});

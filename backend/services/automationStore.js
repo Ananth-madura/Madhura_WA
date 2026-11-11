@@ -89,6 +89,7 @@ const FIELDS = [
   "actions_json",
   "schedule_json",
   "category",
+  "branch_id",
 ];
 
 function normalizeActions(raw) {
@@ -158,7 +159,7 @@ function normalize(input) {
   }
 
   const result = { ...input, name: input.name.trim() };
-  for (const field of ["sender_id", "template_id", "followup_template_id", "flow_id", "group_id"]) {
+  for (const field of ["sender_id", "template_id", "followup_template_id", "flow_id", "group_id", "branch_id"]) {
     result[field] = idValue(input[field]);
   }
 
@@ -337,6 +338,35 @@ function createStore(db) {
     ) {
       throw fail("Select a contact group from this organization");
     }
+
+    if (
+      rule.branch_id &&
+      !(await q("SELECT id FROM branches WHERE tenant_id=? AND id=? AND status!='archived'", [tenant, rule.branch_id])).length
+    ) {
+      throw fail("Select a valid active branch from this organization");
+    }
+  }
+
+  async function snapshotVersion(q, tenant, user, automationId, ruleRow, changelog = "Published snapshot") {
+    try {
+      const [maxRow] = await q(
+        "SELECT COALESCE(MAX(version_number), 0) AS ver FROM wa_automation_versions WHERE tenant_id=? AND automation_id=?",
+        [tenant, automationId]
+      );
+      const nextVer = Number(maxRow?.ver || 0) + 1;
+      await q(
+        "UPDATE wa_automation_versions SET status='archived' WHERE tenant_id=? AND automation_id=? AND status='published'",
+        [tenant, automationId]
+      );
+      const ins = await q(
+        "INSERT INTO wa_automation_versions (tenant_id, automation_id, version_number, snapshot_json, status, changelog, published_by) VALUES (?, ?, ?, ?, 'published', ?, ?)",
+        [tenant, automationId, nextVer, JSON.stringify(ruleRow), String(changelog || "Snapshot").slice(0, 250), user || null]
+      );
+      await q("UPDATE wa_automations SET published_version_id=? WHERE tenant_id=? AND id=?", [ins.insertId, tenant, automationId]);
+      return ins.insertId;
+    } catch (_) {
+      return null;
+    }
   }
 
   const audit = (q, tenant, user, id, action, revision) =>
@@ -388,8 +418,11 @@ function createStore(db) {
       }
       if (replies !== undefined) await options(q, id, replies);
       const row = await get(tenant, id, q);
+      if (Number(row.is_active) === 1 || previous) {
+        await snapshotVersion(q, tenant, user, id, row, previous ? "Updated rule configuration" : "Created active rule");
+      }
       await audit(q, tenant, user, id, previous ? "updated" : "created", row.revision);
-      return row;
+      return get(tenant, id, q);
     });
   }
 
@@ -405,6 +438,10 @@ function createStore(db) {
         "UPDATE wa_automations SET is_active=?,revision=revision+1,updated_at=NOW() WHERE tenant_id=? AND id=?",
         [Number(active), tenant, id]
       );
+      if (active) {
+        const fresh = await get(tenant, id, q);
+        await snapshotVersion(q, tenant, user, id, fresh, "Activated automation version");
+      }
       await audit(q, tenant, user, id, active ? "enabled" : "paused", Number(rule.revision) + 1);
       return { success: true, is_active: Number(active) };
     });
@@ -455,7 +492,56 @@ function createStore(db) {
     });
   }
 
-  return { query, get, save, links, setEnabled, remove, replaceOptions, transaction, bulk };
+  async function bulkAction(tenant, user, ids, action) {
+    const cleanIds = [...new Set((Array.isArray(ids) ? ids : []).map((v) => Number(v)).filter((v) => Number.isInteger(v) && v > 0))];
+    if (!cleanIds.length || cleanIds.length > 200) throw fail("Select 1 to 200 automation rules");
+    if (!["activate", "pause", "duplicate", "delete"].includes(action)) throw fail("Unsupported bulk action");
+
+    return transaction(async (q) => {
+      const placeholders = cleanIds.map(() => "?").join(",");
+      const rows = await q(
+        `SELECT * FROM wa_automations WHERE tenant_id=? AND id IN (${placeholders}) FOR UPDATE`,
+        [tenant, ...cleanIds]
+      );
+      if (rows.length !== cleanIds.length) {
+        throw fail("One or more selected rules were not found in this organization", 404);
+      }
+
+      const affected = [];
+      for (const row of rows) {
+        if (action === "activate" || action === "pause") {
+          const nextActive = action === "activate" ? 1 : 0;
+          if (nextActive) {
+            normalize(row);
+            await links(tenant, row, q);
+          }
+          await q(
+            "UPDATE wa_automations SET is_active=?,revision=revision+1,updated_at=NOW() WHERE tenant_id=? AND id=?",
+            [nextActive, tenant, row.id]
+          );
+          if (nextActive) await snapshotVersion(q, tenant, user, row.id, { ...row, is_active: 1 }, "Bulk activated");
+          await audit(q, tenant, user, row.id, nextActive ? "enabled" : "paused", Number(row.revision) + 1);
+          affected.push(row.id);
+        } else if (action === "duplicate") {
+          const copyName = `${String(row.name).slice(0, 235)} (Copy)`;
+          const ins = await q(
+            `INSERT INTO wa_automations (tenant_id,created_by,branch_id,name,trigger_type,sender_id,template_id,message_text,media_type,media_url,sequence_delay_seconds,followup_message_text,followup_media_type,followup_media_url,followup_template_id,flow_id,group_id,delay_minutes,conditions,is_active,actions_json,schedule_json,category)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)`,
+            [tenant, user, row.branch_id || null, copyName, row.trigger_type, row.sender_id, row.template_id, row.message_text, row.media_type, row.media_url, row.sequence_delay_seconds, row.followup_message_text, row.followup_media_type, row.followup_media_url, row.followup_template_id, row.flow_id, row.group_id, row.delay_minutes, row.conditions, row.actions_json, row.schedule_json, row.category]
+          );
+          await audit(q, tenant, user, ins.insertId, "created", 1);
+          affected.push(ins.insertId);
+        } else if (action === "delete") {
+          await audit(q, tenant, user, row.id, "deleted", row.revision);
+          await q("DELETE FROM wa_automations WHERE tenant_id=? AND id=?", [tenant, row.id]);
+          affected.push(row.id);
+        }
+      }
+      return { success: true, action, count: affected.length, affected };
+    });
+  }
+
+  return { query, get, save, links, setEnabled, remove, replaceOptions, transaction, bulk, bulkAction };
 }
 
 module.exports = { createStore, normalize, normalizeOptions, normalizeActions, normalizeSchedule, TRIGGERS };

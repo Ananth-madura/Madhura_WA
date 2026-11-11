@@ -97,9 +97,28 @@ async function processMessage(tenant,id,messageId,input,isNew){
     await notify(tenant,id,"inbox_changed",{handoff:true});return;
   }
   const version=Number(row.automation_version);
-  const text=await generate(tenant,id,input);
+  let aiReservation=null;
+  const meter=require("./usageMeteringService");
+  try{
+    aiReservation=await meter.reserveCredits({tenantId:tenant,operation:"ai_reply",units:1,referenceId:`ai_msg_${tenant}_${id}_${messageId}`});
+  }catch(err){
+    if(["INSUFFICIENT_CREDITS","PLAN_INACTIVE"].includes(err.code)){
+      throw failure(err.message||"AI credits exhausted",402);
+    }
+  }
+  let text;
+  try{
+    text=await generate(tenant,id,input);
+  }catch(genErr){
+    if(aiReservation?.reservationId)await meter.releaseReservation({reservationId:aiReservation.reservationId,tenantId:tenant}).catch(()=>{});
+    throw genErr;
+  }
   row=await conversation(tenant,id);
-  if(!canSend(row)||Number(row.automation_version)!==version||!(await settings(tenant)).enabled)return;
+  if(!canSend(row)||Number(row.automation_version)!==version||!(await settings(tenant)).enabled){
+    if(aiReservation?.reservationId)await meter.releaseReservation({reservationId:aiReservation.reservationId,tenantId:tenant}).catch(()=>{});
+    return;
+  }
+  if(aiReservation?.reservationId)await meter.consumeReservation({reservationId:aiReservation.reservationId,tenantId:tenant,actualUnits:1}).catch(()=>{});
   const client=await require("./waConfigHelper").cloudClientForTenantSender(tenant,row.sender_id,row.branch_id);
   if(!client.isConfigured())throw failure("Sender unavailable",503);
   const requestId=`ai-${crypto.createHash("sha256").update(`${tenant}:${id}:${messageId}`).digest("hex")}`;

@@ -167,4 +167,33 @@ router.post("/orders/:orderId/reconcile",verifyToken,requireTenantContext,requir
 router.get("/gateway",verifyToken,requireTenantContext,requirePermission("billing.read"),async(req,res)=>{
   try{res.json({success:true,...require("../services/razorpayClient").status(),canManage:await billingService.canManageBilling(req)});}catch(_){res.status(503).json({success:false,message:"Billing permissions are unavailable"});}
 });
+
+router.get("/usage-summary",verifyToken,requireTenantContext,requirePermission("billing.read"),async(req,res)=>{
+  try{
+    const summary=await require("../services/usageMeteringService").getUsageCommandCenterSummary(req.tenantId);
+    res.json({success:true,...summary});
+  }catch(err){
+    res.status(err.status||503).json({success:false,message:err.message||"Usage summary is unavailable"});
+  }
+});
+
+router.get("/employee-usage",verifyToken,requireTenantContext,requirePermission("billing.read"),async(req,res)=>{
+  try{
+    const period=typeof req.query.period==="string"&&/^\d{4}-\d{2}(-\d{2})?$/.test(req.query.period)?req.query.period:undefined;
+    const report=await require("../services/usageMeteringService").getEmployeeUsageReport(req.tenantId,period);
+    res.json({success:true,...report});
+  }catch(err){
+    res.status(err.status||503).json({success:false,message:err.message||"Employee usage analytics are unavailable"});
+  }
+});
+
+router.put("/employee-limits/:userId",verifyToken,requireTenantContext,requirePermission("billing.manage"),async(req,res)=>{
+  try{
+    const result=await require("../services/usageMeteringService").updateEmployeeUsageLimit(req.tenantId,req.params.userId,req.body,req.user?.id);
+    res.json(result);
+  }catch(err){
+    res.status(err.status||400).json({success:false,code:err.code,message:err.message||"Could not update employee limit"});
+  }
+});
+
 module.exports=router;

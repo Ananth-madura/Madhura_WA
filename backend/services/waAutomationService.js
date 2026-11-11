@@ -1096,16 +1096,56 @@ async function maybeSendWelcomeReply(targetPhoneOrJid, contactName, sessionKey, 
   }
 }
 
+async function tryMeteredExecution(params, work) {
+  let reservation = null;
+  const meter = require("./usageMeteringService");
+  try {
+    reservation = await meter.reserveCredits(params);
+  } catch (err) {
+    if (["INSUFFICIENT_CREDITS", "EMPLOYEE_LIMIT_EXCEEDED", "EMPLOYEE_SUSPENDED", "EMPLOYEE_RESTRICTED", "PLAN_INACTIVE"].includes(err.code)) {
+      throw err;
+    }
+    reservation = null;
+  }
+
+  try {
+    const out = await work();
+    if (reservation?.reservationId) {
+      await meter.consumeReservation({ reservationId: reservation.reservationId, tenantId: params.tenantId, actualUnits: 1 }).catch(() => {});
+    }
+    return { ...out, _creditsUsed: reservation?.estimatedAmount || 0 };
+  } catch (workErr) {
+    if (reservation?.reservationId) {
+      await meter.releaseReservation({ reservationId: reservation.reservationId, tenantId: params.tenantId }).catch(() => {});
+    }
+    throw workErr;
+  }
+}
+
 async function executePipelineActions(rule, actions, startIndex = 0, cleanPhone, contactName, data = {}, sessionKey = null, execution = {}) {
   let currentData = { ...data };
   const waLoadBalancer = require("./waLoadBalancer");
   const cloudDelivery = require("./automationCloudDelivery");
+  const waBotGate = require("./waBotGate");
   const activeSessionKey = sessionKey || rule.created_by || require("./whatsappService").defaultKey;
   let lastResult = null;
+  let creditsUsed = 0;
 
   for (let i = startIndex; i < actions.length; i++) {
     const action = actions[i];
     const stepNumber = i + 1;
+
+    // Re-check human takeover BEFORE every autonomous pipeline step so automations never talk over an active employee
+    if (!execution.manual) {
+      const gate = await waBotGate.shouldBotEngage(cleanPhone).catch(() => ({ allowed: true }));
+      if (!gate.allowed && gate.reason === "agent_takeover") {
+        await db.promise().query(
+          "INSERT INTO wa_automation_logs (automation_id, version_id, phone, contact_name, trigger_data, status, error, execution_step, session_key, execution_type, actor_user_id) VALUES (?, ?, ?, ?, NULL, 'skipped', ?, ?, ?, 'pipeline', ?)",
+          [rule.id, rule.published_version_id || null, cleanPhone, contactName || null, `Paused before step ${stepNumber}: human agent takeover`, stepNumber, activeSessionKey, execution.actorUserId || null]
+        ).catch(() => {});
+        return { success: true, stoppedByTakeover: true, step: stepNumber };
+      }
+    }
 
     switch (action.type) {
       case "send_message":
@@ -1311,22 +1351,101 @@ async function executePipelineActions(rule, actions, startIndex = 0, cleanPhone,
       case "wait_delay": {
         const delaySeconds = Math.max(5, Number(action.params?.seconds || (Number(action.params?.minutes || 1) * 60)));
         await db.promise().query(
-          "INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, scheduled_for, execution_step, session_key, execution_type) VALUES (?, ?, ?, ?, 'scheduled', DATE_ADD(NOW(), INTERVAL ? SECOND), ?, ?, 'pipeline')",
-          [rule.id, cleanPhone, contactName, JSON.stringify({ actions, nextStep: stepNumber, currentData }), delaySeconds, stepNumber, activeSessionKey]
+          "INSERT INTO wa_automation_logs (automation_id, version_id, phone, contact_name, trigger_data, status, scheduled_for, execution_step, session_key, execution_type) VALUES (?, ?, ?, ?, ?, 'scheduled', DATE_ADD(NOW(), INTERVAL ? SECOND), ?, ?, 'pipeline')",
+          [rule.id, rule.published_version_id || null, cleanPhone, contactName, JSON.stringify({ actions, nextStep: stepNumber, currentData }), delaySeconds, stepNumber, activeSessionKey]
         );
         return { success: true, scheduledNext: true, delaySeconds, nextStep: stepNumber };
+      }
+
+      case "branch_condition": {
+        const cond = action.params?.conditions || action.params || {};
+        const evalRes = require("./waRuleConditions").evaluateConditionsWithDiagnostics(cond, { ...currentData, phone: cleanPhone, name: contactName });
+        currentData.last_condition_matched = evalRes.matched;
+        if (!evalRes.matched) {
+          if (action.params?.on_false === "stop") {
+            return { success: true, stoppedByCondition: true, step: stepNumber };
+          }
+          if (action.params?.on_false === "skip_next") {
+            i++;
+          }
+        }
+        break;
+      }
+
+      case "internal_notification": {
+        const noteText = formatMessagePlaceholders(action.params?.message || `Automation "${rule.name}" alert for ${contactName || cleanPhone}`, contactName, currentData);
+        try {
+          const io = require("../sockets/chatsockets").getIO();
+          if (io) {
+            const payload = { automationId: rule.id, phone: cleanPhone, contactName, message: noteText, step: stepNumber, timestamp: new Date().toISOString() };
+            io.to(`tenant:${rule.tenant_id}`).emit("wa_internal_alert", payload);
+            if (action.params?.user_id) io.to(`user:${action.params.user_id}`).emit("wa_internal_alert", payload);
+          }
+        } catch (_) {}
+        break;
+      }
+
+      case "call_webhook": {
+        try {
+          const whRunner = require("./flowIntegrations").createWebhookRunner();
+          const outputs = await whRunner({ node_key: action.id || `step_${stepNumber}`, node_type: "call_webhook", config: action.params || {} }, currentData, {
+            tenantId: rule.tenant_id,
+            runId: execution.logId || 0,
+            messageId: execution.requestId || `auto-${rule.id}-${stepNumber}`,
+            occurrence: stepNumber,
+          });
+          Object.assign(currentData, outputs);
+        } catch (whErr) {
+          const uncertain = /ETIMEDOUT|ECONNRESET|ECONNABORTED|timeout/i.test(whErr.code || whErr.message || "");
+          await db.promise().query(
+            "INSERT INTO wa_automation_logs (automation_id, version_id, phone, contact_name, trigger_data, status, error, execution_step, session_key, execution_type, actor_user_id) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, 'pipeline', ?)",
+            [rule.id, rule.published_version_id || null, cleanPhone, contactName || null, uncertain ? "unknown" : "failed", String(whErr.message || "Webhook failed").slice(0, 500), stepNumber, activeSessionKey, execution.actorUserId || null]
+          ).catch(() => {});
+          if (uncertain || action.params?.stop_on_error !== false) {
+            await db.promise().query("UPDATE wa_automations SET failed_runs_count = failed_runs_count + 1, last_executed_at = NOW() WHERE id = ?", [rule.id]).catch(() => {});
+            return { success: false, deliveryUnknown: uncertain, error: whErr.message };
+          }
+        }
+        break;
+      }
+
+      case "ai_process": {
+        const promptText = formatMessagePlaceholders(action.params?.prompt || "Summarize customer inquiry cleanly.", contactName, currentData);
+        const aiOut = await tryMeteredExecution(
+          { tenantId: rule.tenant_id, userId: execution.actorUserId || null, operation: "ai_process", automationId: rule.id, referenceId: `ai_proc_${rule.id}_${execution.requestId || Date.now()}_${stepNumber}` },
+          async () => {
+            const [conv] = await db.promise().query(
+              "SELECT c.id FROM conversations c JOIN wa_contacts ct ON ct.id=c.contact_id WHERE c.tenant_id=? AND (ct.phone=? OR ct.phone LIKE ?) ORDER BY c.id DESC LIMIT 1",
+              [rule.tenant_id, cleanPhone, `%${cleanPhone.slice(-10)}`]
+            );
+            if (!conv.length) return { reply: formatMessagePlaceholders(action.params?.fallback_reply || "Thank you for contacting us.", contactName, currentData) };
+            const reply = await require("./sharedInboxAssistant").generate(rule.tenant_id, conv[0].id, promptText);
+            return { reply };
+          }
+        );
+        creditsUsed += aiOut._creditsUsed || 0;
+        const outVar = action.params?.output_var || "ai_output";
+        currentData[outVar] = aiOut.reply;
+        if (action.params?.send_reply && aiOut.reply) {
+          if (rule.sender_id) {
+            lastResult = await cloudDelivery.send({ tenant_id: rule.tenant_id, sender_id: rule.sender_id }, cleanPhone, aiOut.reply, currentData, { requestId: `aip_${rule.id}_${stepNumber}_${Date.now()}` });
+          } else {
+            lastResult = await waLoadBalancer.sendTextMessage(cleanPhone, aiOut.reply, activeSessionKey);
+          }
+        }
+        break;
       }
     }
   }
 
-  // Update run count
-  await db.promise().query("UPDATE wa_automations SET run_count = run_count + 1 WHERE id = ?", [rule.id]).catch(() => {});
+  // Update run count and timestamps
+  await db.promise().query("UPDATE wa_automations SET run_count = run_count + 1, last_executed_at = NOW() WHERE id = ?", [rule.id]).catch(() => {});
 
   // Record log
   const confirmedId = lastResult ? require("./waInteractive").deliveryMessageId(lastResult) : null;
   await db.promise().query(
-    "INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, execution_step, session_key, wa_message_id, execution_type, diagnostics_json) VALUES (?, ?, ?, NULL, 'sent', ?, ?, ?, 'pipeline', ?)",
-    [rule.id, cleanPhone, contactName || null, actions.length, activeSessionKey, confirmedId, JSON.stringify(execution.diagnostics || [])]
+    "INSERT INTO wa_automation_logs (automation_id, version_id, credits_used, actor_user_id, branch_id, phone, contact_name, trigger_data, status, execution_step, session_key, wa_message_id, execution_type, diagnostics_json) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'sent', ?, ?, ?, 'pipeline', ?)",
+    [rule.id, rule.published_version_id || null, creditsUsed, execution.actorUserId || null, rule.branch_id || null, cleanPhone, contactName || null, actions.length, activeSessionKey, confirmedId, JSON.stringify(execution.diagnostics || [])]
   ).catch(() => {});
 
   return { success: true, result: lastResult };
@@ -1381,7 +1500,13 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
   const chatId = actualTargetChatId || `${cleanPhone}@c.us`;
 
   try {
-    // ── STEP 1: Main Message Send (Template, Rich Media, or Text) ──────────────
+    // ── STEP 1: Main Message Send (Takeover, Opt-out & Usage Check) ──────────
+    if (!execution.manual && execution.phase !== 2 && rule.trigger_type !== "welcome_message") {
+      const gate = await require("./waBotGate").shouldBotEngage(cleanPhone).catch(() => ({ allowed: true }));
+      if (!gate.allowed && gate.reason === "agent_takeover") {
+        throw new Error("Paused: employee recently replied in inbox (human takeover active).");
+      }
+    }
     const [optedOut] = await db.promise().query(
       "SELECT id FROM wa_opt_outs WHERE tenant_id=? AND (phone = ? OR phone LIKE ?) LIMIT 1",
       [rule.tenant_id, cleanPhone, `%${cleanPhone.slice(-10)}`]
@@ -1391,23 +1516,31 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
       [rule.tenant_id, cleanPhone, `%${cleanPhone.slice(-10)}`]
     );
     if (optedOut.length || blocked.length) throw new Error("Contact opted out, unsubscribed, or is blocked.");
-    if(rule.sender_id){
-      sentResult=await require("./automationCloudDelivery").send(rule,cleanPhone,actualMessageText,{...actualData,name:contactName||actualData.name},execution);
-    }else if (rule.template_name) {
-      const bodyComponent = buildTemplateBodyComponent(rule.template_body, contactName, actualData);
-      sentResult = await waLoadBalancer.sendTemplateMessage(sendTarget, rule.template_name, "en", bodyComponent ? [bodyComponent] : [], activeSessionKey);
-    } else if (rule.media_type && rule.media_url) {
-      sentResult = await waLoadBalancer.sendMediaMessage(sendTarget, rule.media_type, rule.media_url, actualMessageText || "", rule.media_filename || "", activeSessionKey);
-    } else {
-      sentResult = await waLoadBalancer.sendTextMessage(sendTarget, actualMessageText, activeSessionKey);
-    }
 
+    const metered = await tryMeteredExecution(
+      { tenantId: rule.tenant_id, userId: execution.actorUserId || null, operation: "automation_execution", automationId: rule.id, referenceId: execution.requestId || `auto_send_${rule.id}_${Date.now()}_${cleanPhone}` },
+      async () => {
+        let resObj = null;
+        if (rule.sender_id) {
+          resObj = await require("./automationCloudDelivery").send(rule, cleanPhone, actualMessageText, { ...actualData, name: contactName || actualData.name }, execution);
+        } else if (rule.template_name) {
+          const bodyComponent = buildTemplateBodyComponent(rule.template_body, contactName, actualData);
+          resObj = await waLoadBalancer.sendTemplateMessage(sendTarget, rule.template_name, "en", bodyComponent ? [bodyComponent] : [], activeSessionKey);
+        } else if (rule.media_type && rule.media_url) {
+          resObj = await waLoadBalancer.sendMediaMessage(sendTarget, rule.media_type, rule.media_url, actualMessageText || "", rule.media_filename || "", activeSessionKey);
+        } else {
+          resObj = await waLoadBalancer.sendTextMessage(sendTarget, actualMessageText, activeSessionKey);
+        }
+        return { resObj };
+      }
+    );
+    sentResult = metered.resObj;
     const confirmedId = require("./waInteractive").deliveryMessageId(sentResult);
     if (!confirmedId) throw Object.assign(new Error("Provider acceptance could not be confirmed."), { deliveryUnknown: true });
 
     // Count an automation once, independent of its follow-up.
     if (execution.phase !== 2) await db.promise().query(
-      "UPDATE wa_automations SET run_count = run_count + 1 WHERE id = ?",
+      "UPDATE wa_automations SET run_count = run_count + 1, last_executed_at = NOW() WHERE id = ?",
       [rule.id]
     );
 
@@ -1553,9 +1686,10 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
     deliveryUnknown = !!err.deliveryUnknown || !!sentResult;
     console.error(`❌ [WA Automation] Failed sending rule '${rule.name}' to ${cleanPhone}:`, sendError);
 
+    await db.promise().query("UPDATE wa_automations SET failed_runs_count = failed_runs_count + 1, last_executed_at = NOW() WHERE id = ?", [rule.id]).catch(() => {});
     if (!execution.logId) await db.promise().query(
-      "INSERT INTO wa_automation_logs (automation_id, phone, contact_name, trigger_data, status, error, session_key, execution_step) VALUES (?, ?, ?, NULL, ?, ?, ?, ?)",
-      [rule.id, cleanPhone, contactName || null, deliveryUnknown ? "unknown" : "failed", sendError, activeSessionKey, execution.phase || 1]
+      "INSERT INTO wa_automation_logs (automation_id, version_id, actor_user_id, branch_id, phone, contact_name, trigger_data, status, error, session_key, execution_step) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)",
+      [rule.id, rule.published_version_id || null, execution.actorUserId || null, rule.branch_id || null, cleanPhone, contactName || null, deliveryUnknown ? "unknown" : "failed", sendError, activeSessionKey, execution.phase || 1]
     ).catch(() => {});
   }
   if(warnings.length)await db.promise().query("UPDATE wa_automation_logs SET error=? WHERE automation_id=? AND wa_message_id=?",[warnings.join(" ").slice(0,500),rule.id,require("./waInteractive").deliveryMessageId(sentResult)]).catch(()=>{});

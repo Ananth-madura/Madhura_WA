@@ -242,6 +242,33 @@ function escapeRegExpList(flow) {
   return new Set(["stop", "unsubscribe", "cancel bot", "human", "agent", ...extra]);
 }
 
+async function withMeter(params, work) {
+  let reservation = null;
+  let meter = null;
+  try {
+    const mod = require("./usageMeteringService");
+    meter = typeof mod.createMeter === "function" ? mod.createMeter({ db: require("../config/database") }) : mod;
+    reservation = await meter.reserveCredits(params);
+  } catch (err) {
+    if (["INSUFFICIENT_CREDITS", "EMPLOYEE_LIMIT_EXCEEDED", "EMPLOYEE_SUSPENDED", "EMPLOYEE_RESTRICTED", "PLAN_INACTIVE"].includes(err.code)) {
+      throw err;
+    }
+    reservation = null;
+  }
+  try {
+    const res = await work();
+    if (reservation?.reservationId && meter) {
+      await meter.consumeReservation({ reservationId: reservation.reservationId, tenantId: params.tenantId, actualUnits: 1 }).catch(() => {});
+    }
+    return res;
+  } catch (err) {
+    if (reservation?.reservationId && meter) {
+      await meter.releaseReservation({ reservationId: reservation.reservationId, tenantId: params.tenantId }).catch(() => {});
+    }
+    throw err;
+  }
+}
+
 async function runLiveAction(tenant, c, state, node, vars, messageId, actionIndex, isNew) {
   const integrations = require("./flowIntegrations");
   const config = node.config || {};
@@ -253,12 +280,18 @@ async function runLiveAction(tenant, c, state, node, vars, messageId, actionInde
     return integrations.createWebhookRunner()(node, vars, { tenantId: tenant, conversationId: c.id, runId: state.runId, messageId, occurrence: actionIndex });
   }
   if (node.node_type === "ai_reply") {
-    const reply = await require("./sharedInboxAssistant").generate(tenant, c.id, definition.interpolate(config.prompt, vars));
+    const reply = await withMeter(
+      { tenantId: tenant, operation: "ai_reply", flowId: state.flow?.id, flowRunId: state.runId, referenceId: `flow_ai_${state.runId}_${messageId}_${actionIndex}` },
+      () => require("./sharedInboxAssistant").generate(tenant, c.id, definition.interpolate(config.prompt, vars))
+    );
     return { [config.output_variable]: reply };
   }
   if (node.node_type === "ai_generate") {
     const prompt = definition.interpolate(config.system_prompt ? `${config.system_prompt}\n\n${config.prompt || ""}` : config.prompt || "{{last_input}}", vars);
-    const reply = await require("./sharedInboxAssistant").generate(tenant, c.id, prompt);
+    const reply = await withMeter(
+      { tenantId: tenant, operation: "ai_generate", flowId: state.flow?.id, flowRunId: state.runId, referenceId: `flow_aig_${state.runId}_${messageId}_${actionIndex}` },
+      () => require("./sharedInboxAssistant").generate(tenant, c.id, prompt)
+    );
     const out = { ai_last_reply: reply, _generated_message: reply };
     if (config.output_variable) out[config.output_variable] = reply;
     return out;
@@ -267,7 +300,10 @@ async function runLiveAction(tenant, c, state, node, vars, messageId, actionInde
     const branches = Object.keys(config.branches || {});
     const rawMsg = definition.interpolate(config.input_variable ? `{{${config.input_variable}}}` : "{{last_input}}", vars) || vars.trigger_message || "";
     const prompt = `Classify this customer message into EXACTLY ONE of these intent keys: ${branches.join(", ")}. Respond with ONLY the single key name (no punctuation or explanation).\nContext: ${config.prompt || ""}\nMessage: "${rawMsg}"`;
-    const classified = (await require("./sharedInboxAssistant").generate(tenant, c.id, prompt)).toLowerCase().trim().replace(/[^a-z0-9_-]/g, "");
+    const classified = (await withMeter(
+      { tenantId: tenant, operation: "ai_intent", flowId: state.flow?.id, flowRunId: state.runId, referenceId: `flow_aii_${state.runId}_${messageId}_${actionIndex}` },
+      () => require("./sharedInboxAssistant").generate(tenant, c.id, prompt)
+    )).toLowerCase().trim().replace(/[^a-z0-9_-]/g, "");
     const matchedKey = branches.find((b) => b.toLowerCase() === classified) || branches.find((b) => classified.includes(b.toLowerCase())) || "";
     return { ai_detected_intent: matchedKey || "unknown", _detected_intent: matchedKey };
   }

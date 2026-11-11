@@ -369,38 +369,13 @@ async function confirmCheckoutPayment({ tenantId, userId, planId, paymentId, ord
  * Grant wallet credits in an append-only ledger transaction.
  */
 async function grantWalletCredits(tenantId, creditType, amount, reason, referenceId = null) {
-  const tid = Number(tenantId);
-  const amt = Number(amount);
-
-  // 1. Ensure account exists
-  await q(
-    `INSERT IGNORE INTO wallet_accounts (tenant_id, currency, credit_type, balance, reserved_balance)
-     VALUES (?, 'INR', ?, 0, 0)`,
-    [tid, creditType]
-  );
-
-  // 2. Update balance
-  await q(
-    `UPDATE wallet_accounts SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP 
-     WHERE tenant_id = ? AND credit_type = ?`,
-    [amt, tid, creditType]
-  );
-
-  const [account] = await q(
-    "SELECT id, balance FROM wallet_accounts WHERE tenant_id = ? AND credit_type = ? LIMIT 1",
-    [tid, creditType]
-  );
-
-  // 3. Record append-only entry
-  if (account) {
-    await q(
-      `INSERT INTO wallet_entries (tenant_id, account_id, entry_type, amount, balance_after, reason, reference_id)
-       VALUES (?, ?, 'credit', ?, ?, ?, ?)`,
-      [tid, account.id, amt, account.balance, reason, referenceId]
-    );
-  }
-
-  return { success: true, accountId: account?.id, balance: account?.balance || 0 };
+  return require("./usageMeteringService").grantCreditsTransactional({
+    tenantId,
+    creditType,
+    amount,
+    reason,
+    referenceId,
+  });
 }
 
 /**

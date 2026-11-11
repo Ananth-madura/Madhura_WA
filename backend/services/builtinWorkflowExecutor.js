@@ -68,7 +68,7 @@ function scoreKbDocs(docs, queryText) {
     .slice(0, 3);
 }
 
-function createBuiltinExecutor({ db = null, kb = null, billing = null, leadCapture = null, aiAssistant = null } = {}) {
+function createBuiltinExecutor({ db = null, kb = null, billing = null, leadCapture = null, aiAssistant = null, eventBus = null } = {}) {
   const getDb = () => db || require("../config/database");
   const q = async (sql, params = []) => (await getDb().promise().query(sql, params))[0];
   const getKb = () => kb || require("./waKnowledgeBase");
@@ -86,6 +86,15 @@ function createBuiltinExecutor({ db = null, kb = null, billing = null, leadCaptu
     try {
       await getLeads().captureLeadFromWhatsApp(payload);
     } catch (_) {}
+  }
+
+  function emitCrmEventSafe(eventName, payload) {
+    if (db && !eventBus) return;
+    setImmediate(() => {
+      try {
+        (eventBus || require("./crmEventBus")).emit(eventName, payload);
+      } catch (_) {}
+    });
   }
 
   // ── 1. CUSTOMER SERVICE ─────────────────────────────────────────────────────
@@ -140,6 +149,7 @@ function createBuiltinExecutor({ db = null, kb = null, billing = null, leadCaptu
          VALUES (?,?,?,?,?,?,?,?,?,?, 'open', ?, ?)`,
         [tenant, ctx.conversationId || null, ctx.contactId || null, phone, inputs.customer_name || ctx.customerName || "Customer", ref, "support", String(inputs.subject || "WhatsApp Support Request").slice(0, 200), String(inputs.details || inputs.description || ""), inputs.priority || "normal", slaDue, idem]
       );
+      emitCrmEventSafe("ticket_created", { tenantId: tenant, phone, customerName: inputs.customer_name || ctx.customerName, reference: ref, eventId: ref });
       return { message: `Support ticket *${ref}* has been created. Priority: ${inputs.priority || "normal"}. Target response within 4 hours.`, reference: ref, status: "open" };
     }
 
@@ -240,6 +250,7 @@ function createBuiltinExecutor({ db = null, kb = null, billing = null, leadCaptu
          VALUES (?,?,?,?,?,?,'appointment',?,?,?,?,?,?, 'confirmed', ?, ?)`,
         [tenant, ctx.conversationId || null, ctx.contactId || null, phone, inputs.customer_name || ctx.customerName || "Customer", ref, service, branch, date, time, staff.id, staff.name, inputs.details || "", idem]
       );
+      emitCrmEventSafe("appointment_booked", { tenantId: tenant, phone, customerName: inputs.customer_name || ctx.customerName, reference: ref, service, branch, date, time, eventId: ref });
       return {
         message: `Appointment confirmed!\nReference: *${ref}*\nService: ${service}\nBranch: ${branch}\nDate & Time: ${date} at ${time}\nSpecialist: ${staff.name}`,
         reference: ref,
@@ -783,6 +794,7 @@ function createBuiltinExecutor({ db = null, kb = null, billing = null, leadCaptu
       "INSERT INTO wa_approval_requests (tenant_id,requester_phone,requester_name,approval_no,request_type,item_name,quantity,amount,details,status,idempotency_key) VALUES (?,?,?,?,?,?,?,?,?,'pending',?)",
       [tenant, phone, inputs.customer_name || "Staff", ref, op, inputs.product || "Operational Item", Number(inputs.quantity) || 1, Number(inputs.budget) || 0, inputs.details || "", idem]
     );
+    emitCrmEventSafe("approval_requested", { tenantId: tenant, phone, customerName: inputs.customer_name || "Staff", reference: ref, amount: Number(inputs.budget) || 0, eventId: ref });
     return { message: `${op === "expense" ? "Expense claim" : "Purchase request"} *${ref}* queued for authorized manager approval.`, reference: ref, status: "pending" };
   }
 

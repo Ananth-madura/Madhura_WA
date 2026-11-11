@@ -25,13 +25,16 @@ router.use((req, res, next) => {
 
 const listing = `SELECT a.*, t.name AS template_name, t.body AS template_body,
   ft.name AS followup_template_name, ft.body AS followup_template_body, f.name AS flow_name, g.name AS group_name, s.display_phone AS sender_phone,
+  b.name AS branch_name, COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''), u.email) AS created_by_name,
   (SELECT COUNT(*) FROM wa_automation_options o WHERE o.automation_id=a.id) AS option_count
   FROM wa_automations a 
   LEFT JOIN wa_templates t ON t.id=a.template_id AND t.tenant_id=a.tenant_id
   LEFT JOIN wa_templates ft ON ft.id=a.followup_template_id AND ft.tenant_id=a.tenant_id
   LEFT JOIN wa_flows f ON f.id=a.flow_id AND f.tenant_id=a.tenant_id
   LEFT JOIN wa_contact_groups g ON g.id=a.group_id AND g.tenant_id=a.tenant_id
-  LEFT JOIN wa_senders s ON s.id=a.sender_id AND s.tenant_id=a.tenant_id`;
+  LEFT JOIN wa_senders s ON s.id=a.sender_id AND s.tenant_id=a.tenant_id
+  LEFT JOIN branches b ON b.id=a.branch_id AND b.tenant_id=a.tenant_id
+  LEFT JOIN users u ON u.id=a.created_by`;
 
 const labeled = (row) => ({
   ...row,
@@ -54,7 +57,7 @@ router.get(
 router.get(
   "/references",
   handle(async (req, res) => {
-    const [templates, flows, groups, senders] = await Promise.all([
+    const [templates, flows, groups, senders, branches] = await Promise.all([
       store.query(
         "SELECT id,name,category,body,meta_status,meta_template_id FROM wa_templates WHERE tenant_id=? ORDER BY name LIMIT 500",
         [req.tenantId]
@@ -67,8 +70,11 @@ router.get(
       store.query("SELECT id,display_phone,status FROM wa_senders WHERE tenant_id=? ORDER BY id LIMIT 100", [
         req.tenantId,
       ]),
+      store.query("SELECT id,name,code,status FROM branches WHERE tenant_id=? AND status!='archived' ORDER BY name LIMIT 100", [
+        req.tenantId,
+      ]).catch(() => []),
     ]);
-    res.json({ templates, flows, groups, senders });
+    res.json({ templates, flows, groups, senders, branches });
   })
 );
 
@@ -186,7 +192,22 @@ router.get(
       );
     } catch (_) {}
     const unpaidCount = invoices.filter((i) => String(i.status).toLowerCase() !== "paid").length;
-    res.json({ invoices, totalInvoices: invoices.length, unpaidCount });
+    let wallets = {};
+    let usageSummary = null;
+    try {
+      const bSum = await require("../services/billingService").getTenantBillingSummary(req.tenantId);
+      wallets = bSum.wallets || {};
+      usageSummary = bSum.usage || null;
+    } catch (_) {}
+    res.json({ invoices, totalInvoices: invoices.length, unpaidCount, wallets, usageSummary });
+  })
+);
+
+router.post(
+  "/bulk",
+  handle(async (req, res) => {
+    const { ids, action } = req.body || {};
+    res.json(await store.bulkAction(req.tenantId, req.user.id, ids, action));
   })
 );
 
@@ -419,6 +440,20 @@ router.put(
 );
 
 router.get(
+  "/:id/versions",
+  handle(async (req, res) => {
+    await store.get(req.tenantId, req.params.id);
+    const versions = await store
+      .query(
+        "SELECT id,version_number,status,changelog,published_by,published_at FROM wa_automation_versions WHERE tenant_id=? AND automation_id=? ORDER BY version_number DESC LIMIT 50",
+        [req.tenantId, req.params.id]
+      )
+      .catch(() => []);
+    res.json(versions);
+  })
+);
+
+router.get(
   "/:id/audit",
   handle(async (req, res) => {
     await store.get(req.tenantId, req.params.id);
@@ -458,7 +493,7 @@ router.post(
       merged,
       String(req.user.id),
       null,
-      { manual: true, requestId: req.body.request_id, diagnostics: condEval.diagnostics }
+      { manual: true, actorUserId: req.user.id, requestId: req.body.request_id, diagnostics: condEval.diagnostics }
     );
     if (!result?.success) {
       return res.status(result?.deliveryUnknown ? 504 : 502).json({

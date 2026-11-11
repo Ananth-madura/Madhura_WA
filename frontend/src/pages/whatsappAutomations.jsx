@@ -20,6 +20,7 @@ import { useAuth } from "../auth/AuthContext";
 import AutomationDraftPreview from "../components/AutomationDraftPreview";
 import AutomationFollowupOptions from "../components/AutomationFollowupOptions";
 import AutomationRuleActivity from "../components/AutomationRuleActivity";
+import AutomationPipelineParams from "../components/AutomationPipelineParams";
 import { automationIssues, isApprovedTemplate } from "../utils/automationDraft";
 
 const TRIGGER_CATEGORIES = [
@@ -268,6 +269,7 @@ const DEMO_TEMPLATES = [
 
 const blankForm = (overrides = {}) => ({
   sender_id: "",
+  branch_id: "",
   name: "",
   trigger_type: "welcome_message",
   category: "general",
@@ -301,8 +303,12 @@ const ACTION_TYPES = [
   { type: "start_flow", label: "Start Conversational Flow Bot", icon: Bot, desc: "Launch an active visual conversational flow" },
   { type: "ask_question", label: "Ask Customer Question (Checkpoint)", icon: HelpCircle, desc: "Collect text, number, date or button choice and wait for response" },
   { type: "wait_delay", label: "Wait / Delay Duration", icon: Clock, desc: "Durable delay before advancing to the next action step" },
+  { type: "branch_condition", label: "Condition Gate (If/Else)", icon: GitBranch, desc: "Stop or skip next step based on CRM event values" },
   { type: "update_crm", label: "Update CRM Record", icon: Tag, desc: "Update lead status, stage, custom field or contact notes" },
   { type: "assign_employee", label: "Assign Employee / Agent", icon: Users, desc: "Route contact or enquiry to a specific team member" },
+  { type: "internal_notification", label: "Internal Team Alert", icon: Bell, desc: "Send live dashboard alert to admins or assigned staff" },
+  { type: "call_webhook", label: "Call External HTTPS Webhook", icon: ArrowRight, desc: "Invoke n8n / ERP endpoint with SSRF guard" },
+  { type: "ai_process", label: "AI Process & Summarize", icon: Sparkles, desc: "Run metered AI instruction and store output variable" },
 ];
 
 function useSafeAuth() {
@@ -330,28 +336,33 @@ function AutomationWorkspace() {
   const editRouteId = location.pathname.match(/\/automations\/(\d+)\/edit\/?$/)?.[1];
   const isEditorPage = Boolean(editRouteId) || location.pathname.replace(/\/$/, "").endsWith("/automations/create");
 
-  // Core Data State
-  const [automations, setAutomations] = useState(DEMO_STARTER_RULES);
-  const [templates, setTemplates] = useState(DEMO_TEMPLATES);
-  const [senders, setSenders] = useState(DEMO_SENDERS);
+  // Core Data State — real empty defaults (no demo leak into production tenants)
+  const [automations, setAutomations] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [senders, setSenders] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [groups, setGroups] = useState([]);
   const [flows, setFlows] = useState([]);
   const [logs, setLogs] = useState([]);
-  const [checkpoints, setCheckpoints] = useState(DEMO_CHECKPOINTS);
+  const [checkpoints, setCheckpoints] = useState([]);
   const [starters, setStarters] = useState(INDUSTRY_STARTERS);
-  const [billingSummary, setBillingSummary] = useState(DEMO_BILLING_SUMMARY);
-  const [stats, setStats] = useState({ totalRules: 3, activeRules: 3, totalRuns: 18, sentCount: 16, failedCount: 0 });
+  const [billingSummary, setBillingSummary] = useState({ invoices: [], totalInvoices: 0, unpaidCount: 0, wallets: {} });
+  const [stats, setStats] = useState({ totalRules: 0, activeRules: 0, totalRuns: 0, sentCount: 0, failedCount: 0, scheduledCount: 0 });
   const [loading, setLoading] = useState(true);
+  const [sectionErrors, setSectionErrors] = useState({});
   const [pageNotice, setPageNotice] = useState(null);
 
   // Active Command Center Tab:
   // "rules" | "pipeline" | "reminders" | "checkpoints" | "billing" | "welcome" | "starters" | "logs"
   const [activeTab, setActiveTab] = useState("rules");
 
-  // Filter & Search State
+  // Filter, Search & Bulk Selection State
   const [ruleSearch, setRuleSearch] = useState("");
   const [ruleStatus, setRuleStatus] = useState("all");
   const [ruleCategory, setRuleCategory] = useState("all");
+  const [ruleTriggerFilter, setRuleTriggerFilter] = useState("all");
+  const [ruleBranchFilter, setRuleBranchFilter] = useState("all");
+  const [selectedRuleIds, setSelectedRuleIds] = useState([]);
   const [expandedLogId, setExpandedLogId] = useState(null);
   const [cancellingRun, setCancellingRun] = useState(null);
 
@@ -411,6 +422,7 @@ function AutomationWorkspace() {
   const fetchData = async () => {
     setLoading(true);
     setPageNotice(null);
+    setSectionErrors({});
 
     if (demoMode) {
       setAutomations(DEMO_STARTER_RULES);
@@ -419,57 +431,53 @@ function AutomationWorkspace() {
       setCheckpoints(DEMO_CHECKPOINTS);
       setBillingSummary(DEMO_BILLING_SUMMARY);
       setStarters(INDUSTRY_STARTERS);
-      setStats({ totalRules: 3, activeRules: 3, totalRuns: 18, sentCount: 16, failedCount: 0 });
+      setStats({ totalRules: 3, activeRules: 3, totalRuns: 18, sentCount: 16, failedCount: 0, scheduledCount: 0 });
       setLoading(false);
       return;
     }
 
-    try {
-      const [aRes, tRes, lRes, wRes, sRes, cRes, bRes, strRes] = await Promise.all([
-        axios.get(`${API}/api/wa/automations`, { headers: headers() }).catch(() => ({ data: [] })),
-        axios.get(`${API}/api/wa/automations/references`, { headers: headers() }).catch(() => ({ data: {} })),
-        axios.get(`${API}/api/wa/automations/logs/recent?limit=50`, { headers: headers() }).catch(() => ({ data: [] })),
-        axios.get(`${API}/api/wa/automations/welcome-settings`, { headers: headers() }).catch(() => ({ data: null })),
-        axios.get(`${API}/api/wa/automations/stats`, { headers: headers() }).catch(() => ({ data: null })),
-        axios.get(`${API}/api/wa/automations/checkpoints`, { headers: headers() }).catch(() => ({ data: [] })),
-        axios.get(`${API}/api/wa/automations/billing/summary`, { headers: headers() }).catch(() => ({ data: { invoices: [] } })),
-        axios.get(`${API}/api/wa/automations/starters`, { headers: headers() }).catch(() => ({ data: [] })),
-      ]);
+    const keys = ["rules", "references", "logs", "welcome", "stats", "checkpoints", "billing", "starters"];
+    const results = await Promise.allSettled([
+      axios.get(`${API}/api/wa/automations`, { headers: headers() }),
+      axios.get(`${API}/api/wa/automations/references`, { headers: headers() }),
+      axios.get(`${API}/api/wa/automations/logs/recent?limit=50`, { headers: headers() }),
+      axios.get(`${API}/api/wa/automations/welcome-settings`, { headers: headers() }),
+      axios.get(`${API}/api/wa/automations/stats`, { headers: headers() }),
+      axios.get(`${API}/api/wa/automations/checkpoints`, { headers: headers() }),
+      axios.get(`${API}/api/wa/automations/billing/summary`, { headers: headers() }),
+      axios.get(`${API}/api/wa/automations/starters`, { headers: headers() }),
+    ]);
 
-      const loadedAutomations = Array.isArray(aRes?.data) ? aRes.data : [];
-      const loadedTemplates = Array.isArray(tRes?.data?.templates) ? tRes.data.templates : [];
-      const loadedFlows = Array.isArray(tRes?.data?.flows) ? tRes.data.flows : [];
-      const loadedGroups = Array.isArray(tRes?.data?.groups) ? tRes.data.groups : [];
-      const loadedSenders = Array.isArray(tRes?.data?.senders) ? tRes.data.senders : [];
-      const loadedLogs = Array.isArray(lRes?.data) ? lRes.data : [];
-      const loadedCheckpoints = Array.isArray(cRes?.data) ? cRes.data : [];
-      const loadedBilling = (bRes?.data && Array.isArray(bRes.data.invoices)) ? bRes.data : DEMO_BILLING_SUMMARY;
-      const loadedStarters = Array.isArray(strRes?.data) ? strRes.data : [];
+    const errs = {};
+    const val = (idx) => {
+      const r = results[idx];
+      if (r.status === "fulfilled") return r.value?.data;
+      errs[keys[idx]] = r.reason?.response?.data?.error || r.reason?.message || `Failed to load ${keys[idx]}`;
+      return null;
+    };
 
-      setAutomations(loadedAutomations.length ? loadedAutomations : DEMO_STARTER_RULES);
-      setTemplates(loadedTemplates.length ? loadedTemplates : DEMO_TEMPLATES);
-      setFlows(loadedFlows);
-      setGroups(loadedGroups);
-      setSenders(loadedSenders.length ? loadedSenders : DEMO_SENDERS);
-      setLogs(loadedLogs);
-      if (wRes?.data) setWelcomeSettings(wRes.data);
-      if (sRes?.data) setStats(sRes.data);
-      setCheckpoints(loadedCheckpoints.length ? loadedCheckpoints : DEMO_CHECKPOINTS);
-      setBillingSummary(loadedBilling);
-      setStarters(loadedStarters.length ? loadedStarters : INDUSTRY_STARTERS);
-    } catch (err) {
-      console.error("Error fetching automations:", err);
-      setPageNotice({
-        type: "error",
-        message: err.response?.data?.message || err.response?.data?.error || "Automation Command Center data could not be loaded.",
-      });
-      setAutomations(DEMO_STARTER_RULES);
-      setTemplates(DEMO_TEMPLATES);
-      setSenders(DEMO_SENDERS);
-      setCheckpoints(DEMO_CHECKPOINTS);
-      setBillingSummary(DEMO_BILLING_SUMMARY);
-      setStarters(INDUSTRY_STARTERS);
-    }
+    const rulesData = val(0);
+    const refData = val(1);
+    const logsData = val(2);
+    const welcomeData = val(3);
+    const statsData = val(4);
+    const chkData = val(5);
+    const billData = val(6);
+    const starterData = val(7);
+
+    setAutomations(Array.isArray(rulesData) ? rulesData : []);
+    setTemplates(Array.isArray(refData?.templates) ? refData.templates : []);
+    setFlows(Array.isArray(refData?.flows) ? refData.flows : []);
+    setGroups(Array.isArray(refData?.groups) ? refData.groups : []);
+    setSenders(Array.isArray(refData?.senders) ? refData.senders : []);
+    setBranches(Array.isArray(refData?.branches) ? refData.branches : []);
+    setLogs(Array.isArray(logsData) ? logsData : []);
+    if (welcomeData) setWelcomeSettings(welcomeData);
+    setStats(statsData && typeof statsData === "object" ? statsData : { totalRules: 0, activeRules: 0, totalRuns: 0, sentCount: 0, failedCount: 0, scheduledCount: 0 });
+    setCheckpoints(Array.isArray(chkData) ? chkData : []);
+    setBillingSummary(billData && Array.isArray(billData.invoices) ? billData : { invoices: [], totalInvoices: 0, unpaidCount: 0, wallets: {} });
+    setStarters(Array.isArray(starterData) && starterData.length ? starterData : INDUSTRY_STARTERS);
+    setSectionErrors(errs);
     setLoading(false);
   };
 
@@ -570,6 +578,7 @@ function AutomationWorkspace() {
 
     setForm(blankForm({
       sender_id: a.sender_id || "",
+      branch_id: a.branch_id || "",
       name: a.name || "",
       trigger_type: a.trigger_type || "welcome_message",
       category: a.category || "general",
@@ -632,6 +641,7 @@ function AutomationWorkspace() {
     const payload = {
       ...(editAutomation ? { revision: editAutomation.revision } : {}),
       sender_id: form.sender_id || null,
+      branch_id: form.branch_id || null,
       name: form.name.trim(),
       trigger_type: form.trigger_type,
       category: form.category || "general",
@@ -689,6 +699,37 @@ function AutomationWorkspace() {
     } catch (err) {
       setPageNotice({ type: "error", message: err.response?.data?.error || "Could not delete automation." });
     }
+  };
+
+  const toggleRuleSelection = (id) => {
+    setSelectedRuleIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const handleBulkSelection = async (action) => {
+    if (!selectedRuleIds.length) return;
+    if (action === "delete" && !window.confirm(`Delete ${selectedRuleIds.length} selected automation rule(s)?`)) return;
+    setBulkToggling(true);
+    try {
+      const { data } = await axios.post(`${API}/api/wa/automations/bulk`, { ids: selectedRuleIds, action }, { headers: headers() });
+      setSelectedRuleIds([]);
+      await fetchData();
+      setPageNotice({ type: "success", message: `Bulk ${action}: ${data.count || selectedRuleIds.length} rule(s) updated.` });
+    } catch (err) {
+      setPageNotice({ type: "error", message: err.response?.data?.error || `Bulk ${action} failed.` });
+    } finally {
+      setBulkToggling(false);
+    }
+  };
+
+  const handleExportSelected = () => {
+    const picked = (Array.isArray(automations) ? automations : []).filter((a) => !selectedRuleIds.length || selectedRuleIds.includes(a.id));
+    const blob = new Blob([JSON.stringify(picked, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `whatsapp-automations-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleCancelRun = async (log) => {
@@ -784,6 +825,8 @@ function AutomationWorkspace() {
     if (ruleStatus === "enabled" && a.is_active !== 1) return false;
     if (ruleStatus === "paused" && a.is_active !== 0) return false;
     if (ruleCategory !== "all" && a.category !== ruleCategory) return false;
+    if (ruleTriggerFilter !== "all" && a.trigger_type !== ruleTriggerFilter) return false;
+    if (ruleBranchFilter !== "all" && String(a.branch_id || "") !== String(ruleBranchFilter)) return false;
     if (ruleSearch.trim()) {
       const q = ruleSearch.toLowerCase();
       return (
@@ -964,7 +1007,7 @@ function AutomationWorkspace() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-slate-700">WhatsApp Meta Sender *</label>
                     <select
@@ -976,6 +1019,22 @@ function AutomationWorkspace() {
                       {senders.map((s) => (
                         <option key={s.id} value={s.id} disabled={s.status !== "connected"}>
                           {s.display_phone || `Sender #${s.id}`} ({s.status})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">Branch Scope (optional)</label>
+                    <select
+                      value={form.branch_id || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                    >
+                      <option value="">Organization-Wide (All Branches)</option>
+                      {branches.map((br) => (
+                        <option key={br.id} value={br.id}>
+                          {br.name} ({br.code})
                         </option>
                       ))}
                     </select>
@@ -1160,6 +1219,17 @@ function AutomationWorkspace() {
                                 <span className="text-xs text-slate-600">minutes</span>
                               </div>
                             )}
+
+                            <AutomationPipelineParams
+                              action={act}
+                              flows={flows}
+                              onPatchParams={(nextParams) =>
+                                setForm((f) => ({
+                                  ...f,
+                                  actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: nextParams } : item)),
+                                }))
+                              }
+                            />
                           </div>
                         ))}
                       </div>
@@ -1445,6 +1515,37 @@ function AutomationWorkspace() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-xs">
+                  <label className="block">
+                    <span className="font-semibold text-slate-700">Timezone</span>
+                    <input
+                      type="text"
+                      value={form.schedule?.timezone || "Asia/Kolkata"}
+                      onChange={(e) => setForm((f) => ({ ...f, schedule: { ...(f.schedule || {}), timezone: e.target.value } }))}
+                      className="mt-1 w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="font-semibold text-slate-700">Cancel pending send if event occurs</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. invoice_paid"
+                      value={form.schedule?.cancel_on_event || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, schedule: { ...(f.schedule || {}), cancel_on_event: e.target.value } }))}
+                      className="mt-1 w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-mono"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 pt-4 font-semibold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.schedule?.business_hours_only)}
+                      onChange={(e) => setForm((f) => ({ ...f, schedule: { ...(f.schedule || {}), business_hours_only: e.target.checked } }))}
+                      className="h-4 w-4 rounded text-slate-900"
+                    />
+                    Respect quiet / working hours only
+                  </label>
+                </div>
+
                 <label className="flex items-center gap-2 pt-1 text-xs font-bold text-slate-800">
                   <input
                     type="checkbox"
@@ -1573,6 +1674,24 @@ function AutomationWorkspace() {
         </div>
       )}
 
+      {Object.keys(sectionErrors).length > 0 && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              Some sections failed to load ({Object.keys(sectionErrors).join(", ")}): {Object.values(sectionErrors)[0]}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchData}
+            className="rounded-md border border-amber-400 bg-white px-2.5 py-1 font-semibold text-amber-900 hover:bg-amber-100"
+          >
+            Retry failed sections
+          </button>
+        </div>
+      )}
+
       {/* ── METRIC STAT CARDS ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
@@ -1686,14 +1805,46 @@ function AutomationWorkspace() {
                 className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none"
               >
                 <option value="all">All Categories</option>
-                <option value="sales">Sales & Leads</option>
-                <option value="billing">Billing & Invoices</option>
-                <option value="support">Support & Appointments</option>
+                <option value="sales">Sales &amp; Leads</option>
+                <option value="billing">Billing &amp; Invoices</option>
+                <option value="support">Support &amp; Appointments</option>
                 <option value="onboarding">Onboarding</option>
               </select>
+
+              <select
+                value={ruleTriggerFilter}
+                onChange={(e) => setRuleTriggerFilter(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none"
+              >
+                <option value="all">All Triggers</option>
+                {TRIGGER_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+
+              {branches.length > 0 && (
+                <select
+                  value={ruleBranchFilter}
+                  onChange={(e) => setRuleBranchFilter(e.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none"
+                >
+                  <option value="all">All Branches</option>
+                  {branches.map((br) => (
+                    <option key={br.id} value={br.id}>{br.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleExportSelected}
+                disabled={safeAutomations.length === 0}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 disabled:opacity-50"
+              >
+                Export JSON
+              </button>
               <button
                 type="button"
                 onClick={handleSeedPrebuilt}
@@ -1705,6 +1856,19 @@ function AutomationWorkspace() {
               </button>
             </div>
           </div>
+
+          {selectedRuleIds.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-300 bg-slate-900 px-3.5 py-2 text-xs text-white">
+              <span className="font-semibold">{selectedRuleIds.length} rule(s) selected</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button type="button" disabled={bulkToggling} onClick={() => handleBulkSelection("activate")} className="rounded bg-emerald-600 px-2.5 py-1 font-semibold hover:bg-emerald-500">Activate</button>
+                <button type="button" disabled={bulkToggling} onClick={() => handleBulkSelection("pause")} className="rounded bg-amber-600 px-2.5 py-1 font-semibold hover:bg-amber-500">Pause</button>
+                <button type="button" disabled={bulkToggling} onClick={() => handleBulkSelection("duplicate")} className="rounded bg-slate-700 px-2.5 py-1 font-semibold hover:bg-slate-600">Duplicate</button>
+                <button type="button" disabled={bulkToggling} onClick={() => handleBulkSelection("delete")} className="rounded bg-rose-600 px-2.5 py-1 font-semibold hover:bg-rose-500">Delete</button>
+                <button type="button" onClick={() => setSelectedRuleIds([])} className="rounded px-2 py-1 text-slate-300 hover:text-white">Clear</button>
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div className="flex justify-center py-16">
@@ -1752,6 +1916,13 @@ function AutomationWorkspace() {
                     <div>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${a.name}`}
+                            checked={selectedRuleIds.includes(a.id)}
+                            onChange={() => toggleRuleSelection(a.id)}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-slate-900"
+                          />
                           <span className="text-lg">{trig?.emoji || "⚡"}</span>
                           <div>
                             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -1798,9 +1969,30 @@ function AutomationWorkspace() {
                               <Smartphone className="w-3 h-3" /> {a.sender_phone}
                             </span>
                           )}
+                          {a.branch_name && (
+                            <span className="flex items-center gap-1">
+                              <Building2 className="w-3 h-3" /> {a.branch_name}
+                            </span>
+                          )}
+                          {a.created_by_name && (
+                            <span className="flex items-center gap-1">
+                              <Users className="w-3 h-3" /> {a.created_by_name}
+                            </span>
+                          )}
                           <span className="flex items-center gap-1">
                             <Play className="w-3 h-3 text-slate-400" /> {a.run_count || 0} runs
+                            {Number(a.failed_runs_count) > 0 && <span className="text-rose-600 font-semibold">· {a.failed_runs_count} fail</span>}
                           </span>
+                          {Number(a.credits_consumed) > 0 && (
+                            <span className="flex items-center gap-1 text-amber-700 font-semibold">
+                              <CreditCard className="w-3 h-3" /> {a.credits_consumed} cr
+                            </span>
+                          )}
+                          {a.published_version_id && (
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600">
+                              v{a.revision || 1}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

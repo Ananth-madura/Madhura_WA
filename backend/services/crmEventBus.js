@@ -628,5 +628,27 @@ function startCrmRealtimeSweep(intervalMs = 30000) {
   console.log("✅ Universal CRM Database Change Sweep started (30s interval)");
 }
 
+for (const evtName of ["invoice_due", "appointment_booked", "appointment_cancelled", "ticket_created", "approval_requested"]) {
+  crmEventBus.on(evtName, async (payload) => {
+    const tenantId = Number(payload?.tenantId || payload?.tenant_id);
+    if (!Number.isSafeInteger(tenantId) || tenantId < 1) return;
+    const phone = cleanPhone(payload?.phone || payload?.client_phone || payload?.customer_phone);
+    if (!phone || phone.length < 10) return;
+    try {
+      const { triggerAutomation } = require("./waAutomationService");
+      await triggerAutomation(evtName, {
+        tenantId,
+        eventId: payload.eventId || payload.reference || payload.id,
+        phone,
+        contactName: payload.customerName || payload.name || payload.client_name || "Customer",
+        data: payload,
+      }).catch(() => {});
+      emitSocketEvent(evtName, { tenantId, phone, reference: payload.reference });
+    } catch (err) {
+      console.warn(`[CRM Event Bus] Error in ${evtName} listener:`, err.message);
+    }
+  });
+}
+
 module.exports = crmEventBus;
 module.exports.startCrmRealtimeSweep = startCrmRealtimeSweep;

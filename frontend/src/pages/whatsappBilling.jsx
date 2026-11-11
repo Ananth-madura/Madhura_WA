@@ -25,6 +25,7 @@ import { API } from "../config/api";
 import { useEnterprise } from "../context/EnterpriseContext";
 import {openRazorpayCheckout} from "../utils/razorpayCheckout";
 import {requireRecords} from "../utils/apiPayload";
+import EmployeeUsagePanel from "../components/EmployeeUsagePanel";
 import {useLocation,useNavigate} from "react-router-dom";
 
 export default function WABilling() {
@@ -330,6 +331,8 @@ export default function WABilling() {
               </div>
             </div>
           </div>
+
+          <EmployeeUsagePanel headers={getHeaders()} canManage={canManage} />
 
           {/* Plan Catalog Grid */}
           <div className="mt-10">

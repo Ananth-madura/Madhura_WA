@@ -68,6 +68,13 @@ async function runPaymentDueCheck() {
             due_date: inv.invoice_duedate,
           },
         }, { dedupeKey: `payment_due:invoice:${inv.id}` });
+        if (!result.triggeredCount) {
+          result = await triggerAutomation("invoice_due", {
+            phone: inv.phone,
+            contactName: inv.name,
+            data: { invoice_no: `INV-${inv.id}`, company: inv.client_company, due_date: inv.invoice_duedate },
+          }, { dedupeKey: `invoice_due:invoice:${inv.id}` });
+        }
         if (!result.success || !result.triggeredCount) throw new Error(result.error || result.reason || "No payment reminder dispatched.");
         notified++;
       } catch (e) {

@@ -91,3 +91,24 @@ test("a linked edit page loads saved replies and submits its revision atomically
   expect(axios.put).toHaveBeenCalledTimes(1);
   expect(axios.post).not.toHaveBeenCalled();
 });
+
+test("dashboard shows genuine empty state without demo leak and surfaces API section errors", async () => {
+  useLocation.mockReturnValue({ pathname: "/whatsapp/automations", state: null });
+  axios.get.mockImplementation(async (url) => {
+    if (url.endsWith("/logs/recent?limit=50")) throw new Error("Logs endpoint offline");
+    return {
+      data: url.endsWith("/references")
+        ? { senders: [], groups: [], flows: [], templates: [], branches: [] }
+        : url.endsWith("/stats")
+        ? { totalRules: 0, activeRules: 0, totalRuns: 0, sentCount: 0, failedCount: 0 }
+        : url.endsWith("/billing/summary")
+        ? { invoices: [], totalInvoices: 0, unpaidCount: 0 }
+        : [],
+    };
+  });
+  render(<WhatsAppAutomations />);
+  await screen.findByText("No automation rules found");
+  expect(screen.queryByText(/Auto-Send Invoice PDF/)).not.toBeInTheDocument();
+  expect(screen.getByRole("alert")).toHaveTextContent(/failed to load/i);
+  expect(screen.getByRole("button", { name: /Retry failed sections/i })).toBeInTheDocument();
+});
