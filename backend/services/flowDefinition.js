@@ -430,7 +430,7 @@ function normalize(input, { publish = false } = {}) {
       if (node.node_type === "business_hours" && (!node.config.open_next || !node.config.closed_next)) {
         throw fail("Connect the open and closed business-hours routes");
       }
-      if (node.node_type === "jump_to_flow" && !Number(node.config.target_flow_id)) {
+      if (node.node_type === "jump_to_flow" && !Number(node.config.target_flow_id) && !String(node.config.target_flow_key || "").trim()) {
         throw fail(`Step ${node.node_key} needs a target flow to jump to`);
       }
       const multiPortTypes = new Set(["end", "handoff", "jump_to_flow", "send_buttons", "send_list", "interactive_menu", "condition", "business_hours", "switch", "business_action", "api_webhook", "ai_intent", "crm_lookup"]);
@@ -861,6 +861,7 @@ async function execute(flow, input, state, initial, execution) {
     } catch (error) {
       if (error.flowInterrupted) throw error;
       result.vars["integration.status"] = "failed";
+      result.vars["integration.error"] = String(error.message || "Action failed").slice(0, 400);
       for (const name of Object.keys(c.outputs || {})) delete result.vars[name];
       if (c.output_variable) delete result.vars[c.output_variable];
       next = nodeType === "ai_intent"

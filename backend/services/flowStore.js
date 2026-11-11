@@ -108,7 +108,7 @@ function createFlowStore(db) {
   async function publish(tenant, user, id, changelog = "Published version") {
     return transaction(async (q) => {
       const flow = definition.normalize(await get(tenant, id, q, true), { publish: true });
-      for (const node of flow.nodes.filter((n) => n.node_type === "business_action")) {
+      for (const node of flow.nodes.filter((n) => n.node_type === "business_action" && n.config?.connection !== "builtin")) {
         await require("./flowConnectionStore").resolve(tenant, node.config.connection, node.config.operation);
       }
       if (flow.nodes.some((n) => ["ai_reply", "ai_generate", "ai_intent"].includes(n.node_type))) {

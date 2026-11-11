@@ -43,13 +43,71 @@ router.get(
 
 router.get(
   "/library",
-  route(async (req, res) =>
+  route(async (req, res) => {
+    const enterprise = require("../services/enterpriseWorkflowTemplates");
     res.json([
       ...require("../services/prebuiltFlows"),
       ...require("../services/serviceFlowBlueprints"),
+      ...enterprise.FLAGSHIP_TEMPLATES,
       ...require("../services/industryFlowBlueprints"),
-    ])
-  )
+    ]);
+  })
+);
+
+router.get(
+  "/hub",
+  route(async (req, res) => {
+    const enterprise = require("../services/enterpriseWorkflowTemplates");
+    const catalog = enterprise.getHubCatalog();
+    const existing = await store
+      .query("SELECT id, name, status, trigger_config FROM wa_flows WHERE tenant_id=? ORDER BY id DESC LIMIT 500", [req.tenantId])
+      .catch(() => []);
+    const installedByKey = {};
+    for (const f of existing) {
+      try {
+        const tc = typeof f.trigger_config === "string" ? JSON.parse(f.trigger_config) : (f.trigger_config || {});
+        if (tc.template_key) {
+          installedByKey[tc.template_key] = { id: f.id, name: f.name, status: f.status };
+        }
+      } catch (_) {}
+    }
+    const [aptCnt] = await store.query("SELECT COUNT(*) AS cnt FROM wa_appointments WHERE tenant_id=?", [req.tenantId]).catch(() => [{ cnt: 0 }]);
+    const [tktCnt] = await store.query("SELECT COUNT(*) AS cnt FROM wa_support_tickets WHERE tenant_id=? AND status IN ('open','escalated')", [req.tenantId]).catch(() => [{ cnt: 0 }]);
+    const [ordCnt] = await store.query("SELECT COUNT(*) AS cnt FROM wa_crm_orders WHERE tenant_id=?", [req.tenantId]).catch(() => [{ cnt: 0 }]);
+    const [aprCnt] = await store.query("SELECT COUNT(*) AS cnt FROM wa_approval_requests WHERE tenant_id=? AND status='pending'", [req.tenantId]).catch(() => [{ cnt: 0 }]);
+    const [alertCnt] = await store.query("SELECT COUNT(*) AS cnt FROM wa_flow_error_alerts WHERE tenant_id=? AND status='open'", [req.tenantId]).catch(() => [{ cnt: 0 }]);
+
+    res.json({
+      success: true,
+      ...catalog,
+      installedByKey,
+      metrics: {
+        appointments: Number(aptCnt?.cnt || 0),
+        openTickets: Number(tktCnt?.cnt || 0),
+        orders: Number(ordCnt?.cnt || 0),
+        pendingApprovals: Number(aprCnt?.cnt || 0),
+        openAlerts: Number(alertCnt?.cnt || 0),
+      },
+    });
+  })
+);
+
+router.post(
+  "/hub/install",
+  route(async (req, res) => {
+    const enterprise = require("../services/enterpriseWorkflowTemplates");
+    const { systemId, templateKeys, connectionMode, autoPublish } = req.body || {};
+    const result = await enterprise.installHubTemplates({
+      db,
+      tenantId: req.tenantId,
+      userId: req.user.id,
+      systemId: systemId || null,
+      templateKeys: Array.isArray(templateKeys) ? templateKeys : [],
+      connectionMode: connectionMode === "business" ? "business" : "builtin",
+      autoPublish: Boolean(autoPublish),
+    });
+    res.status(201).json(result);
+  })
 );
 
 router.get(
@@ -223,6 +281,115 @@ router.delete(
 );
 
 router.post("/seed", route(async (req, res) => res.json(await store.seed(req.tenantId, req.user.id))));
+
+router.get(
+  "/records",
+  route(async (req, res) => {
+    const [appointments, waitlist, tickets, products, orders, hrRequests, approvals] = await Promise.all([
+      store.query("SELECT * FROM wa_appointments WHERE tenant_id=? ORDER BY id DESC LIMIT 50", [req.tenantId]).catch(() => []),
+      store.query("SELECT * FROM wa_appointment_waitlist WHERE tenant_id=? ORDER BY id DESC LIMIT 50", [req.tenantId]).catch(() => []),
+      store.query("SELECT * FROM wa_support_tickets WHERE tenant_id=? ORDER BY id DESC LIMIT 50", [req.tenantId]).catch(() => []),
+      store.query("SELECT * FROM wa_crm_products WHERE tenant_id=? ORDER BY id DESC LIMIT 50", [req.tenantId]).catch(() => []),
+      store.query("SELECT * FROM wa_crm_orders WHERE tenant_id=? ORDER BY id DESC LIMIT 50", [req.tenantId]).catch(() => []),
+      store.query("SELECT * FROM wa_hr_requests WHERE tenant_id=? ORDER BY id DESC LIMIT 50", [req.tenantId]).catch(() => []),
+      store.query("SELECT * FROM wa_approval_requests WHERE tenant_id=? ORDER BY id DESC LIMIT 50", [req.tenantId]).catch(() => []),
+    ]);
+    res.json({ success: true, appointments, waitlist, tickets, products, orders, hrRequests, approvals });
+  })
+);
+
+router.post(
+  "/records/catalog",
+  route(async (req, res) => {
+    const { sku, name, category, description, price, currency, stock_qty } = req.body || {};
+    const cleanSku = String(sku || "").trim().slice(0, 64);
+    const cleanName = String(name || "").trim().slice(0, 180);
+    if (!cleanSku || !cleanName) {
+      return res.status(400).json({ error: "Provide both SKU and product/service name" });
+    }
+    const cleanPrice = Math.max(0, Number(price) || 0);
+    const cleanStock = Math.max(0, Number.parseInt(stock_qty ?? 10, 10) || 0);
+    const cleanCat = String(category || "general").slice(0, 80);
+    const cleanDesc = String(description || "").slice(0, 500);
+    const cleanCurr = String(currency || "INR").slice(0, 10);
+    const existingProd = await store.query("SELECT id FROM wa_crm_products WHERE tenant_id=? AND sku=? LIMIT 1", [req.tenantId, cleanSku]);
+    if (existingProd.length) {
+      await store.query(
+        "UPDATE wa_crm_products SET name=?,category=?,description=?,price=?,stock_qty=?,is_active=1,updated_at=CURRENT_TIMESTAMP WHERE tenant_id=? AND id=?",
+        [cleanName, cleanCat, cleanDesc, cleanPrice, cleanStock, req.tenantId, existingProd[0].id]
+      );
+    } else {
+      await store.query(
+        "INSERT INTO wa_crm_products (tenant_id,sku,name,category,description,price,currency,stock_qty,is_active) VALUES (?,?,?,?,?,?,?,?,1)",
+        [req.tenantId, cleanSku, cleanName, cleanCat, cleanDesc, cleanPrice, cleanCurr, cleanStock]
+      );
+    }
+    const products = await store.query("SELECT * FROM wa_crm_products WHERE tenant_id=? ORDER BY id DESC LIMIT 50", [req.tenantId]);
+    res.status(201).json({ success: true, products });
+  })
+);
+
+router.patch(
+  "/records/:type/:recordId",
+  route(async (req, res) => {
+    const recordId = Number(req.params.recordId);
+    const status = String(req.body?.status || "").trim();
+    const note = String(req.body?.decision_note || "").slice(0, 500);
+    if (!Number.isInteger(recordId) || recordId < 1 || !status) {
+      return res.status(400).json({ error: "Valid record ID and status required" });
+    }
+    const tableConfig = {
+      appointment: { table: "wa_appointments", allowed: new Set(["held", "confirmed", "rescheduled", "cancelled", "no_show", "completed"]) },
+      ticket: { table: "wa_support_tickets", allowed: new Set(["open", "in_progress", "escalated", "resolved", "closed"]) },
+      order: { table: "wa_crm_orders", col: "fulfillment_status", allowed: new Set(["pending", "confirmed", "dispatched", "delivered", "cancelled", "returned"]) },
+      hr: { table: "wa_hr_requests", allowed: new Set(["pending", "approved", "rejected", "completed"]), hasDecision: true },
+      approval: { table: "wa_approval_requests", allowed: new Set(["pending", "approved", "rejected"]), hasDecision: true },
+    }[req.params.type];
+
+    if (!tableConfig || !tableConfig.allowed.has(status)) {
+      return res.status(400).json({ error: "Unsupported record type or status transition" });
+    }
+    const col = tableConfig.col || "status";
+    if (tableConfig.hasDecision) {
+      await store.query(
+        `UPDATE ${tableConfig.table} SET ${col}=?, approver_user_id=?, decision_note=?, updated_at=CURRENT_TIMESTAMP WHERE tenant_id=? AND id=?`,
+        [status, req.user.id, note, req.tenantId, recordId]
+      );
+    } else {
+      await store.query(
+        `UPDATE ${tableConfig.table} SET ${col}=?, updated_at=CURRENT_TIMESTAMP WHERE tenant_id=? AND id=?`,
+        [status, req.tenantId, recordId]
+      );
+    }
+    res.json({ success: true });
+  })
+);
+
+router.get(
+  "/alerts",
+  route(async (req, res) => {
+    const rows = await store
+      .query("SELECT * FROM wa_flow_error_alerts WHERE tenant_id=? ORDER BY id DESC LIMIT 100", [req.tenantId])
+      .catch(() => []);
+    res.json({ success: true, alerts: rows });
+  })
+);
+
+router.patch(
+  "/alerts/:alertId",
+  route(async (req, res) => {
+    const alertId = Number(req.params.alertId);
+    const status = String(req.body?.status || "resolved");
+    if (!Number.isInteger(alertId) || !["open", "acknowledged", "resolved"].includes(status)) {
+      return res.status(400).json({ error: "Invalid alert update" });
+    }
+    await store.query(
+      "UPDATE wa_flow_error_alerts SET status=?, updated_at=CURRENT_TIMESTAMP WHERE tenant_id=? AND id=?",
+      [status, req.tenantId, alertId]
+    );
+    res.json({ success: true });
+  })
+);
 
 function simulation(flow, req) {
   const normalized = definition.normalize(flow);

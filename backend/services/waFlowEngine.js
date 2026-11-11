@@ -1064,6 +1064,28 @@ class WaFlowEngine {
           break;
         }
 
+        case "business_action": {
+          try {
+            const runner = require("./flowIntegrations").createRunner();
+            const outputs = await runner({ node_key: nodeKey, node_type: "business_action", config }, vars, {
+              tenantId: vars._tenant_id || 1,
+              runId,
+              messageId: `wa-${runId}-${nodeKey}`,
+              occurrence: safetyCounter,
+              phone: cleanPhone,
+              customerName: vars["customer.name"] || vars.name || "",
+            });
+            Object.assign(vars, outputs, { "integration.status": "success" });
+            nodeKey = config.next_node_key;
+          } catch (actErr) {
+            console.warn(`[WA Flow] Business action error at node ${nodeKey}:`, actErr.message);
+            vars["integration.status"] = "failed";
+            vars["integration.error"] = String(actErr.message || "Action failed").slice(0, 400);
+            nodeKey = config.error_next || config.next_node_key;
+          }
+          break;
+        }
+
         case "api_webhook": {
           try {
             const runner = require("./flowIntegrations").createWebhookRunner();
@@ -1096,10 +1118,11 @@ class WaFlowEngine {
           } else {
             // ai_generate
             const replyText = aiResult.reply || "";
-            if (replyText) {
+            if (config.output_variable) vars[config.output_variable] = replyText;
+            vars.ai_last_reply = replyText;
+            if (replyText && config.send_immediately !== false) {
               await this.sendFlowMessage(cleanPhone, replyText, sessionKey, targetChatId);
             }
-            vars.ai_last_reply = replyText;
             nodeKey = config.next_node_key;
           }
           break;
@@ -1233,12 +1256,24 @@ class WaFlowEngine {
         }
 
         case "jump_to_flow": {
+          let targetFlow = null;
           if (config.target_flow_id) {
             const [targetFlows] = await db.promise().query("SELECT * FROM wa_flows WHERE id = ?", [config.target_flow_id]);
-            if (targetFlows[0]) {
-              await this.completeRun(runId, `jumped_to_flow_${config.target_flow_id}`);
-              return await this.startFlowRun(targetFlows[0], cleanPhone, sessionKey, vars.last_input || "", targetChatId, vars);
-            }
+            targetFlow = targetFlows[0] || null;
+          } else if (config.target_flow_key) {
+            const [tenantFlows] = await db.promise().query("SELECT * FROM wa_flows WHERE status IN ('active','draft') ORDER BY id DESC LIMIT 200");
+            targetFlow = tenantFlows.find((item) => {
+              try {
+                const tc = typeof item.trigger_config === "string" ? JSON.parse(item.trigger_config) : (item.trigger_config || {});
+                return tc.template_key === String(config.target_flow_key).trim();
+              } catch (_) {
+                return false;
+              }
+            }) || null;
+          }
+          if (targetFlow) {
+            await this.completeRun(runId, `jumped_to_flow_${targetFlow.id}`);
+            return await this.startFlowRun(targetFlow, cleanPhone, sessionKey, vars.last_input || "", targetChatId, vars);
           }
           nodeKey = config.next_node_key;
           break;

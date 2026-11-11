@@ -22,8 +22,10 @@ async function row(tenant, id) {
   return result;
 }
 
-function eligible(c) {
-  return c.status === "open" && !c.is_unsubscribed && !c.is_blocked && new Date(c.service_window_expires_at).getTime() > Date.now();
+function eligible(c, allowTemplateOnly = false) {
+  const openContact = c.status === "open" && !c.is_unsubscribed && !c.is_blocked;
+  if (!openContact) return false;
+  return allowTemplateOnly || new Date(c.service_window_expires_at).getTime() > Date.now();
 }
 
 async function notify(c, event, payload) {
@@ -40,6 +42,27 @@ function emitFlowStatus(c, payload) {
     const data = { phone: c.contact_phone, conversationId: c.id, ...payload };
     io.to(`tenant:${c.tenant_id}`).emit("wa_flow_status", data);
     if (c.owner_user_id) io.to(`user:${c.owner_user_id}`).emit("wa_flow_status", data);
+  } catch (_) {}
+}
+
+async function recordErrorAlert(tenant, c, state, nodeKey, errorCode, errorMessage) {
+  try {
+    await query(
+      "INSERT INTO wa_flow_error_alerts (tenant_id,flow_id,flow_name,run_id,conversation_id,phone,node_key,error_code,error_message,notified_user_id,status) VALUES (?,?,?,?,?,?,?,?,?,?,'open')",
+      [tenant, state?.flow?.id || null, state?.flow?.name || null, state?.runId || null, c?.id || null, c?.contact_phone || null, nodeKey || null, String(errorCode || "ACTION_ERROR").slice(0, 80), String(errorMessage || "Workflow step failed").slice(0, 1000), c?.owner_user_id || null]
+    );
+    const io = require("../sockets/chatsockets").getIO();
+    if (io) {
+      io.to(`tenant:${tenant}`).emit("wa_flow_alert", {
+        flowId: state?.flow?.id || null,
+        flowName: state?.flow?.name || null,
+        runId: state?.runId || null,
+        conversationId: c?.id || null,
+        phone: c?.contact_phone || null,
+        nodeKey,
+        errorMessage: String(errorMessage || "").slice(0, 300),
+      });
+    }
   } catch (_) {}
 }
 
@@ -126,8 +149,9 @@ async function published(tenant, id = null) {
 
 async function deliver(c, state, message, messageId, index, vars) {
   const fresh = await row(c.tenant_id, c.id);
-  if (!eligible(fresh) || fresh.automation_mode !== "flow" || Number(fresh.automation_version) !== state.version || states.get(state.key) !== state) {
-    throw fail("Flow interrupted by an employee or conversation change");
+  const templateSend = message.type === "template";
+  if (!eligible(fresh, templateSend) || fresh.automation_mode !== "flow" || Number(fresh.automation_version) !== state.version || states.get(state.key) !== state) {
+    throw fail(templateSend ? "Flow interrupted by an employee or conversation change" : "Meta 24-hour customer service window expired; use an approved WhatsApp template outside 24h");
   }
   if (!(await query("SELECT id FROM wa_flows WHERE tenant_id=? AND id=? AND status='active'", [c.tenant_id, state.flow.id])).length) {
     throw fail("Flow is no longer active");
@@ -281,7 +305,12 @@ async function runLiveAction(tenant, c, state, node, vars, messageId, actionInde
     return {};
   }
   if (node.node_type === "jump_to_flow") {
-    const targetId = Number(config.target_flow_id);
+    let targetId = Number(config.target_flow_id);
+    if (!targetId && config.target_flow_key) {
+      const allActive = await published(tenant);
+      const hit = allActive.find((item) => definition.parseTriggerConfig(item).template_key === String(config.target_flow_key).trim() && Number(item.id) !== Number(state.flow.id));
+      if (hit) targetId = Number(hit.id);
+    }
     if (!targetId || targetId === Number(state.flow.id)) throw fail("Invalid target sub-flow", 400);
     await finish(state, "completed", `jumped_to_flow_${targetId}`);
     await processMessage(tenant, c.id, `${messageId}-jump`, "", isNew, targetId);
@@ -294,21 +323,25 @@ async function processMessage(tenant, id, messageId, input, isNew = false, flowI
   let c = await row(tenant, id);
   let state = states.get(cacheKey(tenant, id));
 
-  if (!eligible(c)) {
-    if (state) await finish(state, "timed_out", "conversation_unavailable");
-    if (flowId) throw fail("Open this conversation inside its customer service window before starting a bot");
-    return false;
-  }
-
   let requested;
+  let allowTemplateOutside24h = false;
   if (flowId) {
     [requested] = await published(tenant, flowId);
     if (!requested) throw fail("Publish and activate this flow before sending");
     definition.normalize(requested, { publish: true });
-    if (state) {
-      await finish(state, "paused_by_agent", "replaced_by_flow");
-      state = null;
-    }
+    const entryNode = (requested.nodes || []).find((n) => n.node_key === requested.entry_node_key);
+    allowTemplateOutside24h = entryNode?.node_type === "send_template";
+  }
+
+  if (!eligible(c, allowTemplateOutside24h)) {
+    if (state) await finish(state, "timed_out", "conversation_unavailable");
+    if (flowId) throw fail("Open this conversation inside its 24h customer service window or start with an approved WhatsApp template step");
+    return false;
+  }
+
+  if (requested && state) {
+    await finish(state, "paused_by_agent", "replaced_by_flow");
+    state = null;
   }
 
   const lowerInput = String(input || "").trim().toLowerCase();
@@ -433,8 +466,10 @@ async function processMessage(tenant, id, messageId, input, isNew = false, flowI
 
     const assertCurrent = async () => {
       const fresh = await row(tenant, id);
+      const entryNode = (state.flow.nodes || []).find((n) => n.node_key === state.flow.entry_node_key);
+      const allowTpl = entryNode?.node_type === "send_template";
       if (
-        !eligible(fresh) ||
+        !eligible(fresh, allowTpl) ||
         fresh.automation_mode !== "flow" ||
         Number(fresh.automation_version) !== state.version ||
         states.get(state.key) !== state ||
@@ -444,12 +479,15 @@ async function processMessage(tenant, id, messageId, input, isNew = false, flowI
       }
     };
 
+    const windowOpen = Boolean(c.service_window_expires_at && new Date(c.service_window_expires_at).getTime() > Date.now());
     const initialVars = {
       ...defaultVars,
       name: c.contact_name || "Customer",
       "customer.name": c.contact_name || "Customer",
       "customer.phone": c.contact_phone,
       "customer.email": c.contact_email || "",
+      "customer.window_open": windowOpen,
+      "customer.window_expires_at": c.service_window_expires_at ? new Date(c.service_window_expires_at).toISOString() : "",
       "contact.exists": true,
     };
 
@@ -470,6 +508,9 @@ async function processMessage(tenant, id, messageId, input, isNew = false, flowI
           return outputs;
         } catch (error) {
           await query("INSERT INTO wa_flow_run_events (run_id,node_key,event_type,payload) VALUES (?,?,'action_failed',NULL)", [state.runId, node.node_key]);
+          if (!error.flowInterrupted) {
+            await recordErrorAlert(tenant, c, state, node.node_key, error.code || "ACTION_FAILED", error.message);
+          }
           throw error;
         }
       },
@@ -515,6 +556,7 @@ async function processMessage(tenant, id, messageId, input, isNew = false, flowI
     }
     return true;
   } catch (error) {
+    await recordErrorAlert(tenant, c, state, state?.state?.currentNodeKey || state?.flow?.entry_node_key || "runtime", error.message === "delivery_unknown" ? "DELIVERY_UNKNOWN" : "FLOW_FAILED", error.message);
     await finish(state, "failed", error.message === "delivery_unknown" ? "delivery_unknown" : "flow_failed");
     await query("UPDATE conversations SET automation_mode='human',automation_version=automation_version+1,automation_error=? WHERE tenant_id=? AND id=? AND automation_version=?", [
       error.message === "delivery_unknown" ? "delivery_unknown" : "flow_failed",

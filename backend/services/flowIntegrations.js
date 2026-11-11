@@ -98,10 +98,10 @@ function safePublicLookup(hostname, options, callback) {
   });
 }
 
-function createRunner({ request = options => axios(options), env = process.env, resolve = (...args) => require("./flowConnectionStore").resolve(...args) } = {}) {
+function createRunner({ request = options => axios(options), env = process.env, resolve = (...args) => require("./flowConnectionStore").resolve(...args), builtin = null } = {}) {
   return async (node, vars, context) => {
     validate(node.config, { publish: true });
-    const c = node.config, target = await resolve(context.tenantId, c.connection, c.operation, env);
+    const c = node.config;
     for (const value of Object.values(c.inputs)) {
       for (const match of value.matchAll(/\{\{?([\w.]+)\}?\}/g)) {
         if (rules.resolveVar(vars, match[1]) === undefined) throw fail("Business action inputs refer to a missing workflow variable");
@@ -109,18 +109,35 @@ function createRunner({ request = options => axios(options), env = process.env, 
     }
     const inputs = Object.fromEntries(Object.entries(c.inputs).map(([key, value]) => [key, rules.interpolateText(value, vars)]));
     const idempotencyKey = crypto.createHash("sha256").update([context.tenantId, context.runId, context.messageId, node.node_key, context.occurrence].join(":")).digest("hex");
-    const response = await request({
-      method: "POST", url: target.url, timeout: 15000, maxRedirects: 0,
-      maxContentLength: 32768, maxBodyLength: 16384,
-      proxy: false,
-      httpsAgent: new https.Agent({ lookup: safePublicLookup }),
-      headers: { Authorization: `Bearer ${target.token}`, "Idempotency-Key": idempotencyKey, "Content-Type": "application/json" },
-      data: { operation: c.operation, inputs, context: { tenantId: context.tenantId, conversationId: context.conversationId, runId: context.runId, idempotencyKey } },
-    });
-    if (!Number.isInteger(response.status) || response.status < 200 || response.status >= 300 || response.data?.success !== true || !response.data?.data || typeof response.data.data !== "object") throw fail("Business system did not confirm this action");
+    let actionData = null;
+    if (c.connection === "builtin") {
+      const exec = builtin || require("./builtinWorkflowExecutor");
+      const res = await exec.executeOperation(c.operation, inputs, {
+        ...context,
+        nodeKey: node.node_key,
+        phone: context.phone || inputs.customer_phone || vars["customer.phone"] || "",
+        customerName: context.customerName || vars["customer.name"] || vars.name || "",
+      });
+      if (!res || res.success !== true || !res.data || typeof res.data !== "object") {
+        throw fail("Built-in CRM system did not confirm this action");
+      }
+      actionData = res.data;
+    } else {
+      const target = await resolve(context.tenantId, c.connection, c.operation, env);
+      const response = await request({
+        method: "POST", url: target.url, timeout: 15000, maxRedirects: 0,
+        maxContentLength: 32768, maxBodyLength: 16384,
+        proxy: false,
+        httpsAgent: new https.Agent({ lookup: safePublicLookup }),
+        headers: { Authorization: `Bearer ${target.token}`, "Idempotency-Key": idempotencyKey, "Content-Type": "application/json" },
+        data: { operation: c.operation, inputs, context: { tenantId: context.tenantId, conversationId: context.conversationId, runId: context.runId, idempotencyKey } },
+      });
+      if (!Number.isInteger(response.status) || response.status < 200 || response.status >= 300 || response.data?.success !== true || !response.data?.data || typeof response.data.data !== "object") throw fail("Business system did not confirm this action");
+      actionData = response.data.data;
+    }
     const outputs = Object.create(null);
     for (const [variable, path] of Object.entries(c.outputs)) {
-      const value = readPath(response.data.data, path);
+      const value = readPath(actionData, path);
       if (!["string", "number", "boolean"].includes(typeof value) || typeof value === "number" && !Number.isFinite(value) || String(value).length > 4096) throw fail("Business system returned a missing or invalid output");
       outputs[variable] = value;
     }

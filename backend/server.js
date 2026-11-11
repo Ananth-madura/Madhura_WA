@@ -89,10 +89,10 @@ const app = express();
 const r2Storage = require("./services/r2StorageService");
 const isR2OrSqliteActive = require("./config/databaseEngine").usesSqlite();
 const r2Required = process.env.R2_REQUIRED === "1";
-if(r2Required && r2Storage.isConfigured()) {
-  const verifyStorage=()=>r2Storage.verifyConnection().catch(()=>{});
+if (r2Required && r2Storage.isConfigured()) {
+  const verifyStorage = () => r2Storage.verifyConnection().catch(() => { });
   verifyStorage();
-  const storageTimer=setInterval(verifyStorage,300000);storageTimer.unref();
+  const storageTimer = setInterval(verifyStorage, 300000); storageTimer.unref();
 }
 
 const dbState = {
@@ -107,7 +107,7 @@ const dbState = {
   ),
   lastError: null,
 };
-const databaseHealth=require("./services/databaseHealth").createDatabaseHealth(db,{onResult:result=>{dbState.connected=result.ok;dbState.lastError=result.errorCode;}});
+const databaseHealth = require("./services/databaseHealth").createDatabaseHealth(db, { onResult: result => { dbState.connected = result.ok; dbState.lastError = result.errorCode; } });
 
 // Never let a database failure become an unhandled rejection. Without this, a
 // dead database crashes the process even in degraded mode, which defeats the
@@ -194,7 +194,7 @@ app.use((req, res, next) => {
 });
 
 app.use(require("./middleware/requestAdmission").admitRequest);
-app.use(express.json({ limit: process.env.HTTP_JSON_LIMIT || "2mb", verify: (req, res, buf) => { if(req.path.includes("webhook"))req.rawBody = buf; } }));
+app.use(express.json({ limit: process.env.HTTP_JSON_LIMIT || "2mb", verify: (req, res, buf) => { if (req.path.includes("webhook")) req.rawBody = buf; } }));
 app.use(express.urlencoded({ limit: process.env.HTTP_JSON_LIMIT || "2mb", extended: true, parameterLimit: 2000 }));
 
 server.keepAliveTimeout = 65000;
@@ -202,8 +202,8 @@ server.headersTimeout = 66000;
 server.requestTimeout = 120000;
 
 app.set("sharedInboxReady", false);
-app.set("databaseHealth",databaseHealth);
-app.get("/api/ops/metrics",require("./services/runtimeMetrics").protectedSnapshot);
+app.set("databaseHealth", databaseHealth);
+app.get("/api/ops/metrics", require("./services/runtimeMetrics").protectedSnapshot);
 app.get(["/health", "/api/health"], (req, res) => {
   // Truth over green ticks. The status stays 200 so orchestrators do not
   // kill-loop the container, but the body reports the real state — a monitor
@@ -234,12 +234,12 @@ app.get(["/health", "/api/health"], (req, res) => {
     ...(dbUp
       ? {}
       : {
-          reason:
-            dbState.configured
-              ? "Database is configured but not reachable"
-              : "No database configured — set DB_HOST, DB_USER, DB_PASS, DB_NAME (or configure Cloudflare R2 / USE_SQLITE=1)",
-          hint: "Every /api route answers 503 while degraded. Provision MySQL or set Cloudflare R2 keys.",
-        }),
+        reason:
+          dbState.configured
+            ? "Database is configured but not reachable"
+            : "No database configured — set DB_HOST, DB_USER, DB_PASS, DB_NAME (or configure Cloudflare R2 / USE_SQLITE=1)",
+        hint: "Every /api route answers 503 while degraded. Provision MySQL or set Cloudflare R2 keys.",
+      }),
     // Not a fault: the Web engine is optional. Reported so it is never a
     // mystery why QR pairing does nothing.
     whatsappWebEngine: webEngineOn ? "enabled" : "disabled",
@@ -292,7 +292,7 @@ app.use("/api", (req, res, next) => {
   if (!dbState.degradedAllowed) {
     console.warn(
       "Database is not connected and ALLOW_START_WITHOUT_DB is not set — /api will answer 503. " +
-        "Set ALLOW_START_WITHOUT_DB=1 to make that intentional rather than accidental."
+      "Set ALLOW_START_WITHOUT_DB=1 to make that intentional rather than accidental."
     );
   }
   res.status(503).json({
@@ -469,7 +469,7 @@ ensureRuntimeDirs();
 app.use(
   "/uploads",
   (req, res, next) => {
-    if(!require("./middleware/legacyUploads").enabled())return res.sendStatus(404);
+    if (!require("./middleware/legacyUploads").enabled()) return res.sendStatus(404);
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
     next();
@@ -524,6 +524,7 @@ function startServer() {
       await require("./migrations/team_chat").migrate(require("./config/database"));
       await require("./migrations/legacy_employee_memberships").migrate(db);
       await require("./migrations/shared_flows").migrate(require("./config/database"));
+      await require("./migrations/enterprise_workflow_hub").migrate(db);
       await require("./migrations/automation_workspace").migrate(db);
       await require("./migrations/automation_command_center").migrate(db);
       await require("./migrations/sender_workspace").migrate(db);
@@ -545,7 +546,7 @@ function startServer() {
       console.warn("⚠️ WhatsApp tables setup warning:", e.message);
     }
 
-    await databaseHealth.check();databaseHealth.start();
+    await databaseHealth.check(); databaseHealth.start();
 
     // Load active Meta WhatsApp Cloud API credentials on boot
     try {
@@ -591,14 +592,14 @@ function startServer() {
 
     // Universal CRM Real-Time Event Bus & Database Change Sweep (Invoices, Quotes, AMC, Leads, Walkins)
     try {
-      if(process.env.WA_ENABLE_CRM_SWEEP!=="0")require("./services/crmEventBus").startCrmRealtimeSweep();
+      if (process.env.WA_ENABLE_CRM_SWEEP !== "0") require("./services/crmEventBus").startCrmRealtimeSweep();
     } catch (e) {
       console.warn("⚠️ CRM Event Bus sweep warning:", e.message);
     }
 
     // Start WhatsApp Cloud API queue worker (no Redis fallback = synchronous)
     const { startWorker } = require("./services/waQueue");
-    startWorker().catch(() => {});
+    startWorker().catch(() => { });
   };
 
   if (isR2OrSqliteActive || !dbState.degradedAllowed) {
@@ -654,23 +655,23 @@ function startServer() {
 app.startServer = startServer;
 
 function setupGracefulShutdown() {
-  let stopping=false;
+  let stopping = false;
   const shutdown = (signal) => {
-    if(stopping)return;stopping=true;app.set("draining",true);databaseHealth.stop();
+    if (stopping) return; stopping = true; app.set("draining", true); databaseHealth.stop();
     console.log(`\n🛑 [Server Guard] Received ${signal} — draining connections and shutting down gracefully...`);
     server.close(async () => {
       console.log("  HTTP/WebSocket servers closed to new connections.");
       try {
         await require("./services/sharedInboxAssistant").idle();
         const { messageQueue } = require("./services/waQueue");
-        if (messageQueue && messageQueue.close) await messageQueue.close().catch(() => {});
-        if (db && db.end) await new Promise((r) => db.end(r)).catch(() => {});
-      } catch (_) {}
+        if (messageQueue && messageQueue.close) await messageQueue.close().catch(() => { });
+        if (db && db.end) await new Promise((r) => db.end(r)).catch(() => { });
+      } catch (_) { }
       console.log("  Clean shutdown completed.");
       process.exit(0);
     });
-    const io=require("./sockets/chatsockets").getIO();
-    if(io){io.of("/").disconnectSockets(true);io.of("/notifications").disconnectSockets(true);io.engine.close();}
+    const io = require("./sockets/chatsockets").getIO();
+    if (io) { io.of("/").disconnectSockets(true); io.of("/notifications").disconnectSockets(true); io.engine.close(); }
     setTimeout(() => {
       console.error("  Forced exit after 30s shutdown timeout.");
       process.exit(1);

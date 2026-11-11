@@ -317,6 +317,16 @@ export function FlowActionMiscInspector({ node, nodes = [], flows = [], agents =
             ))}
           </select>
         </div>
+        <div>
+          <label className="text-xs font-bold text-slate-700 block mb-1">Or Template Sub-Workflow Key</label>
+          <input
+            type="text"
+            value={cfg.target_flow_key || ""}
+            onChange={(e) => onChange({ target_flow_key: e.target.value })}
+            placeholder="e.g. enterprise.appointments.01_new_booking"
+            className="w-full p-2 text-xs font-mono border rounded-lg"
+          />
+        </div>
       </div>
     );
   }

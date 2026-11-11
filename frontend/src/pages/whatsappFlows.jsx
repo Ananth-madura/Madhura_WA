@@ -13,6 +13,8 @@ import FlowWebhookOptions from "../components/FlowWebhookOptions";
 import FlowAiOptions from "../components/FlowAiOptions";
 import FlowSetVariableOptions from "../components/FlowSetVariableOptions";
 import { FlowMediaInspector, FlowTriggerInspector, FlowActionMiscInspector } from "../components/FlowTriggerAndActionOptions";
+import WorkflowSystemHubModal from "../components/WorkflowSystemHubModal";
+import WorkflowRecordsPanel from "../components/WorkflowRecordsPanel";
 import { flowPorts, setFlowPort, removeFlowNodes, duplicateFlowNodes } from "../utils/waFlowGraph";
 import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
 import WAFlowOutline from "../components/WAFlowOutline";
@@ -178,7 +180,7 @@ const getFlowIssues = (list, entryKey) => {
     if(node.node_type==="ai_reply"&&(!String(cfg.prompt||"").trim()||!String(cfg.output_variable||"").trim()))issues.push({severity:"error",nodeKey:node.node_key,text:`AI reply "${node.node_key}" requires a prompt and output variable.`});
     if(node.node_type==="ai_generate"&&!String(cfg.prompt||"").trim())issues.push({severity:"error",nodeKey:node.node_key,text:`AI step "${node.node_key}" requires instructions or prompt.`});
     if(node.node_type==="ai_intent"&&!Object.keys(cfg.branches||{}).length&&!cfg.fallback_node)issues.push({severity:"error",nodeKey:node.node_key,text:`AI Intent "${node.node_key}" needs at least one branch or fallback.`});
-    if(node.node_type==="jump_to_flow"&&!Number(cfg.target_flow_id))issues.push({severity:"error",nodeKey:node.node_key,text:`Jump step "${node.node_key}" needs a target flow selected.`});
+    if(node.node_type==="jump_to_flow"&&!Number(cfg.target_flow_id)&&!String(cfg.target_flow_key||"").trim())issues.push({severity:"error",nodeKey:node.node_key,text:`Jump step "${node.node_key}" needs a target flow selected.`});
 
     links.forEach(l => {
       if (!nodeMap[l.target]) {
@@ -514,6 +516,7 @@ function FlowsWorkspace() {
 
   // Analytics Modal State
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
+  const [showSystemHub, setShowSystemHub] = useState(false);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [selectedAnalyticsFlow, setSelectedAnalyticsFlow] = useState(null);
@@ -2647,6 +2650,9 @@ function FlowsWorkspace() {
             <p className="hl-subtitle">Build business workflows, connect systems, and inspect every execution.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button onClick={() => setShowSystemHub(true)} className="hl-btn-secondary">
+              <Layers size={15} /> 10-System Hub (75)
+            </button>
             <button onClick={handleSeedFlows} className="hl-btn-secondary">
               <Database size={15} /> Load 10 bot starters
             </button>
@@ -2677,6 +2683,15 @@ function FlowsWorkspace() {
             >
               <Clock size={15} />
               <span>Live Run Audit</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("records")}
+              className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                activeTab === "records" ? "bg-emerald-50 text-emerald-800 shadow-sm" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Database size={15} />
+              <span>CRM Records &amp; Alerts</span>
             </button>
           </div>
 
@@ -2713,7 +2728,13 @@ function FlowsWorkspace() {
                     Create a flow or load a starter template to open it in the visual builder.
                   </p>
                 </div>
-                <div className="flex justify-center gap-2 pt-2">
+                <div className="flex flex-wrap justify-center gap-2 pt-2">
+                  <button
+                    onClick={() => setShowSystemHub(true)}
+                    className="px-4 py-2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold hover:bg-emerald-100"
+                  >
+                    Browse 10-System Templates
+                  </button>
                   <button
                     onClick={handleSeedFlows}
                     className="px-4 py-2 bg-slate-100 text-slate-800 rounded-xl text-xs font-bold hover:bg-slate-200"
@@ -2893,6 +2914,9 @@ function FlowsWorkspace() {
           </div>
         )}
 
+        {/* ── CRM RECORDS & ERROR ALERTS TAB ───────────────────────── */}
+        {activeTab === "records" && <WorkflowRecordsPanel />}
+
         {/* ── FLOW ANALYTICS MODAL ──────────────────────────────────── */}
         {showAnalyticsModal && selectedAnalyticsFlow && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowAnalyticsModal(false)}>
@@ -2959,6 +2983,12 @@ function FlowsWorkspace() {
             </div>
           </div>
         )}
+        <WorkflowSystemHubModal
+          open={showSystemHub}
+          onClose={() => setShowSystemHub(false)}
+          onInstalled={fetchFlows}
+          onEditFlow={(flowId) => navigate(`/whatsapp/flows/edit/${flowId}`)}
+        />
         <FlowTestDialog
           request={testRequest}
           flowName={flowName}
