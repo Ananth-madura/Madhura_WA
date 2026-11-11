@@ -1700,6 +1700,29 @@ export default function WhatsAppPage() {
     } catch (_) { }
 
     fetchMessages(chat.id, 10);
+
+    // Sync active automated bot status for this chat
+    try {
+      const token = waUiStorage.getItem("token");
+      const chatPhone = (chat.phoneNumber || chat.phone || chat.id || "").replace(/\D/g, "");
+      if (chatPhone) {
+        axios.get(`${API}/api/wa/flows/chat-status`, {
+          params: { phone: chatPhone },
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }).then((r) => {
+          const run = r.data?.activeRun;
+          if (run) {
+            setActiveFlowRun({ flowId: run.flowId, flowName: run.flowName, currentNode: run.currentNode, phone: chatPhone, chatId: chat.id });
+          } else {
+            setActiveFlowRun(null);
+          }
+        }).catch(() => {});
+      } else {
+        setActiveFlowRun(null);
+      }
+    } catch (_) {
+      setActiveFlowRun(null);
+    }
   };
 
   const handleSend = async () => {
@@ -2287,21 +2310,40 @@ export default function WhatsAppPage() {
     };
   }, []);
 
+  const handleStopChatBot = async () => {
+    const rawPhone = (activeFlowRun?.phone || selectedChat?.phoneNumber || selectedChat?.phone || selectedChat?.id || "").replace(/\D/g, "");
+    try {
+      const token = waUiStorage.getItem("token");
+      await axios.post(`${API}/api/wa/flows/stop-chat-bot`, {
+        phone: rawPhone,
+        conversationId: selectedChat?.conversationId || null,
+        pauseBot: true,
+      }, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    } catch (_) {}
+    setActiveFlowRun(null);
+  };
+
   const handleTriggerFlow = async (flowId) => {
     if (!selectedChat || !flowId) return;
     setTriggeringFlow(true);
     try {
       const token = waUiStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
-      let phone = selectedChat.id.replace(/\D/g, "");
+      let phone = (selectedChat.phoneNumber || selectedChat.phone || selectedChat.id || "").replace(/\D/g, "");
       if (phone.length === 10) phone = "91" + phone;
-      const res = await axios.post(`${API}/api/wa/flows/${flowId}/trigger-phone`, { phone }, { headers });
+      await axios.post(`${API}/api/wa/flows/${flowId}/trigger-phone`, {
+        phone,
+        chatId: selectedChat.id,
+        conversationId: selectedChat.conversationId || undefined,
+        sessionKey: selectedChat.senderSessionKey || undefined,
+      }, { headers });
       const selFlow = flows.find((f) => String(f.id) === String(flowId));
       setActiveFlowRun({
         flowId,
         flowName: selFlow?.name || "Automated Bot Flow",
         currentNode: "Active",
         phone,
+        chatId: selectedChat.id,
       });
       setShowFlowModal(false);
       setShowAttachMenu(false);
@@ -5613,7 +5655,7 @@ export default function WhatsAppPage() {
                       <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[var(--color-paper)]"></span>
                     </span>
                     <span className="font-bold text-[var(--color-ink)] shrink-0">🤖 Bot Flow Active:</span>
-                    <span className="text-[var(--color-paper-2)] font-medium truncate">{activeFlowRun.flowName || "Automated Flow"}</span>
+                    <span className="text-[var(--color-ink-2)] font-semibold truncate">{activeFlowRun.flowName || "Automated Flow"}</span>
                     {activeFlowRun.currentNode && (
                       <span className="hl-badge shrink-0 hidden sm:inline">
                         Step: {activeFlowRun.currentNode}
@@ -5622,7 +5664,14 @@ export default function WhatsAppPage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button
-                      onClick={() => setActiveFlowRun(null)}
+                      onClick={() => { fetchFlows(); setShowFlowModal(true); }}
+                      className="px-2 py-1 text-[11px] font-bold text-[var(--color-ink)] hover:underline"
+                      title="Switch to another bot flow"
+                    >
+                      Switch Bot
+                    </button>
+                    <button
+                      onClick={handleStopChatBot}
                       className="hl-btn-danger-ghost px-2.5 py-1 text-[11px] font-bold transition flex items-center gap-1"
                       title="Stop this automated bot flow"
                     >
@@ -6652,10 +6701,13 @@ export default function WhatsAppPage() {
                       className={`hl-card p-3.5 cursor-pointer transition flex items-center justify-between ${selectedFlowId === fl.id ? "border-[var(--color-accent)]" : ""}`}
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <p className="font-bold text-xs truncate">{fl.name}</p>
+                          <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full ${fl.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>
+                            {fl.status || "draft"}
+                          </span>
                           <span className="hl-badge text-[10px] px-2 py-0.5 rounded-full">
-                            {fl.node_count || 1} nodes
+                            {fl.trigger_type === "all_inbound" ? "Global" : fl.trigger_type || "keyword"} · {fl.node_count || 1} steps
                           </span>
                         </div>
                         {fl.description && <p className="text-[11px] text-[var(--color-ink-2)] truncate mt-0.5">{fl.description}</p>}

@@ -8,6 +8,11 @@ import FlowSwitchOptions from "../components/FlowSwitchOptions";
 import FlowConnections from "../components/FlowConnections";
 import FlowRunEvents from "../components/FlowRunEvents";
 import FlowWorkspaceGate from "../components/FlowWorkspaceGate";
+import FlowVariablePicker from "../components/FlowVariablePicker";
+import FlowWebhookOptions from "../components/FlowWebhookOptions";
+import FlowAiOptions from "../components/FlowAiOptions";
+import FlowSetVariableOptions from "../components/FlowSetVariableOptions";
+import { FlowMediaInspector, FlowTriggerInspector, FlowActionMiscInspector } from "../components/FlowTriggerAndActionOptions";
 import { flowPorts, setFlowPort, removeFlowNodes, duplicateFlowNodes } from "../utils/waFlowGraph";
 import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
 import WAFlowOutline from "../components/WAFlowOutline";
@@ -19,7 +24,7 @@ import { API } from "../config/api";
 import WAStorageAndSenders from "../components/WAStorageAndSenders";
 import WAInteractiveOptions from "../components/WAInteractiveOptions";
 import { getInteractiveMessage } from "../utils/waInteractiveMessage";
-import { Bot, Plus, Play, Trash2, Loader2, GitFork, Send, X, PhoneCall, Database, Globe, CheckCircle2, Clock, ShieldAlert, ListOrdered, Layers, BarChart2, RefreshCw, Zap, Search, ChevronRight, RotateCcw, Sliders, MessageSquare, AlertCircle, Shield, Sun, Moon } from "lucide-react";
+import { Bot, Plus, Play, Copy, Trash2, Loader2, GitFork, Send, X, PhoneCall, Database, Globe, CheckCircle2, Clock, ListOrdered, Layers, BarChart2, RefreshCw, Zap, Search, ChevronRight, RotateCcw, Sliders, MessageSquare, AlertCircle, Shield, Sun, Moon } from "lucide-react";
 
 // Standard & Advanced WhatsApp Flow Placeholders
 const PLACEHOLDERS = [
@@ -106,7 +111,8 @@ const PALETTE_CATEGORIES = [
       { type: "business_action", label: "Business Action", desc: "Call a configured business system and map its response" },
       { type: "create_lead", label: "Create CRM Lead", icon: "💼", desc: "Save contact as hot sales lead", color: "border-blue-500 bg-blue-50 text-blue-900" },
       { type: "api_webhook", label: "API Webhook", icon: "🌐", desc: "Call external REST API", color: "border-violet-500 bg-violet-50 text-violet-900" },
-      { type: "set_variable", label: "Set Variable", icon: "⚙️", desc: "Assign custom session variable", color: "border-slate-500 bg-slate-50 text-slate-900" },
+      { type: "set_variable", label: "Set Variable / Transform", icon: "⚙️", desc: "Assign variables & math/date transforms", color: "border-slate-500 bg-slate-50 text-slate-900" },
+      { type: "set_tag", label: "Tag Contact", icon: "🏷️", desc: "Tag lead / contact in CRM", color: "border-emerald-500 bg-emerald-50 text-emerald-900" },
     ]
   },
   {
@@ -122,7 +128,7 @@ const PALETTE_CATEGORIES = [
   }
 ];
 
-const SHARED_PALETTE = PALETTE_CATEGORIES.map(category=>({...category,items:category.items.filter(item=>!["ai_intent","ai_generate","delay","crm_lookup","create_lead","api_webhook","jump_to_flow"].includes(item.type))})).filter(category=>category.items.length);
+const SHARED_PALETTE = PALETTE_CATEGORIES;
 
 const makeEntryNode = () => ({
   node_key: "start",
@@ -136,7 +142,7 @@ const makeEntryNode = () => ({
 const cloneNodes = (list) => JSON.parse(JSON.stringify(list || []));
 
 // Steps that are allowed to finish a branch without a follow-up wire.
-const TERMINAL_NODE_TYPES = new Set(["end", "handoff"]);
+const TERMINAL_NODE_TYPES = new Set(["end", "handoff", "jump_to_flow"]);
 
 // Every outgoing link a node owns. Target keys may be stale — callers decide
 // whether a dangling reference is an error (validation) or simply skipped (wires).
@@ -169,6 +175,10 @@ const getFlowIssues = (list, entryKey) => {
     if(node.node_type==="business_hours"&&(!cfg.open_next||!cfg.closed_next))issues.push({severity:"error",nodeKey:node.node_key,text:"Connect both Open and Closed business-hours routes."});
     if(node.node_type==="business_action"&&(!cfg.connection||!cfg.operation||!cfg.next_node_key||!cfg.error_next))issues.push({severity:"error",nodeKey:node.node_key,text:"Choose a connection and operation, and connect Success and Failure routes."});
     if(node.node_type==="switch"&&(!cfg.variable||!cfg.cases?.length||!cfg.fallback_node_key||cfg.cases.some(route=>!route.next_node_key)))issues.push({severity:"error",nodeKey:node.node_key,text:"Choose a switch variable and connect every route, including Otherwise."});
+    if(node.node_type==="ai_reply"&&(!String(cfg.prompt||"").trim()||!String(cfg.output_variable||"").trim()))issues.push({severity:"error",nodeKey:node.node_key,text:`AI reply "${node.node_key}" requires a prompt and output variable.`});
+    if(node.node_type==="ai_generate"&&!String(cfg.prompt||"").trim())issues.push({severity:"error",nodeKey:node.node_key,text:`AI step "${node.node_key}" requires instructions or prompt.`});
+    if(node.node_type==="ai_intent"&&!Object.keys(cfg.branches||{}).length&&!cfg.fallback_node)issues.push({severity:"error",nodeKey:node.node_key,text:`AI Intent "${node.node_key}" needs at least one branch or fallback.`});
+    if(node.node_type==="jump_to_flow"&&!Number(cfg.target_flow_id))issues.push({severity:"error",nodeKey:node.node_key,text:`Jump step "${node.node_key}" needs a target flow selected.`});
 
     links.forEach(l => {
       if (!nodeMap[l.target]) {
@@ -311,6 +321,20 @@ function FlowsWorkspace() {
   const [flowDesc, setFlowDesc] = useState("");
   const [flowTriggerType, setFlowTriggerType] = useState("keyword");
   const [flowKeywords, setFlowKeywords] = useState("hi, hello, bank, menu, help");
+  const [triggerMeta, setTriggerMeta] = useState({
+    match_mode: "smart",
+    case_sensitive: false,
+    priority: 50,
+    sender_scope: "all",
+    sender_ids: [],
+    allow_restart_after_human: false,
+    cooldown_minutes: 0,
+    session_timeout_minutes: 240,
+    escape_keywords: "",
+    active_hours: { enabled: false, timezone: "Asia/Kolkata", start: "09:00", end: "18:00", days: [1, 2, 3, 4, 5, 6] },
+  });
+  const [sendersList, setSendersList] = useState([]);
+  const [agentsList, setAgentsList] = useState([]);
   const [flowEntryNode, setFlowEntryNode] = useState("start");
   const [nodes, setNodes] = useState([]);
   const [selectedNodeKey, setSelectedNodeKey] = useState(null);
@@ -517,6 +541,10 @@ function FlowsWorkspace() {
 
   useEffect(() => {
     fetchFlows();
+    const token = localStorage.getItem("token");
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    axios.get(`${API}/api/wa-flows/senders`, { headers }).then((r) => setSendersList(r.data?.senders || [])).catch(() => {});
+    axios.get(`${API}/api/wa-flows/agents`, { headers }).then((r) => setAgentsList(r.data?.agents || [])).catch(() => {});
   }, [fetchFlows]);
 
   // ── Fetch Audit Runs ────────────────────────────────────────────────────────
@@ -740,6 +768,18 @@ function FlowsWorkspace() {
       }
       const kws = cfg?.keywords || (cfg?.keyword ? [cfg.keyword] : []);
       setFlowKeywords(kws.join(", ") || "hi, hello, menu");
+      setTriggerMeta({
+        match_mode: cfg?.match_mode || "smart",
+        case_sensitive: Boolean(cfg?.case_sensitive),
+        priority: Number(cfg?.priority ?? 50),
+        sender_scope: cfg?.sender_scope || (cfg?.sender_ids?.length ? "selected" : "all"),
+        sender_ids: Array.isArray(cfg?.sender_ids) ? cfg.sender_ids : [],
+        allow_restart_after_human: Boolean(cfg?.allow_restart_after_human),
+        cooldown_minutes: Number(cfg?.cooldown_minutes ?? 0),
+        session_timeout_minutes: Number(cfg?.session_timeout_minutes ?? 240),
+        escape_keywords: cfg?.escape_keywords || "",
+        active_hours: cfg?.active_hours || { enabled: false, timezone: "Asia/Kolkata", start: "09:00", end: "18:00", days: [1, 2, 3, 4, 5, 6] },
+      });
       setFlowEntryNode(flow.entry_node_key || "start");
 
       // Fetch full nodes from backend
@@ -755,6 +795,18 @@ function FlowsWorkspace() {
         let triggerConfig = fullFlow.trigger_config || {};
         if (typeof triggerConfig === "string") { try { triggerConfig = JSON.parse(triggerConfig); } catch { triggerConfig = {}; } }
         setFlowKeywords((triggerConfig.keywords || (triggerConfig.keyword ? [triggerConfig.keyword] : [])).join(", "));
+        setTriggerMeta({
+          match_mode: triggerConfig?.match_mode || "smart",
+          case_sensitive: Boolean(triggerConfig?.case_sensitive),
+          priority: Number(triggerConfig?.priority ?? 50),
+          sender_scope: triggerConfig?.sender_scope || (triggerConfig?.sender_ids?.length ? "selected" : "all"),
+          sender_ids: Array.isArray(triggerConfig?.sender_ids) ? triggerConfig.sender_ids : [],
+          allow_restart_after_human: Boolean(triggerConfig?.allow_restart_after_human),
+          cooldown_minutes: Number(triggerConfig?.cooldown_minutes ?? 0),
+          session_timeout_minutes: Number(triggerConfig?.session_timeout_minutes ?? 240),
+          escape_keywords: triggerConfig?.escape_keywords || "",
+          active_hours: triggerConfig?.active_hours || { enabled: false, timezone: "Asia/Kolkata", start: "09:00", end: "18:00", days: [1, 2, 3, 4, 5, 6] },
+        });
         setFlowEntryNode(fullFlow.entry_node_key || "start");
         const fetchedNodes = res.data?.nodes || [];
         const loaded = fetchedNodes.length > 0 ? fetchedNodes : [makeEntryNode()];
@@ -772,8 +824,20 @@ function FlowsWorkspace() {
       setEditingFlowId(null);
       setFlowName("");
       setFlowDesc("");
-      setFlowTriggerType("manual");
-      setFlowKeywords("");
+      setFlowTriggerType("keyword");
+      setFlowKeywords("hi, hello");
+      setTriggerMeta({
+        match_mode: "smart",
+        case_sensitive: false,
+        priority: 50,
+        sender_scope: "all",
+        sender_ids: [],
+        allow_restart_after_human: false,
+        cooldown_minutes: 0,
+        session_timeout_minutes: 240,
+        escape_keywords: "",
+        active_hours: { enabled: false, timezone: "Asia/Kolkata", start: "09:00", end: "18:00", days: [1, 2, 3, 4, 5, 6] },
+      });
       setFlowEntryNode("start");
       const defaultNodes = [makeEntryNode()];
       setNodes(defaultNodes);
@@ -903,7 +967,7 @@ function FlowsWorkspace() {
         description: flowDesc,
         status: "draft",
         trigger_type: flowTriggerType,
-        trigger_config: { keywords: keywordsArr },
+        trigger_config: { ...triggerMeta, keywords: keywordsArr },
         entry_node_key: actualEntryKey,
         nodes: nodes.map(n => ({
           node_key: n.node_key,
@@ -969,10 +1033,22 @@ function FlowsWorkspace() {
           return;
         }
       }
-      await axios.patch(`${API}/api/wa-flows/${flow.id}/status`, { status: newStatus }, { headers });
+      await axios.patch(`${API}/api/wa-flows/${flow.id}/status`, { status: newStatus, autoPublish: newStatus === "active" }, { headers });
       setFlows(prev => prev.map(f => f.id === flow.id ? { ...f, status: newStatus } : f));
     } catch (err) {
-      alert("Error changing status: " + err.message);
+      alert("Error changing status: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const handleDuplicateFlow = async (flow, e) => {
+    if (e) e.stopPropagation();
+    try {
+      const token = localStorage.getItem("token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      await axios.post(`${API}/api/wa-flows/${flow.id}/duplicate`, {}, { headers });
+      await fetchFlows();
+    } catch (err) {
+      alert("Error duplicating flow: " + (err.response?.data?.error || err.message));
     }
   };
 
@@ -1114,11 +1190,23 @@ function FlowsWorkspace() {
     } else if (item.type === "create_lead") {
       newConfig = { default_service: "General Inquiry", notes: "Captured via bot", next_node_key: "" };
     } else if (item.type === "api_webhook") {
-      newConfig = { method: "GET", url: "", next_node_key: "" };
+      newConfig = { method: "GET", url: "", timeout_ms: 10000, retry_count: 1, headers: {}, query_params: {}, response_mapping: {}, next_node_key: "", error_next: "" };
+    } else if (item.type === "ai_generate") {
+      newConfig = { prompt: "{{last_input}}", system_prompt: "", output_variable: "ai_reply", send_immediately: true, next_node_key: "" };
+    } else if (item.type === "ai_intent") {
+      newConfig = { input_variable: "last_input", prompt: "", branches: { sales: "", support: "", pricing: "" }, fallback_node: "" };
+    } else if (item.type === "set_variable") {
+      newConfig = { var_key: "custom_value", var_value: "{{last_input}}", assignments: [{ key: "custom_value", value: "{{last_input}}", transform: "template", arg: "" }], next_node_key: "" };
+    } else if (item.type === "set_tag") {
+      newConfig = { tag: "Hot Lead", next_node_key: "" };
+    } else if (item.type === "jump_to_flow") {
+      newConfig = { target_flow_id: "" };
+    } else if (["keyword_trigger", "all_inbound_trigger", "first_inbound_trigger"].includes(item.type)) {
+      newConfig = { trigger_label: item.label, keywords: item.type === "keyword_trigger" ? ["hi", "hello"] : [], next_node_key: "" };
     } else if (item.type === "handoff") {
-      newConfig = { note: "Connecting you to our support specialist..." };
+      newConfig = { note: "Connecting you to our support specialist...", priority: "normal" };
     } else if (item.type === "delay") {
-      newConfig = { delay_seconds: 3, next_node_key: "" };
+      newConfig = { delay_seconds: 2, delay_unit: "seconds", next_node_key: "" };
     }
 
     const canvasCenterX = (-pan.x + 400) / zoom;
@@ -1222,7 +1310,7 @@ function FlowsWorkspace() {
     const activeFlowDraft = {
       name: flowName,
       trigger_type: flowTriggerType,
-      trigger_config: { keywords: flowKeywords.split(",").map(k => k.trim()) },
+      trigger_config: { ...triggerMeta, keywords: flowKeywords.split(",").map(k => k.trim()).filter(Boolean) },
       entry_node_key: flowEntryNode || "start",
       nodes
     };
@@ -1793,19 +1881,19 @@ function FlowsWorkspace() {
                 placeholder="Thank you for contacting Fresh Foods Trading!..."
                 className="w-full p-2.5 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-sans"
               />
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                {PLACEHOLDERS.slice(0, 6).map((p, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => updateConfig({ text: `${cfg.text || ""} ${p.tag}` })}
-                    className="px-1.5 py-0.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 rounded text-[10px] font-mono transition"
-                  >
-                    + {p.tag}
-                  </button>
-                ))}
-              </div>
+              <FlowVariablePicker
+                nodes={nodes}
+                onInsert={(tag) => updateConfig({ text: `${cfg.text || ""}${cfg.text ? " " : ""}${tag}` })}
+              />
             </div>
+            <label className="flex items-center gap-2 text-xs text-slate-700">
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.preview_url)}
+                onChange={(e) => updateConfig({ preview_url: e.target.checked })}
+              />
+              <span>Show rich link preview if URL present</span>
+            </label>
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
               <select
@@ -1938,52 +2026,7 @@ function FlowsWorkspace() {
 
         {/* ── MEDIA / PDF CATALOG CONFIGURATION ─────────────────────── */}
         {selectedNode.node_type === "send_media" && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Media URL or Catalog Link</label>
-              <input
-                type="text"
-                value={cfg.url || ""}
-                onChange={(e) => updateConfig({ url: e.target.value })}
-                placeholder="https://yourdomain.com/catalog.pdf"
-                className="w-full p-2 text-xs border rounded-lg font-mono"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Media Type</label>
-              <select
-                value={cfg.media_type || "document"}
-                onChange={(e) => updateConfig({ media_type: e.target.value })}
-                className="w-full p-2 text-xs border rounded-lg bg-white"
-              >
-                <option value="document">Document / PDF Catalog</option>
-                <option value="image">Product Image (JPEG / PNG)</option>
-                <option value="video">Product Video (MP4)</option>
-                <option value="audio">Audio / Voice</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Caption Text</label>
-              <input
-                type="text"
-                value={cfg.caption || ""}
-                onChange={(e) => updateConfig({ caption: e.target.value })}
-                placeholder="Here is our wholesale catalog!"
-                className="w-full p-2 text-xs border rounded-lg"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
-              <select
-                value={cfg.next_node_key || ""}
-                onChange={(e) => updateConfig({ next_node_key: e.target.value })}
-                className="w-full p-2 text-xs border rounded-lg bg-white font-mono"
-              >
-                <option value="">-- Select Next Step --</option>
-                {nodes.map(n => <option key={n.node_key} value={n.node_key}>{n.node_key} ({n.node_type})</option>)}
-              </select>
-            </div>
-          </div>
+          <FlowMediaInspector config={cfg} nodes={nodes} onChange={updateConfig} />
         )}
 
         {/* ── CONDITION BRANCHING CONFIGURATION ─────────────────────── */}
@@ -1991,7 +2034,9 @@ function FlowsWorkspace() {
         {selectedNode.node_type === "business_hours"&&<FlowHoursOptions config={cfg} onChange={updateConfig}/>}
         {selectedNode.node_type === "switch"&&<FlowSwitchOptions config={cfg} onChange={updateConfig}/>}
         {selectedNode.node_type === "business_action"&&<FlowBusinessActionOptions config={cfg} onChange={updateConfig}/>}
-        {selectedNode.node_type === "ai_reply"&&<div className="space-y-3"><p className="text-xs">Uses the configured inbox AI provider and business instructions. Save its reply to a variable, then connect a Text Message step to send it. This step cannot access business records or perform actions.</p><label className="text-xs block">Prompt<textarea className="w-full border rounded p-2" value={cfg.prompt||""} maxLength={2000} onChange={e=>updateConfig({prompt:e.target.value})}/></label><label className="text-xs block">Output variable<input className="w-full border rounded p-2" value={cfg.output_variable||""} onChange={e=>updateConfig({output_variable:e.target.value})}/></label></div>}
+        {["ai_reply", "ai_generate", "ai_intent"].includes(selectedNode.node_type) && (
+          <FlowAiOptions nodeType={selectedNode.node_type} config={cfg} nodes={nodes} onChange={updateConfig} />
+        )}
         {selectedNode.node_type === "contact_lookup"&&<p className="text-xs">Loads customer.name, customer.phone, customer.email and contact.exists from this conversation's organization-owned contact. Preview uses sample contact data. No balances or banking records are fetched.</p>}
         {selectedNode.node_type === "condition" && !cfg.rules?.length && (
           <div className="space-y-3">
@@ -2078,8 +2123,32 @@ function FlowsWorkspace() {
                 <option value="service_ticket">Latest Service Ticket Status</option>
               </select>
             </div>
+            <label className="flex items-center gap-2 text-xs text-slate-700">
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.branch_on_result || cfg.found_next || cfg.not_found_next)}
+                onChange={(e) => updateConfig({ branch_on_result: e.target.checked })}
+              />
+              <span>Branch on Record Found vs Not Found</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] font-bold text-emerald-800 block mb-1">Record Found Route</label>
+                <select value={cfg.found_next || ""} onChange={(e) => updateConfig({ found_next: e.target.value })} className="w-full p-1.5 text-xs bg-emerald-50 border rounded font-mono">
+                  <option value="">-- Optional --</option>
+                  {nodes.map(n => <option key={n.node_key} value={n.node_key}>{n.node_key}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-amber-800 block mb-1">Not Found Route</label>
+                <select value={cfg.not_found_next || ""} onChange={(e) => updateConfig({ not_found_next: e.target.value })} className="w-full p-1.5 text-xs bg-amber-50 border rounded font-mono">
+                  <option value="">-- Optional --</option>
+                  {nodes.map(n => <option key={n.node_key} value={n.node_key}>{n.node_key}</option>)}
+                </select>
+              </div>
+            </div>
             <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Default Next Step Node</label>
               <select
                 value={cfg.next_node_key || ""}
                 onChange={(e) => updateConfig({ next_node_key: e.target.value })}
@@ -2131,28 +2200,15 @@ function FlowsWorkspace() {
           </div>
         )}
 
-        {/* ── LIVE AGENT HANDOFF CONFIGURATION ──────────────────────── */}
-        {selectedNode.node_type === "handoff" && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Handoff Notification Note</label>
-              <input
-                type="text"
-                value={cfg.note || ""}
-                onChange={(e) => updateConfig({ note: e.target.value })}
-                placeholder="Connecting you to our specialist..."
-                className="w-full p-2 text-xs border rounded-lg"
-              />
-            </div>
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
-              <p className="font-bold flex items-center gap-1"><ShieldAlert size={14} /> Agent Transfer Protocol</p>
-              <p className="text-[11px] text-amber-800">
-                1. Stops automatic replies until a staff member explicitly starts a bot again.<br />
-                2. Sends the handoff message to the customer and connected, permitted employees.<br />
-                3. Keeps collected answers transient unless a contact field was explicitly selected for saving.
-              </p>
-            </div>
-          </div>
+        {/* ── LIVE AGENT HANDOFF & MISC ACTIONS CONFIGURATION ──────── */}
+        {["handoff", "delay", "set_tag", "jump_to_flow"].includes(selectedNode.node_type) && (
+          <FlowActionMiscInspector
+            node={selectedNode}
+            nodes={nodes}
+            flows={flows.filter((f) => String(f.id) !== String(editingFlowId))}
+            agents={agentsList}
+            onChange={updateConfig}
+          />
         )}
 
         {/* ── CREATE CRM LEAD CONFIGURATION ─────────────────────────── */}
@@ -2200,147 +2256,31 @@ function FlowsWorkspace() {
 
         {/* ── API WEBHOOK REST CALL CONFIGURATION ────────────────────── */}
         {selectedNode.node_type === "api_webhook" && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Method</label>
-                <select
-                  value={cfg.method || "GET"}
-                  onChange={(e) => updateConfig({ method: e.target.value })}
-                  className="w-full p-2 text-xs border rounded-lg bg-white font-mono font-bold"
-                >
-                  <option value="GET">GET</option>
-                  <option value="POST">POST</option>
-                </select>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="text-xs font-bold text-slate-700 block mb-1">Endpoint URL</label>
-                <input
-                  type="text"
-                  value={cfg.url || ""}
-                  onChange={(e) => updateConfig({ url: e.target.value })}
-                  placeholder="https://api.example.com/order"
-                  className="w-full p-2 text-xs border rounded-lg font-mono"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
-              <select
-                value={cfg.next_node_key || ""}
-                onChange={(e) => updateConfig({ next_node_key: e.target.value })}
-                className="w-full p-2 text-xs border rounded-lg bg-white font-mono"
-              >
-                <option value="">-- Select Next Step --</option>
-                {nodes.map(n => <option key={n.node_key} value={n.node_key}>{n.node_key} ({n.node_type})</option>)}
-              </select>
-            </div>
-          </div>
-        )}
-
-        {/* ── PACING DELAY CONFIGURATION ────────────────────────────── */}
-        {selectedNode.node_type === "delay" && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Typing Delay Duration (Seconds)</label>
-              <input
-                type="number"
-                min="1"
-                max="30"
-                value={cfg.delay_seconds || 2}
-                onChange={(e) => updateConfig({ delay_seconds: parseInt(e.target.value, 10) || 1 })}
-                className="w-full p-2 text-xs border rounded-lg font-mono font-bold"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
-              <select
-                value={cfg.next_node_key || ""}
-                onChange={(e) => updateConfig({ next_node_key: e.target.value })}
-                className="w-full p-2 text-xs border rounded-lg bg-white font-mono"
-              >
-                <option value="">-- Select Next Step --</option>
-                {nodes.map(n => <option key={n.node_key} value={n.node_key}>{n.node_key} ({n.node_type})</option>)}
-              </select>
-            </div>
-          </div>
+          <FlowWebhookOptions config={cfg} nodes={nodes} onChange={updateConfig} />
         )}
 
         {/* ── FLOW TRIGGERS CONFIGURATION (Start / Inbound / Keywords) ── */}
         {(selectedNode.node_type === "start" || selectedNode.node_type?.includes("trigger")) && (
-          <div className="space-y-3">
-            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
-              <span className="font-bold flex items-center gap-1">
-                <span>🚀</span>
-                <span>Flow Entry Trigger Point</span>
-              </span>
-              <p className="text-[10px] text-amber-700">
-                This is the entry node where incoming WhatsApp messages begin this automated journey.
-              </p>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Trigger Description / Label</label>
-              <input
-                type="text"
-                value={cfg.trigger_label || ""}
-                onChange={(e) => updateConfig({ trigger_label: e.target.value })}
-                placeholder="e.g. Welcome Greeting & Menu"
-                className="w-full p-2 text-xs border rounded-lg"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Trigger Keywords (comma-separated)</label>
-              <input
-                type="text"
-                value={Array.isArray(cfg.keywords) ? cfg.keywords.join(", ") : (cfg.keywords || "")}
-                onChange={(e) => updateConfig({ keywords: e.target.value.split(",").map(k => k.trim()) })}
-                placeholder="e.g. hi, hello, food, menu, order, amc, catalog"
-                className="w-full p-2 text-xs font-mono border rounded-lg"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node *</label>
-              <select
-                value={cfg.next_node_key || ""}
-                onChange={(e) => updateConfig({ next_node_key: e.target.value })}
-                className="w-full p-2 text-xs border rounded-lg bg-white font-mono font-semibold"
-              >
-                <option value="">-- Select Next Step --</option>
-                {nodes.filter(n => n.node_key !== selectedNode.node_key).map(n => (
-                  <option key={n.node_key} value={n.node_key}>{n.node_key} ({n.node_type})</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          <FlowTriggerInspector
+            node={selectedNode}
+            nodes={nodes}
+            flowTriggerType={flowTriggerType}
+            flowKeywords={flowKeywords}
+            triggerMeta={triggerMeta}
+            onFlowSettingChange={(k, v) => {
+              if (k === "trigger") setFlowTriggerType(v);
+              else if (k === "keywords") setFlowKeywords(v);
+              else setTriggerMeta((prev) => ({ ...prev, [k]: v }));
+              setDirty(true);
+            }}
+            onChange={updateConfig}
+          />
         )}
 
         {/* ── WHATSAPP HSM TEMPLATE CONFIGURATION ─────────────────────── */}
         {selectedNode.node_type === "send_template" && (
           <div className="space-y-3">
             <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Approved Template Name *</label>
-              <input
-                type="text"
-                value={cfg.template_name || ""}
-                onChange={(e) => updateConfig({ template_name: e.target.value })}
-                placeholder="e.g. order_confirmation_v1"
-                className="w-full p-2 text-xs font-mono border rounded-lg"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Language Code</label>
-              <input
-                type="text"
-                value={cfg.language_code || "en"}
-                onChange={(e) => updateConfig({ language_code: e.target.value })}
-                placeholder="e.g. en or hi"
-                className="w-full p-2 text-xs font-mono border rounded-lg"
-              />
-            </div>
-            <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
               <select
                 value={cfg.next_node_key || ""}
@@ -2356,120 +2296,13 @@ function FlowsWorkspace() {
           </div>
         )}
 
-        {/* ── SET SESSION VARIABLE CONFIGURATION ──────────────────────── */}
+        {/* ── SET SESSION VARIABLE / TRANSFORM CONFIGURATION ─────────── */}
         {selectedNode.node_type === "set_variable" && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Variable Key Name *</label>
-              <input
-                type="text"
-                value={cfg.var_key || ""}
-                onChange={(e) => updateConfig({ var_key: e.target.value.replace(/[^a-zA-Z0-9_]/g, "") })}
-                placeholder="e.g. selected_category / order_item"
-                className="w-full p-2 text-xs font-mono border rounded-lg"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Variable Value *</label>
-              <input
-                type="text"
-                value={cfg.var_value || ""}
-                onChange={(e) => updateConfig({ var_value: e.target.value })}
-                placeholder="e.g. Spices & Masala or {{input}}"
-                className="w-full p-2 text-xs border rounded-lg"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
-              <select
-                value={cfg.next_node_key || ""}
-                onChange={(e) => updateConfig({ next_node_key: e.target.value })}
-                className="w-full p-2 text-xs border rounded-lg bg-white font-mono"
-              >
-                <option value="">-- Select Next Step --</option>
-                {nodes.filter(n => n.node_key !== selectedNode.node_key).map(n => (
-                  <option key={n.node_key} value={n.node_key}>{n.node_key} ({n.node_type})</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-
-        {/* ── AI INTENT ROUTER CONFIGURATION ──────────────────────────── */}
-        {selectedNode.node_type === "ai_intent" && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-700">Intent Branches</label>
-              <button
-                type="button"
-                onClick={() => {
-                  const intentName = prompt("Enter new intent branch key (e.g. pricing, catalog, help):");
-                  if (intentName) {
-                    const branches = { ...(cfg.branches || {}) };
-                    branches[intentName.toLowerCase().trim()] = "";
-                    updateConfig({ branches });
-                  }
-                }}
-                className="text-[10px] text-fuchsia-600 font-bold hover:underline flex items-center gap-1"
-              >
-                + Add Intent
-              </button>
-            </div>
-            <div className="space-y-2">
-              {Object.entries(cfg.branches || { sales: "", support: "", pricing: "", fallback: "" }).map(([intent, targetKey], iIdx) => (
-                <div key={iIdx} className="p-2 bg-slate-50 border rounded-lg flex items-center justify-between gap-2">
-                  <span className="text-xs font-mono font-bold text-fuchsia-800 uppercase">{intent}</span>
-                  <select
-                    value={targetKey || ""}
-                    onChange={(e) => {
-                      const branches = { ...(cfg.branches || {}) };
-                      branches[intent] = e.target.value;
-                      updateConfig({ branches });
-                    }}
-                    className="flex-1 p-1 text-[11px] border rounded bg-white font-mono"
-                  >
-                    <option value="">-- Destination Node --</option>
-                    {nodes.filter(n => n.node_key !== selectedNode.node_key).map(n => (
-                      <option key={n.node_key} value={n.node_key}>{n.node_key}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── AI GENERATE CONFIGURATION ───────────────────────────────── */}
-        {selectedNode.node_type === "ai_generate" && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">System Instructions / Context</label>
-              <textarea
-                value={cfg.prompt || ""}
-                onChange={(e) => updateConfig({ prompt: e.target.value })}
-                rows={3}
-                placeholder="You are a helpful customer support assistant for Madhura..."
-                className="w-full p-2 text-xs border rounded-lg"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
-              <select
-                value={cfg.next_node_key || ""}
-                onChange={(e) => updateConfig({ next_node_key: e.target.value })}
-                className="w-full p-2 text-xs border rounded-lg bg-white font-mono"
-              >
-                <option value="">-- Select Next Step --</option>
-                {nodes.filter(n => n.node_key !== selectedNode.node_key).map(n => (
-                  <option key={n.node_key} value={n.node_key}>{n.node_key} ({n.node_type})</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          <FlowSetVariableOptions config={cfg} nodes={nodes} onChange={updateConfig} />
         )}
 
         {/* ── GENERIC FALLBACK FOR ANY NODE WITH NEXT STEP ────────────── */}
-        {!["switch", "business_action", "ai_reply", "interactive_menu", "send_buttons", "send_list", "send_message", "send_media", "send_template", "send_cta", "condition", "business_hours", "contact_lookup", "ai_intent", "ai_generate", "crm_lookup", "collect_input", "create_lead", "delay", "api_webhook", "set_variable", "handoff", "end", "start"].includes(selectedNode.node_type) && !selectedNode.node_type?.includes("trigger") && (
+        {!["switch", "business_action", "ai_reply", "interactive_menu", "send_buttons", "send_list", "send_message", "send_media", "send_template", "send_cta", "condition", "business_hours", "contact_lookup", "ai_intent", "ai_generate", "crm_lookup", "collect_input", "create_lead", "delay", "api_webhook", "set_variable", "set_tag", "jump_to_flow", "handoff", "end", "start"].includes(selectedNode.node_type) && !selectedNode.node_type?.includes("trigger") && (
           <div className="space-y-3">
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
@@ -2701,15 +2534,15 @@ function FlowsWorkspace() {
           name={flowName} setName={value => { setFlowName(value); setDirty(true); }} dirty={dirty} saving={saving} loading={studioLoading}
           onSave={() => handleSaveFlow(false)} onPublish={() => handleSaveFlow(true)} onExit={handleCloseStudio}
           issues={flowIssues} entry={entryNodeKey} panelRequest={studioPanelRequest}
-          settings={<><WAFlowOutline view="settings" nodes={nodes} issues={flowIssues} selectedKey={selectedNodeKey} name={flowName} description={flowDesc} trigger={flowTriggerType} keywords={flowKeywords} entry={entryNodeKey} onSelect={key => setSelectedNodeKey(key)} onChange={(key, value) => { ({ name: setFlowName, description: setFlowDesc, trigger: setFlowTriggerType, keywords: setFlowKeywords, entry: setFlowEntryNode })[key](value); setDirty(true); }} /><FlowConnections /></>}
+          settings={<><WAFlowOutline view="settings" nodes={nodes} issues={flowIssues} selectedKey={selectedNodeKey} name={flowName} description={flowDesc} trigger={flowTriggerType} keywords={flowKeywords} entry={entryNodeKey} triggerMeta={triggerMeta} senders={sendersList} onSelect={key => setSelectedNodeKey(key)} onMetaChange={nextMeta => { setTriggerMeta(nextMeta); setDirty(true); }} onChange={(key, value) => { ({ name: setFlowName, description: setFlowDesc, trigger: setFlowTriggerType, keywords: setFlowKeywords, entry: setFlowEntryNode })[key](value); setDirty(true); }} /><FlowConnections /></>}
           inspector={<div className="flow-studio-inspector-config">{renderNodeInspector()}</div>}
           onStartPreview={() => resetSimulation()}
-          preview={<div>{nodes.some(node=>["business_action","ai_reply"].includes(node.node_type))&&<div className="text-xs border rounded p-3 mb-3"><p>Actions use labeled sample values in preview. No bookings, payments or API calls are made.</p><label className="flex gap-2 mt-2"><input type="checkbox" checked={simActionFailure} onChange={event=>setSimActionFailure(event.target.checked)}/>Simulate action failure</label></div>}{simError && <p role="alert" className="wa-form-error mb-3">{simError}</p>}{renderWhatsAppPhoneSimulator()}</div>}
+          preview={<div>{nodes.some(node=>["business_action","ai_reply","ai_generate","ai_intent","api_webhook","crm_lookup"].includes(node.node_type))&&<div className="text-xs border rounded p-3 mb-3"><p>Actions use labeled sample values in preview. No bookings, payments or external API calls are made.</p><label className="flex gap-2 mt-2"><input type="checkbox" checked={simActionFailure} onChange={event=>setSimActionFailure(event.target.checked)}/>Simulate action / error route</label></div>}{simError && <p role="alert" className="wa-form-error mb-3">{simError}</p>}{renderWhatsAppPhoneSimulator()}</div>}
           logs={<div className="space-y-3 text-xs">{simLogs.length ? simLogs.map((log, index) => <pre key={index} className="whitespace-pre-wrap break-words p-3 bg-slate-50 rounded border">{typeof log === "string" ? log : JSON.stringify(log, null, 2)}</pre>) : <p className="p-4 text-slate-500">No simulation events yet. Open Preview and send a message to trace the conversation.</p>}</div>}
           notice={saveNotice} onDismissNotice={() => setSaveNotice(null)} loadError={studioLoadError} onRetry={() => openStudio({ id: editingFlowId })}
           onTest={() => openTestDialog()} flowId={editingFlowId} onVersions={() => openVersions(editingFlowId)}
-          metadata={{ description: flowDesc, trigger_type: flowTriggerType, trigger_config: { keywords: flowKeywords.split(",").map(value => value.trim()).filter(Boolean) } }}
-          onImportMetadata={value => { setFlowName(value.name || "Imported flow"); setFlowDesc(value.description || ""); setFlowTriggerType(["manual", "keyword", "all_inbound", "first_inbound"].includes(value.trigger_type) ? value.trigger_type : "manual"); setFlowKeywords((value.trigger_config?.keywords || []).join(", ")); setFlowEntryNode(value.entry_node_key || value.nodes[0].node_key); setDirty(true); }}
+          metadata={{ description: flowDesc, trigger_type: flowTriggerType, trigger_config: { ...triggerMeta, keywords: flowKeywords.split(",").map(value => value.trim()).filter(Boolean) } }}
+          onImportMetadata={value => { setFlowName(value.name || "Imported flow"); setFlowDesc(value.description || ""); setFlowTriggerType(["manual", "keyword", "all_inbound", "first_inbound"].includes(value.trigger_type) ? value.trigger_type : "manual"); setFlowKeywords((value.trigger_config?.keywords || []).join(", ")); if (value.trigger_config) setTriggerMeta(prev => ({ ...prev, ...value.trigger_config })); setFlowEntryNode(value.entry_node_key || value.nodes[0].node_key); setDirty(true); }}
         />
         {showVersionsModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowVersionsModal(false)}>
@@ -2914,9 +2747,20 @@ function FlowsWorkspace() {
                             {flow.status}
                           </span>
 
-                          <span className="text-[10px] font-mono text-slate-400">
-                            {flow.trigger_type || "keyword"}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {(() => {
+                              let tcfg = {};
+                              try { tcfg = typeof flow.trigger_config === "string" ? JSON.parse(flow.trigger_config) : (flow.trigger_config || {}); } catch (_) {}
+                              const scopeLabel = tcfg.sender_ids?.length ? `${tcfg.sender_ids.length} #` : "Global";
+                              const trigLabel = flow.trigger_type === "all_inbound" ? "Global 24/7" : flow.trigger_type === "first_inbound" ? "Welcome" : (flow.trigger_type || "keyword");
+                              return (
+                                <>
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-slate-600">{scopeLabel}</span>
+                                  <span className="text-[10px] font-mono text-slate-500">{trigLabel}{tcfg.priority && Number(tcfg.priority) !== 50 ? ` · P${tcfg.priority}` : ""}</span>
+                                </>
+                              );
+                            })()}
+                          </div>
                         </div>
 
                         <div>
@@ -2963,6 +2807,13 @@ function FlowsWorkspace() {
                             title={isActive ? "Pause Bot" : "Activate Bot"}
                           >
                             <Play size={15} className={isActive ? "fill-emerald-600" : ""} />
+                          </button>
+                          <button
+                            onClick={(e) => handleDuplicateFlow(flow, e)}
+                            className="p-2 text-slate-400 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition"
+                            title="Duplicate Flow"
+                          >
+                            <Copy size={15} />
                           </button>
                           <button
                             onClick={(e) => handleDeleteFlow(flow.id, flow.name, e)}

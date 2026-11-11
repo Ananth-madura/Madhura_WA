@@ -34,7 +34,7 @@ assert(step(flow,"still invalid",step(flow,"bad again",invalid)).isHandedOff);
 const valid=step(flow,"customer@example.test",first);assert(valid.isEnded);assert.equal(valid.messages[0].text,"Received customer@example.test");
 assert.throws(()=>normalize({...simple,nodes:[...simple.nodes,{...simple.nodes[0]}]}),/unique key/);
 assert.throws(()=>normalize({...simple,nodes:simple.nodes.map(n=>n.node_key==="ask"?{...n,config:{...n.config,next_node_key:"missing"}}:n)}),/missing step/);
-assert.throws(()=>normalize({...simple,nodes:simple.nodes.map(n=>({...n,node_type:"api_webhook"}))}),/not supported/);
+assert.throws(()=>normalize({...simple,nodes:simple.nodes.map(n=>({...n,node_type:"unsupported_step_type"}))}),/not supported/);
 assert.throws(()=>normalize({...simple,nodes:simple.nodes.map(n=>n.node_key==="ask"?{...n,config:{...n.config,var_key:"__proto__"}}:n)}),/Reserved/);
 const loop=normalize({name:"Loop",trigger_type:"manual",nodes:[{node_key:"start",node_type:"start",config:{next_node_key:"start"}}]});assert.throws(()=>step(loop),/40 steps/);
 const draft={name:"Unfinished menu",trigger_type:"manual",nodes:[{node_key:"start",node_type:"send_buttons",config:{text:"Choose",buttons:[{id:"a",title:"First",next_node_key:""}]}}]};normalize(draft);assert.throws(()=>normalize(draft,{publish:true}),/connected destinations/);

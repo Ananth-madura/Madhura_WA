@@ -1,12 +1,42 @@
 import WAFlowNodeAdvanced from "./WAFlowNodeAdvanced";
 import FlowStarterPicker from "./FlowStarterPicker";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Send, Image, Link, List, Mail, Hash, CalendarDays, Timer, Globe, Database, UserPlus, UserRound, Flag, Braces, ArrowLeft, Plus, Search, X, Undo2, Redo2, Save, Play, GitBranch, CheckCircle2, AlertCircle, ZoomIn, ZoomOut, Maximize2, MousePointer2, Hand, Copy, Trash2, Download, Upload, Map as MapIcon, Grid, Settings2, ChevronRight, MessageSquare, FileText, LayoutGrid, PanelRightClose } from "lucide-react";
+import { Send, Image, Link, List, Mail, Hash, CalendarDays, Timer, Globe, Database, UserPlus, UserRound, Flag, Braces, ArrowLeft, Plus, Search, X, Undo2, Redo2, Save, Play, GitBranch, GitFork, CheckCircle2, AlertCircle, ZoomIn, ZoomOut, Maximize2, MousePointer2, Hand, Copy, Trash2, Download, Upload, Map as MapIcon, Grid, Settings2, ChevronRight, MessageSquare, FileText, LayoutGrid, PanelRightClose, Zap, Sparkles, Tag, CornerDownRight } from "lucide-react";
 import { duplicateFlowNodes, flowLabel, flowPorts, parseFlowImport, removeFlowNodes, setFlowPort } from "../utils/waFlowGraph";
 import "./WAFlowEditor.css";
 
 const TILE = 80;
-const NODE_ICONS = { start: Play, send_message: Send, send_media: Image, send_template: FileText, send_cta: Link, send_buttons: MessageSquare, send_list: List, interactive_menu: List, condition: GitBranch, business_hours: CalendarDays, contact_lookup: Database, ai_intent: GitBranch, delay: Timer, api_webhook: Globe, crm_lookup: Database, create_lead: UserPlus, handoff: UserRound, end: Flag, set_variable: Braces };
+const NODE_ICONS = {
+  start: Play,
+  trigger: Zap,
+  keyword_trigger: Zap,
+  all_inbound_trigger: Zap,
+  first_inbound_trigger: Zap,
+  send_message: Send,
+  send_media: Image,
+  send_template: FileText,
+  send_cta: Link,
+  send_buttons: MessageSquare,
+  send_list: List,
+  interactive_menu: List,
+  condition: GitBranch,
+  switch: GitFork,
+  business_hours: CalendarDays,
+  contact_lookup: Database,
+  business_action: Database,
+  ai_reply: Sparkles,
+  ai_intent: Sparkles,
+  ai_generate: Sparkles,
+  delay: Timer,
+  api_webhook: Globe,
+  crm_lookup: Database,
+  create_lead: UserPlus,
+  set_tag: Tag,
+  jump_to_flow: CornerDownRight,
+  handoff: UserRound,
+  end: Flag,
+  set_variable: Braces,
+};
 const tileHeight = node => Math.max(TILE, flowPorts(node).length * 24 + 16);
 const position = node => ({ x: Number(node.position_x) || 0, y: Number(node.position_y) || 0 });
 const outputPoint = (node, index) => ({ x: position(node).x + TILE, y: position(node).y + 20 + index * 24 });
@@ -168,7 +198,7 @@ export default function WAFlowEditor({ nodes, categories, selectedKey, onSelect,
         <p className="fe-canvas-help">Drag to select · Alt drag to pan · Click a port to connect</p>
       </div>
       {panel && <aside className="fe-panel flow-studio-inspector" ref={panelRef} aria-label={`${panel} panel`}><header><div><span>{panel === "library" ? "Build your conversation" : panel === "inspector" ? "Step configuration" : "Conversation flow"}</span><h2>{{ library: "Add a step", outline: "Workflow steps", settings: "Flow settings", checks: "Validation checks", preview: "Conversation preview", logs: "Simulation log", inspector: selectedNode ? flowLabel(selectedNode) : "Select a step" }[panel]}</h2></div><button className="fe-icon-button" onClick={() => setPanel(null)} aria-label="Close panel"><PanelRightClose size={18} /></button></header><div className="fe-panel-content">
-        {panel === "library" && <><FlowStarterPicker onChoose={flow=>{if(nodes.length>1&&!window.confirm("Replace the current draft with this starter?"))return;onChange(flow.nodes);onImportMetadata(flow);setPanel("settings");}}/><label className="fe-search"><Search size={16} /><input ref={searchInput} value={librarySearch} onChange={event => setLibrarySearch(event.target.value)} placeholder="Search messages, logic, actions…" /></label>{connection && <p className="fe-panel-explanation">The new step will connect to <strong>{connection.port.label}</strong>.</p>}{categories.filter(category => category.id !== "triggers").map(category => { const items = category.items.filter(item => `${item.label} ${item.desc}`.toLowerCase().includes(librarySearch.toLowerCase())); return items.length ? <section className="fe-library-group" key={category.id}><h3>{category.name.toLowerCase()}</h3>{items.map(item => <button key={item.type} draggable title="Drag onto the canvas or click to add" onDragStart={event => { event.dataTransfer.setData("application/x-madhura-step", item.type); event.dataTransfer.effectAllowed = "copy"; }} onClick={() => addItem(item)}><category.icon size={18} /><span><strong>{item.label}</strong><small>{item.desc}</small></span><Plus size={14} /></button>)}</section> : null; })}{!categories.some(category => category.id !== "triggers" && category.items.some(item => `${item.label} ${item.desc}`.toLowerCase().includes(librarySearch.toLowerCase()))) && <p className="fe-empty">No matching steps. Try “message” or “condition”.</p>}</>}
+        {panel === "library" && <><FlowStarterPicker onChoose={flow=>{if(nodes.length>1&&!window.confirm("Replace the current draft with this starter?"))return;onChange(flow.nodes);onImportMetadata(flow);setPanel("settings");}}/><label className="fe-search"><Search size={16} /><input ref={searchInput} value={librarySearch} onChange={event => setLibrarySearch(event.target.value)} placeholder="Search triggers, messages, logic, API, AI…" /></label>{connection && <p className="fe-panel-explanation">The new step will connect to <strong>{connection.port.label}</strong>.</p>}{categories.map(category => { const items = category.items.filter(item => `${item.label} ${item.desc}`.toLowerCase().includes(librarySearch.toLowerCase())); return items.length ? <section className="fe-library-group" key={category.id}><h3>{category.name.toLowerCase()}</h3>{items.map(item => <button key={item.type} draggable title="Drag onto the canvas or click to add" onDragStart={event => { event.dataTransfer.setData("application/x-madhura-step", item.type); event.dataTransfer.effectAllowed = "copy"; }} onClick={() => addItem(item)}><category.icon size={18} /><span><strong>{item.label}</strong><small>{item.desc}</small></span><Plus size={14} /></button>)}</section> : null; })}{!categories.some(category => category.items.some(item => `${item.label} ${item.desc}`.toLowerCase().includes(librarySearch.toLowerCase()))) && <p className="fe-empty">No matching steps. Try “message”, “webhook”, or “condition”.</p>}</>}
         {panel === "outline" && <><label className="fe-search"><Search size={16} /><input value={outlineSearch} onChange={event => setOutlineSearch(event.target.value)} placeholder="Find a step by name or key?" aria-label="Find a step" /></label>{nodes.filter(node => `${flowLabel(node)} ${node.node_key}`.toLowerCase().includes(outlineSearch.toLowerCase())).map((node, index) => <button className="fe-outline-row" key={node.node_key} onClick={() => focus(node.node_key)}><span>{String(index + 1).padStart(2, "0")}</span><span><strong>{flowLabel(node)}</strong><small>{node.node_key}{node.node_key === entry ? " · Entry" : ""}</small></span><ChevronRight size={14} /></button>)}{!nodes.some(node => `${flowLabel(node)} ${node.node_key}`.toLowerCase().includes(outlineSearch.toLowerCase())) && <p className="fe-empty">No matching steps. Try a different name or key.</p>}</>}
         {panel === "settings" && settings}
         {panel === "checks" && <><p className="fe-panel-explanation">{errors.length} blocking issues · {issues.length - errors.length} warnings. Check each branch and preview the conversation before publishing.</p>{issues.length ? issues.map((issue, index) => <button className={`fe-check ${issue.severity === "error" ? "is-error" : ""}`} key={index} disabled={!issue.nodeKey} onClick={() => focus(issue.nodeKey)}><AlertCircle size={16} /><span><strong>{issue.severity === "error" ? "Fix required" : "Review"}</strong>{issue.text}</span><ChevronRight size={14} /></button>) : <div className="fe-empty"><CheckCircle2 size={28} /><p>No graph issues found. Preview the conversation to review its behavior.</p></div>}</>}

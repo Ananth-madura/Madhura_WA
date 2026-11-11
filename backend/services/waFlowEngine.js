@@ -67,28 +67,16 @@ class WaFlowEngine {
    * everything the customer already typed.
    */
   matchesTriggerKeywords(rawText, flow, { strict = false } = {}) {
-    const raw = String(rawText || "").trim();
-    const lower = raw.toLowerCase();
-    if (!lower) return false;
-
+    let cfg = {};
+    try {
+      cfg = typeof flow?.trigger_config === "string" ? JSON.parse(flow.trigger_config) : (flow?.trigger_config || {});
+    } catch (_) {}
     const keywords = this.getTriggerKeywords(flow);
     if (!keywords.length) return false;
-
-    return keywords.some((kw) => {
-      // Exact match
-      if (lower === kw) return true;
-      // Keyword followed by a separator: "invoice, please" / "invoice!" / "menu?"
-      if (lower.startsWith(kw) && /^[\s,.!?:;-]/.test(lower.slice(kw.length))) return true;
-      if (strict) return false;
-
-      // Exact whole-word match or keyword at start followed by punctuation/space
-      try {
-        if (new RegExp(`^${this.escapeRegex(kw)}$`, "i").test(lower)) return true;
-        if (new RegExp(`^#?${this.escapeRegex(kw)}[\\s,.!?:;-]`, "i").test(raw)) return true;
-        if (new RegExp(`^#${this.escapeRegex(kw)}$`, "i").test(raw)) return true;
-        if (new RegExp(`\\b${this.escapeRegex(kw)}\\b`, "i").test(raw) && kw.length >= 4) return true;
-      } catch (_) {}
-      return false;
+    return require("./flowDefinition").matchesKeywordList(rawText, keywords, {
+      matchMode: cfg.match_mode || "smart",
+      caseSensitive: Boolean(cfg.case_sensitive),
+      strict,
     });
   }
 
@@ -249,17 +237,17 @@ class WaFlowEngine {
       } catch (_) {}
     }
 
-    // A live agent takeover, a previous handoff, or a per-contact bot switch
-    // mutes the flow bot — including advancing a run that is already open.
-    // Without this, a `handoff` node was undone by the customer's very next
-    // message, because an `all_inbound` flow simply started a fresh run.
-    if (!(await require("./waBotGate").botMayReply(cleanPhone, "Flow bot", options))) {
-      return true; // treat as handled so no downstream auto-reply fires either
-    }
+    const definition = require("./flowDefinition");
+    const gate = await require("./waBotGate").shouldBotEngage(cleanPhone, options);
+    const botMuted = !gate.allowed;
 
     try {
-      // 1. Check for an active flow run for this phone or chatId
       const clean10 = cleanPhone.slice(-10);
+      const sessionTenantId = sessionKey
+        ? await require("./waContactTenancy").tenantForSessionKey(sessionKey).catch(() => null)
+        : null;
+
+      // 1. Check for an active flow run for this phone or chatId (unless muted permanently)
       const [activeRuns] = await db.promise().query(
         `SELECT r.*, f.fallback_policy, f.name as flow_name, f.trigger_type, f.trigger_config, f.entry_node_key
          FROM wa_flow_runs r
@@ -272,41 +260,58 @@ class WaFlowEngine {
         [`%${clean10}`, `%${cleanPhone}`, cleanPhone, incomingChatId, incomingChatId]
       );
 
-      // Check if run is stale (> 4 hours since last activity)
+      // Check if run is stale (> configured session_timeout_minutes or 4 hours)
       let isStale = false;
       if (activeRuns && activeRuns.length > 0) {
         const run = activeRuns[0];
+        const runCfg = definition.parseTriggerConfig(run);
+        const timeoutMin = Math.min(1440, Math.max(5, Number(runCfg.session_timeout_minutes || 240)));
         const lastActive = new Date(run.last_advanced_at || run.started_at).getTime();
-        if (Date.now() - lastActive > 4 * 60 * 60 * 1000) {
+        if (Date.now() - lastActive > timeoutMin * 60000) {
           isStale = true;
         }
+      }
+
+      const [rawActiveFlows] = await db.promise().query(
+        sessionTenantId
+          ? "SELECT * FROM wa_flows WHERE tenant_id = ? AND status = 'active' ORDER BY id DESC"
+          : "SELECT * FROM wa_flows WHERE status = 'active' ORDER BY id DESC",
+        sessionTenantId ? [sessionTenantId] : []
+      );
+      const prioritizedFlows = definition.sortFlowsByPriority(rawActiveFlows || []);
+
+      // If bot is muted (e.g. agent took over), only wake up if a matching keyword flow explicitly opts into allow_restart_after_human
+      if (botMuted) {
+        if (gate.reason === "agent_takeover") {
+          const wakeupFlow = prioritizedFlows.find(
+            (f) =>
+              f.trigger_type === "keyword" &&
+              definition.parseTriggerConfig(f).allow_restart_after_human === true &&
+              definition.matchesFlowTrigger(f, messageText, { strict: true, sessionKey })
+          );
+          if (wakeupFlow) {
+            await require("./waBotGate").resumeBot(cleanPhone, sessionKey).catch(() => {});
+            console.log(`🤖 Waking up Keyword Flow "${wakeupFlow.name}" (#${wakeupFlow.id}) after agent pause for +${cleanPhone}`);
+            return await this.startFlowRun(wakeupFlow, cleanPhone, sessionKey, messageText, incomingChatId);
+          }
+        }
+        return true; // keep bot muted so downstream auto-reply doesn't override agent
       }
 
       // If active run exists and is fresh (and not an explicit new keyword trigger), advance it
       if (activeRuns && activeRuns.length > 0 && !isStale) {
         const run = activeRuns[0];
-
-        // Check if customer typed a keyword explicitly for a DIFFERENT active flow
-        const [otherFlows] = await db.promise().query(
-          "SELECT * FROM wa_flows WHERE status = 'active' AND id != ? ORDER BY id DESC",
-          [run.flow_id]
+        const switchedFlow = prioritizedFlows.find(
+          (f) =>
+            Number(f.id) !== Number(run.flow_id) &&
+            f.trigger_type === "keyword" &&
+            definition.matchesFlowTrigger(f, messageText, { strict: true, sessionKey })
         );
-
-        let switchedFlow = null;
-        for (const f of otherFlows) {
-          if (this.isKeywordEligible(f)) {
-            // strict: only a deliberate command may abandon a running flow
-            if (this.matchesTriggerKeywords(messageText, f, { strict: true })) {
-              switchedFlow = f;
-              break;
-            }
-          }
-        }
 
         if (switchedFlow) {
           console.log(`🔀 Customer switched from Flow #${run.flow_id} to Flow "${switchedFlow.name}" (#${switchedFlow.id})`);
           await this.completeRun(run.id, `switched_to_flow_${switchedFlow.id}`);
-          return await this.startFlowRun(switchedFlow, cleanPhone, sessionKey, messageText);
+          return await this.startFlowRun(switchedFlow, cleanPhone, sessionKey, messageText, incomingChatId);
         }
 
         return await this.advanceActiveRun(run, messageText, interactiveReplyId, sessionKey, inboundMedia, options);
@@ -320,27 +325,27 @@ class WaFlowEngine {
         );
       }
 
-      // 2. No active run (or reset) — check trigger rules across all active flows
-      const [activeFlows] = await db.promise().query(
-        "SELECT * FROM wa_flows WHERE status = 'active' ORDER BY id DESC"
-      );
+      if (!prioritizedFlows.length) return false;
 
-      if (!activeFlows || activeFlows.length === 0) {
-        return false;
-      }
+      const isNewContact = !gate.contact || Boolean(options.isNew);
+      for (const flow of prioritizedFlows) {
+        if (flow.trigger_type === "manual") continue;
+        if (!definition.matchesFlowTrigger(flow, messageText, { sessionKey, isNew: isNewContact })) continue;
 
-      // Priority 1: Explicit Keyword Match Flows (Only fires if flow is configured as 'keyword' and user types exact command)
-      for (const flow of activeFlows) {
-        if (this.isKeywordEligible(flow)) {
-          if (this.matchesTriggerKeywords(messageText, flow)) {
-            console.log(`🤖 Triggering Keyword WhatsApp Flow "${flow.name}" (ID: ${flow.id}) for +${cleanPhone}`);
-            return await this.startFlowRun(flow, cleanPhone, sessionKey, messageText);
-          }
+        const cfg = definition.parseTriggerConfig(flow);
+        const cooldownMin = Number(cfg.cooldown_minutes || 0);
+        if (cooldownMin > 0) {
+          const [recentRuns] = await db.promise().query(
+            "SELECT id FROM wa_flow_runs WHERE flow_id = ? AND (phone LIKE ? OR phone = ?) AND started_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE) LIMIT 1",
+            [flow.id, `%${clean10}`, cleanPhone, cooldownMin]
+          ).catch(() => [[]]);
+          if (recentRuns && recentRuns.length > 0) continue;
         }
+
+        console.log(`🤖 Triggering ${flow.trigger_type} WhatsApp Flow "${flow.name}" (ID: ${flow.id}, Priority: ${cfg.priority ?? 50}) for +${cleanPhone}`);
+        return await this.startFlowRun(flow, cleanPhone, sessionKey, messageText, incomingChatId);
       }
 
-      // NOTE: Universal catch-all / all_inbound fallback is disabled.
-      // Flow bots must work ONLY for given numbers when triggered via 'Send Flow Bot' or when continuing an active session.
       return false;
     } catch (err) {
       console.error("waFlowEngine dispatch error:", err.message);
@@ -889,9 +894,35 @@ class WaFlowEngine {
         }
 
         case "delay": {
-          const delaySec = Math.min(Math.max(parseInt(config.delay_seconds, 10) || 3, 1), 30);
-          console.log(`⏱️ [WA Flow] Pausing ${delaySec}s before next step for +${cleanPhone}`);
-          await new Promise((r) => setTimeout(r, delaySec * 1000));
+          const mult = config.delay_unit === "minutes" ? 60 : 1;
+          const delayMs = Math.min(Math.max((Number(config.delay_seconds ?? 2) || 2) * mult * 1000, 200), 15000);
+          console.log(`⏱️ [WA Flow] Pausing ${delayMs}ms before next step for +${cleanPhone}`);
+          await new Promise((r) => setTimeout(r, delayMs));
+          nodeKey = config.next_node_key;
+          break;
+        }
+
+        case "switch": {
+          const rules = require("./flowRules");
+          const matchedCase = (config.cases || []).find((route) =>
+            rules.compare({ ...route, field: config.variable }, vars)
+          );
+          nodeKey = matchedCase?.next_node_key || config.fallback_node_key;
+          break;
+        }
+
+        case "business_hours": {
+          const open = require("./flowRules").openHours(config, new Date());
+          vars["business.is_open"] = open;
+          nodeKey = open ? config.open_next : config.closed_next;
+          break;
+        }
+
+        case "contact_lookup": {
+          vars["customer.name"] = vars["customer.name"] || vars.name || "Customer";
+          vars["customer.phone"] = vars["customer.phone"] || cleanPhone;
+          vars["customer.email"] = vars["customer.email"] || vars.email || "";
+          vars["contact.exists"] = Boolean(vars.is_existing_customer);
           nodeKey = config.next_node_key;
           break;
         }
@@ -1034,50 +1065,15 @@ class WaFlowEngine {
         }
 
         case "api_webhook": {
-          // Dynamic external REST API call
           try {
-            const endpointUrl = this.interpolate(config.url || "", vars);
-            const method = (config.method || "GET").toUpperCase();
-            const headers = {};
-            if (config.headers) {
-              try {
-                const parsedHeaders = typeof config.headers === "string" ? JSON.parse(config.headers) : config.headers;
-                for (const [k, v] of Object.entries(parsedHeaders)) {
-                  headers[k] = this.interpolate(String(v), vars);
-                }
-              } catch (_) {}
-            }
-
-            let requestData = null;
-            if (method !== "GET" && config.body) {
-              try {
-                const renderedBody = this.interpolate(typeof config.body === "string" ? config.body : JSON.stringify(config.body), vars);
-                requestData = JSON.parse(renderedBody);
-              } catch (_) {
-                requestData = config.body;
-              }
-            }
-
-            const response = await axios({
-              method,
-              url: endpointUrl,
-              headers,
-              data: requestData,
-              timeout: 10000,
+            const runner = require("./flowIntegrations").createWebhookRunner();
+            const outputs = await runner({ node_key: nodeKey, node_type: "api_webhook", config }, vars, {
+              tenantId: vars._tenant_id || 1,
+              runId,
+              messageId: `wa-${runId}-${nodeKey}`,
+              occurrence: safetyCounter,
             });
-
-            // An empty mapping object must not swallow the response
-            const mapping = config.response_mapping && typeof config.response_mapping === "object"
-              ? Object.entries(config.response_mapping).filter(([k, v]) => k && v)
-              : [];
-            if (mapping.length) {
-              for (const [varName, jsonPath] of mapping) {
-                vars[varName] = this.extractJsonPath(response.data, jsonPath) || "";
-              }
-            } else if (response.data && typeof response.data === "object") {
-              vars.webhook_response = JSON.stringify(response.data);
-            }
-            vars.webhook_status = "success";
+            Object.assign(vars, outputs);
             nodeKey = config.success_next || config.next_node_key;
           } catch (apiErr) {
             console.warn(`[WA Flow] Webhook error at node ${nodeKey}:`, apiErr.message);
@@ -1110,37 +1106,26 @@ class WaFlowEngine {
         }
 
         case "condition": {
-          const subjectKey = config.subject_key || "input";
-          const varVal = String(vars[subjectKey] !== undefined ? vars[subjectKey] : "").trim();
-          const targetVal = String(config.value !== undefined ? config.value : "").trim();
-          const operator = config.operator || "equals";
-          let isTrue = false;
-
-          if (operator === "equals") isTrue = varVal.toLowerCase() === targetVal.toLowerCase();
-          else if (operator === "not_equals") isTrue = varVal.toLowerCase() !== targetVal.toLowerCase();
-          else if (operator === "contains") isTrue = varVal.toLowerCase().includes(targetVal.toLowerCase());
-          else if (operator === "not_contains") isTrue = !varVal.toLowerCase().includes(targetVal.toLowerCase());
-          else if (operator === "starts_with") isTrue = varVal.toLowerCase().startsWith(targetVal.toLowerCase());
-          else if (operator === "ends_with") isTrue = varVal.toLowerCase().endsWith(targetVal.toLowerCase());
-          else if (operator === "greater_than") isTrue = parseFloat(varVal) > parseFloat(targetVal);
-          else if (operator === "less_than") isTrue = parseFloat(varVal) < parseFloat(targetVal);
-          else if (operator === "greater_or_equal") isTrue = parseFloat(varVal) >= parseFloat(targetVal);
-          else if (operator === "less_or_equal") isTrue = parseFloat(varVal) <= parseFloat(targetVal);
-          else if (operator === "is_empty") isTrue = varVal === "";
-          else if (operator === "is_not_empty" || operator === "present") isTrue = varVal !== "";
-          else if (operator === "is_numeric") isTrue = !isNaN(parseFloat(varVal)) && isFinite(varVal);
-          else if (operator === "matches_regex") {
-            try { isTrue = new RegExp(targetVal, "i").test(varVal); } catch (_) { isTrue = false; }
-          } else isTrue = !!varVal;
-
+          const rules = require("./flowRules");
+          const isTrue = rules.evaluate(config, vars);
           nodeKey = isTrue ? (config.true_next || config.then_node) : (config.false_next || config.else_node);
           break;
         }
 
         case "set_variable": {
-          if (config.variable_name) {
-            const rawVal = config.variable_value !== undefined ? String(config.variable_value) : "";
-            vars[config.variable_name] = this.interpolate(rawVal, vars);
+          const rules = require("./flowRules");
+          if (Array.isArray(config.assignments) && config.assignments.length) {
+            for (const a of config.assignments) {
+              const k = String(a?.key || "").trim();
+              if (!k || rules.RESERVED_KEYS.has(k)) continue;
+              vars[k] = rules.transformValue(a.value ?? "", vars, a.transform || "template", a.arg ?? "");
+            }
+          } else {
+            const k = String(config.var_key || config.variable || config.variable_name || "").trim();
+            if (k && !rules.RESERVED_KEYS.has(k)) {
+              const rawVal = config.var_value ?? config.variable_value ?? config.value ?? "";
+              vars[k] = rules.transformValue(rawVal, vars, config.transform || "template", config.transform_arg ?? "");
+            }
           }
           nodeKey = config.next_node_key;
           break;

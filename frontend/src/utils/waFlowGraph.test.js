@@ -28,3 +28,17 @@ test("switch and business-action branches survive duplication and destination de
   expect(flowPorts(removed[0]).map(port=>port.target)).toEqual(["action",""]);
   expect(flowPorts(removed[1]).map(port=>port.target)).toEqual(["open",""]);
 });
+
+test("n8n webhook and ai_intent expose multi-branch ports properly", () => {
+  const webhook = { node_key: "hook", node_type: "api_webhook", config: { method: "POST", url: "https://api.example.test", next_node_key: "ok", error_next: "fail" } };
+  const intent = { node_key: "router", node_type: "ai_intent", config: { branches: { sales: "s1", support: "s2" }, fallback_node: "fail" } };
+  expect(flowPorts(webhook).map((p) => ({ id: p.id, target: p.target }))).toEqual([
+    { id: "success", target: "ok" },
+    { id: "error", target: "fail" },
+  ]);
+  expect(flowPorts(intent).map((p) => ({ id: p.id, target: p.target }))).toEqual([
+    { id: "sales", target: "s1" },
+    { id: "support", target: "s2" },
+    { id: "fallback", target: "fail" },
+  ]);
+});
