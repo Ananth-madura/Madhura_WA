@@ -99,6 +99,26 @@ const run = async () => {
     });
   });
 
+  {
+    const original = db.promise;
+    let scopedQuery;
+    db.promise = () => ({
+      query: async (sql, params) => {
+        scopedQuery = { sql, params };
+        return [[{ id: 7, ai_enabled: 1 }]];
+      },
+    });
+    try {
+      await waBotGate.shouldBotEngage(PHONE, { tenantId: 42 });
+      ok("tenant-scoped bot checks cannot read another organization's contact", () => {
+        assert.match(scopedQuery.sql, /phone LIKE \? AND tenant_id = \?/);
+        assert.deepStrictEqual(scopedQuery.params, ["%9876543210", 42]);
+      });
+    } finally {
+      db.promise = original;
+    }
+  }
+
   // A first-time sender has no wa_contacts row yet. Existing behaviour is to
   // let the bot greet them; this pins that so the gate is not silently
   // changing what happens for genuinely new customers.

@@ -1137,7 +1137,7 @@ async function executePipelineActions(rule, actions, startIndex = 0, cleanPhone,
 
     // Re-check human takeover BEFORE every autonomous pipeline step so automations never talk over an active employee
     if (!execution.manual) {
-      const gate = await waBotGate.shouldBotEngage(cleanPhone).catch(() => ({ allowed: true }));
+      const gate = await waBotGate.shouldBotEngage(cleanPhone, { tenantId: rule.tenant_id, sessionKey: activeSessionKey }).catch(() => ({ allowed: true }));
       if (!gate.allowed && gate.reason === "agent_takeover") {
         await db.promise().query(
           "INSERT INTO wa_automation_logs (automation_id, version_id, phone, contact_name, trigger_data, status, error, execution_step, session_key, execution_type, actor_user_id) VALUES (?, ?, ?, ?, NULL, 'skipped', ?, ?, ?, 'pipeline', ?)",
@@ -1502,7 +1502,7 @@ async function executeAutomationSend(rule, cleanPhone, contactName, messageText,
   try {
     // ── STEP 1: Main Message Send (Takeover, Opt-out & Usage Check) ──────────
     if (!execution.manual && execution.phase !== 2 && rule.trigger_type !== "welcome_message") {
-      const gate = await require("./waBotGate").shouldBotEngage(cleanPhone).catch(() => ({ allowed: true }));
+      const gate = await require("./waBotGate").shouldBotEngage(cleanPhone, { tenantId: rule.tenant_id, sessionKey: activeSessionKey }).catch(() => ({ allowed: true }));
       if (!gate.allowed && gate.reason === "agent_takeover") {
         throw new Error("Paused: employee recently replied in inbox (human takeover active).");
       }

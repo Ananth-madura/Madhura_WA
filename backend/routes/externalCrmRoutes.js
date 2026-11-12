@@ -499,7 +499,7 @@ router.post("/flow/trigger", async (req, res) => {
     }
 
     const waFlowEngine = require("../services/waFlowEngine");
-    if (clean) await require("../services/waBotGate").resumeBot(clean, sessionKey || req.user?.id).catch(() => {});
+    if (clean) await require("../services/waBotGate").resumeBot(clean, sessionKey || null, req.tenantId).catch(() => {});
     const result = await waFlowEngine.startFlowRun(fRows[0], clean, sessionKey || null, initialMessage || "", chatId || null, {
       _tenant_id: req.tenantId,
     });

@@ -69,7 +69,7 @@ async function sendMenu(phone, automationId, sessionKey) {
 async function handleMenuReply(phone, msg, sessionKey) {
   const cleanPhone = phone.replace(/\D/g, "");
 
-  if (!(await require("./waBotGate").botMayReply(cleanPhone, "Menu auto-reply"))) {
+  if (!(await require("./waBotGate").botMayReply(cleanPhone, "Menu auto-reply", { sessionKey }))) {
     return true; // handled: stay quiet while an agent owns this conversation
   }
 

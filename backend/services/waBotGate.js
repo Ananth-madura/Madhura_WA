@@ -61,11 +61,17 @@ async function shouldBotEngage(phone, opts = {}) {
 
   let contact = null;
   try {
+    let tenantId = Number(opts.tenantId || opts._tenant_id) || null;
+    if (!tenantId && opts.sessionKey) {
+      tenantId = Number(await require("./waContactTenancy").tenantForSessionKey(opts.sessionKey).catch(() => null)) || null;
+    }
+    const tenantClause = tenantId ? " AND tenant_id = ?" : "";
+    const params = tenantId ? [`%${p10}`, tenantId] : [`%${p10}`];
     const [rows] = await getDb().promise().query(
       `SELECT id, name, is_blocked, is_unsubscribed, ai_enabled, ai_paused_until,
               assigned_agent_id, ticket_status, created_at
-         FROM wa_contacts WHERE phone LIKE ? LIMIT 1`,
-      [`%${p10}`]
+         FROM wa_contacts WHERE phone LIKE ?${tenantClause} ORDER BY id DESC LIMIT 1`,
+      params
     );
     contact = rows?.[0] || null;
   } catch (err) {
@@ -105,9 +111,9 @@ async function botMayReply(phone, label, opts = {}) {
   if (!allowed) {
     console.log(
       `🤫 [WA BotGate] ${label} suppressed for +${last10(phone)} — ${reason}` +
-        (reason === "agent_takeover" && contact?.ai_paused_until
-          ? ` (bot paused until ${new Date(contact.ai_paused_until).toISOString()})`
-          : "")
+      (reason === "agent_takeover" && contact?.ai_paused_until
+        ? ` (bot paused until ${new Date(contact.ai_paused_until).toISOString()})`
+        : "")
     );
   }
   return allowed;
@@ -121,13 +127,13 @@ async function botMayReply(phone, label, opts = {}) {
  * @param {number} [minutes]
  * @param {string} [reason] for the log line only
  */
-async function pauseBot(phone, minutes = DEFAULT_TAKEOVER_MIN, reason = "agent_takeover", sessionKey = null) {
+async function pauseBot(phone, minutes = DEFAULT_TAKEOVER_MIN, reason = "agent_takeover", sessionKey = null, scopedTenantId = null) {
   const p10 = last10(phone);
   if (!p10) return false;
   try {
     // Scoped to the calling organization: a phone match on its own would mute
     // the same person for every other tenant on this platform.
-    const tenantId = await require("./waContactTenancy").tenantForContactWrite({ sessionKey });
+    const tenantId = Number(scopedTenantId) || await require("./waContactTenancy").tenantForContactWrite({ sessionKey });
     const [res] = await getDb().promise().query(
       "UPDATE wa_contacts SET ai_paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE) WHERE tenant_id = ? AND phone LIKE ?",
       [minutes, tenantId, `%${p10}`]
@@ -143,11 +149,11 @@ async function pauseBot(phone, minutes = DEFAULT_TAKEOVER_MIN, reason = "agent_t
 }
 
 /** Hand the conversation back to the bot (operator resolved the ticket). */
-async function resumeBot(phone, sessionKey = null) {
+async function resumeBot(phone, sessionKey = null, scopedTenantId = null) {
   const p10 = last10(phone);
   if (!p10) return false;
   try {
-    const tenantId = await require("./waContactTenancy").tenantForContactWrite({ sessionKey });
+    const tenantId = Number(scopedTenantId) || await require("./waContactTenancy").tenantForContactWrite({ sessionKey });
     await getDb().promise().query(
       "UPDATE wa_contacts SET ai_paused_until = NULL WHERE tenant_id = ? AND phone LIKE ?",
       [tenantId, `%${p10}`]
@@ -173,12 +179,12 @@ async function syncConversationTakeover({ db: customDb = null, tenantId = null, 
         const sql = database.isSqlite
           ? `UPDATE wa_contacts SET ai_paused_until = datetime('now', '+' || ? || ' minutes') WHERE ${tid ? "tenant_id = ? AND " : ""}phone LIKE ?`
           : `UPDATE wa_contacts SET ai_paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE) WHERE ${tid ? "tenant_id = ? AND " : ""}phone LIKE ?`;
-        await q(sql, tid ? [minutes, tid, `%${p10}`] : [minutes, `%${p10}`]).catch(() => {});
+        await q(sql, tid ? [minutes, tid, `%${p10}`] : [minutes, `%${p10}`]).catch(() => { });
       } else {
         await q(
           `UPDATE wa_contacts SET ai_paused_until = NULL WHERE ${tid ? "tenant_id = ? AND " : ""}phone LIKE ?`,
           tid ? [tid, `%${p10}`] : [`%${p10}`]
-        ).catch(() => {});
+        ).catch(() => { });
       }
     }
 
@@ -196,16 +202,16 @@ async function syncConversationTakeover({ db: customDb = null, tenantId = null, 
         await q(
           `UPDATE conversations SET automation_mode = 'human', automation_version = automation_version + 1, updated_at = CURRENT_TIMESTAMP WHERE ${tid ? "tenant_id = ? AND " : ""}id = ?`,
           tid ? [tid, id] : [id]
-        ).catch(() => {});
+        ).catch(() => { });
         await q(
           `UPDATE wa_flow_runs SET status = 'paused_by_agent', end_reason = ?, ended_at = CURRENT_TIMESTAMP WHERE conversation_id = ? AND status = 'active'`,
           [String(reason).slice(0, 64), id]
-        ).catch(() => {});
+        ).catch(() => { });
       } else if (tid) {
         await q(
           "UPDATE conversations SET automation_mode = 'assistant', automation_version = automation_version + 1, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND id = ? AND automation_mode = 'human'",
           [tid, id]
-        ).catch(() => {});
+        ).catch(() => { });
       }
     }
     return true;

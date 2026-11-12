@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
-import { API } from "../config/api";
+import api from "../config/axios";
 
 const empty = { name: "business", url: "", token: "", operations: "" };
 export default function FlowConnections() {
@@ -8,13 +7,13 @@ export default function FlowConnections() {
   const [error, setError] = useState(""), [busy, setBusy] = useState(false), [loaded, setLoaded] = useState(false);
   const load = async () => {
     setError("");
-    try { const { data } = await axios.get(`${API}/api/wa-flows/connections`); setConnections(data); setLoaded(true); }
+    try { const { data } = await api.get("/api/wa-flows/connections"); setConnections(data); setLoaded(true); }
     catch (e) { setError(e.response?.data?.error || "Could not load workflow connections."); }
   };
   const save = async event => {
     event.preventDefault(); setBusy(true); setError("");
     try {
-      const { data } = await axios.post(`${API}/api/wa-flows/connections`, { ...draft, operations: draft.operations.split(",").map(value => value.trim()).filter(Boolean) });
+      const { data } = await api.post("/api/wa-flows/connections", { ...draft, operations: draft.operations.split(",").map(value => value.trim()).filter(Boolean) });
       setConnections(data); setDraft(empty);
     } catch (e) { setError(e.response?.data?.error || "Could not save the connection."); }
     finally { setBusy(false); }
@@ -22,7 +21,7 @@ export default function FlowConnections() {
   const remove = async name => {
     if (!window.confirm(`Remove ${name}? Workflows using this connection will follow their failure route.`)) return;
     setBusy(true); setError("");
-    try { await axios.delete(`${API}/api/wa-flows/connections/${encodeURIComponent(name)}`); await load(); }
+    try { await api.delete(`/api/wa-flows/connections/${encodeURIComponent(name)}`); await load(); }
     catch (e) { setError(e.response?.data?.error || "Could not remove the connection."); }
     finally { setBusy(false); }
   };

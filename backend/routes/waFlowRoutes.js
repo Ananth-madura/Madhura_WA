@@ -213,7 +213,7 @@ router.get(
 
     let botPaused = false;
     if (clean10.length >= 8) {
-      const gate = await require("../services/waBotGate").shouldBotEngage(rawPhone).catch(() => ({ allowed: true }));
+      const gate = await require("../services/waBotGate").shouldBotEngage(rawPhone, { tenantId: req.tenantId }).catch(() => ({ allowed: true }));
       botPaused = !gate.allowed && gate.reason === "agent_takeover";
     }
 
@@ -243,7 +243,7 @@ router.post(
         .catch(() => {});
 
       if (req.body.resumeAuto === true) {
-        await require("../services/waBotGate").resumeBot(rawPhone, req.user?.id).catch(() => {});
+        await require("../services/waBotGate").resumeBot(rawPhone, null, req.tenantId).catch(() => {});
         await require("../services/waBotGate").syncConversationTakeover({
           tenantId: req.tenantId,
           phone: rawPhone,
@@ -252,7 +252,7 @@ router.post(
           reason: "manual_resume",
         }).catch(() => {});
       } else if (req.body.pauseBot !== false) {
-        await require("../services/waBotGate").pauseBot(rawPhone, undefined, "manual bot stop", req.user?.id).catch(() => {});
+        await require("../services/waBotGate").pauseBot(rawPhone, undefined, "manual bot stop", null, req.tenantId).catch(() => {});
         await require("../services/waBotGate").syncConversationTakeover({
           tenantId: req.tenantId,
           phone: rawPhone,

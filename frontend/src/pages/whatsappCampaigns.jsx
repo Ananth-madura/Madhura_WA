@@ -128,10 +128,15 @@ function CampaignWorkspace() {
   useEffect(() => {
     const hasRunning = campaigns.some(c => c.status === "running");
     if (!hasRunning) return;
-    const interval = setInterval(() => {
-      fetchData(true);
-    }, 3500);
-    return () => clearInterval(interval);
+    const refresh = () => {
+      if (document.visibilityState === "visible") fetchData(true);
+    };
+    const interval = setInterval(refresh, 3500);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [campaigns, fetchData]);
 
   const openCreate = () => {

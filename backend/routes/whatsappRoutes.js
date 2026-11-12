@@ -829,7 +829,7 @@ router.post("/send-interactive", messageSendLimiter, async (req, res) => {
     }
     const id = await require("../services/waFlowEngine").recordAndEmitBotMessage(phone, historyText, "interactive", { ...payload, native: !!result.native }, sessionKey, chatId,
       { id: interactive.deliveryMessageId(result), status: "sent" });
-    await require("../services/waBotGate").pauseBot(chatId, undefined, "manual menu reply", req.user?.id).catch(() => {});
+    await require("../services/waBotGate").pauseBot(chatId, undefined, "manual menu reply", null, req.tenantId).catch(() => {});
     return res.json({ success: true, id, native: !!result.native, interactive: payload });
   } catch (err) {
     return res.status(err.deliveryUnknown ? 504 : 502).json({ error: err.message, deliveryUnknown: !!err.deliveryUnknown });
@@ -855,7 +855,7 @@ router.post("/send", messageSendLimiter, async (req, res) => {
           replyToMessageId,
           idempotencyKey: idempotencyKey || null,
         });
-        await require("../services/waBotGate").pauseBot(chatId, undefined, "manual reply", req.user?.id).catch(() => {});
+        await require("../services/waBotGate").pauseBot(chatId, undefined, "manual reply", null, req.tenantId).catch(() => {});
         return res.json(result);
       } catch (sendErr) {
         if (sendErr?.deliveryUnknown) {
@@ -1122,8 +1122,8 @@ router.post("/assign-agent", async (req, res) => {
 
     // Handing a chat to a human pauses the bot; unassigning gives it back.
     const waBotGate = require("../services/waBotGate");
-    if (agentId) await waBotGate.pauseBot(clean10, 24 * 60, "assigned to agent", req.user?.id).catch(() => {});
-    else await waBotGate.resumeBot(clean10, req.user?.id).catch(() => {});
+    if (agentId) await waBotGate.pauseBot(clean10, 24 * 60, "assigned to agent", null, req.tenantId).catch(() => {});
+    else await waBotGate.resumeBot(clean10, null, req.tenantId).catch(() => {});
 
     res.json({ success: true, agentId: agentId || null });
   } catch (err) {
@@ -1278,7 +1278,7 @@ router.post("/send-media-upload", messageSendLimiter, privateAttachmentUpload.si
         mediaUrl: r2MediaUrl,
       }).catch(() => {});
     }
-    await require("../services/waBotGate").pauseBot(chatId, undefined, "manual attachment reply", req.user?.id).catch(() => {});
+    await require("../services/waBotGate").pauseBot(chatId, undefined, "manual attachment reply", null, req.tenantId).catch(() => {});
     res.json({
       success: true,
       id: result.id,
@@ -1316,7 +1316,7 @@ router.post("/send-media", messageSendLimiter, async (req, res) => {
           filename || "",
           { idempotencyKey: idempotencyKey || null }
         );
-        await require("../services/waBotGate").pauseBot(chatId, undefined, "manual media reply", req.user?.id).catch(() => {});
+        await require("../services/waBotGate").pauseBot(chatId, undefined, "manual media reply", null, req.tenantId).catch(() => {});
         return res.json(result);
       } catch (mediaErr) {
         if (mediaErr?.deliveryUnknown) {
@@ -1364,7 +1364,7 @@ router.post("/send-location", messageSendLimiter, async (req, res) => {
         const result = await session.sendLocationMessage(chatId, lat, lng, name || "", {
           idempotencyKey: idempotencyKey || null,
         });
-        await require("../services/waBotGate").pauseBot(chatId, undefined, "manual location reply", req.user?.id).catch(() => {});
+        await require("../services/waBotGate").pauseBot(chatId, undefined, "manual location reply", null, req.tenantId).catch(() => {});
         return res.json(result);
       } catch (locErr) {
         if (locErr?.deliveryUnknown) {
@@ -1455,8 +1455,8 @@ router.post("/chat/:chatId/assign", async (req, res) => {
     );
 
     const waBotGate = require("../services/waBotGate");
-    if (agentId) await waBotGate.pauseBot(phone, 24 * 60, "assigned to agent", req.user?.id).catch(() => {});
-    else await waBotGate.resumeBot(phone, req.user?.id).catch(() => {});
+    if (agentId) await waBotGate.pauseBot(phone, 24 * 60, "assigned to agent", null, inboxTenantId).catch(() => {});
+    else await waBotGate.resumeBot(phone, null, inboxTenantId).catch(() => {});
 
     res.json({ success: true, message: `Chat assigned to ${agentName || "unassigned"}` });
   } catch (err) {
@@ -1478,8 +1478,8 @@ router.post("/chat/:chatId/ticket-status", async (req, res) => {
     // Resolving the ticket hands the conversation back to the bot; marking it
     // spam keeps the bot out of it for good.
     const waBotGate = require("../services/waBotGate");
-    if (status === "resolved") await waBotGate.resumeBot(phone, req.user?.id).catch(() => {});
-    else if (status === "spam") await waBotGate.pauseBot(phone, 365 * 24 * 60, "marked spam", req.user?.id).catch(() => {});
+    if (status === "resolved") await waBotGate.resumeBot(phone, null, ticketTenantId).catch(() => {});
+    else if (status === "spam") await waBotGate.pauseBot(phone, 365 * 24 * 60, "marked spam", null, ticketTenantId).catch(() => {});
 
     res.json({ success: true, status });
   } catch (err) {

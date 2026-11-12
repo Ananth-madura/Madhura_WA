@@ -187,7 +187,7 @@ function createPipeline(deps = {}) {
 
     // 7. Strict Human Takeover Gate + Explicit Keyword Restart
     const gate = await getBotGate()
-      .shouldBotEngage(cleanPhone, { isCampaignReply })
+      .shouldBotEngage(cleanPhone, { isCampaignReply, tenantId, sessionKey })
       .catch(() => ({ allowed: true, reason: null }));
 
     if (!gate.allowed && ["contact_blocked", "contact_unsubscribed", "bot_disabled_for_contact"].includes(gate.reason)) {
@@ -319,6 +319,7 @@ function createPipeline(deps = {}) {
         isCampaignReply,
         isHistoric: false,
         chatId,
+        _tenant_id: tenantId,
       })
       .catch(() => false);
     if (flowHandled) return { handled: true, stage: "direct_flow" };
@@ -330,7 +331,7 @@ function createPipeline(deps = {}) {
 
     if (messageText) {
       const welcomeSent = await getAutomation()
-        .maybeSendWelcomeReply(chatId || cleanPhone, contactName, sessionKey, { isCampaignReply })
+        .maybeSendWelcomeReply(chatId || cleanPhone, contactName, sessionKey, { isCampaignReply, tenantId })
         .catch(() => false);
       if (welcomeSent) return { handled: true, stage: "welcome_reply" };
 
