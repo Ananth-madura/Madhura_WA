@@ -532,6 +532,7 @@ function startServer() {
       await require("./migrations/automation_workspace").migrate(db);
       await require("./migrations/automation_command_center").migrate(db);
       await require("./migrations/sender_workspace").migrate(db);
+      await require("./migrations/meta_multi_account_saas").migrate(db);
       await require("./migrations/conversation_shares").migrate(require("./config/database"));
       await require("./migrations/local_first_chat_storage").migrate(require("./config/database"));
       await require("./migrations/r2_storage_unification").migrate(require("./config/database"));

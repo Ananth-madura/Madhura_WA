@@ -37,7 +37,9 @@ function createService(db, transport = axios) {
   }
   function serialize(row, branches) {
     return { id: row.id, tenant_id: row.tenant_id, phone_number_id: row.phone_number_id, display_phone: row.display_phone, verified_name: row.verified_name,
-      waba_id: row.waba_id, is_shared: Boolean(row.is_shared), status: row.status, revision: row.revision,
+      waba_id: row.waba_id, is_shared: Boolean(row.is_shared), is_default: Boolean(row.is_default), department_name: row.department_name || null, department_id: row.department_id || null,
+      code_verification_status: row.code_verification_status || "NOT_VERIFIED", daily_limit: Number(row.daily_limit || 1000), current_day_sent: Number(row.current_day_sent || 0),
+      last_ping_at: row.last_ping_at || null, last_ping_status: row.last_ping_status || null, status: row.status, revision: row.revision,
       quality: row.last_verified_at ? row.quality : null, messaging_tier: row.last_verified_at ? row.messaging_tier : null,
       last_verified_at: row.last_verified_at, health_error: row.health_error, webhook_subscribed_at: row.webhook_subscribed_at,
       has_token: Boolean(row.encrypted_token), has_app_secret: Boolean(row.app_secret), has_verify_token: Boolean(row.verify_token), branches,

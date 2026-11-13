@@ -3,6 +3,8 @@ const router = express.Router();
 const db = require("../config/database");
 const wa = require("../services/whatsappCloudApi");
 const waAiReply = require("../services/waAiReply");
+const { createConcurrentEngine } = require("../services/concurrentSenderEngine");
+const concurrentEngine = createConcurrentEngine(db);
 
 // Opt-out keywords (case-insensitive)
 const OPT_OUT_KEYWORDS = ["stop", "unsubscribe", "opt out", "optout", "cancel", "quit", "end", "remove me", "no more"];
@@ -478,6 +480,7 @@ async function handleStatusUpdate(status, account) {
   }
 
   await require("../services/waDeliveryReceipts").applyDeliveryReceipt(msgId, statusName, timestamp, errorMsg);
+  await concurrentEngine.recordWebhookStatus({ waMessageId: msgId, status: statusName, timestamp, recipientId: phone, errorMessage: errorMsg }).catch(() => {});
 
   const ackMap = { sent: 1, delivered: 2, read: 3, failed: -1 };
   let resolvedTenantId = account?.tenantId || null;
