@@ -63,6 +63,10 @@ import {
   Upload,
   GitBranch,
   Eye,
+  Target,
+  Radio,
+  Contact,
+  ChevronRight,
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
@@ -702,6 +706,12 @@ export default function WhatsAppPage() {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const lastSendTimestampRef = useRef(0);
   const lastQrRefreshClickRef = useRef(0);
+  const inboxFiltersRef = useRef(null);
+  const scrollInboxFilters = (amount) => {
+    if (inboxFiltersRef.current) {
+      inboxFiltersRef.current.scrollBy({ left: amount, behavior: "smooth" });
+    }
+  };
 
   useEffect(() => {
     initializeLocalChatStorage().catch((err) => {
@@ -735,8 +745,12 @@ export default function WhatsAppPage() {
   const [accountBalance, setAccountBalance] = useState(null);
   const [accountBalanceLoading, setAccountBalanceLoading] = useState(false);
 
+  // Multi-Session & Number Hub
+  const [availableSessions, setAvailableSessions] = useState([]);
+  const [selectedSessionKey, setSelectedSessionKey] = useState("all");
+
   // Lightbox Modal, Contact Info Drawer, Sidebar Filters
-  const [sidebarTab, setSidebarTab] = useState("all"); // 'all', 'unread', 'favourites', 'groups', 'bot'
+  const [sidebarTab, setSidebarTab] = useState("all"); // 'all', 'leads', 'contacts', 'unread', 'favourites', 'groups', 'bot'
   const [sidebarMode, setSidebarMode] = useState(() => {
     try {
       return waUiStorage.getItem("wa_sidebar_mode") || "normal"; // "normal", "compact", "wide"
@@ -1138,6 +1152,14 @@ export default function WhatsAppPage() {
         setStatus((s) => ({ ...s, hasQr: true, connected: false }));
         setQrLoading(false);
         setError(null);
+      } else if (res.data && res.data.disabled) {
+        if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+        setQrLoading(false);
+        setError(res.data.error || res.data.message || "WhatsApp Web engine is disabled on server.");
+      } else if (res.data && res.data.error && !res.data.initializing) {
+        if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+        setQrLoading(false);
+        setError(res.data.error);
       } else if (res.data && res.data.initializing) {
         // Still initializing in background — poll fast every 1.5s (up to 45 attempts = ~68s for cold cloud boot)
         if (qrRetryCountRef.current < 45) {
@@ -1162,6 +1184,12 @@ export default function WhatsAppPage() {
         setQrLoading(false);
       }
     } catch (err) {
+      if (err.response?.status === 503 && (err.response?.data?.disabled || err.response?.data?.error)) {
+        if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+        setQrLoading(false);
+        setError(err.response.data.error || err.response.data.message || "WhatsApp Web engine is disabled on server.");
+        return;
+      }
       if (err.response?.status === 504 || err.code === "ECONNABORTED" || (err.message && err.message.includes("timeout"))) {
         if (qrRetryCountRef.current < 10) {
           qrRetryCountRef.current += 1;
@@ -1261,7 +1289,21 @@ export default function WhatsAppPage() {
     }
   }, [location.search, handleForceDisconnectToQr]);
 
-  const fetchChats = useCallback(async (refresh = false) => {
+  const fetchAvailableSessions = useCallback(async () => {
+    try {
+      const token = waUiStorage.getItem("token");
+      const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...enterpriseHeaders,
+      };
+      const res = await axios.get(`${API}/api/whatsapp/all-sessions`, { headers });
+      if (res.data && Array.isArray(res.data)) {
+        setAvailableSessions(res.data);
+      }
+    } catch (_) {}
+  }, [enterpriseHeaders]);
+
+  const fetchChats = useCallback(async (refresh = false, sessionKey = null) => {
     if (!hasLoadedChatsOnce.current && (!chatsRef.current || chatsRef.current.length === 0)) {
       setChatsLoading(true);
     }
@@ -1271,13 +1313,18 @@ export default function WhatsAppPage() {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...enterpriseHeaders,
       };
-      const endpoint = refresh ? `/api/whatsapp/chats?refresh=true` : `/api/whatsapp/chats`;
+      const activeSess = sessionKey !== null ? sessionKey : (selectedSessionKey || "all");
+      const qParams = new URLSearchParams();
+      if (refresh) qParams.set("refresh", "true");
+      if (activeSess && activeSess !== "all") qParams.set("sessionKey", activeSess);
+      const queryString = qParams.toString() ? `?${qParams.toString()}` : "";
+      const endpoint = `/api/whatsapp/chats${queryString}`;
       const res = await axios.get(`${API}${endpoint}`, { headers });
       if (res.data && Array.isArray(res.data)) {
         hasLoadedChatsOnce.current = true;
         setChats((prev) => {
           if (prev && prev.length === res.data.length) {
-            const hasChanged = res.data.some((c, i) => !prev[i] || prev[i].id !== c.id || prev[i].timestamp !== c.timestamp || prev[i].unreadCount !== c.unreadCount || prev[i].lastMessage?.body !== c.lastMessage?.body);
+            const hasChanged = res.data.some((c, i) => !prev[i] || prev[i].id !== c.id || prev[i].timestamp !== c.timestamp || prev[i].unreadCount !== c.unreadCount || prev[i].lastMessage?.body !== c.lastMessage?.body || prev[i].isLead !== c.isLead);
             if (!hasChanged) return prev;
           }
           return res.data;
@@ -1285,7 +1332,7 @@ export default function WhatsAppPage() {
       }
     } catch { }
     setChatsLoading(false);
-  }, []);
+  }, [enterpriseHeaders, selectedSessionKey]);
 
   const fetchAccountDetails = useCallback(async () => {
     try {
@@ -3363,7 +3410,8 @@ export default function WhatsAppPage() {
     fetchStatus();
     fetchChats(false);
     fetchAccountDetails();
-  }, [demoMode, fetchStatus, fetchChats, fetchAccountDetails]);
+    fetchAvailableSessions();
+  }, [demoMode, fetchStatus, fetchChats, fetchAccountDetails, fetchAvailableSessions]);
 
   useEffect(() => {
     // Status polling in background: 15s when active/workspace, 3.5s when QR is active to auto-detect scan, 8s otherwise
@@ -4057,6 +4105,10 @@ export default function WhatsAppPage() {
   }, [chats]);
 
   const allChatsList = deduplicatedChats;
+  const leadsChatsList = deduplicatedChats.filter((c) => Boolean(c.isLead));
+  const contactsChatsList = deduplicatedChats.filter(
+    (c) => Boolean(c.isContact && !c.isGroup)
+  );
   const sharedWithMeChatsList = deduplicatedChats.filter(
     (c) => Boolean(c.isShared || c.is_shared_with_me || c.my_share_permission)
   );
@@ -4079,6 +4131,10 @@ export default function WhatsAppPage() {
   let baseList = allChatsList;
   if (sidebarTab === "all") {
     baseList = allChatsList;
+  } else if (sidebarTab === "leads") {
+    baseList = leadsChatsList;
+  } else if (sidebarTab === "contacts") {
+    baseList = contactsChatsList;
   } else if (sidebarTab === "shared_with_me") {
     baseList = sharedWithMeChatsList;
   } else if (sidebarTab === "shared_by_me") {
@@ -4104,6 +4160,8 @@ export default function WhatsAppPage() {
         (c.phoneNumber || "").includes(searchLower) ||
         (c.formattedPhone || "").toLowerCase().includes(searchLower) ||
         (c.id || "").includes(searchLower) ||
+        (c.leadNotes || "").toLowerCase().includes(searchLower) ||
+        (c.leadStatus || "").toLowerCase().includes(searchLower) ||
         (c.lastMessage?.body || "").toLowerCase().includes(searchLower)
     );
   } else {
@@ -5050,11 +5108,36 @@ export default function WhatsAppPage() {
     );
   };
 
-  // Enquiry funnel: a brand-new enquiry is temperature "new"; qualifying it
-  // moves it into the lead columns; converting it moves it into clients.
-  const newEnquiryRows = enquiries.filter((item) => item.status === "open" && String(item.temperature || "new").toLowerCase() === "new");
-  const leadRows = enquiries.filter((item) => item.status === "open" && ["cold", "warm", "hot"].includes(String(item.temperature || "").toLowerCase()));
-  const activeEnquiryRows = enquiryView === "clients" ? convertedEnquiries : enquiryView === "leads" ? leadRows : newEnquiryRows;
+  // Enquiry funnel: filtered specifically for the active contact/conversation
+  const currentContactEnquiries = (!selectedChat || selectedChat.isGroup) ? [] : enquiries.filter((item) => {
+    const chatDigits = String(selectedChat.id || selectedChat.phone || selectedChat.phoneNumber || "").replace(/\D/g, "");
+    const chat10 = chatDigits.length >= 10 ? chatDigits.slice(-10) : chatDigits;
+    const chatNameLower = (selectedChat.name || "").toLowerCase().trim();
+
+    const itemDigits = String(item.phone || item.mobile || "").replace(/\D/g, "");
+    const item10 = itemDigits.length >= 10 ? itemDigits.slice(-10) : itemDigits;
+    if (chat10 && item10 && (chat10 === item10 || chatDigits === itemDigits)) return true;
+    if (chatNameLower && item.name && item.name.toLowerCase().trim() === chatNameLower && chatNameLower !== "whatsapp contact" && chatNameLower !== "whatsapp lead") return true;
+    return false;
+  });
+
+  const currentContactConverted = (!selectedChat || selectedChat.isGroup) ? [] : convertedEnquiries.filter((item) => {
+    const chatDigits = String(selectedChat.id || selectedChat.phone || selectedChat.phoneNumber || "").replace(/\D/g, "");
+    const chat10 = chatDigits.length >= 10 ? chatDigits.slice(-10) : chatDigits;
+    const chatNameLower = (selectedChat.name || "").toLowerCase().trim();
+
+    const itemDigits = String(item.phone || item.mobile || "").replace(/\D/g, "");
+    const item10 = itemDigits.length >= 10 ? itemDigits.slice(-10) : itemDigits;
+    if (chat10 && item10 && (chat10 === item10 || chatDigits === itemDigits)) return true;
+    if (chatNameLower && item.name && item.name.toLowerCase().trim() === chatNameLower && chatNameLower !== "whatsapp contact") return true;
+    return false;
+  });
+
+  const newEnquiryRows = currentContactEnquiries.filter((item) => item.status === "open" && String(item.temperature || "new").toLowerCase() === "new");
+  const leadRows = currentContactEnquiries.filter((item) => item.status === "open" && ["cold", "warm", "hot"].includes(String(item.temperature || "").toLowerCase()));
+  const activeEnquiryRows = enquiryView === "clients" ? currentContactConverted : enquiryView === "leads" ? leadRows : newEnquiryRows;
+  const contactEnquiryOpenTotal = newEnquiryRows.length + leadRows.length;
+
   const chatPhoneDigits = selectedChat && !selectedChat.isGroup ? String(selectedChat.id || "").replace(/\D/g, "") : "";
   const selectedEnquiry = chatPhoneDigits
     ? [...enquiries, ...convertedEnquiries].find((item) => {
@@ -5102,6 +5185,43 @@ export default function WhatsAppPage() {
                 : "w-full md:w-80 lg:w-[21rem] xl:w-[360px]"
             } ${showMobileChat ? "hidden md:flex" : "flex"}`}
         >
+          {/* Multi-Session / Multi-Number Selector Bar */}
+          {availableSessions.length > 1 && sidebarMode !== "compact" && (
+            <div className="wa-inbox-session-bar px-3 py-1.5 border-b border-[var(--color-rule)] bg-[var(--color-paper-2)]/90 flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <Radio size={12} className="text-emerald-500 shrink-0 animate-pulse" />
+                <span className="text-[10px] font-bold text-[var(--color-ink-2)] uppercase tracking-wider shrink-0">Channel:</span>
+                <select
+                  value={selectedSessionKey}
+                  onChange={(e) => {
+                    const newSess = e.target.value;
+                    setSelectedSessionKey(newSess);
+                    fetchChats(true, newSess);
+                  }}
+                  className="hl-input text-xs py-1 px-2 rounded-lg truncate font-medium bg-[var(--color-paper)] border-[var(--color-rule)] flex-1 min-w-0"
+                >
+                  {availableSessions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.channel === "all" ? "🌐 " : s.channel === "cloud_api" ? "☁️ " : "📱 "}
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  fetchAvailableSessions();
+                  fetchChats(true);
+                }}
+                title="Refresh sessions & chats"
+                className="p-1 rounded text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper)] transition shrink-0"
+              >
+                <RefreshCw size={11} className={chatsLoading ? "animate-spin" : ""} />
+              </button>
+            </div>
+          )}
+
           {/* Search Bar & Action Buttons */}
           <div className="wa-inbox-search p-2.5 border-b border-[var(--color-rule)] flex items-center gap-1.5 shrink-0 bg-[var(--color-paper-2)]">
             {sidebarMode === "compact" ? (
@@ -5190,90 +5310,144 @@ export default function WhatsAppPage() {
             )}
           </div>
 
-          {/* Filter Capsules / Pills (All, Direct, Unread, Groups, Bot, Favourites) */}
+          {/* Filter Capsules / Pills (All, Direct, Unread, Groups, Bot, Favourites) with interactive sidescroll */}
           {sidebarMode !== "compact" && (
-            <div className="wa-inbox-filters hl-tabs px-3 py-1.5 flex items-center gap-1.5 shrink-0 overflow-x-auto wa-no-scrollbar border-b border-[var(--color-rule)] bg-[var(--color-paper-2)]">
+            <div className="wa-inbox-filters-wrapper relative flex items-center border-b border-[var(--color-rule)] bg-[var(--color-paper-2)] select-none">
               <button
-                onClick={() => setSidebarTab("all")}
-                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "all" ? "is-active" : ""}`}
+                type="button"
+                onClick={() => scrollInboxFilters(-110)}
+                className="p-1 px-1.5 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper)] transition z-10 shrink-0 border-r border-[var(--color-rule)]/40 flex items-center justify-center cursor-pointer"
+                title="Scroll filters left"
+                aria-label="Scroll filters left"
               >
-                <span>All</span>
-                <span className="hl-badge text-[10px] px-1.5 py-0.2 font-semibold">
-                  {allChatsList.length}
-                </span>
+                <ChevronLeft size={13} />
               </button>
-              <button
-                onClick={() => setSidebarTab("shared_with_me")}
-                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "shared_with_me" ? "is-active" : ""}`}
+              <div
+                ref={inboxFiltersRef}
+                className="wa-inbox-filters hl-tabs px-1.5 py-1 flex items-center gap-1 flex-1 min-w-0 overflow-x-auto whitespace-nowrap scroll-smooth"
+                onWheel={(e) => {
+                  if (e.deltaY !== 0) {
+                    e.currentTarget.scrollLeft += e.deltaY;
+                  }
+                }}
               >
-                <Users size={12} />
-                <span>Shared with Me</span>
-                {sharedWithMeChatsList.length > 0 && (
-                  <span className="hl-badge hl-badge-accent text-[10px] px-1.5 py-0.2 font-extrabold">
-                    {sharedWithMeChatsList.length}
-                  </span>
-                )}
-              </button>
-              {sharedByMeChatsList.length > 0 && (
                 <button
-                  onClick={() => setSidebarTab("shared_by_me")}
-                  className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "shared_by_me" ? "is-active" : ""}`}
+                  onClick={() => setSidebarTab("all")}
+                  className={`hl-tab px-2 py-0.5 text-xs font-semibold shrink-0 whitespace-nowrap transition flex items-center gap-1 ${sidebarTab === "all" ? "is-active" : ""}`}
                 >
-                  <span>Shared by Me</span>
-                  <span className="hl-badge text-[10px] px-1.5 py-0.2 font-semibold">
-                    {sharedByMeChatsList.length}
+                  <span>All</span>
+                  <span className="hl-badge text-[10px] px-1 py-0.2 font-semibold">
+                    {allChatsList.length}
                   </span>
                 </button>
-              )}
-              <button
-                onClick={() => setSidebarTab("unread")}
-                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "unread" ? "is-active" : ""}`}
-              >
-                <span>Unread</span>
-                {unreadChatsList.length > 0 && (
-                  <span className="hl-badge hl-badge-error text-[10px] px-1.5 py-0.2 font-black animate-pulse">
-                    {unreadChatsList.length}
-                  </span>
+                <button
+                  onClick={() => setSidebarTab("leads")}
+                  className={`hl-tab px-2 py-0.5 text-xs font-semibold shrink-0 whitespace-nowrap transition flex items-center gap-1 ${sidebarTab === "leads" ? "is-active" : ""}`}
+                  title="Inbound CRM Leads & Telecall Inquiries"
+                >
+                  <Target size={11} className="text-amber-500" />
+                  <span>Leads</span>
+                  {leadsChatsList.length > 0 && (
+                    <span className="hl-badge bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[10px] px-1 py-0.2 font-black">
+                      {leadsChatsList.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setSidebarTab("contacts")}
+                  className={`hl-tab px-2 py-0.5 text-xs font-semibold shrink-0 whitespace-nowrap transition flex items-center gap-1 ${sidebarTab === "contacts" ? "is-active" : ""}`}
+                  title="All CRM Contacts"
+                >
+                  <Contact size={11} className="text-blue-500" />
+                  <span>Contacts</span>
+                  {contactsChatsList.length > 0 && (
+                    <span className="hl-badge text-[10px] px-1 py-0.2 font-semibold">
+                      {contactsChatsList.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setSidebarTab("shared_with_me")}
+                  className={`hl-tab px-2 py-0.5 text-xs font-semibold shrink-0 whitespace-nowrap transition flex items-center gap-1 ${sidebarTab === "shared_with_me" ? "is-active" : ""}`}
+                >
+                  <Users size={11} />
+                  <span>Shared</span>
+                  {sharedWithMeChatsList.length > 0 && (
+                    <span className="hl-badge hl-badge-accent text-[10px] px-1 py-0.2 font-extrabold">
+                      {sharedWithMeChatsList.length}
+                    </span>
+                  )}
+                </button>
+                {sharedByMeChatsList.length > 0 && (
+                  <button
+                    onClick={() => setSidebarTab("shared_by_me")}
+                    className={`hl-tab px-2 py-0.5 text-xs font-semibold shrink-0 whitespace-nowrap transition flex items-center gap-1 ${sidebarTab === "shared_by_me" ? "is-active" : ""}`}
+                  >
+                    <span>My Shares</span>
+                    <span className="hl-badge text-[10px] px-1 py-0.2 font-semibold">
+                      {sharedByMeChatsList.length}
+                    </span>
+                  </button>
                 )}
-              </button>
-              <button
-                onClick={() => setSidebarTab("direct")}
-                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "direct" ? "is-active" : ""}`}
-              >
-                <span>Direct</span>
-                <span className="hl-badge text-[10px] px-1.5 py-0.2 font-semibold">
-                  {directChatsList.length}
-                </span>
-              </button>
-              <button
-                onClick={() => setSidebarTab("groups")}
-                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "groups" ? "is-active" : ""}`}
-              >
-                <span>Groups</span>
-                {groupChatsList.length > 0 && (
-                  <span className={`hl-badge text-[10px] px-1.5 py-0.2 font-bold ${sidebarTab === "groups" ? "hl-badge-accent" : ""}`}>
-                    {groupChatsList.length}
+                <button
+                  onClick={() => setSidebarTab("unread")}
+                  className={`hl-tab px-2 py-0.5 text-xs font-semibold shrink-0 whitespace-nowrap transition flex items-center gap-1 ${sidebarTab === "unread" ? "is-active" : ""}`}
+                >
+                  <span>Unread</span>
+                  {unreadChatsList.length > 0 && (
+                    <span className="hl-badge hl-badge-error text-[10px] px-1 py-0.2 font-black animate-pulse">
+                      {unreadChatsList.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setSidebarTab("direct")}
+                  className={`hl-tab px-2 py-0.5 text-xs font-semibold shrink-0 whitespace-nowrap transition flex items-center gap-1 ${sidebarTab === "direct" ? "is-active" : ""}`}
+                >
+                  <span>Direct</span>
+                  <span className="hl-badge text-[10px] px-1 py-0.2 font-semibold">
+                    {directChatsList.length}
                   </span>
-                )}
-              </button>
+                </button>
+                <button
+                  onClick={() => setSidebarTab("groups")}
+                  className={`hl-tab px-2 py-0.5 text-xs font-semibold shrink-0 whitespace-nowrap transition flex items-center gap-1 ${sidebarTab === "groups" ? "is-active" : ""}`}
+                >
+                  <span>Groups</span>
+                  {groupChatsList.length > 0 && (
+                    <span className={`hl-badge text-[10px] px-1 py-0.2 font-bold ${sidebarTab === "groups" ? "hl-badge-accent" : ""}`}>
+                      {groupChatsList.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setSidebarTab("bot")}
+                  className={`hl-tab px-2 py-0.5 text-xs font-semibold shrink-0 whitespace-nowrap transition flex items-center gap-1 ${sidebarTab === "bot" ? "is-active" : ""}`}
+                  title="Chats currently in automated bot flow"
+                >
+                  <span>Automated</span>
+                  {botChatsList.length > 0 && (
+                    <span className="hl-badge hl-badge-warn text-[10px] px-1 py-0.2 font-bold">
+                      {botChatsList.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setSidebarTab("favourites")}
+                  className={`hl-tab px-2 py-0.5 text-xs font-semibold shrink-0 whitespace-nowrap transition flex items-center gap-1 ${sidebarTab === "favourites" ? "is-active" : ""}`}
+                >
+                  <Star size={11} className={sidebarTab === "favourites" ? "text-[var(--color-focus)] fill-[var(--color-focus)]" : ""} />
+                  <span>Favourites</span>
+                </button>
+              </div>
               <button
-                onClick={() => setSidebarTab("bot")}
-                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "bot" ? "is-active" : ""}`}
-                title="Chats currently in automated bot flow"
+                type="button"
+                onClick={() => scrollInboxFilters(110)}
+                className="p-1 px-1.5 text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper)] transition z-10 shrink-0 border-l border-[var(--color-rule)]/40 flex items-center justify-center cursor-pointer"
+                title="Scroll filters right"
+                aria-label="Scroll filters right"
               >
-                <span>Automated</span>
-                {botChatsList.length > 0 && (
-                  <span className="hl-badge hl-badge-warn text-[10px] px-1.5 py-0.2 font-bold">
-                    {botChatsList.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setSidebarTab("favourites")}
-                className={`hl-tab px-2.5 py-1 text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${sidebarTab === "favourites" ? "is-active" : ""}`}
-              >
-                <Star size={11} className={sidebarTab === "favourites" ? "text-[var(--color-focus)] fill-[var(--color-focus)]" : ""} />
-                <span>Favourites</span>
+                <ChevronRight size={13} />
               </button>
             </div>
           )}
@@ -5291,15 +5465,19 @@ export default function WhatsAppPage() {
                 <p className="hl-empty-title mb-1">
                   {searchTerm
                     ? "No chats match your search"
-                    : sidebarTab === "unread"
-                      ? "No unread messages"
-                      : sidebarTab === "direct"
-                        ? "No 1-on-1 direct conversations"
-                        : sidebarTab === "favourites"
-                          ? "No starred or pinned chats"
-                          : sidebarTab === "groups"
-                            ? "No group chats found"
-                            : "No WhatsApp chats yet"}
+                    : sidebarTab === "leads"
+                      ? "No CRM Leads or Inquiries found"
+                      : sidebarTab === "contacts"
+                        ? "No CRM Contacts found"
+                        : sidebarTab === "unread"
+                          ? "No unread messages"
+                          : sidebarTab === "direct"
+                            ? "No 1-on-1 direct conversations"
+                            : sidebarTab === "favourites"
+                              ? "No starred or pinned chats"
+                              : sidebarTab === "groups"
+                                ? "No group chats found"
+                                : "No WhatsApp chats yet"}
                 </p>
                 <p className="hl-subtitle mb-4 max-w-xs">
                   {searchTerm
@@ -5413,6 +5591,21 @@ export default function WhatsAppPage() {
                               Shared ({chat.collaborator_count})
                             </span>
                           )}
+                          {chat.isLead && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-extrabold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 shrink-0">
+                              🎯 {chat.leadStatus || "Lead"}
+                            </span>
+                          )}
+                          {chat.isClient && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 shrink-0">
+                              💼 Client
+                            </span>
+                          )}
+                          {chat.isContact && !chat.isLead && !chat.isClient && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
+                              Contact
+                            </span>
+                          )}
                         </div>
                         <span className="hl-id font-semibold shrink-0">
                           {timeStr}
@@ -5440,7 +5633,7 @@ export default function WhatsAppPage() {
                             {selectedChat?.id === chat.id && contactTyping ? (
                               <span className="hl-badge hl-badge-accent font-semibold italic animate-pulse">typing...</span>
                             ) : (
-                              chat.lastMessage?.body || "Tap to open conversation"
+                              chat.lastMessage?.body || (chat.leadNotes ? `📌 ${chat.leadNotes}` : (chat.isLead ? `🎯 Inbound lead (${chat.leadStatus || "Inquiry"})` : (chat.isContact ? "Tap to message contact" : "Tap to open conversation")))
                             )}
                           </span>
                         </div>
@@ -5486,7 +5679,7 @@ export default function WhatsAppPage() {
             </div>
           ) : (
             <>
-              <header className="wa-conversation-header">
+              <header className="wa-conversation-header sticky top-0 z-30 shrink-0">
                 <button type="button" onClick={() => setShowMobileChat(false)} className="wa-chat-back md:hidden" aria-label="Back to conversations"><ChevronLeft size={20} /></button>
                 <button type="button" className="wa-contact-identity" onClick={() => { setShowNotesDrawer(false); fetchContactCrmDetails(selectedChat.id); setShowContactInfoDrawer(true); }} aria-label={`View contact details for ${selectedChat.name || "contact"}`}>
                   <WAContactAvatar src={selectedChat.profilePicUrl} name={selectedChat.name} phone={selectedChat.id} isGroup={selectedChat.isGroup} size="md" />
@@ -5498,6 +5691,16 @@ export default function WhatsAppPage() {
                         <Users size={11} /> Collaborator ({selectedChat.sharePermission || "Active"})
                       </span>
                     )}
+                    {selectedChat.isLead && (
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 w-fit">
+                        <Target size={11} /> Lead ({selectedChat.leadStatus || "CRM Lead"})
+                      </span>
+                    )}
+                    {selectedChat.isClient && (
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 w-fit">
+                        💼 Client {selectedChat.companyName ? `(${selectedChat.companyName})` : ""}
+                      </span>
+                    )}
                   </span>
                 </button>
                 <div className="wa-header-actions">
@@ -5505,19 +5708,17 @@ export default function WhatsAppPage() {
                     {/* Ticket state and assignment are administrator routing actions. */}
                     {isAdminView && <label className="wa-ticket-field"><span>Status</span><select aria-label="Conversation status" id="wa-ticket-status-select" value={ticketStatus} onChange={event => handleUpdateTicketStatus(event.target.value)}><option value="open">Open</option><option value="pending">Pending</option><option value="resolved">Resolved</option><option value="spam">Spam</option></select></label>}
                     <details className="wa-enquiries-menu" onToggle={event => { if (event.currentTarget.open) loadEnquiries(); }}>
-                      <summary className="wa-enquiries-button" aria-label="Enquiries and leads" title="Enquiries and leads">
+                      <summary className="wa-enquiries-button shrink-0 text-xs" aria-label="Enquiries and leads" title="Enquiries and leads for this contact">
                         <span className="wa-enquiries-label">Enquiries</span>
-                        {enquiryOpenTotal > 0 && <span className="wa-enquiries-count">{enquiryOpenTotal}</span>}
-                        <ChevronDown size={13} />
+                        {contactEnquiryOpenTotal > 0 && <span className="wa-enquiries-count">{contactEnquiryOpenTotal}</span>}
+                        <ChevronDown size={12} />
                       </summary>
                       <div className="wa-enquiries-panel" role="dialog" aria-label="Enquiries and leads">
                         <div className="wa-enquiries-panel-head">
                           <div>
-                            <strong>Enquiries → Leads → Clients</strong>
+                            <strong>Enquiries for {selectedChat?.name || "this contact"}</strong>
                             <p>
-                              {enquirySummary
-                                ? `${newEnquiryRows.length} enquiry · ${leadRows.length} leads · ${enquirySummary.hot || 0} hot · ${enquirySummary.warm || 0} warm · ${enquirySummary.cold || 0} cold`
-                                : "Qualify enquiries, set lead temperature, convert to clients"}
+                              {newEnquiryRows.length} enquiry · {leadRows.length} leads · {currentContactConverted.length} clients
                             </p>
                           </div>
                           <button type="button" onClick={loadEnquiries} disabled={enquiriesLoading} title="Refresh enquiries" aria-label="Refresh enquiries">
@@ -5532,7 +5733,7 @@ export default function WhatsAppPage() {
                             Leads <span>{leadRows.length}</span>
                           </button>
                           <button type="button" role="tab" aria-selected={enquiryView === "clients"} className={enquiryView === "clients" ? "is-active" : ""} onClick={() => setEnquiryView("clients")}>
-                            Clients <span>{enquirySummary?.converted || convertedEnquiries.length}</span>
+                            Clients <span>{currentContactConverted.length}</span>
                           </button>
                         </div>
                         {enquiryError && <p role="alert" className="wa-enquiries-error">{enquiryError}</p>}
@@ -5543,10 +5744,10 @@ export default function WhatsAppPage() {
                           ) : activeEnquiryRows.length === 0 ? (
                             <p className="wa-enquiries-state">
                               {enquiryView === "enquiries"
-                                ? "No open enquiries yet. Pick a type and write the enquiry below."
+                                ? `No open enquiries for ${selectedChat?.name || "this contact"}. Pick a type and write the enquiry below.`
                                 : enquiryView === "leads"
-                                  ? "No qualified leads yet. Qualify an enquiry as cold, warm or hot."
-                                  : "No clients converted from enquiries yet."}
+                                  ? `No active leads for ${selectedChat?.name || "this contact"}. Qualify an enquiry as cold, warm or hot.`
+                                  : `No clients converted for ${selectedChat?.name || "this contact"}.`}
                             </p>
                           ) : (
                             activeEnquiryRows.map((enquiry) => {
@@ -5676,7 +5877,6 @@ export default function WhatsAppPage() {
                       </div>
                     </details>
                     {isAdminView && <label className="wa-ticket-field wa-assignee-field"><Users size={14} /><select aria-label="Assign conversation" value={assignedAgentName} onChange={event => { const member = teamMembers.find(m => `${m.first_name} ${m.last_name || ""}`.trim() === event.target.value); handleAssignAgent(member?.id || null, event.target.value); }}><option value="">Unassigned</option>{teamMembers.map(m => { const name = `${m.first_name} ${m.last_name || ""}`.trim(); return <option key={m.id} value={name}>{name}</option>; })}</select></label>}
-                    <span className="wa-conversation-branch" title="Assigned branch"><GitBranch size={13} />{selectedChat.branch_name || activeBranch?.name || "Head Office"}</span>
                   </div>
                   <button type="button" className={`wa-header-action ${showShareModal ? "is-active" : ""}`} onClick={() => setShowShareModal(true)} title="Share conversation with colleagues"><Users size={16} /><span>Share</span></button>
                   <button type="button" className={`wa-header-action ${showNotesDrawer ? "is-active" : ""}`} onClick={() => { setShowContactInfoDrawer(false); if (!showNotesDrawer) fetchInternalNotes(selectedChat.id); setShowNotesDrawer(v => !v); }} aria-pressed={showNotesDrawer} title="Team notes"><FileText size={16} /><span>Notes</span>{internalNotes.length > 0 && <span className="wa-note-count">{internalNotes.length}</span>}</button>
@@ -5684,6 +5884,15 @@ export default function WhatsAppPage() {
                   <details className="wa-conversation-menu" key={selectedChat.id}>
                     <summary aria-label="More conversation actions" title="More conversation actions"><MoreVertical size={19} /></summary>
                     <div className="wa-conversation-menu-panel" onClick={event => { if (event.target.closest("button")) event.currentTarget.closest("details").removeAttribute("open"); }}>
+                      <div className="px-3 py-2 border-b border-[var(--color-rule)] flex items-center justify-between gap-2 text-xs text-[var(--color-ink-2)] bg-[var(--color-paper-2)]/70 rounded-t-lg">
+                        <span className="flex items-center gap-1.5 font-medium">
+                          <GitBranch size={13} className="text-amber-500 shrink-0" />
+                          <span>Branch:</span>
+                        </span>
+                        <span className="font-bold text-[var(--color-ink)] truncate max-w-[160px]">
+                          {selectedChat.branch_name || activeBranch?.name || "Head Office (Main)"}
+                        </span>
+                      </div>
                       <p>Conversation actions</p>
                       <button type="button" onClick={() => setShowShareModal(true)}><Users size={16} /> Share conversation</button>
                       <button type="button" onClick={() => setShowTemplatePicker(v => !v)}><FileText size={16} /> Message templates</button>
@@ -5750,6 +5959,25 @@ export default function WhatsAppPage() {
                   onDrop={handleDropFiles}
                   className="wa-message-thread relative z-10 flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-4 overscroll-contain wa-parallel-scroll wa-custom-scrollbar scroll-smooth"
                 >
+                  {/* Lead Context Banner */}
+                  {selectedChat?.isLead && (
+                    <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs flex items-center justify-between gap-3 text-amber-900 dark:text-amber-200 shadow-2xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Target size={14} className="shrink-0 text-amber-500" />
+                        <span className="font-bold shrink-0">CRM Lead:</span>
+                        <span className="font-semibold truncate">{selectedChat.leadStatus || "Active Lead"}</span>
+                        {selectedChat.leadNotes && (
+                          <span className="text-[11px] opacity-80 truncate hidden sm:inline">
+                            · {selectedChat.leadNotes}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 shrink-0">
+                        {selectedChat.leadType || "Inquiry"}
+                      </span>
+                    </div>
+                  )}
+
                   {isDraggingFile && (
                     <div className="absolute inset-0 z-50 bg-[var(--color-paper)]/90 backdrop-blur-xs flex flex-col items-center justify-center border-2 border-dashed border-[var(--color-ink)] m-3 rounded-2xl pointer-events-none transition-all animate-in fade-in">
                       <div className="w-16 h-16 rounded-full bg-[var(--color-paper-2)] border border-[var(--color-rule)] flex items-center justify-center text-[var(--color-ink)] mb-3 shadow-lg">
@@ -5776,10 +6004,63 @@ export default function WhatsAppPage() {
                       <Loader2 size={28} className="animate-spin text-[var(--color-ink)]" />
                     </div>
                   ) : messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-[var(--color-ink-2)] text-sm">
-                      <MessageSquare size={44} className="mb-2 text-[var(--color-ink)] opacity-80" />
-                      <p className="font-bold text-[var(--color-ink)] text-base">No message history yet</p>
-                      <p className="text-xs text-[var(--color-ink-2)]">Send a message below to start chatting with {selectedChat.name}</p>
+                    <div className="flex flex-col items-center justify-center h-full text-[var(--color-ink-2)] text-sm max-w-md mx-auto p-4 text-center">
+                      {selectedChat.isLead ? (
+                        <div className="w-full bg-[var(--color-paper-2)] border border-[var(--color-rule)] rounded-xl p-5 shadow-xs text-left">
+                          <div className="flex items-center justify-between gap-2 mb-3">
+                            <span className="hl-badge bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1">
+                              <Target size={12} />
+                              <span>CRM Lead ({selectedChat.leadType || "Inbound"})</span>
+                            </span>
+                            <span className="hl-badge text-[10px] bg-[var(--color-paper)] border border-[var(--color-rule)] px-1.5 py-0.5 rounded font-medium">
+                              Status: {selectedChat.leadStatus || "New"}
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-base text-[var(--color-ink)] mb-0.5">
+                            {selectedChat.name}
+                          </h4>
+                          <p className="text-xs text-[var(--color-ink-2)] font-mono mb-3">
+                            {selectedChat.formattedPhone || selectedChat.phoneNumber || selectedChat.id}
+                          </p>
+                          {selectedChat.leadNotes && (
+                            <div className="bg-[var(--color-paper)] p-2.5 rounded-lg border border-[var(--color-rule)] text-xs text-[var(--color-ink-2)] mb-4">
+                              <span className="font-semibold text-[var(--color-ink)] block mb-1">Inquiry / Followup Notes:</span>
+                              <span className="italic">{selectedChat.leadNotes}</span>
+                            </div>
+                          )}
+                          <div className="text-xs font-semibold text-[var(--color-ink)] mb-2">Recommended Quick Actions:</div>
+                          <div className="flex flex-col gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMessageInput(`Hello ${selectedChat.name && selectedChat.name !== "WhatsApp Lead" ? selectedChat.name : ""}, thank you for contacting Madhura Technologies! How can we assist you with our services today?`);
+                                if (textareaRef.current) textareaRef.current.focus();
+                              }}
+                              className="hl-btn-secondary text-xs text-left px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-[var(--color-accent-soft)] transition"
+                            >
+                              <span>👋</span>
+                              <span className="truncate">"Hello, thank you for contacting Madhura Technologies..."</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMessageInput(`Hi ${selectedChat.name && selectedChat.name !== "WhatsApp Lead" ? selectedChat.name : ""}, would you be available for a brief 10-minute call to discuss your requirements in detail?`);
+                                if (textareaRef.current) textareaRef.current.focus();
+                              }}
+                              className="hl-btn-secondary text-xs text-left px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-[var(--color-accent-soft)] transition"
+                            >
+                              <span>📞</span>
+                              <span className="truncate">"Would you be available for a brief call to discuss..."</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <MessageSquare size={44} className="mb-2 text-[var(--color-ink)] opacity-80" />
+                          <p className="font-bold text-[var(--color-ink)] text-base">No message history yet</p>
+                          <p className="text-xs text-[var(--color-ink-2)]">Send a message below to start chatting with {selectedChat.name}</p>
+                        </>
+                      )}
                     </div>
                   ) : (
                     [...messages].reverse().map((msg, mIdx, ordered) => {

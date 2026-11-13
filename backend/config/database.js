@@ -1008,6 +1008,26 @@ async function seedDefaultEmployees() {
     }
   } catch (e) { console.log("Admin teammember seed:", e.message); }
 
+  try {
+    const adminUserRow = await queryAsync(`SELECT id, tenant_id FROM users WHERE email = ? LIMIT 1`, [adminUser.email]);
+    if (adminUserRow.length > 0) {
+      const uId = adminUserRow[0].id;
+      const tId = Number(adminUserRow[0].tenant_id) || 1;
+      await queryAsync(
+        db.isSqlite
+          ? `INSERT OR IGNORE INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, 'organization_owner', 'active')`
+          : `INSERT INTO organization_memberships (tenant_id, user_id, role, membership_status) VALUES (?, ?, 'organization_owner', 'active') ON DUPLICATE KEY UPDATE role = 'organization_owner', membership_status = 'active'`,
+        [tId, uId]
+      );
+      await queryAsync(
+        db.isSqlite
+          ? `INSERT OR IGNORE INTO staff_branch_memberships (tenant_id, branch_id, user_id, is_primary, is_available, auto_assign_enabled) VALUES (?, 1, ?, 1, 1, 1)`
+          : `INSERT INTO staff_branch_memberships (tenant_id, branch_id, user_id, is_primary, is_available, auto_assign_enabled) VALUES (?, 1, ?, 1, 1, 1) ON DUPLICATE KEY UPDATE is_primary = 1`,
+        [tId, uId]
+      );
+    }
+  } catch (e) { console.log("Admin membership seed notice:", e.message); }
+
   const employees = [
     { first_name: "Princee", last_name: "SD", emp_id: "MT055", email: "info@madhuratech.com", mobile: "", job_title: "Sales", emp_role: "Sales" },
     { first_name: "Vimal", last_name: "", emp_id: "MT051", email: "sales1@technostore.co.in", mobile: "", job_title: "Sales", emp_role: "Sales" },

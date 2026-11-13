@@ -50,6 +50,12 @@ function getExecutablePath() {
   if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
     return process.env.CHROME_PATH;
   }
+  if (process.env.CHROME_BIN && fs.existsSync(process.env.CHROME_BIN)) {
+    return process.env.CHROME_BIN;
+  }
+  if (process.env.CHROMIUM_PATH && fs.existsSync(process.env.CHROMIUM_PATH)) {
+    return process.env.CHROMIUM_PATH;
+  }
   // 1. Playwright / Puppeteer Chrome for Testing (Cleanest vanilla Chromium builds)
   try {
     const pwDir = path.join(process.env.LOCALAPPDATA || "", "ms-playwright");
@@ -57,6 +63,18 @@ function getExecutablePath() {
       const dirs = fs.readdirSync(pwDir);
       for (const d of dirs) {
         const p = path.join(pwDir, d, "chrome-win64", "chrome.exe");
+        if (fs.existsSync(p)) return p;
+      }
+    }
+  } catch (_) {}
+
+  // Linux Playwright dir
+  try {
+    const pwLinuxDir = "/root/.cache/ms-playwright";
+    if (fs.existsSync(pwLinuxDir)) {
+      const dirs = fs.readdirSync(pwLinuxDir);
+      for (const d of dirs) {
+        const p = path.join(pwLinuxDir, d, "chrome-linux", "chrome");
         if (fs.existsSync(p)) return p;
       }
     }
@@ -82,16 +100,28 @@ function getExecutablePath() {
     // Brave / Chromium paths
     path.join(process.env.PROGRAMFILES || "C:\\Program Files", "BraveSoftware\\Brave-Browser\\Application\\brave.exe"),
     path.join(process.env.LOCALAPPDATA || "", "BraveSoftware\\Brave-Browser\\Application\\brave.exe"),
-    // Linux/Docker paths
+    // Linux/Docker/VPS paths
     "/usr/bin/google-chrome-stable",
     "/usr/bin/google-chrome",
     "/usr/bin/chromium-browser",
     "/usr/bin/chromium",
     "/snap/bin/chromium",
+    "/usr/lib/chromium/chrome",
+    "/usr/lib/chromium-browser/chromium-browser",
   ];
   for (const p of candidatePaths) {
     if (p && fs.existsSync(p)) return p;
   }
+
+  // Fallback: which lookup on POSIX/Linux systems
+  if (process.platform !== "win32") {
+    try {
+      const cp = require("child_process");
+      const found = cp.execSync("which google-chrome-stable || which google-chrome || which chromium-browser || which chromium 2>/dev/null", { encoding: "utf8" }).trim();
+      if (found && fs.existsSync(found)) return found;
+    } catch (_) {}
+  }
+
   return undefined;
 }
 
@@ -596,7 +626,7 @@ class WhatsAppService {
     // error carrying the reason, which the routes turn into a clear 503 — far
     // better than a Chromium launch that gets the container OOM-killed and
     // surfaces as a generic failure or a crash-looping deploy.
-    if (!WEB_ENGINE_ENABLED) {
+    if (!isWebEngineEnabled()) {
       const err = new Error(WEB_ENGINE_DISABLED_REASON);
       err.code = "WHATSAPP_WEB_ENGINE_DISABLED";
       err.status = 503;
@@ -695,7 +725,11 @@ class WhatsAppService {
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
           "--no-first-run",
-          ...(process.platform === "linux" ? ["--single-process", "--no-zygote"] : []),
+          ...(process.platform === "linux" ? [
+          "--no-zygote",
+          "--disable-dev-shm-usage",
+          ...(process.env.WA_PUPPETEER_SINGLE_PROCESS === "1" ? ["--single-process"] : []),
+        ] : []),
           "--disable-gpu",
           "--disable-blink-features=AutomationControlled",
           "--disable-features=IsolateOrigins,site-per-process,Translate,OptimizationHints,MediaRouter",
@@ -2132,6 +2166,223 @@ class WhatsAppService {
         isGroup: false, unreadCount: 0, timestamp: 0, lastMessage: null, hasMessages: false, source: "WhatsApp Account",
       });
     }
+
+    // 3. Hydrate CRM Contacts, Leads, and Clients (Tenant-wide visibility)
+    try {
+      const db = require("../config/database");
+      const contactTenantId = await require("./waContactTenancy").tenantForContactWrite({
+        sessionKey: this.key,
+      }).catch(() => 1);
+
+      // 3a. Hydrate recent / active wa_contacts (up to 500)
+      const [waContacts] = await db.promise().query(
+        `SELECT id, name, phone, email, source, opt_in_status, tags, last_message_text, last_message_at, profile_pic_url, avatar_url, unread_count, created_at
+         FROM wa_contacts
+         WHERE (tenant_id = ? OR tenant_id IS NULL)
+         ORDER BY (last_message_at IS NOT NULL) DESC, last_message_at DESC, id DESC
+         LIMIT 500`,
+        [contactTenantId]
+      );
+
+      (waContacts || []).forEach((c) => {
+        const cleanPhone = (c.phone || "").replace(/\D/g, "");
+        if (!cleanPhone || cleanPhone.length < 10) return;
+        const clean10 = cleanPhone.slice(-10);
+        const contactChatId = `91${clean10}@c.us`;
+        const contactTime = c.last_message_at
+          ? Math.floor(new Date(c.last_message_at).getTime() / 1000)
+          : (c.created_at ? Math.floor(new Date(c.created_at).getTime() / 1000) : 0);
+
+        if (chatMap.has(clean10)) {
+          const chat = chatMap.get(clean10);
+          if (c.name && (!chat.name || chat.name === "WhatsApp Contact" || chat.name.startsWith("+"))) {
+            chat.name = c.name;
+          }
+          if (c.profile_pic_url || c.avatar_url) {
+            chat.profilePicUrl = c.profile_pic_url || c.avatar_url;
+          }
+          chat.isContact = true;
+          chat.email = c.email || chat.email || null;
+          chat.tags = c.tags || chat.tags || null;
+          if (c.last_message_text && (!chat.lastMessage || !chat.lastMessage.body)) {
+            chat.lastMessage = {
+              body: c.last_message_text,
+              timestamp: contactTime,
+              fromMe: false,
+              type: "text",
+            };
+            chat.hasMessages = true;
+          }
+        } else {
+          chatMap.set(clean10, {
+            id: contactChatId,
+            phoneNumber: cleanPhone,
+            formattedPhone: formatPhoneDisplay(cleanPhone),
+            name: c.name || formatPhoneDisplay(cleanPhone),
+            unreadCount: c.unread_count || 0,
+            timestamp: contactTime,
+            isPinned: false,
+            isGroup: false,
+            isMuted: false,
+            profilePicUrl: c.profile_pic_url || c.avatar_url || null,
+            lastMessage: c.last_message_text
+              ? {
+                  body: c.last_message_text,
+                  timestamp: contactTime,
+                  fromMe: false,
+                  type: "text",
+                }
+              : null,
+            hasMessages: Boolean(c.last_message_text),
+            source: c.source || "CRM Contact",
+            isContact: true,
+            email: c.email || null,
+            tags: c.tags || null,
+          });
+        }
+      });
+
+      // 3b. Hydrate CRM Leads from telecalls
+      const [telecalls] = await db.promise().query(
+        `SELECT id, customer_name, mobile_number, call_outcome, followup_notes, call_date, created_at
+         FROM telecalls
+         WHERE (tenant_id = ? OR tenant_id IS NULL)
+         ORDER BY id DESC LIMIT 100`,
+        [contactTenantId]
+      ).catch(() => [[]]);
+
+      (telecalls || []).forEach((t) => {
+        const cleanPhone = (t.mobile_number || "").replace(/\D/g, "");
+        if (!cleanPhone || cleanPhone.length < 10) return;
+        const clean10 = cleanPhone.slice(-10);
+        const leadChatId = `91${clean10}@c.us`;
+        const leadTime = t.created_at ? Math.floor(new Date(t.created_at).getTime() / 1000) : 0;
+
+        if (chatMap.has(clean10)) {
+          const chat = chatMap.get(clean10);
+          chat.isLead = true;
+          chat.leadType = "telecall";
+          chat.leadStatus = t.call_outcome || "WhatsApp Lead";
+          chat.leadNotes = t.followup_notes || "";
+          if (t.customer_name && (!chat.name || chat.name === "WhatsApp Contact" || chat.name.startsWith("+"))) {
+            chat.name = t.customer_name;
+          }
+        } else {
+          chatMap.set(clean10, {
+            id: leadChatId,
+            phoneNumber: cleanPhone,
+            formattedPhone: formatPhoneDisplay(cleanPhone),
+            name: t.customer_name || `Lead +91 ${clean10}`,
+            unreadCount: 0,
+            timestamp: leadTime,
+            isPinned: false,
+            isGroup: false,
+            isMuted: false,
+            isLead: true,
+            leadType: "telecall",
+            leadStatus: t.call_outcome || "WhatsApp Lead",
+            leadNotes: t.followup_notes || "",
+            lastMessage: t.followup_notes
+              ? {
+                  body: t.followup_notes,
+                  timestamp: leadTime,
+                  fromMe: false,
+                  type: "text",
+                }
+              : null,
+            hasMessages: Boolean(t.followup_notes),
+            source: "CRM Telecall Lead",
+          });
+        }
+      });
+
+      // 3c. Hydrate CRM Clients
+      const [crmClients] = await db.promise().query(
+        `SELECT id, name, phone, email, company_name, created_at
+         FROM clients
+         WHERE (tenant_id = ? OR tenant_id IS NULL)
+         ORDER BY id DESC LIMIT 50`,
+        [contactTenantId]
+      ).catch(() => [[]]);
+
+      (crmClients || []).forEach((cl) => {
+        const cleanPhone = (cl.phone || "").replace(/\D/g, "");
+        if (!cleanPhone || cleanPhone.length < 10) return;
+        const clean10 = cleanPhone.slice(-10);
+        const leadChatId = `91${clean10}@c.us`;
+        const clientTime = cl.created_at ? Math.floor(new Date(cl.created_at).getTime() / 1000) : 0;
+
+        if (chatMap.has(clean10)) {
+          const chat = chatMap.get(clean10);
+          chat.isClient = true;
+          chat.companyName = cl.company_name || null;
+          chat.email = cl.email || chat.email || null;
+          if (cl.name && (!chat.name || chat.name === "WhatsApp Contact" || chat.name.startsWith("+"))) {
+            chat.name = cl.name;
+          }
+        } else {
+          chatMap.set(clean10, {
+            id: leadChatId,
+            phoneNumber: cleanPhone,
+            formattedPhone: formatPhoneDisplay(cleanPhone),
+            name: cl.name || (cl.company_name ? `${cl.company_name} Client` : `Client +91 ${clean10}`),
+            unreadCount: 0,
+            timestamp: clientTime,
+            isPinned: false,
+            isGroup: false,
+            isMuted: false,
+            isClient: true,
+            companyName: cl.company_name || null,
+            email: cl.email || null,
+            lastMessage: null,
+            hasMessages: false,
+            source: "CRM Client",
+          });
+        }
+      });
+
+      // 3d. Hydrate walkins & fields
+      const [walkinRows] = await db.promise().query(
+        `SELECT id, customer_name, mobile_number, walkin_status, followup_notes, created_at
+         FROM walkins
+         WHERE (tenant_id = ? OR tenant_id IS NULL)
+         ORDER BY id DESC LIMIT 50`,
+        [contactTenantId]
+      ).catch(() => [[]]);
+
+      (walkinRows || []).forEach((w) => {
+        const cleanPhone = (w.mobile_number || "").replace(/\D/g, "");
+        if (!cleanPhone || cleanPhone.length < 10) return;
+        const clean10 = cleanPhone.slice(-10);
+        if (chatMap.has(clean10)) {
+          const chat = chatMap.get(clean10);
+          chat.isLead = true;
+          chat.leadType = "walkin";
+          chat.leadStatus = w.walkin_status || "Walk-in Lead";
+          chat.leadNotes = w.followup_notes || chat.leadNotes;
+        } else {
+          chatMap.set(clean10, {
+            id: `91${clean10}@c.us`,
+            phoneNumber: cleanPhone,
+            formattedPhone: formatPhoneDisplay(cleanPhone),
+            name: w.customer_name || `Walkin +91 ${clean10}`,
+            unreadCount: 0,
+            timestamp: w.created_at ? Math.floor(new Date(w.created_at).getTime() / 1000) : 0,
+            isPinned: false,
+            isGroup: false,
+            isLead: true,
+            leadType: "walkin",
+            leadStatus: w.walkin_status || "Walk-in Lead",
+            leadNotes: w.followup_notes || "",
+            lastMessage: w.followup_notes ? { body: w.followup_notes, timestamp: Math.floor(new Date(w.created_at).getTime() / 1000), fromMe: false, type: "text" } : null,
+            hasMessages: Boolean(w.followup_notes),
+            source: "CRM Walkin Lead",
+          });
+        }
+      });
+    } catch (crmErr) {
+      console.warn("CRM chats hydration notice:", crmErr.message);
+    }
     const finalChats = Array.from(chatMap.values());
     finalChats.sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
@@ -2193,21 +2444,51 @@ class WhatsAppService {
     const digitsOnly = chatId.replace(/\D/g, "");
     const clean10 = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
 
-    // 1. Fast DB message fetch (< 5ms response time)
+    // Resolve LID to real phone number if applicable
+    let resolvedPhone = null;
+    if (chatId.includes("@lid")) {
+      resolvedPhone = await this.resolveLidToPhone(chatId).catch(() => null);
+      if (!resolvedPhone && this.lidToPhoneMap?.has(chatId)) {
+        resolvedPhone = this.lidToPhoneMap.get(chatId);
+      }
+    }
+    const cleanResolved10 = resolvedPhone ? resolvedPhone.replace(/\D/g, "").slice(-10) : null;
+
+    // 1. Fast DB message fetch (< 5ms response time) across the tenant
     const dbMsgs = [];
     try {
       const db = require("../config/database");
       const dbLimit = Math.max(numericLimit, 50);
+      const contactTenantId = await require("./waContactTenancy").tenantForContactWrite({
+        sessionKey: this.key,
+      }).catch(() => 1);
+
       const contentColumns = require("./waChatPrivacy").serverChatStorageEnabled()
         ? "message_text as body, media_url, media_filename, interactive_payload, metadata"
-        : "NULL as body, NULL as media_url, NULL as media_filename, NULL as interactive_payload, NULL as metadata";
+        : "COALESCE(message_text, '') as body, media_url, media_filename, interactive_payload, metadata";
+
+      const searchTerms = new Set();
+      if (clean10) searchTerms.add(`%${clean10}%`);
+      if (digitsOnly) searchTerms.add(`%${digitsOnly}%`);
+      if (cleanResolved10) searchTerms.add(`%${cleanResolved10}%`);
+      if (resolvedPhone) searchTerms.add(`%${resolvedPhone.replace(/\D/g, "")}%`);
+      searchTerms.add(`%${chatId}%`);
+
+      const searchParams = Array.from(searchTerms);
+      const wherePhoneClause = searchParams.map(() => "(phone LIKE ? OR phone = ?)").join(" OR ");
+      const queryParams = [contactTenantId, this.key];
+      searchParams.forEach((t) => {
+        queryParams.push(t, t.replace(/%/g, ""));
+      });
+      queryParams.push(dbLimit);
+
       const [rows] = await db.promise().query(
         `SELECT id, phone, direction, message_type, created_at, wa_message_id, status, media_mime_type, media_id, ${contentColumns}
          FROM wa_message_logs
-         WHERE (session_key = ? OR session_key IS NULL)
-           AND (phone LIKE ? OR phone LIKE ? OR phone LIKE ? OR phone = ?)
+         WHERE (tenant_id = ? OR session_key = ? OR session_key IS NULL)
+           AND (${wherePhoneClause})
          ORDER BY created_at DESC LIMIT ?`,
-        [this.key, `%${clean10}%`, `%${digitsOnly}%`, `%${chatId}%`, digitsOnly, dbLimit]
+        queryParams
       );
       rows.forEach((r) => {
         const isFile = ["media", "image", "video", "audio", "ptt", "document", "sticker"].includes(r.message_type) || Boolean(r.media_url) || /\.(md|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|zip|rar|png|jpg|jpeg|webp|mp4|mp3|ogg|wav)$/i.test(r.body || "");
@@ -2215,11 +2496,26 @@ class WhatsAppService {
         try { interactive = typeof r.interactive_payload === "string" ? JSON.parse(r.interactive_payload) : r.interactive_payload; } catch (_) {}
         let metadata = {};
         try { metadata = typeof r.metadata === "string" ? JSON.parse(r.metadata) : r.metadata || {}; } catch (_) {}
+        let bodyText = r.body;
+        if (!bodyText || !bodyText.trim()) {
+          if (r.message_type === "e2e_notification") {
+            bodyText = "🔒 Messages and calls are end-to-end encrypted.";
+          } else if (r.message_type === "call_log") {
+            bodyText = "📞 Voice or Video Call";
+          } else if (isFile) {
+            bodyText = r.media_filename || "📎 Attachment";
+          } else if (r.message_type === "location") {
+            bodyText = "📍 Location";
+          } else {
+            bodyText = r.message_text || "";
+          }
+        }
+
         dbMsgs.push({
           id: r.wa_message_id || `db_${r.id}`,
           serializedId: metadata.serializedId || null,
           from: r.direction === "inbound" ? r.phone : "me",
-          body: r.body || (r.message_type === "media" ? "📎 Attachment" : r.message_type === "location" ? "📍 Location" : ""),
+          body: bodyText,
           timestamp: Math.floor(new Date(r.created_at).getTime() / 1000),
           isMe: r.direction === "outbound",
           hasMedia: Boolean(isFile),
@@ -2255,11 +2551,24 @@ class WhatsAppService {
             const freshLive = msgs.map((m) => {
               const filename = m._data?.filename || (/\.(md|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|zip|rar|png|jpg|jpeg|webp|mp4|mp3|ogg|wav)$/i.test(m.body || "") ? m.body : "");
               const isMedia = Boolean(m.hasMedia || m.type === "document" || m.type === "image" || m.type === "video" || m.type === "audio" || filename);
+              let bodyText = m.body || m._data?.body || m.caption || m._data?.caption || "";
+              if (!bodyText) {
+                if (m.type === "e2e_notification") {
+                  bodyText = "🔒 Messages and calls are end-to-end encrypted.";
+                } else if (m.type === "call_log") {
+                  bodyText = "📞 Voice or Video Call";
+                } else if (isMedia) {
+                  bodyText = filename || (MEDIA_TYPE_LABELS[m.type] || "📎 Attachment");
+                } else if (describeLastMessage(m)) {
+                  bodyText = describeLastMessage(m);
+                }
+              }
+
               return {
                 id: m.id.id,
                 serializedId: m.id._serialized || m.id.id,
                 from: m.from,
-                body: filename || describeLastMessage(m) || m.body || "",
+                body: bodyText,
                 timestamp: m.timestamp,
                 isMe: m.fromMe,
                 type: m.type || (isMedia ? "document" : "text"),
@@ -2278,13 +2587,19 @@ class WhatsAppService {
 
               // Auto-persist loaded chat messages into wa_message_logs DB
               const db = require("../config/database");
+              const persistTenantId = await require("./waContactTenancy").tenantForContactWrite({
+                sessionKey: this.key,
+              }).catch(() => 1);
+              const storePhone = resolvedPhone ? resolvedPhone.replace(/\D/g, "") : digitsOnly;
+
               for (const m of freshLive) {
                 await db.promise().query(
-                  `INSERT IGNORE INTO wa_message_logs (session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at, media_filename, media_mime_type, metadata)
-                   VALUES (?, ?, ?, ?, ?, ?, 'sent', FROM_UNIXTIME(?), ?, ?, ?)`,
+                  `INSERT IGNORE INTO wa_message_logs (tenant_id, session_key, phone, direction, message_type, message_text, wa_message_id, status, created_at, media_filename, media_mime_type, metadata)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'sent', FROM_UNIXTIME(?), ?, ?, ?)`,
                   [
+                    persistTenantId,
                     this.key,
-                    digitsOnly,
+                    storePhone,
                     m.isMe ? "outbound" : "inbound",
                     m.hasMedia ? (m.type || "media") : "text",
                     m.body || describeLastMessage(m) || "",
@@ -3468,7 +3783,11 @@ async function restoreExisting() {
 
   if (!process.env.WA_DEFAULT_USER) {
     try {
-      const [rows] = await db.promise().query("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1");
+      const primaryAdminEmail = process.env.ADMIN_SEED_EMAIL || "admin@madhuratech.com";
+      const [rows] = await db.promise().query(
+        "SELECT id FROM users WHERE email = ? OR role = 'admin' ORDER BY (email = ?) DESC, id ASC LIMIT 1",
+        [primaryAdminEmail, primaryAdminEmail]
+      );
       if (rows.length) defaultKey = String(rows[0].id);
     } catch (_) {}
   }
@@ -3538,7 +3857,7 @@ async function restoreExisting() {
     restored++;
   }
 
-  if (restored === 0 && WEB_ENGINE_ENABLED) {
+  if (restored === 0 && isWebEngineEnabled()) {
     console.log("ℹ️ No active saved WhatsApp sessions — pre-warming default session in background for instant QR pairing...");
     setTimeout(() => {
       getDefault().init(false).catch((e) => {

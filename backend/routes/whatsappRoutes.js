@@ -17,6 +17,17 @@ router.use(async (req, res, next) => {
 const { messageSendLimiter, qrRefreshLimiter, sessionResetThrottle } = require("../middleware/waRateLimiter");
 const memberChat = require("../services/memberChat");
 
+function formatPhoneDisplay(phone) {
+  if (!phone) return "";
+  const digits = String(phone).replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length >= 14 && !digits.startsWith("120363")) return "";
+  if (digits.length === 10) return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+  if (digits.length === 12 && digits.startsWith("91")) return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
+  if (digits.length > 10) return `+${digits.slice(0, digits.length - 10)} ${digits.slice(-10, -5)} ${digits.slice(-5)}`;
+  return `+${digits}`;
+}
+
 /**
  * Assigned-chat boundary for organization members.
  *
@@ -250,7 +261,7 @@ router.get("/status", async (req, res) => {
     const { status } = await memberChatStatus(req);
     return res.json(status);
   }
-  const waCloud = await require("../services/waConfigHelper").cloudClientForUser(req.user.id);
+  const waCloud = await require("../services/waConfigHelper").safeCloudClientForUser(req.user.id);
   if (req.user?.id) {
     await configureForUser(req.user.id).catch(() => {});
   }
@@ -460,7 +471,24 @@ router.get("/qr", qrRefreshLimiter, async (req, res) => {
       });
     }
 
+    const isEngineActive = typeof mgr.isWebEngineEnabled === "function" ? mgr.isWebEngineEnabled() : true;
+    if (!isEngineActive) {
+      return res.status(503).json({
+        qr: null,
+        qrDataUrl: null,
+        initializing: false,
+        connected: false,
+        disabled: true,
+        error: mgr.WEB_ENGINE_DISABLED_REASON || "WhatsApp Web engine is disabled by configuration (WA_ENABLE_WEB_ENGINE=0)",
+        message: mgr.WEB_ENGINE_DISABLED_REASON || "WhatsApp Web engine is disabled",
+      });
+    }
+
     const session = userSession(req);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found", initializing: false, connected: false });
+    }
+
     if (req.query.force === "true" || req.query.refresh === "true") {
       if (req.query.force === "true" && !session.ready) {
         await session.init(true).catch(() => {});
@@ -491,19 +519,24 @@ router.get("/qr", qrRefreshLimiter, async (req, res) => {
       session.init(false).catch((e) => console.warn("WhatsApp background init warning:", e.message));
     }
 
-    // Quick wait (up to 3.5s) for instant response without hanging proxies or timing out
-    const qr = await session.getQr(3500).catch(() => null);
+    // Quick wait (up to 6s) for instant response without hanging proxies or timing out
+    const qr = await session.getQr(6000).catch(() => null);
     const finalQr = qr || session.qrCode || null;
     const qrDataUrl = session.qrDataUrl || await toDataUrl(finalQr);
+    const hasInitError = Boolean(session.lastInitError && !session.isInitializing && !finalQr && !session.ready);
+
     res.json({
       qr: finalQr,
       qrDataUrl,
-      initializing: session.isInitializing || (!finalQr && !session.ready),
+      initializing: session.isInitializing || (!finalQr && !session.ready && !hasInitError),
       connected: session.ready,
+      error: hasInitError ? session.lastInitError : null,
       message: session.ready
         ? "Connected"
         : finalQr
         ? "QR Ready"
+        : hasInitError
+        ? session.lastInitError
         : "Initializing browser session in background...",
     });
   } catch (err) {
@@ -515,7 +548,8 @@ router.get("/qr", qrRefreshLimiter, async (req, res) => {
       qrDataUrl,
       initializing: session?.isInitializing || false,
       connected: session?.ready || false,
-      message: "Initializing WhatsApp engine in background...",
+      error: err.message || null,
+      message: err.message || "Initializing WhatsApp engine in background...",
     });
   }
 });
@@ -572,8 +606,252 @@ router.get("/chats", async (req, res) => {
       const liveChats = key ? mgr.get(key).chatsCache || [] : [];
       return res.json(await memberChat.listChats(req, liveChats));
     }
-    const chats = await s(req).getChats(req.query.refresh === "true");
+    const sessionKey = req.query.sessionKey;
+    const sessionToUse = (sessionKey && sessionKey !== "all") ? mgr.get(sessionKey) : s(req);
+    const chats = await sessionToUse.getChats(req.query.refresh === "true");
     res.json(chats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Multi-Session & Number Hub: List all available sessions/channels ────────
+router.get("/all-sessions", async (req, res) => {
+  try {
+    const tenantId = req.user?.tenant_id || 1;
+    const sessions = [
+      {
+        id: "all",
+        name: "All Senders & Numbers (Unified)",
+        channel: "all",
+        status: "active",
+        isDefault: true,
+      }
+    ];
+
+    // 1. Live WhatsApp Web session for this user
+    try {
+      const liveStatus = await s(req).getStatus();
+      if (liveStatus && liveStatus.connected) {
+        sessions.push({
+          id: String(req.user.id),
+          name: `WhatsApp Web (${liveStatus.phone ? `+${liveStatus.phone}` : "Connected"})`,
+          channel: "web_session",
+          phone: liveStatus.phone,
+          status: "connected",
+          isDefault: false,
+        });
+      }
+    } catch (_) {}
+
+    // 2. Query configured wa_accounts for tenant
+    try {
+      const [accounts] = await db.promise().query(
+        `SELECT id, account_name, phone_number, connection_type, is_active, is_default
+         FROM wa_accounts
+         WHERE (tenant_id = ? OR tenant_id IS NULL OR created_by = ?) AND is_active = 1
+         ORDER BY is_default DESC, id DESC`,
+        [tenantId, req.user.id]
+      );
+      accounts.forEach((acc) => {
+        if (acc.phone_number && !sessions.some((s) => s.phone === acc.phone_number)) {
+          sessions.push({
+            id: `acc_${acc.id}`,
+            name: acc.account_name || (acc.connection_type === "cloud_api" ? `Meta Cloud (${acc.phone_number})` : `Web (${acc.phone_number})`),
+            channel: acc.connection_type || "web_session",
+            phone: acc.phone_number,
+            status: "active",
+            isDefault: Boolean(acc.is_default),
+            accountId: acc.id,
+          });
+        }
+      });
+    } catch (_) {}
+
+    // 3. Query wa_senders
+    try {
+      const [senders] = await db.promise().query(
+        `SELECT id, display_phone, verified_name, status, is_default
+         FROM wa_senders
+         WHERE (tenant_id = ? OR tenant_id IS NULL)
+         ORDER BY is_default DESC, id DESC`,
+        [tenantId]
+      );
+      senders.forEach((sender) => {
+        if (sender.display_phone && !sessions.some((s) => s.phone === sender.display_phone)) {
+          sessions.push({
+            id: `sender_${sender.id}`,
+            name: sender.verified_name ? `${sender.verified_name} (${sender.display_phone})` : `Cloud API (${sender.display_phone})`,
+            channel: "cloud_api",
+            phone: sender.display_phone,
+            status: sender.status || "active",
+            isDefault: Boolean(sender.is_default),
+            senderId: sender.id,
+          });
+        }
+      });
+    } catch (_) {}
+
+    res.json(sessions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── CRM Leads Stream: Inbound inquiries from telecalls, clients, walkins ────
+router.get("/crm-leads", async (req, res) => {
+  try {
+    const tenantId = req.user?.tenant_id || 1;
+    const leads = [];
+    const seen = new Set();
+
+    // 1. Telecalls
+    const [telecalls] = await db.promise().query(
+      `SELECT id, customer_name, mobile_number, call_outcome, followup_notes, call_date, created_at
+       FROM telecalls
+       WHERE (tenant_id = ? OR tenant_id IS NULL)
+       ORDER BY id DESC LIMIT 200`,
+      [tenantId]
+    ).catch(() => [[]]);
+
+    (telecalls || []).forEach((t) => {
+      const cleanPhone = (t.mobile_number || "").replace(/\D/g, "");
+      if (!cleanPhone || cleanPhone.length < 10) return;
+      const clean10 = cleanPhone.slice(-10);
+      if (seen.has(clean10)) return;
+      seen.add(clean10);
+      leads.push({
+        id: `91${clean10}@c.us`,
+        phoneNumber: cleanPhone,
+        formattedPhone: formatPhoneDisplay(cleanPhone),
+        name: t.customer_name || `Lead +91 ${clean10}`,
+        unreadCount: 0,
+        timestamp: t.created_at ? Math.floor(new Date(t.created_at).getTime() / 1000) : 0,
+        isGroup: false,
+        isLead: true,
+        leadType: "telecall",
+        leadStatus: t.call_outcome || "WhatsApp Lead",
+        leadNotes: t.followup_notes || "",
+        lastMessage: t.followup_notes ? { body: t.followup_notes, timestamp: Math.floor(new Date(t.created_at).getTime() / 1000), fromMe: false, type: "text" } : null,
+        hasMessages: Boolean(t.followup_notes),
+        source: "CRM Telecall Lead",
+      });
+    });
+
+    // 2. Clients
+    const [clients] = await db.promise().query(
+      `SELECT id, name, phone, email, company_name, created_at
+       FROM clients
+       WHERE (tenant_id = ? OR tenant_id IS NULL)
+       ORDER BY id DESC LIMIT 100`,
+      [tenantId]
+    ).catch(() => [[]]);
+
+    (clients || []).forEach((cl) => {
+      const cleanPhone = (cl.phone || "").replace(/\D/g, "");
+      if (!cleanPhone || cleanPhone.length < 10) return;
+      const clean10 = cleanPhone.slice(-10);
+      if (seen.has(clean10)) return;
+      seen.add(clean10);
+      leads.push({
+        id: `91${clean10}@c.us`,
+        phoneNumber: cleanPhone,
+        formattedPhone: formatPhoneDisplay(cleanPhone),
+        name: cl.name || (cl.company_name ? `${cl.company_name} Client` : `Client +91 ${clean10}`),
+        unreadCount: 0,
+        timestamp: cl.created_at ? Math.floor(new Date(cl.created_at).getTime() / 1000) : 0,
+        isGroup: false,
+        isClient: true,
+        companyName: cl.company_name || null,
+        email: cl.email || null,
+        leadStatus: "Client",
+        lastMessage: null,
+        hasMessages: false,
+        source: "CRM Client",
+      });
+    });
+
+    // 3. Walkins
+    const [walkins] = await db.promise().query(
+      `SELECT id, customer_name, mobile_number, walkin_status, followup_notes, created_at
+       FROM walkins
+       WHERE (tenant_id = ? OR tenant_id IS NULL)
+       ORDER BY id DESC LIMIT 100`,
+      [tenantId]
+    ).catch(() => [[]]);
+
+    (walkins || []).forEach((w) => {
+      const cleanPhone = (w.mobile_number || "").replace(/\D/g, "");
+      if (!cleanPhone || cleanPhone.length < 10) return;
+      const clean10 = cleanPhone.slice(-10);
+      if (seen.has(clean10)) return;
+      seen.add(clean10);
+      leads.push({
+        id: `91${clean10}@c.us`,
+        phoneNumber: cleanPhone,
+        formattedPhone: formatPhoneDisplay(cleanPhone),
+        name: w.customer_name || `Walkin +91 ${clean10}`,
+        unreadCount: 0,
+        timestamp: w.created_at ? Math.floor(new Date(w.created_at).getTime() / 1000) : 0,
+        isGroup: false,
+        isLead: true,
+        leadType: "walkin",
+        leadStatus: w.walkin_status || "Walk-in Lead",
+        leadNotes: w.followup_notes || "",
+        lastMessage: w.followup_notes ? { body: w.followup_notes, timestamp: Math.floor(new Date(w.created_at).getTime() / 1000), fromMe: false, type: "text" } : null,
+        hasMessages: Boolean(w.followup_notes),
+        source: "CRM Walkin Lead",
+      });
+    });
+
+    res.json(leads);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── CRM Contacts List: Search and paginate all wa_contacts ──────────────────
+router.get("/contacts-list", async (req, res) => {
+  try {
+    const tenantId = req.user?.tenant_id || 1;
+    const query = req.query.q ? `%${req.query.q.trim()}%` : null;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 150, 10), 1000);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+    let sql = `SELECT id, name, phone, email, source, opt_in_status, tags, last_message_text, last_message_at, profile_pic_url, avatar_url, unread_count, created_at
+               FROM wa_contacts
+               WHERE (tenant_id = ? OR tenant_id IS NULL)`;
+    const params = [tenantId];
+    if (query) {
+      sql += ` AND (name LIKE ? OR phone LIKE ? OR email LIKE ?)`;
+      params.push(query, query, query);
+    }
+    sql += ` ORDER BY (last_message_at IS NOT NULL) DESC, last_message_at DESC, id DESC LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
+
+    const [rows] = await db.promise().query(sql, params);
+    const formatted = rows.map((c) => {
+      const cleanPhone = (c.phone || "").replace(/\D/g, "");
+      const clean10 = cleanPhone.slice(-10);
+      return {
+        id: `91${clean10}@c.us`,
+        phoneNumber: cleanPhone,
+        formattedPhone: formatPhoneDisplay(cleanPhone),
+        name: c.name || formatPhoneDisplay(cleanPhone),
+        unreadCount: c.unread_count || 0,
+        timestamp: c.last_message_at ? Math.floor(new Date(c.last_message_at).getTime() / 1000) : (c.created_at ? Math.floor(new Date(c.created_at).getTime() / 1000) : 0),
+        isGroup: false,
+        profilePicUrl: c.profile_pic_url || c.avatar_url || null,
+        isContact: true,
+        email: c.email || null,
+        tags: c.tags || null,
+        source: c.source || "WhatsApp Contact",
+        lastMessage: c.last_message_text ? { body: c.last_message_text, timestamp: Math.floor(new Date(c.last_message_at || c.created_at).getTime() / 1000), fromMe: false, type: "text" } : null,
+        hasMessages: Boolean(c.last_message_text),
+      };
+    });
+
+    res.json(formatted);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1533,8 +1811,21 @@ router.post("/chat/:chatId/notes", async (req, res) => {
 // ── Multi-Account Manager: List & Switch ──────────────────────────────────────
 router.get("/accounts/list", async (req, res) => {
   try {
-    const cloud = await require("../services/waConfigHelper").cloudClientForUser(req.user.id);
-    const [accounts] = await db.promise().query("SELECT id, account_name, phone_number, phone_number_id, waba_id, connection_type, is_active, is_default, quality_rating, messaging_limit, created_at FROM wa_accounts WHERE created_by = ? OR (created_by IS NULL AND phone_number_id = ?) ORDER BY is_default DESC, created_at ASC", [req.user.id, cloud.phoneNumberId || ""]);
+    const tenantId = req.user?.tenant_id || 1;
+    let cloudPhoneId = "";
+    try {
+      const cloud = await require("../services/waConfigHelper").cloudClientForUser(req.user.id);
+      cloudPhoneId = cloud.phoneNumberId || "";
+    } catch (_) {}
+
+    const [accounts] = await db.promise().query(
+      `SELECT id, account_name, phone_number, phone_number_id, waba_id, connection_type, is_active, is_default, quality_rating, messaging_limit, created_at
+       FROM wa_accounts
+       WHERE (tenant_id = ? OR tenant_id IS NULL OR created_by = ? OR (phone_number_id IS NOT NULL AND phone_number_id = ?))
+         AND is_active = 1
+       ORDER BY is_default DESC, created_at ASC`,
+      [tenantId, req.user.id, cloudPhoneId]
+    );
     res.json(accounts);
   } catch (err) {
     res.status(500).json({ error: err.message });
