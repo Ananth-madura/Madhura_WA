@@ -601,8 +601,11 @@ class WhatsAppService {
       const app = require("../server");
       const io = app.get && app.get("io");
       if (io) {
-        io.to(`user:${this.key}`).emit(event, { phone, chatId, message, sessionKey: this.key });
-
+        const payload = { phone, chatId, message, sessionKey: this.key };
+        io.to(`user:${this.key}`).emit(event, payload);
+        if (["wa_qr", "wa_ready", "wa_connected", "wa_disconnected", "wa_loading", "wa_authenticated"].includes(event)) {
+          io.to("admin_notifications").emit(event, payload);
+        }
       }
     } catch (_) {}
   }

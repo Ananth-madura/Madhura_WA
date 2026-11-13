@@ -457,7 +457,12 @@ router.post("/test-send", async (req, res) => {
   }
 });
 
-router.get("/qr", qrRefreshLimiter, async (req, res) => {
+router.get("/qr", (req, res, next) => {
+  if (req.query.force === "true" || req.query.refresh === "true") {
+    return qrRefreshLimiter(req, res, next);
+  }
+  return next();
+}, async (req, res) => {
   try {
     if (req.query.mock === "true") {
       const demoQr = "2@madhura-demo-qr-token-" + Date.now();

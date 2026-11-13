@@ -1143,10 +1143,10 @@ export default function WhatsAppPage() {
         setQrDataUrl(null);
         setQrLoading(false);
         fetchStatus();
-      } else if (res.data && res.data.qr) {
+      } else if (res.data && (res.data.qr || res.data.qrDataUrl)) {
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
         qrRetryCountRef.current = 0;
-        setQrCode(res.data.qr);
+        if (res.data.qr) setQrCode(res.data.qr);
         if (res.data.qrDataUrl) setQrDataUrl(res.data.qrDataUrl);
         setQrCountdown(25);
         setStatus((s) => ({ ...s, hasQr: true, connected: false }));
@@ -1190,8 +1190,18 @@ export default function WhatsAppPage() {
         setError(err.response.data.error || err.response.data.message || "WhatsApp Web engine is disabled on server.");
         return;
       }
+      if (err.response?.status === 429) {
+        // Rate limited — do not abort polling loop, back off 2.5s and recheck
+        if (qrRetryCountRef.current < 45) {
+          if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+          qrPollTimerRef.current = setTimeout(() => {
+            fetchQr(false);
+          }, 2500);
+          return;
+        }
+      }
       if (err.response?.status === 504 || err.code === "ECONNABORTED" || (err.message && err.message.includes("timeout"))) {
-        if (qrRetryCountRef.current < 10) {
+        if (qrRetryCountRef.current < 45) {
           qrRetryCountRef.current += 1;
           console.warn("ℹ️ WhatsApp QR generation in progress, re-checking in 1.5s...");
           setQrLoading(true);
@@ -4283,7 +4293,7 @@ export default function WhatsAppPage() {
           {/* Mode 1: QR Code Scan */}
           {connectMode === "qr" && (
             <div className="flex flex-col items-center justify-center text-center py-2">
-              {qrLoading && !qrCode ? (
+              {qrLoading && !qrCode && !qrDataUrl ? (
                 <div className="py-10 text-center max-w-sm mx-auto">
                   <div className="relative w-16 h-16 mx-auto mb-4 flex items-center justify-center">
                     <div className="absolute inset-0 rounded-full border-4 border-[var(--color-rule)] opacity-30"></div>
@@ -4302,7 +4312,7 @@ export default function WhatsAppPage() {
                     <span>Force Fresh QR Code 🔄</span>
                   </button>
                 </div>
-              ) : qrCode ? (
+              ) : (qrCode || qrDataUrl) ? (
                 <div className="w-full flex flex-col items-center">
                   {/* Step-by-step guidance pill strip */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full max-w-lg mb-5 text-left">

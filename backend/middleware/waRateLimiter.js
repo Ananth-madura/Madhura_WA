@@ -156,7 +156,7 @@ module.exports = {
   createThrottle,
   campaignLaunchLimiter: createRateLimiter({ windowMs: 60000, maxRequests: 40, category: "campaign_launch" }),
   messageSendLimiter: createRateLimiter({ windowMs: 60000, maxRequests: 350, category: "message_send" }),
-  qrRefreshLimiter: createRateLimiter({ windowMs: 15000, maxRequests: 6, category: "qr_refresh" }),
+  qrRefreshLimiter: createRateLimiter({ windowMs: 15000, maxRequests: 25, category: "qr_refresh" }),
   loginLimiter: (req,res,next)=>loginIp(req,res,()=>loginAccount(req,res,next)),
   refreshLimiter: createRateLimiter({windowMs:60000,maxRequests:1000,category:"browser_refresh"}),
   otpLimiter: createRateLimiter({ windowMs: 10 * 60 * 1000, maxRequests: 10, category: "email_otp" }),
