@@ -28,6 +28,7 @@ import {
   Briefcase,
   Building,
   GitBranch,
+  ChevronDown,
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../config/api";
@@ -39,8 +40,8 @@ const ACCESS_LEVEL_META = {
     label: "Full WhatsApp Access",
     shortLabel: "Full Access",
     badge: "hl-badge-success",
-    color: "#059669",
-    bg: "rgba(16, 185, 129, 0.12)",
+    color: "#202C52",
+    bg: "rgba(32, 44, 82, 0.08)",
     icon: ShieldCheck,
     desc: "Complete access to live chat inbox, bulk campaigns, contact groups, and automated flows.",
   },
@@ -48,8 +49,8 @@ const ACCESS_LEVEL_META = {
     label: "Live Chat Only",
     shortLabel: "Chat Only",
     badge: "hl-badge-info",
-    color: "#2563eb",
-    bg: "rgba(37, 99, 235, 0.12)",
+    color: "#2563EB",
+    bg: "rgba(37, 99, 235, 0.08)",
     icon: MessageCircle,
     desc: "1-on-1 customer chat inbox access. Can respond to customer inquiries and send templates.",
   },
@@ -57,8 +58,8 @@ const ACCESS_LEVEL_META = {
     label: "Read Only",
     shortLabel: "Read Only",
     badge: "hl-badge",
-    color: "#64748b",
-    bg: "rgba(100, 116, 139, 0.12)",
+    color: "#667085",
+    bg: "rgba(100, 116, 139, 0.08)",
     icon: Eye,
     desc: "View-only access to customer chat history, logs, and analytics. Outbound messaging is disabled.",
   },
@@ -67,7 +68,7 @@ const ACCESS_LEVEL_META = {
     shortLabel: "Campaigns",
     badge: "hl-badge-warn",
     color: "#7c3aed",
-    bg: "rgba(124, 58, 237, 0.12)",
+    bg: "rgba(124, 58, 237, 0.08)",
     icon: Send,
     desc: "Create and launch bulk broadcasts, templates, and contact segments. Chat inbox is hidden.",
   },
@@ -76,12 +77,8 @@ const ACCESS_LEVEL_META = {
 export default function WAEmployees() {
   const { user, demoMode } = useAuth();
   const { activeTenant, activeBranch, branches, enterpriseHeaders, isOwnerOrAdmin, actorRole, loading: orgLoading } = useEnterprise();
-  // A delegated sub-admin manages people but may not touch peers, other
-  // administrators, or the owner. The server enforces this; the UI hides the
-  // controls so nobody is left guessing why an action failed.
   const subadmin = actorRole === "subadmin" || user?.role === "subadmin";
 
-  // Employee data & analytics
   const [employees, setEmployees] = useState([]);
   const employeeRequest = useRef(0);
   const [analytics, setAnalytics] = useState({
@@ -93,21 +90,19 @@ export default function WAEmployees() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [toast, setToast] = useState(null); // { message, type: 'success' | 'error' }
+  const [toast, setToast] = useState(null);
 
-  // Filter & Search states
   const [searchQuery, setSearchQuery] = useState("");
   const [levelFilter, setLevelFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [branchFilter, setBranchFilter] = useState("all");
 
-  // Modals state
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createdEmployeeResult, setCreatedEmployeeResult] = useState(null); // for showing generated code modal
-  const [editEmployee, setEditEmployee] = useState(null); // for editing access level
+  const [createdEmployeeResult, setCreatedEmployeeResult] = useState(null);
+  const [editEmployee, setEditEmployee] = useState(null);
   const [copiedCodeId, setCopiedCodeId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
-  // Form states for creating employee
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -135,9 +130,6 @@ export default function WAEmployees() {
 
   const fetchEmployees = useCallback(async () => {
     const version = ++employeeRequest.current;
-    // Only the organization administrators may list people. Wait for the
-    // membership to resolve so an administrator is not skipped on first paint
-    // and a member never fires an unnecessary request.
     if (orgLoading || !isOwnerOrAdmin) return;
     setLoading(true);
     setError("");
@@ -284,7 +276,6 @@ export default function WAEmployees() {
     }
   };
 
-  // Filtered employees list
   const filteredEmployees = employees.filter((emp) => {
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
@@ -311,33 +302,30 @@ export default function WAEmployees() {
     return matchesSearch && matchesLevel && matchesStatus && matchesBranch;
   });
 
-  // Strict employee isolation guard: members never get the people directory.
-  // The resolved membership decides, not the session role — a promoted member
-  // whose token still says employee must see this page and a demoted admin
-  // must not.
   if (!orgLoading && !isOwnerOrAdmin) {
     return (
       <div className="hl-page wa-employees-page crm-layout-content p-4 sm:p-6 max-w-4xl mx-auto">
-      <WAWorkspaceGuide section="employees" />        <div
+        <WAWorkspaceGuide section="employees" />
+        <div
           className="hl-card text-center p-8 sm:p-12 mt-6"
           style={{
-            background: "var(--color-paper)",
-            border: "1px solid var(--color-line)",
-            borderRadius: "var(--radius-lg, 12px)",
+            background: "var(--color-paper-2, #ffffff)",
+            border: "1px solid var(--color-rule, #E8E8E8)",
+            borderRadius: "var(--radius-lg, 14px)",
           }}
         >
           <div
             className="w-16 h-16 rounded-full mx-auto flex items-center justify-center mb-4"
-            style={{ background: "rgba(245, 158, 11, 0.15)", color: "#d97706" }}
+            style={{ background: "rgba(32, 44, 82, 0.08)", color: "var(--color-ink, #202C52)" }}
           >
             <ShieldAlert size={32} />
           </div>
-          <h2 className="hl-title text-xl mb-2" style={{ color: "var(--color-ink)" }}>
+          <h2 className="hl-title text-xl mb-2" style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}>
             Deep Staff Isolation Active
           </h2>
           <p
             className="text-sm max-w-md mx-auto mb-6"
-            style={{ color: "var(--color-ink-2)", lineHeight: 1.6 }}
+            style={{ color: "var(--color-ink-2, #667085)", lineHeight: 1.6 }}
           >
             Your account is assigned employee-level WhatsApp access. To protect organization privacy,
             employee profiles and staff access codes are exclusively managed by your workspace administrator.
@@ -345,12 +333,12 @@ export default function WAEmployees() {
           <div
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold"
             style={{
-              background: "var(--color-paper-2, #f1f5f9)",
-              color: "var(--color-ink)",
-              border: "1px solid var(--color-line)",
+              background: "var(--color-surface, #F5F5F5)",
+              color: "var(--color-ink, #202C52)",
+              border: "1px solid var(--color-rule, #E8E8E8)",
             }}
           >
-            <ShieldCheck size={14} className="text-emerald-600" />
+            <ShieldCheck size={14} style={{ color: "var(--color-success, #16803C)" }} />
             <span>Assigned Access Level: {ACCESS_LEVEL_META[user?.whatsapp_access_level || "full"]?.label || "Full WhatsApp Access"}</span>
           </div>
         </div>
@@ -359,28 +347,28 @@ export default function WAEmployees() {
   }
 
   return (
-    <div className="hl-page wa-employees-page crm-layout-content p-3 sm:p-6 w-full max-w-7xl mx-auto space-y-4">
-      {/* Top Navigation Strip */}
-      {/* Toast Notification */}
+    <div className="hl-page wa-employees-page crm-layout-content p-4 sm:p-6 w-full max-w-7xl mx-auto space-y-5">
       {toast && (
-        <div className="fixed bottom-5 right-5 z-[9999] animate-bounce-short">
+        <div className="fixed bottom-5 right-5 z-[9999]">
           <div
-            className={`hl-card flex items-center gap-3 px-4 py-3 shadow-xl ${
-              toast.type === "error"
-                ? "border-red-300 bg-red-50 text-red-800"
-                : "border-emerald-300 bg-emerald-50 text-emerald-800"
-            }`}
-            style={{ borderRadius: "var(--radius-md, 8px)" }}
+            className="hl-card flex items-center gap-3 px-4 py-3 shadow-xl"
+            style={{
+              borderRadius: "var(--radius-md, 10px)",
+              background: toast.type === "error" ? "#FEF3F2" : "#ECFDF3",
+              border: `1px solid ${toast.type === "error" ? "#FECACA" : "#ABEFC6"}`,
+              color: toast.type === "error" ? "#B42318" : "#067647",
+            }}
           >
             {toast.type === "error" ? (
-              <AlertCircle size={18} className="text-red-600" />
+              <AlertCircle size={18} />
             ) : (
-              <CheckCircle2 size={18} className="text-emerald-600" />
+              <CheckCircle2 size={18} />
             )}
             <span className="text-xs font-semibold">{toast.message}</span>
             <button
               onClick={() => setToast(null)}
-              className="ml-2 text-gray-500 hover:text-gray-800"
+              className="ml-2 opacity-60 hover:opacity-100 transition"
+              aria-label="Dismiss notification"
             >
               <X size={14} />
             </button>
@@ -389,21 +377,28 @@ export default function WAEmployees() {
       )}
 
       {!demoMode && <InboxRoutingSettings key={activeTenant?.id || "none"} />}
-      {/* Page Header */}
-      <div className="hl-commandbar p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
+
+      {/* Page Header — command bar */}
+      <div
+        className="hl-commandbar p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
+        style={{ borderRadius: "var(--radius-lg, 14px)" }}
+      >
+        <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center font-bold"
-              style={{ background: "rgba(16, 185, 129, 0.15)", color: "#059669" }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: "rgba(32, 44, 82, 0.10)", color: "var(--color-ink, #202C52)" }}
             >
               <Users size={18} />
             </div>
-            <h1 className="hl-title text-xl sm:text-2xl" style={{ margin: 0 }}>
+            <h1
+              className="hl-title text-xl sm:text-2xl"
+              style={{ margin: 0, fontFamily: "Poppins, sans-serif", letterSpacing: "-0.02em" }}
+            >
               Employees &amp; access
             </h1>
           </div>
-          <p className="text-xs sm:text-sm" style={{ color: "var(--color-ink-2)", margin: 0 }}>
+          <p className="text-xs sm:text-sm" style={{ color: "var(--color-ink-2, #667085)", margin: 0 }}>
             Assign branches, manage permissions and track employee activation.
           </p>
         </div>
@@ -425,126 +420,115 @@ export default function WAEmployees() {
               setShowCreateModal(true);
             }}
             className="hl-btn-primary"
-            style={{
-              fontSize: 13,
-              height: 38,
-              background: "linear-gradient(135deg, #059669 0%, #0d9488 100%)",
-              borderColor: "#047857",
-            }}
+            style={{ fontSize: 13, height: 38 }}
           >
             <UserPlus size={15} />
-            <span>+ Add Employee</span>
+            <span>Add employee</span>
           </button>
         </div>
       </div>
 
-      {/* Multi-Dynamic Analytics Cards Strip */}
+      {/* KPI strip */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        {/* Total Employees */}
-        <div className="hl-card p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-semibold" style={{ color: "var(--color-ink-2)" }}>
-            <span>Total Staff</span>
-            <Users size={15} className="text-emerald-600" />
+        <div className="hl-card p-4 flex flex-col justify-between" style={{ borderRadius: "var(--radius-md, 10px)" }}>
+          <div className="flex items-center justify-between text-xs font-semibold" style={{ color: "var(--color-ink-2, #667085)" }}>
+            <span>Total staff</span>
+            <Users size={15} style={{ color: "var(--color-ink, #202C52)" }} />
           </div>
           <div className="mt-2">
-            <span className="text-2xl font-bold" style={{ color: "var(--color-ink)" }}>
+            <span className="text-2xl font-bold" style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}>
               {analytics.total_employees}
             </span>
-            <span className="text-[11px] block text-gray-500 mt-0.5">Workspace team members</span>
+            <span className="text-[11px] block mt-0.5" style={{ color: "var(--color-ink-2, #667085)" }}>Workspace team members</span>
           </div>
         </div>
 
-        {/* Active Staff */}
-        <div className="hl-card p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-semibold" style={{ color: "var(--color-ink-2)" }}>
-            <span>Active Staff</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+        <div className="hl-card p-4 flex flex-col justify-between" style={{ borderRadius: "var(--radius-md, 10px)" }}>
+          <div className="flex items-center justify-between text-xs font-semibold" style={{ color: "var(--color-ink-2, #667085)" }}>
+            <span>Active staff</span>
+            <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--color-success, #16803C)" }} />
           </div>
           <div className="mt-2">
-            <span className="text-2xl font-bold text-emerald-700">
+            <span className="text-2xl font-bold" style={{ color: "var(--color-success, #16803C)", fontFamily: "Poppins, sans-serif" }}>
               {analytics.active_employees}
             </span>
-            <span className="text-[11px] block text-emerald-600 mt-0.5">Activated &amp; operational</span>
+            <span className="text-[11px] block mt-0.5" style={{ color: "var(--color-success, #16803C)", opacity: 0.8 }}>Activated &amp; operational</span>
           </div>
         </div>
 
-        {/* Pending Activation */}
-        <div className="hl-card p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-semibold" style={{ color: "var(--color-ink-2)" }}>
-            <span>Pending Login</span>
-            <Clock size={15} className="text-amber-500" />
+        <div className="hl-card p-4 flex flex-col justify-between" style={{ borderRadius: "var(--radius-md, 10px)" }}>
+          <div className="flex items-center justify-between text-xs font-semibold" style={{ color: "var(--color-ink-2, #667085)" }}>
+            <span>Pending login</span>
+            <Clock size={15} style={{ color: "var(--color-accent-hover, #E9AA00)" }} />
           </div>
           <div className="mt-2">
-            <span className="text-2xl font-bold text-amber-700">
+            <span className="text-2xl font-bold" style={{ color: "var(--color-accent-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}>
               {analytics.pending_activation}
             </span>
-            <span className="text-[11px] block text-amber-600 mt-0.5">Awaiting Access Code login</span>
+            <span className="text-[11px] block mt-0.5" style={{ color: "var(--color-ink-2, #667085)" }}>Awaiting access code login</span>
           </div>
         </div>
 
-        {/* Access Levels Breakdown */}
-        <div className="hl-card p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-semibold" style={{ color: "var(--color-ink-2)" }}>
-            <span>Access Levels</span>
-            <ShieldCheck size={15} className="text-blue-600" />
+        <div className="hl-card p-4 flex flex-col justify-between" style={{ borderRadius: "var(--radius-md, 10px)" }}>
+          <div className="flex items-center justify-between text-xs font-semibold" style={{ color: "var(--color-ink-2, #667085)" }}>
+            <span>Access levels</span>
+            <ShieldCheck size={15} style={{ color: "var(--color-info, #2563EB)" }} />
           </div>
           <div className="mt-2 text-xs space-y-1">
-            <div className="flex justify-between items-center text-emerald-700">
+            <div className="flex justify-between items-center" style={{ color: "var(--color-ink, #202C52)" }}>
               <span>Full:</span>
               <span className="font-bold">{analytics.access_levels?.full || 0}</span>
             </div>
-            <div className="flex justify-between items-center text-blue-700">
-              <span>Chat Only:</span>
+            <div className="flex justify-between items-center" style={{ color: "var(--color-info, #2563EB)" }}>
+              <span>Chat only:</span>
               <span className="font-bold">{analytics.access_levels?.chat_only || 0}</span>
             </div>
-            <div className="flex justify-between items-center text-purple-700">
+            <div className="flex justify-between items-center" style={{ color: "#7c3aed" }}>
               <span>Campaigns:</span>
               <span className="font-bold">{analytics.access_levels?.campaign_only || 0}</span>
             </div>
           </div>
         </div>
 
-        {/* Total Messages Dispatched */}
-        <div className="hl-card p-4 flex flex-col justify-between col-span-2 lg:col-span-1">
-          <div className="flex items-center justify-between text-xs font-semibold" style={{ color: "var(--color-ink-2)" }}>
+        <div className="hl-card p-4 flex flex-col justify-between col-span-2 lg:col-span-1" style={{ borderRadius: "var(--radius-md, 10px)" }}>
+          <div className="flex items-center justify-between text-xs font-semibold" style={{ color: "var(--color-ink-2, #667085)" }}>
             <span>Dispatched</span>
-            <BarChart3 size={15} className="text-teal-600" />
+            <BarChart3 size={15} style={{ color: "var(--color-ink, #202C52)" }} />
           </div>
           <div className="mt-2">
-            <span className="text-2xl font-bold text-teal-800">
+            <span className="text-2xl font-bold" style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}>
               {Number(analytics.total_messages_dispatched || 0).toLocaleString()}
             </span>
-            <span className="text-[11px] block text-teal-600 mt-0.5">Total outbound messages</span>
+            <span className="text-[11px] block mt-0.5" style={{ color: "var(--color-ink-2, #667085)" }}>Total outbound messages</span>
           </div>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="hl-card p-3 flex flex-col sm:flex-row items-center gap-3">
-        {/* Search */}
+      <div className="hl-card p-3 flex flex-col sm:flex-row items-center gap-3" style={{ borderRadius: "var(--radius-md, 10px)" }}>
         <div className="relative flex-1 w-full">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--color-ink-2, #667085)" }} />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name, email, employee ID or Access Code..."
+            placeholder="Search by name, email, employee ID or access code..."
             className="hl-input w-full pl-9"
             style={{ height: 38, fontSize: 13 }}
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 transition"
+              style={{ color: "var(--color-ink-2, #667085)" }}
+              aria-label="Clear search"
             >
               <X size={14} />
             </button>
           )}
         </div>
 
-        {/* Filters */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          {/* Branch Filter */}
           {branches && branches.length > 0 && (
             <select
               value={branchFilter}
@@ -552,7 +536,7 @@ export default function WAEmployees() {
               className="hl-input w-full sm:w-auto"
               style={{ height: 38, fontSize: 13, minWidth: 150 }}
             >
-              <option value="all">🏢 All Branches</option>
+              <option value="all">All branches</option>
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name} ({b.code})
@@ -561,52 +545,49 @@ export default function WAEmployees() {
             </select>
           )}
 
-          {/* Access Level Filter */}
           <select
             value={levelFilter}
             onChange={(e) => setLevelFilter(e.target.value)}
             className="hl-input w-full sm:w-auto"
             style={{ height: 38, fontSize: 13, minWidth: 160 }}
           >
-            <option value="all">All Access Levels</option>
+            <option value="all">All access levels</option>
             <option value="full">Full WhatsApp Access</option>
             <option value="chat_only">Live Chat Only</option>
             <option value="read_only">Read Only</option>
             <option value="campaign_only">Campaigns Only</option>
           </select>
 
-          {/* Status Filter */}
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="hl-input w-full sm:w-auto"
             style={{ height: 38, fontSize: 13, minWidth: 140 }}
           >
-            <option value="all">All Statuses</option>
-            <option value="active">Active Only</option>
-            <option value="pending">Pending Login</option>
+            <option value="all">All statuses</option>
+            <option value="active">Active only</option>
+            <option value="pending">Pending login</option>
           </select>
         </div>
       </div>
 
-      {/* Error state */}
       {error && (
-        <div className="hl-card p-4 border-red-300 bg-red-50 text-red-800 text-sm flex items-center gap-2">
-          <AlertCircle size={16} className="text-red-600 shrink-0" />
+        <div className="hl-card p-4 text-sm flex items-center gap-2" style={{ border: "1px solid #FECACA", background: "#FEF3F2", color: "#B42318", borderRadius: "var(--radius-md, 10px)" }}>
+          <AlertCircle size={16} className="shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Employees Table */}
-      <div className="hl-card overflow-hidden">
+      {/* Employees table */}
+      <div className="hl-card overflow-hidden" style={{ borderRadius: "var(--radius-md, 10px)" }}>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs" style={{ borderCollapse: "collapse" }}>
             <thead>
               <tr
                 style={{
-                  background: "var(--color-paper-2, #f8fafc)",
-                  borderBottom: "1px solid var(--color-line)",
-                  color: "var(--color-ink-2)",
+                  background: "var(--color-surface, #F5F5F5)",
+                  borderBottom: "1px solid var(--color-rule, #E8E8E8)",
+                  color: "var(--color-ink-2, #667085)",
                   textTransform: "uppercase",
                   letterSpacing: "0.04em",
                   fontSize: 11,
@@ -615,29 +596,29 @@ export default function WAEmployees() {
                 <th className="py-3 px-4 font-semibold">Employee</th>
                 <th className="py-3 px-4 font-semibold">Role</th>
                 <th className="py-3 px-4 font-semibold">Branch</th>
-                <th className="py-3 px-4 font-semibold">WhatsApp Access Level</th>
-                <th className="py-3 px-4 font-semibold">Workspace Access Code</th>
+                <th className="py-3 px-4 font-semibold">WhatsApp access level</th>
+                <th className="py-3 px-4 font-semibold">Workspace access code</th>
                 <th className="py-3 px-4 font-semibold">Status</th>
                 <th className="py-3 px-4 font-semibold text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-gray-500">
-                    <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-emerald-600" />
+                  <td colSpan={7} className="py-12 text-center" style={{ color: "var(--color-ink-2, #667085)" }}>
+                    <RefreshCw size={24} className="animate-spin mx-auto mb-2" style={{ color: "var(--color-ink, #202C52)" }} />
                     <span>Loading employees directory…</span>
                   </td>
                 </tr>
               ) : filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-gray-500">
-                    <Users size={32} className="mx-auto mb-2 text-gray-300" />
-                    <p className="font-semibold text-sm text-gray-700">No employees found</p>
-                    <p className="text-xs text-gray-500 mt-1">
+                  <td colSpan={7} className="py-12 text-center" style={{ color: "var(--color-ink-2, #667085)" }}>
+                    <Users size={32} className="mx-auto mb-2" style={{ color: "var(--color-text-muted, #98A2B3)" }} />
+                    <p className="font-semibold text-sm" style={{ color: "var(--color-ink, #202C52)" }}>No employees found</p>
+                    <p className="text-xs mt-1" style={{ color: "var(--color-ink-2, #667085)" }}>
                       {searchQuery
                         ? "Try clearing your search query or filters."
-                        : "Click '+ Add Employee' to create your first team member and generate an Access Code."}
+                        : "Click \"Add employee\" to create your first team member and generate an access code."}
                     </p>
                   </td>
                 </tr>
@@ -647,46 +628,50 @@ export default function WAEmployees() {
                   const LevelIcon = level.icon;
                   const isCurrentAdmin = emp.id === user?.id;
                   const isPending = emp.status !== "active";
-                  // A sub-admin never manages a peer administrator or the
-                  // owner (owners appear with the admin role).
                   const targetIsAdministrator = ["admin", "subadmin"].includes(emp.role);
                   const subadminLocked = subadmin && !isCurrentAdmin && targetIsAdministrator;
 
+                  const isExpanded = expandedId === emp.id;
                   return (
+                    <React.Fragment key={emp.id}>
                     <tr
-                      key={emp.id}
-                      className="hover:bg-slate-50/70 transition-colors"
-                      style={{ borderBottom: "1px solid var(--color-line)" }}
+                      className="transition-colors"
+                      style={{ borderBottom: "1px solid var(--color-rule, #E8E8E8)", cursor: "pointer" }}
+                      onClick={(e) => {
+                        // Don't toggle when interacting with buttons/inputs/selects
+                        if (e.target.closest("button, a, input, select, textarea")) return;
+                        setExpandedId(isExpanded ? null : emp.id);
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface, #F5F5F5)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = isExpanded ? "var(--color-surface, #F5F5F5)" : "transparent")}
                     >
-                      {/* Name & Email */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
+                          <ChevronDown size={14} className="shrink-0 transition-transform" style={{ color: "var(--color-ink-2, #667085)", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }} />
                           <div
-                            className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs uppercase shrink-0 text-white shadow-sm"
+                            className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs uppercase shrink-0 text-white"
                             style={{
-                              background: isCurrentAdmin
-                                ? "linear-gradient(135deg, #059669 0%, #0d9488 100%)"
-                                : "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)",
+                              background: isCurrentAdmin ? "var(--color-ink, #202C52)" : "var(--color-primary-soft, #2B385F)",
                             }}
                           >
                             {(emp.first_name?.[0] || "E") + (emp.last_name?.[0] || "")}
                           </div>
-                          <div>
-                            <div className="font-semibold text-sm flex items-center gap-1.5" style={{ color: "var(--color-ink)" }}>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-sm flex items-center gap-1.5 flex-wrap" style={{ color: "var(--color-ink, #202C52)" }}>
                               <span>{`${emp.first_name || ""} ${emp.last_name || ""}`.trim() || "Employee"}</span>
                               {isCurrentAdmin && (
-                                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
+                                <span className="text-[10px] px-1.5 py-0.5 rounded font-bold" style={{ background: "var(--color-accent-soft, #FFF4CC)", color: "var(--color-accent-ink, #202C52)" }}>
                                   You
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-gray-500 flex items-center gap-2 mt-0.5">
+                            <div className="text-[11px] flex items-center gap-2 mt-0.5 flex-wrap" style={{ color: "var(--color-ink-2, #667085)" }}>
                               <span className="flex items-center gap-1">
                                 <Mail size={11} />
                                 {emp.email}
                               </span>
                               {emp.emp_id && (
-                                <span className="bg-gray-100 px-1.5 py-0.2 rounded text-[10px] text-gray-600 font-mono">
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-mono" style={{ background: "var(--color-surface, #F5F5F5)", color: "var(--color-ink-2, #667085)" }}>
                                   {emp.emp_id}
                                 </span>
                               )}
@@ -695,47 +680,52 @@ export default function WAEmployees() {
                         </div>
                       </td>
 
-                      {/* System Role */}
                       <td className="py-3.5 px-4">
                         <span
-                          className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold capitalize ${
-                            emp.role === "admin"
-                              ? "bg-purple-100 text-purple-800"
-                              : emp.role === "subadmin"
-                                ? "bg-amber-100 text-amber-800"
-                                : "bg-blue-50 text-blue-800 border border-blue-200"
-                          }`}
+                          className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold capitalize"
+                          style={{
+                            background:
+                              emp.role === "admin"
+                                ? "rgba(124, 58, 237, 0.10)"
+                                : emp.role === "subadmin"
+                                  ? "rgba(233, 170, 0, 0.15)"
+                                  : "rgba(37, 99, 235, 0.08)",
+                            color:
+                              emp.role === "admin"
+                                ? "#7c3aed"
+                                : emp.role === "subadmin"
+                                  ? "var(--color-accent-ink, #202C52)"
+                                  : "var(--color-info, #2563EB)",
+                          }}
                         >
                           {emp.role || "employee"}
                         </span>
                         {emp.job_title && (
-                          <div className="text-[11px] text-gray-500 mt-0.5 truncate max-w-[140px]">
+                          <div className="text-[11px] mt-0.5 truncate max-w-[140px]" style={{ color: "var(--color-ink-2, #667085)" }}>
                             {emp.job_title}
                           </div>
                         )}
                       </td>
 
-                      {/* Branch */}
                       <td className="py-3.5 px-4">
                         {emp.branch_name ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] bg-slate-100 text-slate-800 px-2.5 py-1 rounded-md font-medium border border-slate-200">
-                            📍 {emp.branch_name}
+                          <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md font-medium" style={{ background: "var(--color-surface, #F5F5F5)", color: "var(--color-ink, #202C52)", border: "1px solid var(--color-rule, #E8E8E8)" }}>
+                            {emp.branch_name}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-md font-medium border border-emerald-100">
-                            🏢 Head Office
+                          <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md font-medium" style={{ background: "var(--color-accent-soft, #FFF4CC)", color: "var(--color-accent-ink, #202C52)", border: "1px solid var(--color-accent, #FCBD16)" }}>
+                            Head office
                           </span>
                         )}
                       </td>
 
-                      {/* WhatsApp Access Level */}
                       <td className="py-3.5 px-4">
                         <div
                           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold"
                           style={{
                             background: level.bg,
                             color: level.color,
-                            border: `1px solid ${level.color}30`,
+                            border: `1px solid ${level.color}25`,
                           }}
                           title={level.desc}
                         >
@@ -744,91 +734,95 @@ export default function WAEmployees() {
                         </div>
                       </td>
 
-                      {/* Workspace Access Code */}
                       <td className="py-3.5 px-4">
                         {emp.access_code ? (
                           <div className="flex items-center gap-1.5">
                             <span
-                              className="font-mono font-bold text-xs px-2 py-1 rounded bg-slate-100 border border-slate-200 text-slate-800 tracking-wider"
-                              style={{ letterSpacing: "0.06em" }}
+                              className="font-mono font-bold text-xs px-2 py-1 rounded tracking-wider"
+                              style={{
+                                background: "var(--color-surface, #F5F5F5)",
+                                border: "1px solid var(--color-rule, #E8E8E8)",
+                                color: "var(--color-ink, #202C52)",
+                                letterSpacing: "0.06em",
+                                fontFamily: "JetBrains Mono, monospace",
+                              }}
                             >
                               {emp.access_code}
                             </span>
                             <button
                               type="button"
                               onClick={() => handleCopy(emp.access_code, emp.id)}
-                              className="p-1 rounded hover:bg-slate-200 text-gray-500 transition-colors"
-                              title="Copy Access Code"
+                              className="p-1 rounded transition-colors"
+                              style={{ color: "var(--color-ink-2, #667085)" }}
+                              title="Copy access code"
                             >
                               {copiedCodeId === emp.id ? (
-                                <Check size={14} className="text-emerald-600" />
+                                <Check size={14} style={{ color: "var(--color-success, #16803C)" }} />
                               ) : (
                                 <Copy size={14} />
                               )}
                             </button>
                           </div>
                         ) : (
-                          <span className="text-xs text-gray-400 italic">None generated</span>
+                          <span className="text-xs italic" style={{ color: "var(--color-ink-2, #667085)" }}>None generated</span>
                         )}
                       </td>
 
-                      {/* Status */}
                       <td className="py-3.5 px-4">
                         {isPending ? (
-                          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            <span>Pending Login</span>
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded" style={{ color: "var(--color-accent-ink, #202C52)", background: "var(--color-accent-soft, #FFF4CC)", border: "1px solid var(--color-accent, #FCBD16)" }}>
+                            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--color-accent, #FCBD16)" }} />
+                            <span>Pending login</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded" style={{ color: "var(--color-success, #16803C)", background: "#ECFDF3", border: "1px solid #ABEFC6" }}>
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--color-success, #16803C)" }} />
                             <span>Active</span>
                           </span>
                         )}
                       </td>
 
-                      {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Share Invitation */}
                           {emp.access_code && (
                             <button
                               onClick={() => handleCopyInvitation(emp)}
-                              className="p-1.5 rounded text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
-                              title="Copy Invitation Instructions"
+                              className="p-1.5 rounded transition-colors"
+                              style={{ color: "var(--color-ink-2, #667085)" }}
+                              title="Copy invitation instructions"
                             >
                               <ExternalLink size={14} />
                             </button>
                           )}
 
-                          {/* Regenerate Code */}
                           {!subadminLocked && (
                             <button
                               onClick={() => handleRegenerateCode(emp.id, emp.first_name)}
-                              className="p-1.5 rounded text-gray-600 hover:text-blue-700 hover:bg-blue-50 transition-colors"
-                              title="Regenerate Access Code"
+                              className="p-1.5 rounded transition-colors"
+                              style={{ color: "var(--color-ink-2, #667085)" }}
+                              title="Regenerate access code"
                             >
                               <KeyRound size={14} />
                             </button>
                           )}
 
-                          {/* Edit Access Level */}
                           {!subadminLocked && (
                             <button
                               onClick={() => setEditEmployee({ ...emp })}
-                              className="p-1.5 rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-                              title="Edit Access Level & Job Title"
+                              className="p-1.5 rounded transition-colors"
+                              style={{ color: "var(--color-ink-2, #667085)" }}
+                              title="Edit access level & job title"
                             >
                               <Edit2 size={14} />
                             </button>
                           )}
 
-                          {/* Delete */}
                           {!isCurrentAdmin && !subadminLocked && (
                             <button
                               onClick={() => handleDeleteEmployee(emp.id, emp.first_name)}
-                              className="p-1.5 rounded text-gray-400 hover:text-red-700 hover:bg-red-50 transition-colors"
-                              title="Remove Employee"
+                              className="p-1.5 rounded transition-colors"
+                              style={{ color: "var(--color-error, #D92D20)" }}
+                              title="Remove employee"
                             >
                               <Trash2 size={14} />
                             </button>
@@ -836,6 +830,52 @@ export default function WAEmployees() {
                         </div>
                       </td>
                     </tr>
+                    {isExpanded && (
+                      <tr style={{ background: "var(--color-surface, #F5F5F5)" }}>
+                        <td colSpan={7} className="px-4 py-4">
+                          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                            <div className="flex-1 min-w-0 space-y-2">
+                              <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-ink-2, #667085)" }}>Employee details</div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs" style={{ color: "var(--color-ink, #202C52)" }}>
+                                <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Name: </span>{`${emp.first_name || ""} ${emp.last_name || ""}`.trim() || "Employee"}</div>
+                                <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Email: </span>{emp.email}</div>
+                                <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Role: </span>{emp.role || "employee"}</div>
+                                <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Job title: </span>{emp.job_title || "—"}</div>
+                                <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Branch: </span>{emp.branch_name || "Head office"}</div>
+                                <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Access level: </span>{level.label}</div>
+                                <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Status: </span>{isPending ? "Pending login" : "Active"}</div>
+                                {emp.access_code && (
+                                  <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Access code: </span><span className="font-mono font-bold">{emp.access_code}</span></div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2 shrink-0">
+                              {emp.access_code && (
+                                <button onClick={() => handleCopyInvitation(emp)} className="hl-btn-secondary text-xs" style={{ height: 34 }}>
+                                  <ExternalLink size={13} /> Copy invitation
+                                </button>
+                              )}
+                              {!subadminLocked && (
+                                <button onClick={() => handleRegenerateCode(emp.id, emp.first_name)} className="hl-btn-secondary text-xs" style={{ height: 34 }}>
+                                  <KeyRound size={13} /> Regenerate code
+                                </button>
+                              )}
+                              {!subadminLocked && (
+                                <button onClick={() => setEditEmployee({ ...emp })} className="hl-btn-primary text-xs" style={{ height: 34 }}>
+                                  <Edit2 size={13} /> Edit access
+                                </button>
+                              )}
+                              {!isCurrentAdmin && !subadminLocked && (
+                                <button onClick={() => handleDeleteEmployee(emp.id, emp.first_name)} className="hl-btn-secondary text-xs" style={{ height: 34, color: "var(--color-error, #D92D20)", borderColor: "#FECACA" }}>
+                                  <Trash2 size={13} /> Remove
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })
               )}
@@ -846,49 +886,50 @@ export default function WAEmployees() {
 
       {/* Modal: Create Employee */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(5, 14, 47, 0.6)", backdropFilter: "blur(4px)" }}>
           <div
             ref={employeeDialog}
             role="dialog"
             aria-modal="true"
             aria-label="Add employee"
-            className="hl-card w-full max-w-lg max-h-[92dvh] flex flex-col overflow-hidden animate-scale-up rounded-2xl shadow-2xl"
-            style={{ background: "var(--color-paper)" }}
+            className="hl-card w-full max-w-lg max-h-[92dvh] flex flex-col overflow-hidden animate-scale-up shadow-2xl"
+            style={{ background: "var(--color-paper-2, #ffffff)", borderRadius: "var(--radius-lg, 14px)" }}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-slate-50/80 shrink-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b shrink-0" style={{ borderColor: "var(--color-rule, #E8E8E8)", background: "var(--color-surface, #F5F5F5)" }}>
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "var(--color-ink, #202C52)", color: "#ffffff" }}>
                   <UserPlus size={18} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-gray-900 m-0">Add New Employee</h3>
-                  <p className="text-[11px] text-gray-500 m-0">Generate a unique Access Code for isolated WhatsApp workspace login</p>
+                  <h3 className="font-bold text-base m-0" style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}>Add new employee</h3>
+                  <p className="text-[11px] m-0" style={{ color: "var(--color-ink-2, #667085)" }}>Generate a unique access code for isolated WhatsApp workspace login</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition"
+                className="p-1.5 rounded-lg transition"
+                style={{ color: "var(--color-ink-2, #667085)" }}
+                aria-label="Close"
               >
                 <X size={18} />
               </button>
             </div>
 
             <form onSubmit={handleCreateSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              <div className="p-5 space-y-4 flex-1 overflow-y-auto wa-custom-scrollbar overscroll-contain">
+              <div className="p-5 space-y-4 flex-1 overflow-y-auto overscroll-contain">
                 {formError && (
-                  <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
-                    <AlertCircle size={15} className="shrink-0 text-red-600" />
+                  <div className="p-3 text-xs rounded-xl flex items-center gap-2" style={{ background: "#FEF3F2", border: "1px solid #FECACA", color: "#B42318" }}>
+                    <AlertCircle size={15} className="shrink-0" />
                     <span>{formError}</span>
                   </div>
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">First Name *</label>
+                    <label className="block mb-1.5 font-bold text-xs" style={{ color: "var(--color-ink, #202C52)" }}>First name *</label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none" style={{ color: "var(--color-ink-2, #667085)" }}>
                         <User size={15} />
                       </div>
                       <input
@@ -902,9 +943,9 @@ export default function WAEmployees() {
                     </div>
                   </div>
                   <div>
-                    <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Last Name</label>
+                    <label className="block mb-1.5 font-bold text-xs" style={{ color: "var(--color-ink, #202C52)" }}>Last name</label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none" style={{ color: "var(--color-ink-2, #667085)" }}>
                         <User size={15} />
                       </div>
                       <input
@@ -919,9 +960,9 @@ export default function WAEmployees() {
                 </div>
 
                 <div>
-                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Work Email Address *</label>
+                  <label className="block mb-1.5 font-bold text-xs" style={{ color: "var(--color-ink, #202C52)" }}>Work email address *</label>
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none" style={{ color: "var(--color-ink-2, #667085)" }}>
                       <Mail size={15} />
                     </div>
                     <input
@@ -933,16 +974,16 @@ export default function WAEmployees() {
                       placeholder="employee@company.com"
                     />
                   </div>
-                  <span className="text-[11px] text-gray-500 block mt-1.5 ml-1">
-                    Employee will verify this email along with their workspace Access Code upon first login.
+                  <span className="text-[11px] block mt-1.5 ml-1" style={{ color: "var(--color-ink-2, #667085)" }}>
+                    Employee will verify this email along with their workspace access code upon first login.
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Job Title</label>
+                    <label className="block mb-1.5 font-bold text-xs" style={{ color: "var(--color-ink, #202C52)" }}>Job title</label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none" style={{ color: "var(--color-ink-2, #667085)" }}>
                         <Briefcase size={15} />
                       </div>
                       <input
@@ -950,33 +991,28 @@ export default function WAEmployees() {
                         value={formData.job_title}
                         onChange={(e) => setFormData({ ...formData, job_title: e.target.value })}
                         className="hl-input w-full pl-9 pr-3 h-10 text-sm"
-                        placeholder="e.g. Sales Specialist"
+                        placeholder="e.g. Sales specialist"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">System Role</label>
+                    <label className="block mb-1.5 font-bold text-xs" style={{ color: "var(--color-ink, #202C52)" }}>System role</label>
                     <select
                       value={formData.role}
                       onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                       className="hl-input w-full h-10 text-sm font-medium"
                     >
                       <option value="employee">Employee</option>
-                      <option value="agent">Support Agent</option>
-                      {/* A sub-admin is an organization administrator server-side,
-                          so only administrators may hand that role out. The
-                          current value stays selectable so an edit form never
-                          renders blank. */}
+                      <option value="agent">Support agent</option>
                       <option value="subadmin" disabled={subadmin && formData.role !== "subadmin"}>Sub-admin (manager)</option>
                       <option value="admin" disabled={subadmin && formData.role !== "admin"}>Admin</option>
                     </select>
                   </div>
                 </div>
 
-                {/* Assigned Branch Selection */}
                 <div>
-                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
-                    Assigned Branch / Location *
+                  <label className="block mb-1.5 font-bold text-xs" style={{ color: "var(--color-ink, #202C52)" }}>
+                    Assigned branch / location *
                   </label>
                   <select
                     value={formData.branch_id || (branches?.[0]?.id) || 1}
@@ -986,22 +1022,21 @@ export default function WAEmployees() {
                     {branches && branches.length > 0 ? (
                       branches.map((b) => (
                         <option key={b.id} value={b.id}>
-                          {b.name} ({b.code}){b.is_head_office ? " — Head Office" : ""}
+                          {b.name} ({b.code}){b.is_head_office ? " — Head office" : ""}
                         </option>
                       ))
                     ) : (
-                      <option value="1">Head Office (Main) (HQ-01)</option>
+                      <option value="1">Head office (Main) (HQ-01)</option>
                     )}
                   </select>
-                  <span className="text-[11px] text-gray-500 block mt-1.5 ml-1">
+                  <span className="text-[11px] block mt-1.5 ml-1" style={{ color: "var(--color-ink-2, #667085)" }}>
                     Staff member will be scoped to handle conversations and campaigns for this branch.
                   </span>
                 </div>
 
-                {/* Granular WhatsApp Access Level Selection */}
                 <div>
-                  <label className="hl-section-label block mb-2 font-bold text-xs text-gray-700">
-                    WhatsApp Access Level &amp; Permissions
+                  <label className="block mb-2 font-bold text-xs" style={{ color: "var(--color-ink, #202C52)" }}>
+                    WhatsApp access level &amp; permissions
                   </label>
                   <div className="space-y-2">
                     {Object.entries(ACCESS_LEVEL_META).map(([key, meta]) => {
@@ -1011,25 +1046,26 @@ export default function WAEmployees() {
                         <label
                           key={key}
                           onClick={() => setFormData({ ...formData, whatsapp_access_level: key })}
-                          className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                            isSelected
-                              ? "border-emerald-500 bg-emerald-50/60 shadow-xs ring-1 ring-emerald-500/30"
-                              : "border-gray-200 hover:border-gray-300 hover:bg-gray-50/50"
-                          }`}
+                          className="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all"
+                          style={{
+                            borderColor: isSelected ? "var(--color-ink, #202C52)" : "var(--color-rule, #E8E8E8)",
+                            background: isSelected ? "var(--color-surface, #F5F5F5)" : "#ffffff",
+                            boxShadow: isSelected ? "0 0 0 1px var(--color-ink, #202C52)" : "none",
+                          }}
                         >
                           <input
                             type="radio"
                             name="whatsapp_access_level"
                             checked={isSelected}
                             onChange={() => setFormData({ ...formData, whatsapp_access_level: key })}
-                            className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                            style={{ marginTop: 2, accentColor: "var(--color-ink, #202C52)" }}
                           />
                           <div className="flex-1 text-xs">
-                            <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                            <div className="font-bold flex items-center gap-1.5" style={{ color: "var(--color-ink, #202C52)" }}>
                               <Icon size={14} style={{ color: meta.color }} />
                               <span>{meta.label}</span>
                             </div>
-                            <p className="text-gray-500 text-[11px] mt-0.5 leading-relaxed">
+                            <p className="text-[11px] mt-0.5 leading-relaxed" style={{ color: "var(--color-ink-2, #667085)" }}>
                               {meta.desc}
                             </p>
                           </div>
@@ -1040,8 +1076,7 @@ export default function WAEmployees() {
                 </div>
               </div>
 
-              {/* Sticky Footer */}
-              <div className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-gray-100 bg-slate-50/90 shrink-0">
+              <div className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t shrink-0" style={{ borderColor: "var(--color-rule, #E8E8E8)", background: "var(--color-surface, #F5F5F5)" }}>
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
@@ -1052,13 +1087,9 @@ export default function WAEmployees() {
                 <button
                   type="submit"
                   disabled={formLoading}
-                  className="hl-btn-primary px-4 py-2 text-xs font-bold shadow-sm"
-                  style={{
-                    background: "linear-gradient(135deg, #059669 0%, #0d9488 100%)",
-                    borderColor: "#047857",
-                  }}
+                  className="hl-btn-primary px-4 py-2 text-xs font-bold"
                 >
-                  {formLoading ? "Generating Code…" : "Create & Generate Access Code"}
+                  {formLoading ? "Generating code…" : "Create & generate code"}
                 </button>
               </div>
             </form>
@@ -1066,39 +1097,40 @@ export default function WAEmployees() {
         </div>
       )}
 
-      {/* Modal: Created Employee Code Success Dialog */}
+      {/* Modal: Created Employee Code Success */}
       {createdEmployeeResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(5, 14, 47, 0.6)", backdropFilter: "blur(4px)" }}>
           <div
-            className="hl-card w-full max-w-md p-6 text-center animate-scale-up rounded-2xl shadow-2xl"
-            style={{ background: "var(--color-paper)" }}
+            className="hl-card w-full max-w-md p-6 text-center animate-scale-up shadow-2xl"
+            style={{ background: "var(--color-paper-2, #ffffff)", borderRadius: "var(--radius-lg, 14px)" }}
           >
-            <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-3">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{ background: "var(--color-accent-soft, #FFF4CC)", color: "var(--color-accent-ink, #202C52)" }}>
               <CheckCircle2 size={28} />
             </div>
 
-            <h3 className="font-bold text-lg text-gray-900 mb-1">
-              Employee Created Successfully!
+            <h3 className="font-bold text-lg mb-1" style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}>
+              Employee created successfully
             </h3>
-            <p className="text-xs text-gray-600 mb-4">
-              Share the unique Access Code below with{" "}
-              <strong>{createdEmployeeResult.first_name}</strong> ({createdEmployeeResult.email}) so they can log in for the first time.
+            <p className="text-xs mb-4" style={{ color: "var(--color-ink-2, #667085)" }}>
+              Share the unique access code below with{" "}
+              <strong style={{ color: "var(--color-ink, #202C52)" }}>{createdEmployeeResult.first_name}</strong> ({createdEmployeeResult.email}) so they can log in for the first time.
             </p>
 
-            {/* Access Code Highlight Box */}
             <div
-              className="p-4 rounded-xl border border-emerald-300 bg-emerald-50/70 mb-4 flex flex-col items-center justify-center gap-1"
+              className="p-4 rounded-xl mb-4 flex flex-col items-center justify-center gap-1"
+              style={{ border: "1px solid var(--color-accent, #FCBD16)", background: "var(--color-accent-soft, #FFF4CC)" }}
             >
-              <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
-                Workspace Access Code
+              <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--color-accent-ink, #202C52)" }}>
+                Workspace access code
               </span>
               <span
-                className="text-2xl font-mono font-extrabold text-emerald-900 tracking-widest my-1"
+                className="text-2xl font-mono font-extrabold tracking-widest my-1"
+                style={{ color: "var(--color-ink, #202C52)", fontFamily: "JetBrains Mono, monospace" }}
               >
                 {createdEmployeeResult.access_code}
               </span>
-              <span className="text-[11px] text-emerald-700">
-                Access Level: {ACCESS_LEVEL_META[createdEmployeeResult.whatsapp_access_level]?.label}
+              <span className="text-[11px]" style={{ color: "var(--color-ink-2, #667085)" }}>
+                Access level: {ACCESS_LEVEL_META[createdEmployeeResult.whatsapp_access_level]?.label}
               </span>
             </div>
 
@@ -1109,14 +1141,14 @@ export default function WAEmployees() {
                 className="hl-btn-primary w-full py-2.5 flex items-center justify-center gap-2 text-sm font-bold rounded-xl"
               >
                 <Copy size={16} />
-                <span>Copy Invitation &amp; Access Code</span>
+                <span>Copy invitation &amp; access code</span>
               </button>
               <button
                 type="button"
                 onClick={() => setCreatedEmployeeResult(null)}
                 className="hl-btn-secondary w-full py-2 text-xs font-semibold rounded-xl"
               >
-                Done / Close
+                Done
               </button>
             </div>
           </div>
@@ -1125,33 +1157,35 @@ export default function WAEmployees() {
 
       {/* Modal: Edit Employee Access Level */}
       {editEmployee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(5, 14, 47, 0.6)", backdropFilter: "blur(4px)" }}>
           <div
-            className="hl-card w-full max-w-md max-h-[92dvh] flex flex-col overflow-hidden animate-scale-up rounded-2xl shadow-2xl"
-            style={{ background: "var(--color-paper)" }}
+            className="hl-card w-full max-w-md max-h-[92dvh] flex flex-col overflow-hidden animate-scale-up shadow-2xl"
+            style={{ background: "var(--color-paper-2, #ffffff)", borderRadius: "var(--radius-lg, 14px)" }}
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-slate-50/80 shrink-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b shrink-0" style={{ borderColor: "var(--color-rule, #E8E8E8)", background: "var(--color-surface, #F5F5F5)" }}>
               <div className="flex items-center gap-2">
-                <Edit2 size={16} className="text-blue-600" />
-                <h3 className="font-bold text-base text-gray-900 m-0">
-                  Edit Access Level: {editEmployee.first_name}
+                <Edit2 size={16} style={{ color: "var(--color-info, #2563EB)" }} />
+                <h3 className="font-bold text-base m-0" style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}>
+                  Edit access level: {editEmployee.first_name}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setEditEmployee(null)}
-                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100"
+                className="p-1.5 rounded-lg transition"
+                style={{ color: "var(--color-ink-2, #667085)" }}
+                aria-label="Close"
               >
                 <X size={16} />
               </button>
             </div>
 
             <form onSubmit={handleUpdateAccessLevel} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              <div className="p-5 space-y-4 flex-1 overflow-y-auto wa-custom-scrollbar overscroll-contain">
+              <div className="p-5 space-y-4 flex-1 overflow-y-auto overscroll-contain">
                 <div>
-                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Job Title</label>
+                  <label className="block mb-1.5 font-bold text-xs" style={{ color: "var(--color-ink, #202C52)" }}>Job title</label>
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none" style={{ color: "var(--color-ink-2, #667085)" }}>
                       <Briefcase size={15} />
                     </div>
                     <input
@@ -1164,41 +1198,40 @@ export default function WAEmployees() {
                 </div>
 
                 <div>
-                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Account Status</label>
+                  <label className="block mb-1.5 font-bold text-xs" style={{ color: "var(--color-ink, #202C52)" }}>Account status</label>
                   <select
                     value={editEmployee.status || "active"}
                     onChange={(e) => setEditEmployee({ ...editEmployee, status: e.target.value })}
                     className="hl-input w-full h-10 text-sm font-medium"
                   >
-                    <option value="active">Active (Operational)</option>
-                    <option value="pending">Pending Activation (Awaiting Code Login)</option>
-                    <option value="banned">Suspended / Deactivated</option>
-                    <option value="inactive">Inactive / Left organization</option>
+                    <option value="active">Active (operational)</option>
+                    <option value="pending">Pending activation (awaiting code login)</option>
+                    <option value="banned">Suspended / deactivated</option>
+                    <option value="inactive">Inactive / left organization</option>
                   </select>
                 </div>
 
-                {/* Branch Assignment */}
                 <div>
-                  <label className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">Assigned Branch / Location</label>
+                  <label className="block mb-1.5 font-bold text-xs" style={{ color: "var(--color-ink, #202C52)" }}>Assigned branch / location</label>
                   <select
                     value={editEmployee.branch_id || ""}
                     onChange={(e) => setEditEmployee({ ...editEmployee, branch_id: e.target.value ? Number(e.target.value) : null })}
                     className="hl-input w-full h-10 text-sm font-medium"
                   >
-                    <option value="">🏢 Head Office / Default</option>
+                    <option value="">Head office / default</option>
                     {branches && branches.map((b) => (
                       <option key={b.id} value={b.id}>
-                        {b.name} ({b.code}){b.is_head_office ? " — Head Office" : ""}
+                        {b.name} ({b.code}){b.is_head_office ? " — Head office" : ""}
                       </option>
                     ))}
                   </select>
-                  <span className="text-[11px] text-gray-500 block mt-1.5 ml-1">
+                  <span className="text-[11px] block mt-1.5 ml-1" style={{ color: "var(--color-ink-2, #667085)" }}>
                     Reassigning updates the operational branch and customer chat scope for this employee.
                   </span>
                 </div>
 
                 <div>
-                  <label className="hl-section-label block mb-2 font-bold text-xs text-gray-700">WhatsApp Access Level</label>
+                  <label className="block mb-2 font-bold text-xs" style={{ color: "var(--color-ink, #202C52)" }}>WhatsApp access level</label>
                   <div className="space-y-2">
                     {Object.entries(ACCESS_LEVEL_META).map(([key, meta]) => {
                       const Icon = meta.icon;
@@ -1207,23 +1240,26 @@ export default function WAEmployees() {
                         <label
                           key={key}
                           onClick={() => setEditEmployee({ ...editEmployee, whatsapp_access_level: key })}
-                          className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition ${
-                            isSelected ? "border-blue-500 bg-blue-50/60 ring-1 ring-blue-500/30" : "border-gray-200 hover:border-gray-300"
-                          }`}
+                          className="flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition"
+                          style={{
+                            borderColor: isSelected ? "var(--color-info, #2563EB)" : "var(--color-rule, #E8E8E8)",
+                            background: isSelected ? "rgba(37, 99, 235, 0.06)" : "#ffffff",
+                            boxShadow: isSelected ? "0 0 0 1px var(--color-info, #2563EB)" : "none",
+                          }}
                         >
                           <input
                             type="radio"
                             name="edit_level"
                             checked={isSelected}
                             onChange={() => setEditEmployee({ ...editEmployee, whatsapp_access_level: key })}
-                            className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                            style={{ marginTop: 2, accentColor: "var(--color-info, #2563EB)" }}
                           />
                           <div className="text-xs">
-                            <span className="font-bold text-gray-900 flex items-center gap-1.5">
+                            <span className="font-bold flex items-center gap-1.5" style={{ color: "var(--color-ink, #202C52)" }}>
                               <Icon size={13} style={{ color: meta.color }} />
                               {meta.label}
                             </span>
-                            <span className="text-[11px] text-gray-500 block leading-tight mt-0.5">
+                            <span className="text-[11px] block leading-tight mt-0.5" style={{ color: "var(--color-ink-2, #667085)" }}>
                               {meta.desc}
                             </span>
                           </div>
@@ -1234,7 +1270,7 @@ export default function WAEmployees() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-gray-100 bg-slate-50/90 shrink-0">
+              <div className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t shrink-0" style={{ borderColor: "var(--color-rule, #E8E8E8)", background: "var(--color-surface, #F5F5F5)" }}>
                 <button
                   type="button"
                   onClick={() => setEditEmployee(null)}
@@ -1243,7 +1279,7 @@ export default function WAEmployees() {
                   Cancel
                 </button>
                 <button type="submit" className="hl-btn-primary px-4 py-2 text-xs font-bold">
-                  Save Changes
+                  Save changes
                 </button>
               </div>
             </form>

@@ -57,8 +57,7 @@ async function injectMasterAdmin() {
         status = 'active',
         two_factor_enabled = 0,
         tenant_id = ?,
-        whatsapp_access_level = 'full',
-        department = 'Management'
+        whatsapp_access_level = 'full'
       WHERE id = ?`,
       [firstName, lastName, empId, passwordHash, tenantId, userId]
     );
@@ -67,8 +66,8 @@ async function injectMasterAdmin() {
     const [result] = await db.promise().query(
       `INSERT INTO users (
         first_name, last_name, emp_id, email, user_password,
-        role, status, two_factor_enabled, tenant_id, whatsapp_access_level, department
-      ) VALUES (?, ?, ?, ?, ?, 'admin', 'active', 0, ?, 'full', 'Management')`,
+        role, status, two_factor_enabled, tenant_id, whatsapp_access_level
+      ) VALUES (?, ?, ?, ?, ?, 'admin', 'active', 0, ?, 'full')`,
       [firstName, lastName, empId, email, passwordHash, tenantId]
     );
     userId = result.insertId;
@@ -165,15 +164,15 @@ async function injectMasterAdmin() {
 
   if (branchMembership && branchMembership.length > 0) {
     await db.promise().query(
-      "UPDATE staff_branch_memberships SET is_primary = 1, is_available = 1, auto_assign_enabled = 1, max_open_chats = 1000, max_open_leads = 1000 WHERE id = ?",
+      "UPDATE staff_branch_memberships SET is_primary = 1 WHERE id = ?",
       [branchMembership[0].id]
     );
     console.log(`  [OK] Updated staff branch scope.`);
   } else {
     await db.promise().query(
       `INSERT INTO staff_branch_memberships (
-        tenant_id, branch_id, user_id, is_primary, is_available, auto_assign_enabled, max_open_chats, max_open_leads
-      ) VALUES (?, ?, ?, 1, 1, 1, 1000, 1000)`,
+        tenant_id, branch_id, user_id, is_primary
+      ) VALUES (?, ?, ?, 1)`,
       [tenantId, branchId, userId]
     );
     console.log(`  [OK] Assigned primary branch scope to Head Office.`);

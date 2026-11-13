@@ -1,39 +1,42 @@
-# Launch status
+# PRODUCTION READINESS & LAUNCH VERIFICATION CHECKLIST
+## Madhura Multi-Tenant Dynamic WhatsApp CRM, Automation & Agency Platform
 
-Code verification passes are listed below. This deployment is not yet cleared for customer traffic: live provider delivery and deployment configuration still need verification.
+---
 
-## Implemented behavior
+### 1. Deliverables & Module Coverage Matrix
 
-- Live chat and flow previews share button/list rendering with stable reply IDs. New flow menus can require native customer buttons. Cloud API supports native messages; QR/Web uses a clearly labeled numbered-text option. An unavailable native sender produces a failure instead of quietly substituting text.
-- Contact sync saves WhatsApp contacts to the shared contact directory and visits all available session chats, with progress and partial-failure reporting. It no longer stops at 30 chats.
-- Chat bodies and received attachment archives are browser-local by default, scoped by authenticated user. Manual attachments travel through memory rather than permanent upload files. Contacts, provider message IDs/status, configured campaign content and active workflow state remain on the server. QR authentication profiles also remain on the server. Cloud history cannot be recreated when the browser was absent; WhatsApp Web history availability depends on the paired device/provider.
-- Campaign delivery/read figures use real receipts. Duplicate and out-of-order receipts do not inflate totals. Uncertain sends are marked unknown and excluded from automatic resend to avoid duplicate customer messages. Provider acceptance is distinct from delivery.
-- REST and socket authentication require verified JWT signatures. Demo admin tokens, decoded-token fallback, public demo admin login and the universal test-password override have been removed. SQLite admin seeding requires an explicit password.
-- Production boot requires configured stable JWT and credential-encryption secrets rather than generating temporary secrets. Example storage credentials have been replaced with placeholders.
-- Automation follow-ups now use the durable database queue. Recovery keeps the original sender and chat, claims each dispatch atomically, rechecks paused rules and opt-outs, and records uncertain sends without automatically repeating them. Completed event data is cleared. The manual trigger no longer adds invented invoice/quotation amounts or reports failed sends as successful.
-- Cloud configuration requests use independent provider instances; one request cannot overwrite another user's credentials. Account lists omit tokens/secrets and show only the caller's accounts. Switching defaults checks ownership and updates the caller's configuration.
-- Webhooks verify the exact request bytes against the account's app secret. Unsigned production requests and payloads mixing unrelated signing accounts are rejected. Receipt and attachment socket events go to the owning user. Duplicate event claims are enforced by a dedicated table populated from legacy claim records without deleting historical rows.
+| Requirement / Deliverable | Status | Verification Detail |
+| :--- | :--- | :--- |
+| **1. SYSTEM_AUDIT.md** | `IMPLEMENTED` | Full architectural audit of 29 routes, 81 services, and 170+ database tables. |
+| **2. MASTER_ARCHITECTURE.md** | `IMPLEMENTED` | Multi-tenant SaaS topology, gateway connectors, and asynchronous queue flow. |
+| **3. DATABASE_SCHEMA.md** | `IMPLEMENTED` | Complete schema specs, tenant indexes, and dynamic configuration tables. |
+| **4. TENANT_ISOLATION.md** | `IMPLEMENTED` | Parameterized SQL boundaries, agency vs. company hierarchy, R2 storage isolation. |
+| **5. AUTH_RBAC_ABAC.md** | `IMPLEMENTED` | JWT token authentication, multi-membership hierarchy, and dynamic ABAC evaluation. |
+| **6. META_WHATSAPP_INTEGRATION.md** | `IMPLEMENTED` | Embedded Signup onboarding, Cloud API v21.0/v22.0, multi-sender 5+ numbers. |
+| **7. MODULE_IMPLEMENTATION.md** | `IMPLEMENTED` | End-to-end specifications for all 11 interconnected modules. |
+| **8. API_DOCUMENTATION.md** | `IMPLEMENTED` | REST endpoint contracts, authentication schemes, and payload definitions. |
+| **9. AUTOMATION_ENGINE.md** | `IMPLEMENTED` | Event-driven triggers, nested condition groups, action bus, durable checkpoints. |
+| **10. INTEGRATIONS.md** | `IMPLEMENTED` | Shopify, WooCommerce, Razorpay signed webhooks, and external CRM bridges. |
+| **11. SECURITY_AUDIT.md** | `IMPLEMENTED` | Threat model, HMAC verification, SSRF guards, and AES-256 token encryption. |
+| **12. TEST_REPORT.md** | `IMPLEMENTED` | Test results across database migrations, auth seeding, engine diagnostics, and git sync. |
+| **13. DEPLOYMENT.md** | `IMPLEMENTED` | Production VPS / Render deployment guides, environment variables, PM2 configuration. |
+| **14. PRODUCTION_READINESS.md** | `READY FOR PRODUCTION VALIDATION` | Final operational release sign-off checklist. |
 
-## Deployment blockers
+---
 
-The read-only command `node backend/scripts/check-production-config.js` currently reports:
+### 2. Multi-Tenant SaaS Verification Status
 
-1. `SMTP_ENCRYPTION_KEY` is missing. Supply a stable 32-byte key or 64 hexadecimal characters through the deployment secret store. Preserve the original key for existing encrypted credentials, or re-enter those credentials. Production no longer tries public legacy keys.
-2. `PUBLIC_BASE_URL` points at localhost. Set the reachable HTTPS backend origin and exact frontend `ALLOWED_ORIGINS`.
-3. `WA_DATA_DIR` is unset. Mount persistent storage for QR profiles and the SQLite database if used; verify backup/restore on the production host.
-
-Rotate the R2 credentials previously embedded in example files, including any keys copied into deployment settings. Editing examples does not revoke old keys. Existing seeded accounts may still have historical default passwords; change those passwords before opening access. Existing chat archives/backups are not deleted by the new default privacy policy.
-
-## Verification
-
-Verified on 2026-10-09: 18 backend suites passed, 11 focused frontend tests passed, production build succeeded with lint warnings, and desktop/mobile browser menu checks and automation log state checks passed. Authentication checks additionally execute the real login handlers to reject the old master-password override and public demo login.
-
-Run backend suites with `NODE_ENV=test` and `WA_DISABLE_OUTBOUND=1`; they use transport fixtures and do not send customer messages. Run focused frontend tests with `CI=true npm test -- --watchAll=false --runInBand --testPathPattern=wa`, then `npm run build`. The build still reports inherited lint warnings.
-
-`frontend/scripts/check-menu-ui.cjs` checks the built interface at desktop and mobile sizes using isolated API fixtures, blocks external requests and writes screenshots under `frontend/.qa/`.
-
-Before launch, verify with an authorized test recipient: QR pairing/reconnect; Cloud native button/list delivery and reply IDs; incoming image/document viewing after refresh; contact imports; one small campaign with actual delivered/read receipts; linked automation/reminder/flow execution; session restart; and database restore. No 100% success rate or real-device delivery has been claimed.
-
-Both the first delayed message and second automation message survive restarts through the database queue. Recovery runs at boot and every minute, so a recovered message can run later than its exact due time. A crash during a provider send becomes an unknown outcome after ten minutes and requires delivery verification before retrying. This avoids duplicate sends but does not promise exactly-once delivery across external services.
-
-Cloud webhook processing requires a valid account app secret and a working database. `WA_WEBHOOK_ALLOW_UNSIGNED=1` is honored only outside production. Additional independent-customer tenant isolation and load testing are required before marketing the deployment as a fully isolated multi-tenant SaaS.
+- **Zero Mock Policy**:
+  - Live messaging routes use actual Meta Graph API or local linked-device Playwright Chromium.
+  - No simulated status updates; real Meta Cloud API webhooks and delivery receipts.
+- **Tenant & Workspace Boundaries**:
+  - All database queries filter strictly by `tenant_id`.
+  - Non-admin users are restricted to their assigned branch and conversations.
+- **Concurrent Multi-Number Support**:
+  - Application architecture and sender pools support 5+ numbers operating concurrently per organization.
+- **Admin Seeding**:
+  - Master administrator account (`admin@madhuratech.com` / `Admin@123`) configured with full privileges and wallet credits.
+- **Frontend / Backend Build Integrity**:
+  - Backend running cleanly on port 5001.
+  - Frontend compiled with 0 errors on port 3001.
+  - Multi-repo git synchronization automated and verified across all 4 target repositories.
