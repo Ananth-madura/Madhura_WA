@@ -200,4 +200,128 @@ router.put("/employee-limits/:userId",verifyToken,requireTenantContext,requirePe
   }
 });
 
+/**
+ * WATI-style Dual Billing & Limits Endpoints
+ */
+
+router.get("/mode", verifyToken, requireTenantContext, requirePermission("billing.read"), async (req, res) => {
+  try {
+    const profile = await metaBillingModeService.getBillingProfile(req.tenantId);
+    res.json({ success: true, profile });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.put("/mode", verifyToken, requireTenantContext, requirePermission("billing.manage"), async (req, res) => {
+  try {
+    const { mode, creditLineStatus } = req.body;
+    const updated = await metaBillingModeService.updateBillingMode(req.tenantId, mode, { creditLineStatus });
+    res.json({ success: true, profile: updated });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+router.put("/spending-limits", verifyToken, requireTenantContext, requirePermission("billing.manage"), async (req, res) => {
+  try {
+    const updated = await metaBillingModeService.updateSpendingLimits(req.tenantId, req.body);
+    res.json({ success: true, profile: updated });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+router.get("/spending-summary", verifyToken, requireTenantContext, requirePermission("billing.read"), async (req, res) => {
+  try {
+    const summary = await metaBillingModeService.getSpendingSummary(req.tenantId);
+    res.json({ success: true, summary });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.get("/pricing/rate-card", verifyToken, requireTenantContext, requirePermission("billing.read"), async (req, res) => {
+  try {
+    const { country, category } = req.query;
+    if (country || category) {
+      const rate = await metaMessagePricingEngine.getRateCard(country, category);
+      return res.json({ success: true, rate });
+    }
+    const rates = await metaMessagePricingEngine.listRateCards();
+    res.json({ success: true, rates });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.get("/limits", verifyToken, requireTenantContext, requirePermission("billing.read"), async (req, res) => {
+  try {
+    const limits = await metaMessagingLimitEngine.getMessagingLimit(req.tenantId, req.query.accountId);
+    res.json({ success: true, limits });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.put("/limits/sync", verifyToken, requireTenantContext, requirePermission("billing.manage"), async (req, res) => {
+  try {
+    const { tier, accountId } = req.body;
+    const updated = await metaMessagingLimitEngine.syncLimitsFromMeta(req.tenantId, accountId, tier);
+    res.json({ success: true, limits: updated });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+router.get("/wallet", verifyToken, requireTenantContext, requirePermission("billing.read"), async (req, res) => {
+  try {
+    const balances = await watiWalletService.getWalletBalances(req.tenantId);
+    res.json({ success: true, ...balances });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.post("/wallet/topup", verifyToken, requireTenantContext, requirePermission("billing.manage"), async (req, res) => {
+  try {
+    const { bucket, amountMinor, currency, paymentGateway } = req.body;
+    const order = await watiWalletService.createTopupOrder({
+      tenantId: req.tenantId,
+      bucket,
+      amountMinor,
+      currency,
+      paymentGateway
+    });
+    res.json({ success: true, order });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+router.post("/wallet/confirm-topup", verifyToken, requireTenantContext, requirePermission("billing.manage"), async (req, res) => {
+  try {
+    const { orderId, paymentId, signature, gatewayResponse } = req.body;
+    const result = await watiWalletService.confirmTopupPayment({
+      tenantId: req.tenantId,
+      orderId,
+      paymentId,
+      signature,
+      gatewayResponse
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+router.get("/service-allowance", verifyToken, requireTenantContext, requirePermission("billing.read"), async (req, res) => {
+  try {
+    const allowance = await metaMessagePricingEngine.getServiceAllowance(req.tenantId, req.query.phoneNumberId);
+    res.json({ success: true, allowance });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 module.exports=router;

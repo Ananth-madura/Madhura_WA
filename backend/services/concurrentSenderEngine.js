@@ -171,6 +171,37 @@ function createConcurrentEngine(db, transport = axios) {
     const token = sender.raw_token || (sender.encrypted_token ? decrypt(sender.encrypted_token) : "");
     if (!token) throw failure("Sender has no valid access token saved", 400);
 
+    // 0. Pre-flight Meta Messaging Limit Check
+    const limitEngine = require("./metaMessagingLimitEngine").createLimitEngine({ db });
+    const pricingEngine = require("./metaMessagePricingEngine").createPricingEngine({ db });
+    const billingModeService = require("./metaBillingModeService").createBillingModeService({ db });
+
+    const limitPrecheck = await limitEngine.canDispatch({
+      tenantId: tid,
+      accountId: sender.waba_id,
+      recipientPhone: cleanTo,
+      isCustomerInitiated: Boolean(context.isCustomerInitiated)
+    }).catch(() => ({ allowed: true }));
+
+    if (!limitPrecheck.allowed) {
+      throw failure(`Meta daily messaging limit reached for organization ${tid}: tier capacity of ${limitPrecheck.max_daily_recipients} unique contacts reached.`, 429);
+    }
+
+    // 0.1 Determine Category & Billing Profile
+    const profile = await billingModeService.getBillingProfile(tid).catch(() => ({ billing_mode: "direct_meta" }));
+    const category = context.category || (type === "template" ? "marketing" : "service");
+
+    // 0.2 Reserve message cost in ledger
+    const reservation = await pricingEngine.reserveMessageCost({
+      tenantId: tid,
+      accountId: sender.waba_id,
+      phoneNumberId: sender.phone_number_id,
+      recipientPhone: cleanTo,
+      category,
+      billingMode: profile.billing_mode,
+      campaignId: context.campaignId || null
+    }).catch(() => null);
+
     // 1. Acquire WABA Token Bucket permission
     const bucket = getWabaBucket(sender.waba_id);
     await bucket.acquire(1, 10000);
@@ -246,6 +277,15 @@ function createConcurrentEngine(db, transport = axios) {
       // Record failure metric
       await recordMetric(tid, sender.id, "failed");
 
+      // Release reserved message cost if send failed
+      if (reservation?.message_id) {
+        await pricingEngine.releaseFailedMessage({
+          tenantId: tid,
+          messageId: reservation.message_id,
+          failureReason: errorMsg
+        }).catch(() => {});
+      }
+
       const customErr = failure(`WhatsApp dispatch error [${errorCode}]: ${errorMsg}`, errorOccurred.response?.status || 502);
       customErr.metaError = metaErr;
       customErr.latencyMs = latencyMs;
@@ -262,6 +302,22 @@ function createConcurrentEngine(db, transport = axios) {
       ) VALUES (?, ?, ?, ?, 'outbound', ?, ?, ?, 'sent', NOW())`,
       [tid, sender.id, branchId || null, cleanTo, type, text || (template ? template.name : type), metaMessageId]
     ).catch(() => {});
+
+    // Record dispatch into rolling 24-hour limit window
+    await limitEngine.recordDispatch({
+      tenantId: tid,
+      accountId: sender.waba_id,
+      recipientPhone: cleanTo,
+      isCustomerInitiated: Boolean(context.isCustomerInitiated)
+    }).catch(() => {});
+
+    // Update message_billing_records with metaMessageId
+    if (reservation?.message_id) {
+      await q(
+        "UPDATE message_billing_records SET status='sent', meta_message_id=?, updated_at=NOW() WHERE message_id=?",
+        [metaMessageId, reservation.message_id]
+      ).catch(() => {});
+    }
 
     // Update sender daily sent counter
     if (sender.id) {
@@ -337,6 +393,21 @@ function createConcurrentEngine(db, transport = axios) {
         "UPDATE wa_message_logs SET status=?, updated_at=NOW() WHERE id=?",
         [normalizedStatus, msgRow.id]
       ).catch(() => {});
+
+      // Settle or release message billing cost upon real delivery confirmation
+      const pricingEngine = require("./metaMessagePricingEngine").createPricingEngine({ db });
+      if (normalizedStatus === "delivered") {
+        await pricingEngine.settleDeliveredMessage({
+          tenantId: msgRow.tenant_id,
+          metaMessageId: waMessageId
+        }).catch(() => {});
+      } else if (normalizedStatus === "failed") {
+        await pricingEngine.releaseFailedMessage({
+          tenantId: msgRow.tenant_id,
+          metaMessageId: waMessageId,
+          failureReason: errorMessage || "WEBHOOK_DELIVERY_FAILED"
+        }).catch(() => {});
+      }
 
       if (msgRow.tenant_id && msgRow.sender_id) {
         await recordMetric(msgRow.tenant_id, msgRow.sender_id, normalizedStatus);

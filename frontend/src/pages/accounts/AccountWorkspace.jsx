@@ -27,6 +27,7 @@ import { metaSignup } from "./metaSignup";
 import TeamAccessWorkspace from "./TeamAccessWorkspace";
 import WhatsAppSenderCenter from "../../components/WhatsAppSenderCenter";
 import WhatsAppIntegrations from "../../components/WhatsAppIntegrations";
+import MetaConnectWizard from "../../components/MetaConnectWizard";
 import "./accounts.css";
 
 const message = (error) =>
@@ -555,7 +556,7 @@ export function Workspace({ enterprise }) {
               type="button"
               className="ac-btn ac-btn-primary"
               disabled={Boolean(busy)}
-              onClick={() => navigate({ tab: "integrations" })}
+              onClick={() => navigate({ tab: "connect" })}
             >
               <Plus size={15} />
               <span>Connect WhatsApp Number</span>
@@ -629,6 +630,18 @@ export function Workspace({ enterprise }) {
             <Phone size={15} />
             <span>Numbers & Operations</span>
             <span className="ac-tab-chip">{senders.length}</span>
+          </Link>
+
+          <Link
+            role="tab"
+            aria-selected={tab === "connect"}
+            aria-current={tab === "connect" ? "page" : undefined}
+            to="?tab=connect"
+            className={`ac-tab ${tab === "connect" ? "is-active" : ""}`}
+          >
+            <Sparkles size={15} />
+            <span>Connect Wizard (11-Step)</span>
+            <span className="ac-tab-chip">WATI Mode</span>
           </Link>
 
           <Link
@@ -729,6 +742,24 @@ export function Workspace({ enterprise }) {
       {tab === "assistant" ? (
         <div className="ac-panel">
           <Assistant request={request} run={run} busy={busy} admin={admin} />
+        </div>
+      ) : tab === "connect" ? (
+        <div className="ac-panel">
+          <MetaConnectWizard
+            branches={branches}
+            senders={senders}
+            setup={setup}
+            onStartEmbeddedSignup={startSignup}
+            onDiscoverAssets={handleDiscoverAssets}
+            onBatchConnect={handleBatchConnect}
+            onPing={handlePing}
+            onRegisterPin={handleRegisterPin}
+            onComplete={async () => {
+              await refresh();
+              navigate({ tab: "senders" });
+            }}
+            onCancel={() => navigate({ tab: "senders" })}
+          />
         </div>
       ) : tab === "assign" ? (
         <TeamAccessWorkspace enterprise={enterprise} request={request} admin={admin} />
