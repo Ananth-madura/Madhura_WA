@@ -12,7 +12,7 @@ try {
 } catch (_) {
   try {
     LoadUtilsFn = require(path.join(__dirname, "../node_modules/whatsapp-web.js/src/util/Injected/Utils")).LoadUtils;
-  } catch (_) {}
+  } catch (_) { }
 }
 
 // Forcefully terminates any orphan Chrome / Edge processes holding this session on Windows
@@ -24,7 +24,7 @@ function killSessionBrowserProcesses(sessionPath) {
     const script = `Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'msedge.exe' -or $_.Name -eq 'chrome.exe') -and $_.CommandLine -like '*${folderName}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
     const encoded = Buffer.from(script, "utf16le").toString("base64");
     cp.execSync(`powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`, { timeout: 4000, stdio: "ignore" });
-  } catch (_) {}
+  } catch (_) { }
 
   // Remove lingering Chrome lockfiles that cause "browser is already running" or EBUSY on Windows
   try {
@@ -37,10 +37,10 @@ function killSessionBrowserProcesses(sessionPath) {
     ];
     for (const lf of lockFiles) {
       if (fs.existsSync(lf)) {
-        try { fs.unlinkSync(lf); } catch (_) {}
+        try { fs.unlinkSync(lf); } catch (_) { }
       }
     }
-  } catch (_) {}
+  } catch (_) { }
 }
 
 function getExecutablePath() {
@@ -66,7 +66,7 @@ function getExecutablePath() {
         if (fs.existsSync(p)) return p;
       }
     }
-  } catch (_) {}
+  } catch (_) { }
 
   // Linux Playwright dir
   try {
@@ -78,14 +78,14 @@ function getExecutablePath() {
         if (fs.existsSync(p)) return p;
       }
     }
-  } catch (_) {}
+  } catch (_) { }
 
   try {
     if (typeof puppeteer.executablePath === "function") {
       const pPath = puppeteer.executablePath();
       if (pPath && fs.existsSync(pPath)) return pPath;
     }
-  } catch (_) {}
+  } catch (_) { }
 
   const candidatePaths = [
     // Google Chrome paths
@@ -119,7 +119,7 @@ function getExecutablePath() {
       const cp = require("child_process");
       const found = cp.execSync("which google-chrome-stable || which google-chrome || which chromium-browser || which chromium 2>/dev/null", { encoding: "utf8" }).trim();
       if (found && fs.existsSync(found)) return found;
-    } catch (_) {}
+    } catch (_) { }
   }
 
   return undefined;
@@ -389,7 +389,7 @@ class WhatsAppService {
     const gate = new Promise((r) => { release = r; });
     const chained = prev.then(() => gate, () => gate);
     this._sendLocks.set(lockKey, chained);
-    await prev.catch(() => {});
+    await prev.catch(() => { });
     try {
       return await fn();
     } finally {
@@ -452,7 +452,7 @@ class WhatsAppService {
             }
           }
         }
-      } catch (_) {}
+      } catch (_) { }
 
       // 1b. In-page evaluate fallback for any still unmapped
       const stillUnmapped = unmapped.filter(
@@ -472,7 +472,7 @@ class WhatsAppService {
                       const pn = pnWid.user || pnWid._serialized || pnWid;
                       out.push({ lid, pn: String(pn) });
                     }
-                  } catch (_) {}
+                  } catch (_) { }
                 }
                 return out;
               }, stillUnmapped),
@@ -493,7 +493,7 @@ class WhatsAppService {
               }
             }
           }
-        } catch (_) {}
+        } catch (_) { }
       }
     }
 
@@ -518,7 +518,7 @@ class WhatsAppService {
       if (fs.existsSync(metaFile)) {
         return JSON.parse(fs.readFileSync(metaFile, "utf8"));
       }
-    } catch (_) {}
+    } catch (_) { }
     return null;
   }
 
@@ -529,7 +529,7 @@ class WhatsAppService {
       }
       const metaFile = path.join(this.sessionPath, "session_meta.json");
       fs.writeFileSync(metaFile, JSON.stringify({ ...meta, updatedAt: Date.now() }, null, 2), "utf8");
-    } catch (_) {}
+    } catch (_) { }
   }
 
   markLoggedOut(reason = "USER_LOGOUT") {
@@ -572,14 +572,14 @@ class WhatsAppService {
   // and time out or throw under load. Serialize read calls through here.
   enqueue(fn) {
     const run = this._queue.then(fn, fn);
-    this._queue = run.then(() => {}, () => {});
+    this._queue = run.then(() => { }, () => { });
     return run;
   }
 
   // Dedicated fast queue for outbound sends so messages are never blocked behind slow contact scans
   enqueueSend(fn) {
     const run = this._sendQueue.then(fn, fn);
-    this._sendQueue = run.then(() => {}, () => {});
+    this._sendQueue = run.then(() => { }, () => { });
     return run;
   }
 
@@ -607,7 +607,7 @@ class WhatsAppService {
           io.to("admin_notifications").emit(event, payload);
         }
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   // Serializes every client-lifecycle transition (init / logout). These both
@@ -650,8 +650,8 @@ class WhatsAppService {
     // Clean up any stale/dead client instance before initializing a new one
     if (this.client) {
       try {
-        await this.client.destroy().catch(() => {});
-      } catch (_) {}
+        await this.client.destroy().catch(() => { });
+      } catch (_) { }
       this.client = null;
     }
 
@@ -667,7 +667,7 @@ class WhatsAppService {
           console.log(`🧹 [Session Purge] Cleaning empty or unauthenticated session directory for ${this.key}`);
           fs.rmSync(sessionPath, { recursive: true, force: true });
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     // Each live session is a headless Chrome holding WhatsApp Web (~350-500MB
@@ -704,7 +704,7 @@ class WhatsAppService {
         this.lastInitError = "Init watchdog timeout (75s) waiting for browser/WhatsApp Web to load";
         this.isInitializing = false;
         if (this.client) {
-          this.client.destroy().catch(() => {});
+          this.client.destroy().catch(() => { });
           this.client = null;
         }
       }
@@ -729,10 +729,10 @@ class WhatsAppService {
           "--disable-dev-shm-usage",
           "--no-first-run",
           ...(process.platform === "linux" ? [
-          "--no-zygote",
-          "--disable-dev-shm-usage",
-          ...(process.env.WA_PUPPETEER_SINGLE_PROCESS === "1" ? ["--single-process"] : []),
-        ] : []),
+            "--no-zygote",
+            "--disable-dev-shm-usage",
+            ...(process.env.WA_PUPPETEER_SINGLE_PROCESS === "1" ? ["--single-process"] : []),
+          ] : []),
           "--disable-gpu",
           "--disable-blink-features=AutomationControlled",
           "--disable-features=IsolateOrigins,site-per-process,Translate,OptimizationHints,MediaRouter",
@@ -797,10 +797,10 @@ class WhatsAppService {
         evalOnNewDoc: () => {
           try {
             Object.defineProperty(navigator, "webdriver", { get: () => undefined });
-          } catch (_) {}
+          } catch (_) { }
           try {
             delete Object.getPrototypeOf(navigator).webdriver;
-          } catch (_) {}
+          } catch (_) { }
           try {
             const brands = [
               { brand: "Chromium", version: "131" },
@@ -825,7 +825,7 @@ class WhatsAppService {
               toJSON: () => ({ brands, mobile: false, platform: "Windows" })
             };
             Object.defineProperty(navigator, "userAgentData", { get: () => uad });
-          } catch (_) {}
+          } catch (_) { }
         },
       };
       if (pinnedWebVersion !== "latest") {
@@ -850,7 +850,7 @@ class WhatsAppService {
           const qrcode = require("qrcode");
           qrDataUrl = await qrcode.toDataURL(qr, { margin: 1, width: 280 });
           this.qrDataUrl = qrDataUrl;
-        } catch (_) {}
+        } catch (_) { }
         console.log(`✅ WhatsApp QR Code generated successfully for session ${this.key}!`);
         this.emitWaEvent("wa_qr", null, null, { qr, qrDataUrl, sessionKey: this.key });
         this.qrCallbacks.forEach((cb) => cb(qr));
@@ -894,7 +894,7 @@ class WhatsAppService {
                updated_at = NOW()`,
             [`WhatsApp Web (${this.phone || 'Connected'})`, this.phone]
           );
-        } catch (_) {}
+        } catch (_) { }
 
         this.saveSessionMeta({
           sessionKey: this.key,
@@ -908,29 +908,29 @@ class WhatsAppService {
         this.emitWaEvent("wa_connected", null, this.phone, { connected: true, phone: this.phone, sessionKey: this.key });
         try {
           require("./crmWebhookForwarder").forwardSessionStatus({ sessionKey: this.key, connected: true, phone: this.phone });
-        } catch (_) {}
+        } catch (_) { }
 
         // Ensure WWebJS utils are active and stay active across page navigations
         if (this.client?.pupPage) {
           try {
-            await this.ensureWWebJSInjected().catch(() => {});
+            await this.ensureWWebJSInjected().catch(() => { });
             this.client.pupPage.on("framenavigated", async () => {
               try {
-                await this.ensureWWebJSInjected().catch(() => {});
-              } catch (_) {}
+                await this.ensureWWebJSInjected().catch(() => { });
+              } catch (_) { }
             });
-          } catch (_) {}
+          } catch (_) { }
         }
 
         (async () => {
           try {
             const res = await this.getChats(true);
             this.emitWaEvent("wa_chats_synced", null, this.phone, res);
-          } catch (_) {}
+          } catch (_) { }
           try {
             const res = await this.syncWhatsAppContacts();
             this.emitWaEvent("wa_contacts_synced", null, this.phone, res);
-          } catch (_) {}
+          } catch (_) { }
         })();
       });
 
@@ -984,7 +984,7 @@ class WhatsAppService {
         this.emitWaEvent("wa_disconnected", null, this.phone, { reason: reasonStr });
         try {
           require("./crmWebhookForwarder").forwardSessionStatus({ sessionKey: this.key, connected: false, phone: this.phone, reason: reasonStr });
-        } catch (_) {}
+        } catch (_) { }
 
         // Only mark logged_out if it was an explicit LOGOUT from phone / user
         if (reasonStr.toUpperCase().includes("LOGOUT")) {
@@ -1067,7 +1067,7 @@ class WhatsAppService {
                 liveMsg.mediaUrl = `/uploads/wa-media/${this.key}/${hit}`;
               }
             }
-          } catch (_) {}
+          } catch (_) { }
         }
 
         if (!this.messagesCache[chatId]) this.messagesCache[chatId] = [];
@@ -1100,7 +1100,7 @@ class WhatsAppService {
                   });
                 }
               })
-              .catch(() => {});
+              .catch(() => { });
           });
         }
 
@@ -1115,7 +1115,7 @@ class WhatsAppService {
               message: liveMsg,
             });
           }
-        } catch (_) {}
+        } catch (_) { }
 
         // 2. Async DB log and bot automation in background (zero blocking)
         process.nextTick(async () => {
@@ -1164,9 +1164,9 @@ class WhatsAppService {
                   liveMsg.body,
                   msg.fromMe ? 0 : 1
                 ]
-              ).catch(() => {});
+              ).catch(() => { });
             }
-          } catch (_) {}
+          } catch (_) { }
 
           // ── 🛡️ QUARANTINE ENFORCEMENT: NEVER TRIGGER AUTOMATION ON PAST/SYNC MESSAGES ──
           if (isHistoricalOrSync) {
@@ -1180,12 +1180,12 @@ class WhatsAppService {
             const contactName = msg._data?.notifyName || msg.notifyName || null;
             const inboundMedia = isMedia
               ? {
-                  hasMedia: true,
-                  type: msg.type || "document",
-                  filename: rawFilename || "",
-                  caption: msg.body || "",
-                  resolve: () => this.getMediaForMessage(chatId, liveMsg.id, liveMsg.serializedId),
-                }
+                hasMedia: true,
+                type: msg.type || "document",
+                filename: rawFilename || "",
+                caption: msg.body || "",
+                resolve: () => this.getMediaForMessage(chatId, liveMsg.id, liveMsg.serializedId),
+              }
               : null;
 
             await require("./unifiedChatPipeline").processInbound({
@@ -1252,7 +1252,7 @@ class WhatsAppService {
             timestamp: reaction.timestamp || Math.floor(Date.now() / 1000),
           };
           this.emitWaEvent("wa_message_reaction", chatId, cleanPhone, reactionData);
-        } catch (_) {}
+        } catch (_) { }
       });
 
       // Real-time message revoke / delete for everyone
@@ -1269,8 +1269,8 @@ class WhatsAppService {
           db.promise().query(
             "UPDATE wa_message_logs SET message_text = '🚫 This message was deleted' WHERE wa_message_id = ? OR wa_message_id = ?",
             [msgId, serializedId || msgId]
-          ).catch(() => {});
-        } catch (_) {}
+          ).catch(() => { });
+        } catch (_) { }
       });
 
       // Delivery receipts: keeps the tick marks honest (sent -> delivered -> read)
@@ -1295,7 +1295,7 @@ class WhatsAppService {
           }
 
           this.emitWaEvent("wa_message_ack", chatId, cleanPhone, { id: msgId, serializedId, ack, status });
-          require("./waDeliveryReceipts").applyDeliveryReceipt([msgId, serializedId], status).catch(() => {});
+          require("./waDeliveryReceipts").applyDeliveryReceipt([msgId, serializedId], status).catch(() => { });
 
           const db = require("../config/database");
           const statusColumn = { sent: "sent_at", delivered: "delivered_at", read: "read_at" }[status];
@@ -1308,8 +1308,8 @@ class WhatsAppService {
           db.promise().query(
             `UPDATE wa_message_logs SET ${sets.join(", ")} WHERE wa_message_id = ? OR wa_message_id = ?`,
             params
-          ).catch(() => {});
-        } catch (_) {}
+          ).catch(() => { });
+        } catch (_) { }
       });
 
       await this.client.initialize();
@@ -1319,7 +1319,7 @@ class WhatsAppService {
       console.error(`❌ [WA Init Error] Session ${this.key} initialization error:`, err?.message || err);
       const deadClient = this.client;
       this.client = null;
-      try { await deadClient?.destroy?.(); } catch (_) {}
+      try { await deadClient?.destroy?.(); } catch (_) { }
 
       const isCorruptedProfileErr =
         err?.message?.includes("Minified Invariant") ||
@@ -1334,7 +1334,7 @@ class WhatsAppService {
           if (fs.existsSync(sessionPath)) {
             fs.rmSync(sessionPath, { recursive: true, force: true });
           }
-        } catch (_) {}
+        } catch (_) { }
         return this._doInit(true);
       }
 
@@ -1368,7 +1368,7 @@ class WhatsAppService {
           const isManual = options?.isManual !== false && !options?.isCampaign;
 
           try {
-            await this.ensureWWebJSInjected().catch(() => {});
+            await this.ensureWWebJSInjected().catch(() => { });
             await this._paceSend(isManual);
             sentResult = await this.enqueueSend(() =>
               this.withTimeout(
@@ -1488,7 +1488,7 @@ class WhatsAppService {
               message: newMsg,
             });
           })
-          .catch(() => {});
+          .catch(() => { });
 
         process.nextTick(async () => {
           try {
@@ -1508,8 +1508,8 @@ class WhatsAppService {
                  last_message_text = VALUES(last_message_text),
                  last_message_at = NOW()`,
               [contactTenantId, "Me", cleanPhone, message]
-            ).catch(() => {});
-          } catch (e) {}
+            ).catch(() => { });
+          } catch (e) { }
         });
 
         return { success: true, id: msgId, result: sentResult };
@@ -1534,10 +1534,10 @@ class WhatsAppService {
 
           // Trigger background sync for contacts & chat history if not already triggered
           setTimeout(() => {
-            this.syncWhatsAppChatsAndMessages().catch(() => {});
+            this.syncWhatsAppChatsAndMessages().catch(() => { });
           }, 1000);
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     const sessionMeta = this.getSessionMeta();
@@ -1572,8 +1572,8 @@ class WhatsAppService {
     this.isInitializing = false;
     this._isHibernated = true;
     try {
-      await deadClient.destroy().catch(() => {});
-    } catch (_) {}
+      await deadClient.destroy().catch(() => { });
+    } catch (_) { }
   }
 
   // Tears down a dead/crashed client and schedules a reconnect.
@@ -1589,7 +1589,7 @@ class WhatsAppService {
     this.phone = null;
     this.isInitializing = false;
     this.client = null;
-    try { deadClient?.destroy?.().catch(() => {}); } catch (_) {}
+    try { deadClient?.destroy?.().catch(() => { }); } catch (_) { }
 
     if (this._reconnectScheduled) return;
     this._reconnectScheduled = true;
@@ -1597,7 +1597,7 @@ class WhatsAppService {
       this._reconnectScheduled = false;
       if (!this.ready && !this.isInitializing) {
         console.log("🔄 Auto-reconnecting WhatsApp Web session in background...");
-        this.init(false).catch(() => {});
+        this.init(false).catch(() => { });
       }
     }, 10000);
   }
@@ -1740,7 +1740,7 @@ class WhatsAppService {
           }).catch(() => false);
 
           if (!clickedReload) {
-            await this.client.pupPage.reload({ waitUntil: "load", timeout: 25000 }).catch(() => {});
+            await this.client.pupPage.reload({ waitUntil: "load", timeout: 25000 }).catch(() => { });
           }
 
           const newQr = await this._waitForQr(15000).catch(() => null);
@@ -1756,7 +1756,7 @@ class WhatsAppService {
       }
 
       // Fallback: if browser was stopped, boot it cleanly
-      await this.init(false).catch(() => {});
+      await this.init(false).catch(() => { });
       const qr = await this._waitForQr(15000).catch(() => null);
       return {
         connected: this.ready,
@@ -1910,7 +1910,7 @@ class WhatsAppService {
           .filter((c) => c.id?._serialized?.includes("@lid") || c.id?.server === "lid")
           .map((c) => c.id?._serialized || String(c.id));
         if (lidChatIds.length > 0) {
-          await this.resolveLidsBatch(lidChatIds).catch(() => {});
+          await this.resolveLidsBatch(lidChatIds).catch(() => { });
         }
 
         // 1b. Collect all clean 10-digit phones and LIDs for name enrichment lookup in DB
@@ -1943,7 +1943,7 @@ class WhatsAppService {
                 }
               });
             }
-          } catch (_) {}
+          } catch (_) { }
         }
 
         // 1c. Process and deduplicate each live chat
@@ -1982,11 +1982,11 @@ class WhatsAppService {
           // NEVER raw 14+ digit LID string
           let resolvedName = c.name;
           const rawNameDigits = (resolvedName || "").replace(/\D/g, "");
-          const isBogusName = !resolvedName || 
-                              resolvedName === "Unknown" || 
-                              resolvedName.startsWith("+") || 
-                              (rawNameDigits.length >= 13 && !rawNameDigits.startsWith("120363")) ||
-                              resolvedName.includes("@lid");
+          const isBogusName = !resolvedName ||
+            resolvedName === "Unknown" ||
+            resolvedName.startsWith("+") ||
+            (rawNameDigits.length >= 13 && !rawNameDigits.startsWith("120363")) ||
+            resolvedName.includes("@lid");
 
           if (clean10 && contactNameMap.has(clean10)) {
             const dbMatch = contactNameMap.get(clean10);
@@ -2020,13 +2020,13 @@ class WhatsAppService {
             profilePicUrl: (clean10 && contactNameMap.get(clean10)?.pic) || null,
             lastMessage: c.lastMessage
               ? {
-                  body: describeLastMessage(c.lastMessage),
-                  timestamp: c.lastMessage.timestamp,
-                  fromMe: Boolean(c.lastMessage.fromMe),
-                  type: c.lastMessage.type || null,
-                  hasMedia: Boolean(c.lastMessage.hasMedia),
-                  status: WhatsAppService.ackToStatus(c.lastMessage.ack),
-                }
+                body: describeLastMessage(c.lastMessage),
+                timestamp: c.lastMessage.timestamp,
+                fromMe: Boolean(c.lastMessage.fromMe),
+                type: c.lastMessage.type || null,
+                hasMedia: Boolean(c.lastMessage.hasMedia),
+                status: WhatsAppService.ackToStatus(c.lastMessage.ack),
+              }
               : null,
             hasMessages: true,
           };
@@ -2083,9 +2083,9 @@ class WhatsAppService {
                   chat.timestamp || Math.floor(Date.now() / 1000),
                   chat.unreadCount || 0
                 ]
-              ).catch(() => {});
+              ).catch(() => { });
             }
-          } catch (_) {}
+          } catch (_) { }
         });
 
       } catch (err) {
@@ -2230,11 +2230,11 @@ class WhatsAppService {
             profilePicUrl: c.profile_pic_url || c.avatar_url || null,
             lastMessage: c.last_message_text
               ? {
-                  body: c.last_message_text,
-                  timestamp: contactTime,
-                  fromMe: false,
-                  type: "text",
-                }
+                body: c.last_message_text,
+                timestamp: contactTime,
+                fromMe: false,
+                type: "text",
+              }
               : null,
             hasMessages: Boolean(c.last_message_text),
             source: c.source || "CRM Contact",
@@ -2287,11 +2287,11 @@ class WhatsAppService {
             leadNotes: t.followup_notes || "",
             lastMessage: t.followup_notes
               ? {
-                  body: t.followup_notes,
-                  timestamp: leadTime,
-                  fromMe: false,
-                  type: "text",
-                }
+                body: t.followup_notes,
+                timestamp: leadTime,
+                fromMe: false,
+                type: "text",
+              }
               : null,
             hasMessages: Boolean(t.followup_notes),
             source: "CRM Telecall Lead",
@@ -2413,7 +2413,7 @@ class WhatsAppService {
       if (rows[0] && (rows[0].profile_pic_url || rows[0].avatar_url)) {
         return rows[0].profile_pic_url || rows[0].avatar_url;
       }
-    } catch (_) {}
+    } catch (_) { }
 
     // 2. Fetch live from WhatsApp Web client if connected
     if (this.ready && this.client) {
@@ -2430,10 +2430,10 @@ class WhatsAppService {
           await db.promise().query(
             "UPDATE wa_contacts SET profile_pic_url = ? WHERE tenant_id = ? AND phone LIKE ?",
             [picUrl, picTenantId, `%${cleanPhone}`]
-          ).catch(() => {});
+          ).catch(() => { });
           return picUrl;
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     return null;
@@ -2496,9 +2496,9 @@ class WhatsAppService {
       rows.forEach((r) => {
         const isFile = ["media", "image", "video", "audio", "ptt", "document", "sticker"].includes(r.message_type) || Boolean(r.media_url) || /\.(md|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|zip|rar|png|jpg|jpeg|webp|mp4|mp3|ogg|wav)$/i.test(r.body || "");
         let interactive = null;
-        try { interactive = typeof r.interactive_payload === "string" ? JSON.parse(r.interactive_payload) : r.interactive_payload; } catch (_) {}
+        try { interactive = typeof r.interactive_payload === "string" ? JSON.parse(r.interactive_payload) : r.interactive_payload; } catch (_) { }
         let metadata = {};
-        try { metadata = typeof r.metadata === "string" ? JSON.parse(r.metadata) : r.metadata || {}; } catch (_) {}
+        try { metadata = typeof r.metadata === "string" ? JSON.parse(r.metadata) : r.metadata || {}; } catch (_) { }
         let bodyText = r.body;
         if (!bodyText || !bodyText.trim()) {
           if (r.message_type === "e2e_notification") {
@@ -2609,7 +2609,7 @@ class WhatsAppService {
                     m.id,
                     m.timestamp || Math.floor(Date.now() / 1000), m.filename || null, m.mimetype || null, JSON.stringify({ serializedId: m.serializedId })
                   ]
-                ).catch(() => {});
+                ).catch(() => { });
               }
               this.emitWaEvent("wa_chat_history_updated", chatId, digitsOnly, { count: freshLive.length });
             }
@@ -2654,14 +2654,14 @@ class WhatsAppService {
         await this.enqueue(async () => {
           try {
             if (this.client.sendSeen) {
-              await this.withTimeout(this.client.sendSeen(formattedChatId), 2000, "sendSeen").catch(() => {});
+              await this.withTimeout(this.client.sendSeen(formattedChatId), 2000, "sendSeen").catch(() => { });
             }
             const chat = await this.client.getChatById(formattedChatId).catch(() => null);
             if (chat && chat.sendSeen) {
-              await this.withTimeout(chat.sendSeen(), 2000, "chat.sendSeen").catch(() => {});
+              await this.withTimeout(chat.sendSeen(), 2000, "chat.sendSeen").catch(() => { });
             }
-          } catch (_) {}
-        }).catch(() => {});
+          } catch (_) { }
+        }).catch(() => { });
       }
 
       // 2. Clear unread in database. Scoped to this session's organization -
@@ -2673,12 +2673,12 @@ class WhatsAppService {
       await db.promise().query(
         "UPDATE wa_contacts SET unread_count = 0 WHERE tenant_id = ? AND (phone LIKE ? OR phone LIKE ?)",
         [seenTenantId, `%${cleanPhone}`, `%${digitsOnly}`]
-      ).catch(() => {});
+      ).catch(() => { });
 
       await db.promise().query(
         "UPDATE wa_message_logs SET is_read = 1 WHERE tenant_id = ? AND (phone LIKE ? OR phone LIKE ?) AND direction = 'inbound'",
         [seenTenantId, `%${cleanPhone}`, `%${digitsOnly}`]
-      ).catch(() => {});
+      ).catch(() => { });
 
       // 3. Emit real-time read event to UI
       this.emitWaEvent("wa_chat_read", chatId, digitsOnly, { unreadCount: 0 });
@@ -2707,7 +2707,7 @@ class WhatsAppService {
             await db.promise().query(
               "UPDATE wa_message_logs SET message_text = '🚫 This message was deleted' WHERE wa_message_id = ? OR wa_message_id = ?",
               [messageId, messageId]
-            ).catch(() => {});
+            ).catch(() => { });
             return { success: true };
           }
         }
@@ -2726,9 +2726,9 @@ class WhatsAppService {
         const chat = await this.client.getChatById(formattedChatId).catch(() => null);
         if (chat) {
           if (isTyping && chat.sendStateTyping) {
-            await chat.sendStateTyping().catch(() => {});
+            await chat.sendStateTyping().catch(() => { });
           } else if (chat.clearState) {
-            await chat.clearState().catch(() => {});
+            await chat.clearState().catch(() => { });
           }
           return { success: true };
         }
@@ -2769,7 +2769,7 @@ class WhatsAppService {
           source = "Telecalling";
         }
       }
-    } catch (_) {}
+    } catch (_) { }
 
     let totalInvoiced = 0;
     let totalPaid = 0;
@@ -2829,7 +2829,7 @@ class WhatsAppService {
 
       const [[r4]] = await db.promise().query("SELECT COUNT(*) as cnt FROM wa_message_logs WHERE status = 'failed'");
       totalFailed = r4?.cnt || 0;
-    } catch (_) {}
+    } catch (_) { }
 
     const unifiedStatus = await this.getUnifiedStatus().catch(() => ({ connected: false, activeEngine: "Unknown" }));
 
@@ -2875,7 +2875,7 @@ class WhatsAppService {
       if (contact && (contact._serialized || contact.$1)) {
         return contact._serialized || contact.$1;
       }
-    } catch (_) {}
+    } catch (_) { }
     return formattedJid;
   }
 
@@ -2953,7 +2953,7 @@ class WhatsAppService {
         const hit = cachedMedia(cacheDir, safeId, `/uploads/wa-media/${this.key}`);
         if (hit) return hit;
       }
-    } catch (_) {}
+    } catch (_) { }
 
     // 2. Cloud Media cache hit check
     try {
@@ -2961,7 +2961,7 @@ class WhatsAppService {
         const hit = cachedMedia(cloudMediaDir, safeId, "/uploads/wa-media/cloud");
         if (hit) return hit;
       }
-    } catch (_) {}
+    } catch (_) { }
 
     // 3. Fallback to Meta Cloud API if web session not connected
     if (!this.ready || !this.client) {
@@ -2969,7 +2969,7 @@ class WhatsAppService {
       if (waCloud.isConfigured()) {
         try {
           let metadata = {};
-          try { metadata = typeof saved?.metadata === "string" ? JSON.parse(saved.metadata) : saved?.metadata || {}; } catch (_) {}
+          try { metadata = typeof saved?.metadata === "string" ? JSON.parse(saved.metadata) : saved?.metadata || {}; } catch (_) { }
           const mediaId = cloudMediaId || saved?.media_id || metadata.image?.id || metadata.document?.id || metadata.video?.id || metadata.audio?.id || metadata.sticker?.id;
           if (!mediaId) throw new Error("The Cloud media ID is missing from this message.");
           return await waCloud.downloadMedia(mediaId, { persist, tenantId: this.tenantId || 1 });
@@ -3019,7 +3019,7 @@ class WhatsAppService {
       await db.promise().query(
         "UPDATE wa_message_logs SET media_url = ?, media_filename = ?, media_mime_type = ? WHERE wa_message_id = ? AND (session_key = ? OR session_key IS NULL)",
         [mediaStreamUrl, media.filename || filename, media.mimetype, messageId, this.key]
-      ).catch(() => {});
+      ).catch(() => { });
       return {
         url: mediaStreamUrl,
         storageKey,
@@ -3035,7 +3035,7 @@ class WhatsAppService {
     await db.promise().query(
       "UPDATE wa_message_logs SET media_url = ?, media_filename = ?, media_mime_type = ? WHERE wa_message_id = ? AND (session_key = ? OR session_key IS NULL)",
       [`/uploads/wa-media/${this.key}/${filename}`, media.filename || filename, media.mimetype, messageId, this.key]
-    ).catch(() => {});
+    ).catch(() => { });
 
     return {
       url: `/uploads/wa-media/${this.key}/${filename}`,
@@ -3123,7 +3123,7 @@ class WhatsAppService {
                   }
                 }
               }
-            } catch (_) {}
+            } catch (_) { }
           }
         }
 
@@ -3133,7 +3133,7 @@ class WhatsAppService {
             if (typeof MessageMedia.fromFilePath === "function") {
               media = MessageMedia.fromFilePath(localFilePath);
             }
-          } catch (_) {}
+          } catch (_) { }
           if (!media) {
             const ext = path.extname(localFilePath).toLowerCase();
             const mimeMap = {
@@ -3197,7 +3197,7 @@ class WhatsAppService {
           sendOpts = { caption: caption || undefined };
         }
 
-        await this.ensureWWebJSInjected().catch(() => {});
+        await this.ensureWWebJSInjected().catch(() => { });
         let sent;
         try {
           sent = await this.enqueue(() => this.withTimeout(
@@ -3208,7 +3208,7 @@ class WhatsAppService {
         } catch (mediaErr) {
           if (mediaErr?.message && (mediaErr.message.includes("getChat") || mediaErr.message.includes("WWebJS"))) {
             console.warn(`⚠️ [WA Auto-Repair] Media send getChat/WWebJS error. Re-injecting and retrying...`);
-            await this.ensureWWebJSInjected(true).catch(() => {});
+            await this.ensureWWebJSInjected(true).catch(() => { });
             sent = await this.enqueue(() => this.withTimeout(
               this.client.sendMessage(resolvedJid, media, sendOpts),
               35000,
@@ -3300,7 +3300,7 @@ class WhatsAppService {
 
     if (this.ready && this.client) {
       try {
-        await this.ensureWWebJSInjected().catch(() => {});
+        await this.ensureWWebJSInjected().catch(() => { });
         await this._paceSend();
         const resolvedJid = await this.resolveTargetJid(targetJid);
         const location = new Location(lat, lng, { name });
@@ -3314,7 +3314,7 @@ class WhatsAppService {
         } catch (locErr) {
           if (locErr?.message && (locErr.message.includes("getChat") || locErr.message.includes("WWebJS"))) {
             console.warn(`⚠️ [WA Auto-Repair] Location send getChat/WWebJS error. Re-injecting and retrying...`);
-            await this.ensureWWebJSInjected(true).catch(() => {});
+            await this.ensureWWebJSInjected(true).catch(() => { });
             sent = await this.enqueue(() => this.withTimeout(
               this.client.sendMessage(resolvedJid, location),
               25000,
@@ -3398,7 +3398,7 @@ class WhatsAppService {
       );
       if (lidContacts.length > 0) {
         const lidIds = lidContacts.map((c) => c.id?._serialized || String(c.id));
-        await this.resolveLidsBatch(lidIds).catch(() => {});
+        await this.resolveLidsBatch(lidIds).catch(() => { });
       }
 
       const db = require("../config/database");
@@ -3441,7 +3441,7 @@ class WhatsAppService {
           );
           if (res.affectedRows === 1) inserted++;
           else if (res.affectedRows === 2) updated++;
-        } catch (e) {}
+        } catch (e) { }
       }
 
       return { success: true, count: rawContacts.length, inserted, updated };
@@ -3514,7 +3514,7 @@ class WhatsAppService {
       if (this.client.info?.wid?._serialized) {
         profilePicUrl = await this.client.getProfilePicUrl(this.client.info.wid._serialized).catch(() => null);
       }
-    } catch (_) {}
+    } catch (_) { }
 
     let contactsCount = 0;
     try {
@@ -3523,7 +3523,7 @@ class WhatsAppService {
         "SELECT COUNT(*) as total FROM wa_contacts WHERE source = 'WhatsApp Account' OR opt_in_status = 1"
       );
       contactsCount = total || 0;
-    } catch (_) {}
+    } catch (_) { }
 
     return {
       connected: true,
@@ -3550,7 +3550,7 @@ class WhatsAppService {
       if (rows.length > 0 && rows[0].body_text) {
         text = rows[0].body_text;
       }
-    } catch (_) {}
+    } catch (_) { }
 
     if (!text) {
       const DEFAULT_TEMPLATES = {
@@ -3588,7 +3588,7 @@ class WhatsAppService {
       if (this.client) {
         await this.client.destroy();
       }
-    } catch (_) {}
+    } catch (_) { }
     this.client = null;
     this.ready = false;
     this.qrCode = null;
@@ -3608,15 +3608,15 @@ class WhatsAppService {
       await db.promise().query(
         "UPDATE wa_accounts SET is_active = 0, updated_at = NOW() WHERE account_name LIKE ? OR phone_number LIKE ?",
         [`%${this.key}%`, `%${this.key}%`]
-      ).catch(() => {});
-    } catch (_) {}
+      ).catch(() => { });
+    } catch (_) { }
 
     if (purgeImmediately) {
       try {
         if (fs.existsSync(this.sessionPath)) {
           fs.rmSync(this.sessionPath, { recursive: true, force: true });
         }
-      } catch (_) {}
+      } catch (_) { }
       // Keep instance in sessions map to prevent split-brain re-initializations
       this.emitWaEvent("wa_disconnected", null, this.phone, { reason: "LOGOUT", purged: true, sessionKey: this.key });
       return { success: true, purged: true, message: "Session permanently deleted from disk and memory." };
@@ -3731,7 +3731,7 @@ async function cleanExpiredSessions() {
             deleteReason = `Logged out for > 4 days (expired at ${new Date(expiresAt).toISOString()})`;
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     } else {
       try {
         const stats = fs.statSync(dir);
@@ -3740,14 +3740,14 @@ async function cleanExpiredSessions() {
           shouldDelete = true;
           deleteReason = `Abandoned incomplete session folder older than 4 days`;
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     if (shouldDelete) {
       try {
         const instance = sessions.get(sessionKey);
         if (instance && instance.client) {
-          await instance.client.destroy().catch(() => {});
+          await instance.client.destroy().catch(() => { });
           instance.client = null;
           instance.ready = false;
         }
@@ -3792,7 +3792,7 @@ async function restoreExisting() {
         [primaryAdminEmail, primaryAdminEmail]
       );
       if (rows.length) defaultKey = String(rows[0].id);
-    } catch (_) {}
+    } catch (_) { }
   }
 
   await migrateLegacySession(defaultKey);
@@ -3810,7 +3810,7 @@ async function restoreExisting() {
       "UPDATE wa_campaigns SET session_key = ? WHERE session_key IS NULL AND (created_by IS NULL OR created_by = ?)",
       [defaultKey, defaultKey]
     );
-  } catch (_) {}
+  } catch (_) { }
 
   let dirs = [];
   try {
@@ -3836,7 +3836,7 @@ async function restoreExisting() {
   for (const key of dirs) {
     const dir = path.join(SESSIONS_ROOT, key);
     if (!hasSavedProfile(dir)) {
-      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { }
       continue;
     }
 
@@ -3849,7 +3849,7 @@ async function restoreExisting() {
           console.log(`ℹ️ WhatsApp session ${key} is logged out (auto-deletes in 4 days). Skipping auto-restore.`);
           continue;
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     // Staggered and unawaited — N cold Chrome launches at once would stall boot.

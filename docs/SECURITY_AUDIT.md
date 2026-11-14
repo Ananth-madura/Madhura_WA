@@ -35,3 +35,4 @@
 ### 4. Audit & Compliance
 - **Audit Logging**: `wa_workspace_audit` records all administrative actions with actor ID, IP address, and timestamp.
 - **Opt-Out & Privacy**: Explicit unsubscribes (`wa_opt_outs`) suppress future broadcast sends automatically, complying with Meta WhatsApp Business Policies and GDPR.
+

@@ -88,3 +88,4 @@ function canAccessConversation(user, conversation) {
 Every sensitive action produces an audit record:
 - Table: `wa_workspace_audit` and `branch_audit_events`
 - Logged attributes: `timestamp`, `tenant_id`, `branch_id`, `actor_user_id`, `action_type`, `resource_type`, `resource_id`, `ip_address`, `before_state_json`, `after_state_json`.
+

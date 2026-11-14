@@ -94,3 +94,4 @@ sequenceDiagram
 - **Client Company**: Has `tenant_type = 'company'` and `parent_tenant_id = <agency_id>`.
 - Agency operators can switch into client company workspaces only if granted explicit authorization in `organization_memberships`.
 - All actions taken by agency operators while scoped to a client workspace are recorded in `branch_audit_events` with the operator's actual user identity.
+

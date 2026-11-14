@@ -1,5 +1,5 @@
 import { waUiStorage } from "../utils/waUiStorage";
-import {requireRecords,cachedRecords} from "../utils/apiPayload";
+import { requireRecords, cachedRecords } from "../utils/apiPayload";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
@@ -315,7 +315,7 @@ function safeLocalStorageSet(key, value) {
         }
         keysToRemove.slice(0, Math.max(1, Math.ceil(keysToRemove.length / 2))).forEach((k) => waUiStorage.removeItem(k));
         waUiStorage.setItem(key, value);
-      } catch (_) {}
+      } catch (_) { }
     }
   }
 }
@@ -354,7 +354,7 @@ function MediaBubble({ chatId, messageId, serializedId = null, filename = "", me
           conversationId: chatId,
           filename: cached.filename || filename,
           mimetype: cached.mimetype || mimetype
-        }).catch(() => {});
+        }).catch(() => { });
         setLoading(false);
         return;
       }
@@ -366,12 +366,12 @@ function MediaBubble({ chatId, messageId, serializedId = null, filename = "", me
       });
       if (data && (data.url || data.data)) {
         if (data.data) {
-          await writeLocalMedia(`${chatId}:${messageId}`, data, owner).catch(() => {});
+          await writeLocalMedia(`${chatId}:${messageId}`, data, owner).catch(() => { });
           await saveLocalMedia(cloudMediaId || messageId, data.data, {
             conversationId: chatId,
             filename: data.filename || filename,
             mimetype: data.mimetype || mimetype
-          }).catch(() => {});
+          }).catch(() => { });
           localBlobRef.current = localMediaUrl(data);
           setMedia({ ...data, url: localBlobRef.current });
         } else setMedia(data);
@@ -649,7 +649,7 @@ export default function WhatsAppPage() {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === "object") return parsed;
       }
-    } catch (_) {}
+    } catch (_) { }
     return { connected: false, initializing: true, hasQr: false };
   });
   const [qrCode, setQrCode] = useState(null);
@@ -687,7 +687,7 @@ export default function WhatsAppPage() {
           if (cachedMsgs) return cachedRecords(JSON.parse(cachedMsgs));
         }
       }
-    } catch (_) {}
+    } catch (_) { }
     return [];
   });
   const [isDraggingFile, setIsDraggingFile] = useState(false);
@@ -981,8 +981,8 @@ export default function WhatsAppPage() {
     if (selectedChat?.id && Array.isArray(messages) && messages.length > 0) {
       const toStore = messages.slice(0, 100);
       safeLocalStorageSet(`wa_chat_messages_${selectedChat.id}`, JSON.stringify(toStore));
-      writeLocalMessages(selectedChat.id, messages).catch(() => {});
-      saveBatchLocalMessages(messages.filter((m) => m.body && !m.historyUnavailable)).catch(() => {});
+      writeLocalMessages(selectedChat.id, messages).catch(() => { });
+      saveBatchLocalMessages(messages.filter((m) => m.body && !m.historyUnavailable)).catch(() => { });
       if (!messagesCacheRef.current) messagesCacheRef.current = {};
       messagesCacheRef.current[selectedChat.id] = messages;
     }
@@ -1050,7 +1050,7 @@ export default function WhatsAppPage() {
       try {
         res = await axios.get(`${API}/api/whatsapp/unified-status`, { headers, timeout: 10000 });
       } catch (e1) {
-        if(e1.response?.status!==404)throw e1;
+        if (e1.response?.status !== 404) throw e1;
         res = await axios.get(`${API}/api/whatsapp/status`, { headers, timeout: 10000 });
       }
       const raw = res.data;
@@ -1143,9 +1143,11 @@ export default function WhatsAppPage() {
         setQrDataUrl(null);
         setQrLoading(false);
         fetchStatus();
+      } else if (res.data && res.data.qr) {
       } else if (res.data && (res.data.qr || res.data.qrDataUrl)) {
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
         qrRetryCountRef.current = 0;
+        setQrCode(res.data.qr);
         if (res.data.qr) setQrCode(res.data.qr);
         if (res.data.qrDataUrl) setQrDataUrl(res.data.qrDataUrl);
         setQrCountdown(25);
@@ -1201,28 +1203,29 @@ export default function WhatsAppPage() {
         }
       }
       if (err.response?.status === 504 || err.code === "ECONNABORTED" || (err.message && err.message.includes("timeout"))) {
-        if (qrRetryCountRef.current < 45) {
-          qrRetryCountRef.current += 1;
-          console.warn("ℹ️ WhatsApp QR generation in progress, re-checking in 1.5s...");
-          setQrLoading(true);
-          if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
-          qrPollTimerRef.current = setTimeout(() => {
-            fetchQr(false);
-          }, 1500);
+        if (qrRetryCountRef.current < 10) {
+          if (qrRetryCountRef.current < 45) {
+            qrRetryCountRef.current += 1;
+            console.warn("ℹ️ WhatsApp QR generation in progress, re-checking in 1.5s...");
+            setQrLoading(true);
+            if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+            qrPollTimerRef.current = setTimeout(() => {
+              fetchQr(false);
+            }, 1500);
+          } else {
+            setError("Server is taking longer to start WhatsApp browser session. Click 'Force Fresh QR Code' below to retry.");
+            setQrLoading(false);
+          }
         } else {
-          setError("Server is taking longer to start WhatsApp browser session. Click 'Force Fresh QR Code' below to retry.");
+          const msg = err.response?.data?.error || err.message || "Failed to generate QR code. Click Refresh QR to retry.";
+          setError(msg);
           setQrLoading(false);
         }
-      } else {
-        const msg = err.response?.data?.error || err.message || "Failed to generate QR code. Click Refresh QR to retry.";
-        setError(msg);
-        setQrLoading(false);
+      } finally {
+        qrFetchInFlightRef.current = false;
+        hasTriggeredQrFetch.current = true;
       }
-    } finally {
-      qrFetchInFlightRef.current = false;
-      hasTriggeredQrFetch.current = true;
-    }
-  }, [demoMode, fetchStatus]);
+    }, [demoMode, fetchStatus]);
 
   // QR auto-countdown timer (25s visual indicator) with auto-refresh on expire
   useEffect(() => {
@@ -1310,7 +1313,7 @@ export default function WhatsAppPage() {
       if (res.data && Array.isArray(res.data)) {
         setAvailableSessions(res.data);
       }
-    } catch (_) {}
+    } catch (_) { }
   }, [enterpriseHeaders]);
 
   const fetchChats = useCallback(async (refresh = false, sessionKey = null) => {
@@ -1457,7 +1460,7 @@ export default function WhatsAppPage() {
         messagesCacheRef.current[chatId] = localStored;
         setMessages(localStored);
       }
-    } catch (_) {}
+    } catch (_) { }
 
     const hasCached = Boolean(messagesCacheRef.current[chatId] && messagesCacheRef.current[chatId].length > 0);
     if (!hasCached) {
@@ -1470,7 +1473,7 @@ export default function WhatsAppPage() {
             setMessages(parsed);
           }
         }
-      } catch (_) {}
+      } catch (_) { }
       const nowHasCached = Boolean(messagesCacheRef.current[chatId] && messagesCacheRef.current[chatId].length > 0);
       if (!nowHasCached) {
         if (limit === 10) setMessagesLoading(true);
@@ -1539,13 +1542,13 @@ export default function WhatsAppPage() {
       reconciled.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
       if (toSaveLocally.length > 0) {
-        saveBatchLocalMessages(toSaveLocally).catch(() => {});
+        saveBatchLocalMessages(toSaveLocally).catch(() => { });
       }
 
       // Sync with legacy cache for backward compatibility
       const legacyLocal = await readLocalMessages(chatId).catch(() => []);
       const mergedLegacy = mergeLocalMessages(legacyLocal, reconciled);
-      await writeLocalMessages(chatId, mergedLegacy).catch(() => {});
+      await writeLocalMessages(chatId, mergedLegacy).catch(() => { });
 
       messagesCacheRef.current[chatId] = reconciled;
       setMessages(reconciled);
@@ -1589,7 +1592,7 @@ export default function WhatsAppPage() {
   };
 
   const fetchTemplates = useCallback(async () => {
-    if(demoMode)return;
+    if (demoMode) return;
     try {
       const token = waUiStorage.getItem("token");
       const { data } = await axios.get(`${API}/api/wa/templates`, { headers: { Authorization: `Bearer ${token}` } });
@@ -1748,7 +1751,7 @@ export default function WhatsAppPage() {
             setTimeout(() => scrollToBottom(false), 20);
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     // Mark as read on WhatsApp server & DB
@@ -1776,7 +1779,7 @@ export default function WhatsAppPage() {
           } else {
             setActiveFlowRun(null);
           }
-        }).catch(() => {});
+        }).catch(() => { });
       } else {
         setActiveFlowRun(null);
       }
@@ -1832,7 +1835,7 @@ export default function WhatsAppPage() {
       isMe: true,
       status: "sending",
     };
-    saveLocalMessage(tempMsg, selectedChat.id).catch(() => {});
+    saveLocalMessage(tempMsg, selectedChat.id).catch(() => { });
     setMessages((prev) => [tempMsg, ...prev]);
     setTimeout(scrollToBottom, 50);
 
@@ -1938,9 +1941,9 @@ export default function WhatsAppPage() {
       setChatBotPaused(true);
       setActiveFlowRun(null);
       const realId = res.data?.id || res.data?.result?.id || tempId;
-      updateLocalMessage(tempId, { id: realId, status: "sent", body: textToSend }).catch(() => {});
+      updateLocalMessage(tempId, { id: realId, status: "sent", body: textToSend }).catch(() => { });
       if (realId !== tempId) {
-        saveLocalMessage({ ...tempMsg, id: realId, status: "sent" }, selectedChat.id).catch(() => {});
+        saveLocalMessage({ ...tempMsg, id: realId, status: "sent" }, selectedChat.id).catch(() => { });
       }
       setMessages((prev) =>
         prev.map((m) =>
@@ -1956,14 +1959,14 @@ export default function WhatsAppPage() {
       // It may be on the customer's phone. Say so and make no further attempt.
       if (payload?.deliveryUnknown) {
         setDeliveryWarning(payload.error || "Delivery could not be confirmed.");
-        updateLocalMessage(tempId, { status: "unknown" }).catch(() => {});
+        updateLocalMessage(tempId, { status: "unknown" }).catch(() => { });
         setMessages((prev) =>
           prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "unknown" } : m))
         );
       } else {
         const msg = payload?.error || err.message || "Failed to send message";
         setError(`Failed to send message: ${msg}`);
-        updateLocalMessage(tempId, { status: "failed" }).catch(() => {});
+        updateLocalMessage(tempId, { status: "failed" }).catch(() => { });
         setMessages((prev) =>
           prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "failed" } : m))
         );
@@ -2029,7 +2032,7 @@ export default function WhatsAppPage() {
   fetchContactCrmDetailsRef.current = fetchContactCrmDetails;
 
   const fetchQuickReplies = async () => {
-    if(demoMode)return;
+    if (demoMode) return;
     try {
       const token = waUiStorage.getItem("token");
       const res = await axios.get(`${API}/api/whatsapp/quick-replies`, {
@@ -2060,7 +2063,7 @@ export default function WhatsAppPage() {
       isMe: true,
       status: "sending",
     };
-    saveLocalMessage(tempMsg, selectedChat.id).catch(() => {});
+    saveLocalMessage(tempMsg, selectedChat.id).catch(() => { });
     setMessages((prev) => [tempMsg, ...prev]);
     setTimeout(scrollToBottom, 50);
 
@@ -2091,9 +2094,9 @@ export default function WhatsAppPage() {
       );
 
       const realId = res.data?.id || res.data?.result?.id || tempId;
-      updateLocalMessage(tempId, { id: realId, status: "sent", body: cleanText }).catch(() => {});
+      updateLocalMessage(tempId, { id: realId, status: "sent", body: cleanText }).catch(() => { });
       if (realId !== tempId) {
-        saveLocalMessage({ ...tempMsg, id: realId, status: "sent" }, selectedChat.id).catch(() => {});
+        saveLocalMessage({ ...tempMsg, id: realId, status: "sent" }, selectedChat.id).catch(() => { });
       }
       setMessages((prev) =>
         prev.map((m) =>
@@ -2104,13 +2107,13 @@ export default function WhatsAppPage() {
       const payload = err.response?.data;
       if (payload?.deliveryUnknown) {
         setDeliveryWarning(payload.error || "Delivery could not be confirmed.");
-        updateLocalMessage(tempId, { status: "unknown" }).catch(() => {});
+        updateLocalMessage(tempId, { status: "unknown" }).catch(() => { });
         setMessages((prev) =>
           prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "unknown" } : m))
         );
       } else {
         console.warn("handleSendDirect error:", err.message);
-        updateLocalMessage(tempId, { status: "failed" }).catch(() => {});
+        updateLocalMessage(tempId, { status: "failed" }).catch(() => { });
         setMessages((prev) =>
           prev.map((m) => (m.idempotencyKey === idempotencyKey ? { ...m, status: "failed" } : m))
         );
@@ -2196,8 +2199,8 @@ export default function WhatsAppPage() {
       filename: file.name,
       status: "sending",
     };
-    saveLocalMedia(tempId, file, { conversationId: selectedChat.id, filename: file.name, mimetype: file.type }).catch(() => {});
-    saveLocalMessage(optimisticMsg, selectedChat.id).catch(() => {});
+    saveLocalMedia(tempId, file, { conversationId: selectedChat.id, filename: file.name, mimetype: file.type }).catch(() => { });
+    saveLocalMessage(optimisticMsg, selectedChat.id).catch(() => { });
     setMessages((prev) => [optimisticMsg, ...prev]);
     scrollToBottom();
 
@@ -2226,17 +2229,17 @@ export default function WhatsAppPage() {
 
       const owner = localCacheOwner();
       const localFile = await mediaFromFile(file);
-      await writeLocalMedia(`${selectedChat.id}:${tempId}`, localFile, owner).catch(() => {});
+      await writeLocalMedia(`${selectedChat.id}:${tempId}`, localFile, owner).catch(() => { });
       formData.append("chatId", selectedChat.id);
       formData.append("mediaType", file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : file.type.startsWith("audio/") ? "audio" : customMediaType || "document");
       formData.append("idempotencyKey", `ui_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
       const res = await axios.post(`${API}/api/whatsapp/send-media-upload`, formData, { headers, timeout: 60000 });
       const realId = res.data?.id || tempId;
-      await writeLocalMedia(`${selectedChat.id}:${realId}`, localFile, owner).catch(() => {});
-      await saveLocalMedia(realId, file, { conversationId: selectedChat.id, filename: file.name, mimetype: file.type }).catch(() => {});
-      await updateLocalMessage(tempId, { id: realId, status: "sent", mediaUrl: localBlobUrl }).catch(() => {});
+      await writeLocalMedia(`${selectedChat.id}:${realId}`, localFile, owner).catch(() => { });
+      await saveLocalMedia(realId, file, { conversationId: selectedChat.id, filename: file.name, mimetype: file.type }).catch(() => { });
+      await updateLocalMessage(tempId, { id: realId, status: "sent", mediaUrl: localBlobUrl }).catch(() => { });
       if (realId !== tempId) {
-        await saveLocalMessage({ ...optimisticMsg, id: realId, status: "sent" }, selectedChat.id).catch(() => {});
+        await saveLocalMessage({ ...optimisticMsg, id: realId, status: "sent" }, selectedChat.id).catch(() => { });
       }
       setMessages((prev) => {
         const next = prev.map((m) =>
@@ -2254,7 +2257,7 @@ export default function WhatsAppPage() {
       }
       const errMsg = payload?.error || err.message || "Failed to send attachment";
       setError(`Attachment error: ${errMsg}`);
-      updateLocalMessage(tempId, { status: payload?.deliveryUnknown || !err.response ? "unknown" : "failed" }).catch(() => {});
+      updateLocalMessage(tempId, { status: payload?.deliveryUnknown || !err.response ? "unknown" : "failed" }).catch(() => { });
       setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, status: payload?.deliveryUnknown || !err.response ? "unknown" : "failed" } : m)));
     }
     setMediaSending(false);
@@ -2389,7 +2392,7 @@ export default function WhatsAppPage() {
       }, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       setChatBotPaused(Boolean(nextPaused));
       if (nextPaused) setActiveFlowRun(null);
-    } catch (_) {}
+    } catch (_) { }
   };
 
   const handleStopChatBot = async () => {
@@ -3548,7 +3551,7 @@ export default function WhatsAppPage() {
       };
 
       if (msgObj && (targetChatId || activeSelected?.id)) {
-        saveLocalMessage(msgObj, targetChatId || activeSelected?.id).catch(() => {});
+        saveLocalMessage(msgObj, targetChatId || activeSelected?.id).catch(() => { });
       }
 
       const owner = localCacheOwner();
@@ -3607,7 +3610,7 @@ export default function WhatsAppPage() {
             messagesCacheRef.current[targetChatId] = enriched;
             safeLocalStorageSet(`wa_chat_messages_${targetChatId}`, JSON.stringify(enriched.slice(0, 100)));
           }
-        } catch (_) {}
+        } catch (_) { }
       }
 
       setChats((prev) => {
@@ -3697,7 +3700,7 @@ export default function WhatsAppPage() {
     const handleMessageUpdated = (data) => {
       const { id, serializedId, mediaUrl, filename } = data || {};
       if (!id && !serializedId) return;
-      updateLocalMessage(id || serializedId, data).catch(() => {});
+      updateLocalMessage(id || serializedId, data).catch(() => { });
       setMessages((prev) => {
         const next = prev.map((m) => {
           if (m.id === id || (serializedId && m.serializedId === serializedId)) {
@@ -3792,7 +3795,7 @@ export default function WhatsAppPage() {
       if (!message?.id && !message?.serializedId) return;
       const status = message.status;
       if (!status) return;
-      updateLocalMessage(message.id || message.serializedId, { status, ack: message.ack }).catch(() => {});
+      updateLocalMessage(message.id || message.serializedId, { status, ack: message.ack }).catch(() => { });
 
       setMessages((prev) =>
         prev.map((m) =>
@@ -4002,15 +4005,15 @@ export default function WhatsAppPage() {
       setSelectedChat((prev) =>
         prev
           ? {
-              ...prev,
-              branch_id: Number(transferTargetBranchId),
-              branch_name: targetBranchObj?.name || res.data?.branchName,
-              branch_code: targetBranchObj?.code || res.data?.branchCode,
-              owner_user_id: transferTargetUserId ? Number(transferTargetUserId) : null,
-              owner_name: targetUserObj
-                ? `${targetUserObj.first_name || ""} ${targetUserObj.last_name || ""}`.trim()
-                : res.data?.assignedUserName || null,
-            }
+            ...prev,
+            branch_id: Number(transferTargetBranchId),
+            branch_name: targetBranchObj?.name || res.data?.branchName,
+            branch_code: targetBranchObj?.code || res.data?.branchCode,
+            owner_user_id: transferTargetUserId ? Number(transferTargetUserId) : null,
+            owner_name: targetUserObj
+              ? `${targetUserObj.first_name || ""} ${targetUserObj.last_name || ""}`.trim()
+              : res.data?.assignedUserName || null,
+          }
           : prev
       );
 
@@ -4213,8 +4216,8 @@ export default function WhatsAppPage() {
 
         {error && (
           <div className={`hl-card mb-4 p-3 text-xs font-semibold flex items-center justify-between gap-2 max-w-2xl mx-auto w-full ${error.includes("warming up") || error.includes("initializing")
-              ? "border-[var(--color-accent)] bg-[var(--color-paper-2)] text-[var(--color-ink)]"
-              : "border-[var(--color-error)] text-[var(--color-error)]"
+            ? "border-[var(--color-accent)] bg-[var(--color-paper-2)] text-[var(--color-ink)]"
+            : "border-[var(--color-error)] text-[var(--color-error)]"
             }`}>
             <div className="flex items-center gap-2">
               {(error.includes("warming up") || error.includes("initializing")) && (
@@ -4293,199 +4296,201 @@ export default function WhatsAppPage() {
           {/* Mode 1: QR Code Scan */}
           {connectMode === "qr" && (
             <div className="flex flex-col items-center justify-center text-center py-2">
-              {qrLoading && !qrCode && !qrDataUrl ? (
-                <div className="py-10 text-center max-w-sm mx-auto">
-                  <div className="relative w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                    <div className="absolute inset-0 rounded-full border-4 border-[var(--color-rule)] opacity-30"></div>
-                    <div className="absolute inset-0 rounded-full border-4 border-[var(--color-accent)] border-t-transparent animate-spin"></div>
-                    <Smartphone size={24} className="text-[var(--color-ink)]" />
+              {qrLoading && !qrCode ? (
+                { qrLoading && !qrCode && !qrDataUrl ? (
+                  <div className="py-10 text-center max-w-sm mx-auto">
+                    <div className="relative w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                      <div className="absolute inset-0 rounded-full border-4 border-[var(--color-rule)] opacity-30"></div>
+                      <div className="absolute inset-0 rounded-full border-4 border-[var(--color-accent)] border-t-transparent animate-spin"></div>
+                      <Smartphone size={24} className="text-[var(--color-ink)]" />
+                    </div>
+                    <p className="hl-empty-title font-bold text-base">Generating WhatsApp QR Code...</p>
+                    <p className="hl-subtitle mt-1 mb-5 text-xs">
+                      Starting WhatsApp browser engine. If this takes more than a few seconds, click Force Fresh below.
+                    </p>
+                    <button
+                      onClick={() => fetchQr(true)}
+                      className="hl-btn-secondary text-xs px-3.5 py-2 inline-flex items-center gap-1.5 shadow-sm"
+                    >
+                      <RefreshCw size={13} className="animate-spin" />
+                      <span>Force Fresh QR Code 🔄</span>
+                    </button>
                   </div>
-                  <p className="hl-empty-title font-bold text-base">Generating WhatsApp QR Code...</p>
-                  <p className="hl-subtitle mt-1 mb-5 text-xs">
-                    Starting WhatsApp browser engine. If this takes more than a few seconds, click Force Fresh below.
-                  </p>
-                  <button
-                    onClick={() => fetchQr(true)}
-                    className="hl-btn-secondary text-xs px-3.5 py-2 inline-flex items-center gap-1.5 shadow-sm"
-                  >
-                    <RefreshCw size={13} className="animate-spin" />
-                    <span>Force Fresh QR Code 🔄</span>
-                  </button>
+                ) : qrCode ? (
+                ): (qrCode || qrDataUrl) ? (
+              <div className="w-full flex flex-col items-center">
+                {/* Step-by-step guidance pill strip */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full max-w-lg mb-5 text-left">
+                  <div className="p-2.5 rounded-xl border border-[var(--color-rule)] bg-[var(--color-paper)] flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-full bg-[var(--color-ink)] text-[var(--color-paper-2)] font-bold text-[11px] flex items-center justify-center shrink-0">1</span>
+                    <span className="text-[11px] leading-tight text-[var(--color-ink)]">Open WhatsApp on your phone</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl border border-[var(--color-rule)] bg-[var(--color-paper)] flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-full bg-[var(--color-ink)] text-[var(--color-paper-2)] font-bold text-[11px] flex items-center justify-center shrink-0">2</span>
+                    <span className="text-[11px] leading-tight text-[var(--color-ink)]">Menu (⋮) or Settings → <strong>Linked Devices</strong></span>
+                  </div>
+                  <div className="p-2.5 rounded-xl border border-[var(--color-rule)] bg-[var(--color-paper)] flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-full bg-[var(--color-ink)] text-[var(--color-paper-2)] font-bold text-[11px] flex items-center justify-center shrink-0">3</span>
+                    <span className="text-[11px] leading-tight text-[var(--color-ink)]">Tap <strong>Link a Device</strong> & point camera here</span>
+                  </div>
                 </div>
-              ) : (qrCode || qrDataUrl) ? (
-                <div className="w-full flex flex-col items-center">
-                  {/* Step-by-step guidance pill strip */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full max-w-lg mb-5 text-left">
-                    <div className="p-2.5 rounded-xl border border-[var(--color-rule)] bg-[var(--color-paper)] flex items-center gap-2.5">
-                      <span className="w-6 h-6 rounded-full bg-[var(--color-ink)] text-[var(--color-paper-2)] font-bold text-[11px] flex items-center justify-center shrink-0">1</span>
-                      <span className="text-[11px] leading-tight text-[var(--color-ink)]">Open WhatsApp on your phone</span>
+
+                {/* QR Box with Viewfinder Corners */}
+                <div className="relative p-4 rounded-2xl bg-white border-2 border-[var(--color-rule)] shadow-lg inline-block mb-3 transition-all">
+                  {/* Viewfinder corner brackets */}
+                  <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-emerald-500 rounded-tl-sm pointer-events-none" />
+                  <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-emerald-500 rounded-tr-sm pointer-events-none" />
+                  <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-emerald-500 rounded-bl-sm pointer-events-none" />
+                  <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-emerald-500 rounded-br-sm pointer-events-none" />
+
+                  {qrDataUrl ? (
+                    <img src={qrDataUrl} alt="WhatsApp Web QR Code" className="w-[230px] h-[230px] sm:w-[250px] sm:h-[250px] object-contain mx-auto select-none" />
+                  ) : (
+                    <QRCodeSVG value={qrCode} size={240} level="M" className="mx-auto select-none" />
+                  )}
+
+                  {/* Active Verification Overlay */}
+                  {loginCheckState === "checking" && (
+                    <div className="absolute inset-0 bg-white/85 backdrop-blur-[2px] rounded-2xl flex flex-col items-center justify-center p-4">
+                      <Loader2 size={36} className="animate-spin text-emerald-600 mb-2" />
+                      <span className="text-xs font-bold text-[var(--color-ink)]">Verifying Link...</span>
+                      <span className="text-[10px] text-[var(--color-ink-2)] mt-1">Checking handshake with phone</span>
                     </div>
-                    <div className="p-2.5 rounded-xl border border-[var(--color-rule)] bg-[var(--color-paper)] flex items-center gap-2.5">
-                      <span className="w-6 h-6 rounded-full bg-[var(--color-ink)] text-[var(--color-paper-2)] font-bold text-[11px] flex items-center justify-center shrink-0">2</span>
-                      <span className="text-[11px] leading-tight text-[var(--color-ink)]">Menu (⋮) or Settings → <strong>Linked Devices</strong></span>
-                    </div>
-                    <div className="p-2.5 rounded-xl border border-[var(--color-rule)] bg-[var(--color-paper)] flex items-center gap-2.5">
-                      <span className="w-6 h-6 rounded-full bg-[var(--color-ink)] text-[var(--color-paper-2)] font-bold text-[11px] flex items-center justify-center shrink-0">3</span>
-                      <span className="text-[11px] leading-tight text-[var(--color-ink)]">Tap <strong>Link a Device</strong> & point camera here</span>
-                    </div>
-                  </div>
-
-                  {/* QR Box with Viewfinder Corners */}
-                  <div className="relative p-4 rounded-2xl bg-white border-2 border-[var(--color-rule)] shadow-lg inline-block mb-3 transition-all">
-                    {/* Viewfinder corner brackets */}
-                    <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-emerald-500 rounded-tl-sm pointer-events-none" />
-                    <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-emerald-500 rounded-tr-sm pointer-events-none" />
-                    <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-emerald-500 rounded-bl-sm pointer-events-none" />
-                    <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-emerald-500 rounded-br-sm pointer-events-none" />
-
-                    {qrDataUrl ? (
-                      <img src={qrDataUrl} alt="WhatsApp Web QR Code" className="w-[230px] h-[230px] sm:w-[250px] sm:h-[250px] object-contain mx-auto select-none" />
-                    ) : (
-                      <QRCodeSVG value={qrCode} size={240} level="M" className="mx-auto select-none" />
-                    )}
-
-                    {/* Active Verification Overlay */}
-                    {loginCheckState === "checking" && (
-                      <div className="absolute inset-0 bg-white/85 backdrop-blur-[2px] rounded-2xl flex flex-col items-center justify-center p-4">
-                        <Loader2 size={36} className="animate-spin text-emerald-600 mb-2" />
-                        <span className="text-xs font-bold text-[var(--color-ink)]">Verifying Link...</span>
-                        <span className="text-[10px] text-[var(--color-ink-2)] mt-1">Checking handshake with phone</span>
-                      </div>
-                    )}
-                    {loginCheckState === "success" && (
-                      <div className="absolute inset-0 bg-emerald-500/95 rounded-2xl flex flex-col items-center justify-center p-4 text-white animate-in fade-in">
-                        <CheckCircle2 size={44} className="mb-2" />
-                        <span className="text-sm font-bold">Linked Successfully!</span>
-                        <span className="text-xs opacity-90 mt-0.5">Opening chat workspace...</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* QR Validity Progress Bar & Indicator */}
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span className="text-[11px] font-semibold text-[var(--color-ink-2)]">
-                      QR active • Auto-refreshes in <strong className="text-emerald-700">{qrCountdown}s</strong>
-                    </span>
-                    <div className="w-16 h-1.5 bg-[var(--color-rule)] rounded-full overflow-hidden ml-1">
-                      <div
-                        className="h-full bg-emerald-500 transition-all duration-1000 ease-linear rounded-full"
-                        style={{ width: `${Math.max(0, Math.min(100, (qrCountdown / 25) * 100))}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Actions Bar (.hl-card > .flex > div > .flex) */}
-                  <div className="flex flex-wrap items-center justify-center gap-2.5 max-w-xl w-full mb-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const now = Date.now();
-                        if (now - lastQrRefreshClickRef.current < 2000) return;
-                        lastQrRefreshClickRef.current = now;
-                        fetchQr(true);
-                      }}
-                      disabled={qrLoading || checkingLogin}
-                      className="hl-btn-secondary px-3.5 py-2 text-xs font-semibold transition flex items-center gap-2 hover:bg-[var(--color-paper)]"
-                      title="Fetch a brand-new QR code immediately"
-                    >
-                      <RefreshCw size={13} className={qrLoading ? "animate-spin" : ""} />
-                      <span>{qrLoading ? "Refreshing..." : "Refresh QR Code"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleCheckLogin}
-                      disabled={checkingLogin || loginCheckState === "checking"}
-                      className="hl-btn-primary px-4 py-2 text-xs font-bold transition flex items-center gap-2 shadow-sm bg-emerald-700 hover:bg-emerald-800 text-white border-transparent"
-                      title="Verify if your phone has successfully scanned the QR code"
-                    >
-                      {checkingLogin || loginCheckState === "checking" ? (
-                        <>
-                          <Loader2 size={13} className="animate-spin text-white" />
-                          <span>Verifying Connection...</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 size={13} />
-                          <span>I Scanned It → Check Login ⚡</span>
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleEnterWorkspace}
-                      className="hl-btn-secondary px-3.5 py-2 text-xs font-semibold text-[var(--color-ink)] hover:bg-[var(--color-paper)] transition flex items-center gap-1.5 border border-dashed border-[var(--color-rule)]"
-                      title="Open saved chats; sending requires a connected WhatsApp account"
-                    >
-                      <span>💬 Open Chat Workspace</span>
-                    </button>
-                  </div>
-
-                  {/* Real-time Verification Feedback Box */}
-                  {loginCheckMessage && (
-                    <div
-                      className={`w-full max-w-lg p-3 rounded-xl text-xs flex items-start gap-2.5 transition-all text-left ${loginCheckState === "checking"
-                          ? "bg-blue-50 border border-blue-200 text-blue-900"
-                          : loginCheckState === "success"
-                            ? "bg-emerald-50 border border-emerald-300 text-emerald-900"
-                            : loginCheckState === "failed"
-                              ? "bg-amber-50 border border-amber-300 text-amber-900"
-                              : "bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]"
-                        }`}
-                    >
-                      {loginCheckState === "checking" && <Loader2 size={15} className="animate-spin shrink-0 text-blue-600 mt-0.5" />}
-                      {loginCheckState === "success" && <CheckCircle2 size={15} className="shrink-0 text-emerald-600 mt-0.5" />}
-                      {loginCheckState === "failed" && <Info size={15} className="shrink-0 text-amber-600 mt-0.5" />}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-xs leading-snug">{loginCheckMessage}</p>
-                        {loginCheckState === "failed" && (
-                          <div className="mt-2 flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={handleCheckLogin}
-                              className="px-2.5 py-1 rounded-lg bg-amber-600 text-white font-bold text-[11px] hover:bg-amber-700 transition"
-                            >
-                              Retry Check
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleEnterWorkspace}
-                              className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 font-semibold text-[11px] text-amber-900 hover:bg-amber-100 transition"
-                            >
-                              Explore in Workspace
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      {loginCheckState !== "checking" && (
-                        <button
-                          type="button"
-                          onClick={() => setLoginCheckMessage("")}
-                          className="shrink-0 opacity-60 hover:opacity-100"
-                        >
-                          <X size={13} />
-                        </button>
-                      )}
+                  )}
+                  {loginCheckState === "success" && (
+                    <div className="absolute inset-0 bg-emerald-500/95 rounded-2xl flex flex-col items-center justify-center p-4 text-white animate-in fade-in">
+                      <CheckCircle2 size={44} className="mb-2" />
+                      <span className="text-sm font-bold">Linked Successfully!</span>
+                      <span className="text-xs opacity-90 mt-0.5">Opening chat workspace...</span>
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="py-6 text-center">
-                  <Smartphone size={52} className="text-[var(--color-ink)] mx-auto mb-3" />
-                  <h3 className="hl-empty-title mb-1">Ready to Link WhatsApp Phone</h3>
-                  <p className="hl-subtitle max-w-sm mx-auto mb-4">Click below to generate a QR code to scan with your phone.</p>
+
+                {/* QR Validity Progress Bar & Indicator */}
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-[11px] font-semibold text-[var(--color-ink-2)]">
+                    QR active • Auto-refreshes in <strong className="text-emerald-700">{qrCountdown}s</strong>
+                  </span>
+                  <div className="w-16 h-1.5 bg-[var(--color-rule)] rounded-full overflow-hidden ml-1">
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-1000 ease-linear rounded-full"
+                      style={{ width: `${Math.max(0, Math.min(100, (qrCountdown / 25) * 100))}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Actions Bar (.hl-card > .flex > div > .flex) */}
+                <div className="flex flex-wrap items-center justify-center gap-2.5 max-w-xl w-full mb-3">
                   <button
+                    type="button"
                     onClick={() => {
-                      hasTriggeredQrFetch.current = true;
-                      fetchQr();
+                      const now = Date.now();
+                      if (now - lastQrRefreshClickRef.current < 2000) return;
+                      lastQrRefreshClickRef.current = now;
+                      fetchQr(true);
                     }}
-                    className="hl-btn-primary font-bold text-xs"
+                    disabled={qrLoading || checkingLogin}
+                    className="hl-btn-secondary px-3.5 py-2 text-xs font-semibold transition flex items-center gap-2 hover:bg-[var(--color-paper)]"
+                    title="Fetch a brand-new QR code immediately"
                   >
-                    Display QR Code Now
+                    <RefreshCw size={13} className={qrLoading ? "animate-spin" : ""} />
+                    <span>{qrLoading ? "Refreshing..." : "Refresh QR Code"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCheckLogin}
+                    disabled={checkingLogin || loginCheckState === "checking"}
+                    className="hl-btn-primary px-4 py-2 text-xs font-bold transition flex items-center gap-2 shadow-sm bg-emerald-700 hover:bg-emerald-800 text-white border-transparent"
+                    title="Verify if your phone has successfully scanned the QR code"
+                  >
+                    {checkingLogin || loginCheckState === "checking" ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin text-white" />
+                        <span>Verifying Connection...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={13} />
+                        <span>I Scanned It → Check Login ⚡</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleEnterWorkspace}
+                    className="hl-btn-secondary px-3.5 py-2 text-xs font-semibold text-[var(--color-ink)] hover:bg-[var(--color-paper)] transition flex items-center gap-1.5 border border-dashed border-[var(--color-rule)]"
+                    title="Open saved chats; sending requires a connected WhatsApp account"
+                  >
+                    <span>💬 Open Chat Workspace</span>
                   </button>
                 </div>
+
+                {/* Real-time Verification Feedback Box */}
+                {loginCheckMessage && (
+                  <div
+                    className={`w-full max-w-lg p-3 rounded-xl text-xs flex items-start gap-2.5 transition-all text-left ${loginCheckState === "checking"
+                      ? "bg-blue-50 border border-blue-200 text-blue-900"
+                      : loginCheckState === "success"
+                        ? "bg-emerald-50 border border-emerald-300 text-emerald-900"
+                        : loginCheckState === "failed"
+                          ? "bg-amber-50 border border-amber-300 text-amber-900"
+                          : "bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)]"
+                      }`}
+                  >
+                    {loginCheckState === "checking" && <Loader2 size={15} className="animate-spin shrink-0 text-blue-600 mt-0.5" />}
+                    {loginCheckState === "success" && <CheckCircle2 size={15} className="shrink-0 text-emerald-600 mt-0.5" />}
+                    {loginCheckState === "failed" && <Info size={15} className="shrink-0 text-amber-600 mt-0.5" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-xs leading-snug">{loginCheckMessage}</p>
+                      {loginCheckState === "failed" && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleCheckLogin}
+                            className="px-2.5 py-1 rounded-lg bg-amber-600 text-white font-bold text-[11px] hover:bg-amber-700 transition"
+                          >
+                            Retry Check
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleEnterWorkspace}
+                            className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 font-semibold text-[11px] text-amber-900 hover:bg-amber-100 transition"
+                          >
+                            Explore in Workspace
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {loginCheckState !== "checking" && (
+                      <button
+                        type="button"
+                        onClick={() => setLoginCheckMessage("")}
+                        className="shrink-0 opacity-60 hover:opacity-100"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              ) : (
+              <div className="py-6 text-center">
+                <Smartphone size={52} className="text-[var(--color-ink)] mx-auto mb-3" />
+                <h3 className="hl-empty-title mb-1">Ready to Link WhatsApp Phone</h3>
+                <p className="hl-subtitle max-w-sm mx-auto mb-4">Click below to generate a QR code to scan with your phone.</p>
+                <button
+                  onClick={() => {
+                    hasTriggeredQrFetch.current = true;
+                    fetchQr();
+                  }}
+                  className="hl-btn-primary font-bold text-xs"
+                >
+                  Display QR Code Now
+                </button>
+              </div>
               )}
             </div>
           )}
@@ -5151,17 +5156,17 @@ export default function WhatsAppPage() {
   const chatPhoneDigits = selectedChat && !selectedChat.isGroup ? String(selectedChat.id || "").replace(/\D/g, "") : "";
   const selectedEnquiry = chatPhoneDigits
     ? [...enquiries, ...convertedEnquiries].find((item) => {
-        const leadDigits = String(item.phone || "").replace(/\D/g, "");
-        return leadDigits && (leadDigits === chatPhoneDigits || leadDigits.slice(-10) === chatPhoneDigits.slice(-10));
-      })
+      const leadDigits = String(item.phone || "").replace(/\D/g, "");
+      return leadDigits && (leadDigits === chatPhoneDigits || leadDigits.slice(-10) === chatPhoneDigits.slice(-10));
+    })
     : null;
 
   return (
     <div className="wa-inbox w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-[var(--color-paper-2)] text-[var(--color-ink)] rounded-xl border border-[var(--color-rule)] shadow-sm overflow-hidden select-text wa-parallel-container">      {syncing && (
-        <p className="px-3 py-2 text-xs shrink-0 border-b border-[var(--color-rule)] bg-[var(--color-paper-2)] text-[var(--color-ink-2)]" role="status">
-          Syncing WhatsApp: {syncProgress?.completedChats || 0} / {syncProgress?.totalChats || "..."} chats.
-        </p>
-      )}
+      <p className="px-3 py-2 text-xs shrink-0 border-b border-[var(--color-rule)] bg-[var(--color-paper-2)] text-[var(--color-ink-2)]" role="status">
+        Syncing WhatsApp: {syncProgress?.completedChats || 0} / {syncProgress?.totalChats || "..."} chats.
+      </p>
+    )}
 
       {deliveryWarning && (
         <div role="alert" className="p-2.5 text-xs font-semibold flex items-start justify-between gap-3 shrink-0 bg-[var(--color-paper-2)] border-b border-[var(--color-brand-orange)] text-[var(--color-ink)]">
@@ -5189,10 +5194,10 @@ export default function WhatsAppPage() {
         {/* Chats Sidebar Column (Independent Parallel Scrolling) */}
         <div
           className={`wa-inbox-sidebar border-r border-[var(--color-rule)] bg-[var(--color-paper-2)] flex flex-col h-full min-h-0 shrink-0 select-none transition-all duration-200 ${sidebarMode === "compact"
-              ? "wa-sidebar-compact"
-              : sidebarMode === "wide"
-                ? "wa-sidebar-wide"
-                : "w-full md:w-80 lg:w-[21rem] xl:w-[360px]"
+            ? "wa-sidebar-compact"
+            : sidebarMode === "wide"
+              ? "wa-sidebar-wide"
+              : "w-full md:w-80 lg:w-[21rem] xl:w-[360px]"
             } ${showMobileChat ? "hidden md:flex" : "flex"}`}
         >
           {/* Multi-Session / Multi-Number Selector Bar */}
@@ -5517,12 +5522,12 @@ export default function WhatsAppPage() {
                     <div
                       key={chat.id}
                       onClick={() => handleSelectChat(chat)}
-                    role="button" tabIndex={0} aria-pressed={isActive}
-                    aria-label={`Open conversation with ${chat.name || chat.phoneNumber || "contact"}`}
-                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleSelectChat(chat); } }}
-                    className={`wa-conversation-row w-full py-3 flex flex-col items-center justify-center cursor-pointer relative group transition-all duration-150 border-l-2 ${isActive
-                          ? "bg-[var(--color-paper)] border-[var(--color-accent)]"
-                          : "border-transparent hover:bg-[var(--color-paper)]/70"
+                      role="button" tabIndex={0} aria-pressed={isActive}
+                      aria-label={`Open conversation with ${chat.name || chat.phoneNumber || "contact"}`}
+                      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleSelectChat(chat); } }}
+                      className={`wa-conversation-row w-full py-3 flex flex-col items-center justify-center cursor-pointer relative group transition-all duration-150 border-l-2 ${isActive
+                        ? "bg-[var(--color-paper)] border-[var(--color-accent)]"
+                        : "border-transparent hover:bg-[var(--color-paper)]/70"
                         }`}
                       title={`${chat.name || chat.phoneNumber || "Contact"}\n${chat.lastMessage?.body || "Open conversation"}`}
                     >
@@ -6618,22 +6623,22 @@ export default function WhatsAppPage() {
                     <div className="hl-section-label px-2 py-1 text-[10px] uppercase font-bold text-[var(--color-ink)]">Quick Replies (Click to insert)</div>
                     {("remind".startsWith(messageInput.slice(1).toLowerCase().split(/\s/)[0]) ||
                       messageInput.slice(1).toLowerCase().startsWith("remind")) && (
-                      <div
-                        onClick={() => {
-                          setMessageInput("/remind ");
-                          textareaRef.current?.focus();
-                        }}
-                        className="p-2 hover:bg-[var(--color-paper)] rounded-xl cursor-pointer transition"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-xs text-[var(--color-ink)]">/remind</span>
-                          <span className="text-[10px] text-[var(--color-ink-2)] font-semibold">Set a reminder</span>
+                        <div
+                          onClick={() => {
+                            setMessageInput("/remind ");
+                            textareaRef.current?.focus();
+                          }}
+                          className="p-2 hover:bg-[var(--color-paper)] rounded-xl cursor-pointer transition"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs text-[var(--color-ink)]">/remind</span>
+                            <span className="text-[10px] text-[var(--color-ink-2)] font-semibold">Set a reminder</span>
+                          </div>
+                          <p className="text-[11px] text-[var(--color-ink-2)] truncate mt-0.5">
+                            /remind tomorrow 10am call about the invoice
+                          </p>
                         </div>
-                        <p className="text-[11px] text-[var(--color-ink-2)] truncate mt-0.5">
-                          /remind tomorrow 10am call about the invoice
-                        </p>
-                      </div>
-                    )}
+                      )}
                     {quickReplies
                       .filter((qr) => qr.shortcut?.toLowerCase().includes(messageInput.slice(1).toLowerCase()) || qr.title?.toLowerCase().includes(messageInput.slice(1).toLowerCase()))
                       .map((qr) => (
@@ -7754,11 +7759,10 @@ export default function WhatsAppPage() {
           aria-live="polite"
         >
           <div
-            className={`hl-card flex items-center gap-2 px-3.5 py-2 text-xs font-semibold shadow-lg ${
-              reminderToast.type === "error"
+            className={`hl-card flex items-center gap-2 px-3.5 py-2 text-xs font-semibold shadow-lg ${reminderToast.type === "error"
                 ? "border-[var(--color-error)] text-[var(--color-error)]"
                 : ""
-            }`}
+              }`}
           >
             <Bell size={14} className="shrink-0" />
             <span className="min-w-0">{reminderToast.message}</span>
@@ -7817,8 +7821,8 @@ export default function WhatsAppPage() {
                             );
                           }}
                           className={`hl-card p-3 cursor-pointer transition flex items-center justify-between ${isSelected
-                              ? "border-[var(--color-accent)]"
-                              : ""
+                            ? "border-[var(--color-accent)]"
+                            : ""
                             }`}
                         >
                           <div>
@@ -8024,8 +8028,8 @@ export default function WhatsAppPage() {
                         key={rule.id}
                         onClick={() => setSelectedAutomationId(rule.id)}
                         className={`hl-card p-3 cursor-pointer transition flex items-center justify-between ${isSelected
-                            ? "border-[var(--color-accent)]"
-                            : ""
+                          ? "border-[var(--color-accent)]"
+                          : ""
                           }`}
                       >
                         <div className="min-w-0 flex-1">

@@ -73,3 +73,4 @@ Conditions support nested group logic:
 ### 5. Durable Checkpoints & Multi-Day Workflows
 - Multi-day drip campaigns and delay nodes persist their execution resume state in `wa_automation_checkpoints`.
 - The background scheduler (`backend/server.js`) scans for pending checkpoints every 60 seconds, ensuring zero lost workflows across backend server restarts.
+

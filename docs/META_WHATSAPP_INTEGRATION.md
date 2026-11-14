@@ -97,3 +97,4 @@ A single customer tenant can connect **5 or more phone numbers** concurrently.
               └── Inbound Webhook: status = 'read'
 ```
 Every status transition updates `messages` and `wa_message_logs`, emits a real-time event to connected Socket.IO clients, and updates campaign analytics.
+

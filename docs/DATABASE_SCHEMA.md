@@ -80,3 +80,4 @@ Every multi-tenant table includes a composite index:
 - `INDEX idx_<table_name>_tenant (tenant_id)`
 - `INDEX idx_<table_name>_tenant_created (tenant_id, created_at DESC)`
 - `INDEX idx_<table_name>_tenant_phone (tenant_id, phone)` (for contact queries)
+

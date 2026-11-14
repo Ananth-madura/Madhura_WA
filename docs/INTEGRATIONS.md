@@ -46,3 +46,4 @@ All external integrations are configured per-tenant in `tenant_crm_webhooks` and
 - **Outbound Webhook Dispatch**:
   - Workflows can trigger external POST/PUT requests with custom headers, HMAC authentication, and payload transformation templates.
   - Supports automated retries (exponential backoff: 1s, 5s, 30s) on network failures.
+

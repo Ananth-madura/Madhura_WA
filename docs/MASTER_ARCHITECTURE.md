@@ -93,3 +93,4 @@ Meta Webhook Ingested -> HMAC Verified -> Deduped
 - **Idempotent Webhooks**: Message delivery receipts and inbound payloads check `wa_webhook_claims` to eliminate duplicate processing.
 - **Anti-Ban Throttling**: Pacing delays between sequential sends, warm-up ramping for newly registered numbers, and automatic pause on error spikes.
 - **Durable Checkpoints**: Long-running multi-day workflows persist state in `wa_automation_checkpoints`.
+

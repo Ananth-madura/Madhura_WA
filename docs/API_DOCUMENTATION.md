@@ -78,3 +78,4 @@
 - `POST /api/wa/payments/verify`: Verify Razorpay webhook or payment signature.
 - `POST /api/whatsapp/webhook`: Meta Cloud API inbound webhook endpoint.
 - `GET /api/whatsapp/webhook`: Meta Cloud API webhook verification challenge.
+
