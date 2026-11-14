@@ -302,7 +302,7 @@ export default function WAVariablePicker({ onInsert, className = "" }) {
               key={v.tag}
               type="button"
               onClick={() => handleSelect(v.tag)}
-              title={`${v.label} (Example: ${v.sample}) — Click to insert`}
+              title={`${v.label} (Example: ${v.sample}) - Click to insert`}
               className={`hl-badge px-2.5 py-1 rounded-xl text-[11px] font-semibold border transition flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs ${group.color}`}
             >
               <Plus size={11} className="opacity-70" />

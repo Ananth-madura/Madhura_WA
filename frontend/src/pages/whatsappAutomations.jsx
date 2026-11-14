@@ -974,29 +974,48 @@ function AutomationWorkspace() {
               {/* Basics */}
               <section className="space-y-4 p-5 sm:p-6">
                 <div>
-                  <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">1</span>
+                  <h2
+                    className="flex items-center gap-2 text-sm font-bold m-0"
+                    style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+                  >
+                    <span
+                      className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white shrink-0"
+                      style={{ background: "var(--color-ink, #202C52)" }}
+                    >
+                      1
+                    </span>
                     Rule basics
                   </h2>
-                  <p className="mt-1 text-xs text-slate-500">Name the rule and pick the CRM event that starts it.</p>
+                  <p className="mt-1 text-xs" style={{ color: "var(--color-ink-2, #667085)" }}>
+                    Name the rule and pick the CRM event that starts it.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
-                    <label htmlFor="automation-rule-name" className="mb-1 block text-xs font-semibold text-slate-700">Rule Name *</label>
+                    <label htmlFor="automation-rule-name" className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                      Rule Name *
+                    </label>
                     <input
                       id="automation-rule-name"
                       type="text"
                       value={form.name}
                       onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                       placeholder="e.g. Instant Invoice WhatsApp Notice"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
+                      className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none"
+                      style={{
+                        borderColor: "var(--color-rule, #E8E8E8)",
+                        background: "var(--color-paper-2, #ffffff)",
+                        color: "var(--color-ink, #202C52)",
+                      }}
                       required
                     />
                   </div>
 
                   <div>
-                    <label htmlFor="automation-trigger-event" className="mb-1 block text-xs font-semibold text-slate-700">Trigger Event *</label>
+                    <label htmlFor="automation-trigger-event" className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                      Trigger Event *
+                    </label>
                     <select
                       id="automation-trigger-event"
                       value={form.trigger_type}
@@ -1008,7 +1027,12 @@ function AutomationWorkspace() {
                           message_text: !f.message_text?.trim() || f.message_text === PRESET_MESSAGES[f.trigger_type] ? PRESET_MESSAGES[t] || "" : f.message_text,
                         }));
                       }}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
+                      className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none"
+                      style={{
+                        borderColor: "var(--color-rule, #E8E8E8)",
+                        background: "var(--color-paper-2, #ffffff)",
+                        color: "var(--color-ink, #202C52)",
+                      }}
                     >
                       {TRIGGER_CATEGORIES.map((cat) => (
                         <optgroup key={cat.category} label={cat.category}>
@@ -1020,17 +1044,26 @@ function AutomationWorkspace() {
                         </optgroup>
                       ))}
                     </select>
-                    <p className="mt-1 text-[11px] text-slate-500">{TRIGGER_TYPES.find((t) => t.value === form.trigger_type)?.desc}</p>
+                    <p className="mt-1 text-[11px]" style={{ color: "var(--color-ink-2, #667085)" }}>
+                      {TRIGGER_TYPES.find((t) => t.value === form.trigger_type)?.desc}
+                    </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-700">WhatsApp Meta Sender *</label>
+                    <label className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                      WhatsApp Meta Sender *
+                    </label>
                     <select
                       value={form.sender_id || ""}
                       onChange={(e) => setForm((f) => ({ ...f, sender_id: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
+                      className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none"
+                      style={{
+                        borderColor: "var(--color-rule, #E8E8E8)",
+                        background: "var(--color-paper-2, #ffffff)",
+                        color: "var(--color-ink, #202C52)",
+                      }}
                     >
                       <option value="">Choose a connected Meta sender</option>
                       {senders.map((s) => (
@@ -1042,11 +1075,18 @@ function AutomationWorkspace() {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-700">Branch Scope (optional)</label>
+                    <label className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                      Branch Scope (optional)
+                    </label>
                     <select
                       value={form.branch_id || ""}
                       onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                      className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none"
+                      style={{
+                        borderColor: "var(--color-rule, #E8E8E8)",
+                        background: "var(--color-paper-2, #ffffff)",
+                        color: "var(--color-ink, #202C52)",
+                      }}
                     >
                       <option value="">Organization-Wide (All Branches)</option>
                       {branches.map((br) => (
@@ -1058,11 +1098,18 @@ function AutomationWorkspace() {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-700">Category</label>
+                    <label className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                      Category
+                    </label>
                     <select
                       value={form.category || "general"}
                       onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                      className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none"
+                      style={{
+                        borderColor: "var(--color-rule, #E8E8E8)",
+                        background: "var(--color-paper-2, #ffffff)",
+                        color: "var(--color-ink, #202C52)",
+                      }}
                     >
                       <option value="general">General</option>
                       <option value="sales">Sales &amp; Leads</option>
@@ -1077,11 +1124,19 @@ function AutomationWorkspace() {
               {/* Conditions */}
               <section className="space-y-4 p-5 sm:p-6">
                 <div>
-                  <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">2</span>
+                  <h2
+                    className="flex items-center gap-2 text-sm font-bold m-0"
+                    style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+                  >
+                    <span
+                      className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white shrink-0"
+                      style={{ background: "var(--color-ink, #202C52)" }}
+                    >
+                      2
+                    </span>
                     Conditions
                   </h2>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs" style={{ color: "var(--color-ink-2, #667085)" }}>
                     Optional filters. Leave empty to run for every matching event.
                   </p>
                 </div>
@@ -1092,28 +1147,49 @@ function AutomationWorkspace() {
               <section className="space-y-4 p-5 sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">3</span>
+                    <h2
+                      className="flex items-center gap-2 text-sm font-bold m-0"
+                      style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+                    >
+                      <span
+                        className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white shrink-0"
+                        style={{ background: "var(--color-ink, #202C52)" }}
+                      >
+                        3
+                      </span>
                       Message content
                     </h2>
-                    <p className="mt-1 text-xs text-slate-500">Send one message, or build a multi-step workflow pipeline.</p>
+                    <p className="mt-1 text-xs" style={{ color: "var(--color-ink-2, #667085)" }}>
+                      Send one message, or build a multi-step workflow pipeline.
+                    </p>
                   </div>
-                  <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+                  <div
+                    className="flex items-center gap-1 rounded-lg border p-1"
+                    style={{
+                      background: "var(--color-surface, #F5F5F5)",
+                      borderColor: "var(--color-rule, #E8E8E8)",
+                    }}
+                  >
                     <button
                       type="button"
                       onClick={() => setForm((f) => ({ ...f, mode: "single" }))}
-                      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-                        form.mode === "single" ? "border border-slate-200 bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
-                      }`}
+                      className="rounded-md px-3 py-1.5 text-xs font-semibold transition"
+                      style={{
+                        background: form.mode === "single" ? "var(--color-paper-2, #ffffff)" : "transparent",
+                        color: "var(--color-ink, #202C52)",
+                        border: form.mode === "single" ? "1px solid var(--color-rule, #E8E8E8)" : "none",
+                      }}
                     >
                       Direct message
                     </button>
                     <button
                       type="button"
                       onClick={() => setForm((f) => ({ ...f, mode: "pipeline" }))}
-                      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-                        form.mode === "pipeline" ? "bg-slate-900 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
-                      }`}
+                      className="rounded-md px-3 py-1.5 text-xs font-semibold transition"
+                      style={{
+                        background: form.mode === "pipeline" ? "var(--color-ink, #202C52)" : "transparent",
+                        color: form.mode === "pipeline" ? "#ffffff" : "var(--color-ink, #202C52)",
+                      }}
                     >
                       🔀 Workflow pipeline
                     </button>
@@ -1121,30 +1197,55 @@ function AutomationWorkspace() {
                 </div>
 
                 {form.mode === "pipeline" ? (
-                  <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                      <span className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-                        <GitBranch className="h-4 w-4 text-slate-700" /> Action pipeline ({form.actions.length} steps)
+                  <div
+                    className="space-y-4 rounded-xl border p-4"
+                    style={{
+                      background: "var(--color-surface, #F5F5F5)",
+                      borderColor: "var(--color-rule, #E8E8E8)",
+                    }}
+                  >
+                    <div
+                      className="flex items-center justify-between border-b pb-2"
+                      style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+                    >
+                      <span className="flex items-center gap-1.5 text-xs font-bold" style={{ color: "var(--color-ink, #202C52)" }}>
+                        <GitBranch className="h-4 w-4" /> Action pipeline ({form.actions.length} steps)
                       </span>
-                      <span className="text-[11px] text-slate-500">Actions run in consecutive order.</span>
+                      <span className="text-[11px]" style={{ color: "var(--color-ink-2, #667085)" }}>
+                        Actions run in consecutive order.
+                      </span>
                     </div>
 
                     {form.actions.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500">
+                      <div
+                        className="rounded-lg border border-dashed p-4 text-center text-xs"
+                        style={{
+                          background: "var(--color-paper-2, #ffffff)",
+                          borderColor: "var(--color-rule, #E8E8E8)",
+                          color: "var(--color-ink-2, #667085)",
+                        }}
+                      >
                         No actions added yet. Add steps from the action library below.
                       </div>
                     ) : (
                       <div className="space-y-3">
                         {form.actions.map((act, aIdx) => (
-                          <div key={aIdx} className="space-y-2 rounded-lg border border-slate-200 bg-white p-3.5 shadow-xs">
+                          <div
+                            key={aIdx}
+                            className="space-y-2 rounded-lg border p-3.5 shadow-2xs"
+                            style={{
+                              background: "var(--color-paper-2, #ffffff)",
+                              borderColor: "var(--color-rule, #E8E8E8)",
+                            }}
+                          >
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-slate-900">
+                              <span className="text-xs font-bold" style={{ color: "var(--color-ink, #202C52)" }}>
                                 Step {aIdx + 1}: {ACTION_TYPES.find((t) => t.type === act.type)?.label || act.type}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => setForm((f) => ({ ...f, actions: f.actions.filter((_, i) => i !== aIdx) }))}
-                                className="text-xs font-medium text-rose-600 hover:text-rose-700"
+                                className="text-xs font-semibold text-rose-600 hover:text-rose-700"
                               >
                                 Remove
                               </button>
@@ -1162,7 +1263,12 @@ function AutomationWorkspace() {
                                   }));
                                 }}
                                 placeholder="Message text with variables (e.g. Hello {name}!)..."
-                                className="w-full rounded border border-slate-300 p-2 text-xs"
+                                className="w-full rounded border p-2 text-xs focus:outline-none"
+                                style={{
+                                  borderColor: "var(--color-rule, #E8E8E8)",
+                                  background: "var(--color-paper-2, #ffffff)",
+                                  color: "var(--color-ink, #202C52)",
+                                }}
                               />
                             )}
 
@@ -1179,7 +1285,12 @@ function AutomationWorkspace() {
                                       actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, question_text: val } } : item)),
                                     }));
                                   }}
-                                  className="w-full rounded border border-slate-300 p-2 text-xs"
+                                  className="w-full rounded border p-2 text-xs focus:outline-none"
+                                  style={{
+                                    borderColor: "var(--color-rule, #E8E8E8)",
+                                    background: "var(--color-paper-2, #ffffff)",
+                                    color: "var(--color-ink, #202C52)",
+                                  }}
                                 />
                                 <div className="grid grid-cols-2 gap-2">
                                   <select
@@ -1191,7 +1302,12 @@ function AutomationWorkspace() {
                                         actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, expected_type: val } } : item)),
                                       }));
                                     }}
-                                    className="rounded border border-slate-300 p-1.5 text-xs"
+                                    className="rounded border p-1.5 text-xs focus:outline-none"
+                                    style={{
+                                      borderColor: "var(--color-rule, #E8E8E8)",
+                                      background: "var(--color-paper-2, #ffffff)",
+                                      color: "var(--color-ink, #202C52)",
+                                    }}
                                   >
                                     <option value="button">Quick Reply Button Choice</option>
                                     <option value="text">Free Text Answer</option>
@@ -1210,7 +1326,12 @@ function AutomationWorkspace() {
                                         actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, crm_field: val } } : item)),
                                       }));
                                     }}
-                                    className="rounded border border-slate-300 p-1.5 text-xs"
+                                    className="rounded border p-1.5 text-xs focus:outline-none"
+                                    style={{
+                                      borderColor: "var(--color-rule, #E8E8E8)",
+                                      background: "var(--color-paper-2, #ffffff)",
+                                      color: "var(--color-ink, #202C52)",
+                                    }}
                                   />
                                 </div>
                               </div>
@@ -1218,7 +1339,7 @@ function AutomationWorkspace() {
 
                             {act.type === "wait_delay" && (
                               <div className="flex items-center gap-2">
-                                <span className="text-xs text-slate-600">Delay for:</span>
+                                <span className="text-xs" style={{ color: "var(--color-ink-2, #667085)" }}>Delay for:</span>
                                 <input
                                   type="number"
                                   min="1"
@@ -1231,9 +1352,14 @@ function AutomationWorkspace() {
                                       actions: f.actions.map((item, i) => (i === aIdx ? { ...item, params: { ...item.params, minutes: val } } : item)),
                                     }));
                                   }}
-                                  className="w-24 rounded border border-slate-300 p-1 text-xs"
+                                  className="w-24 rounded border p-1 text-xs focus:outline-none font-mono"
+                                  style={{
+                                    borderColor: "var(--color-rule, #E8E8E8)",
+                                    background: "var(--color-paper-2, #ffffff)",
+                                    color: "var(--color-ink, #202C52)",
+                                  }}
                                 />
-                                <span className="text-xs text-slate-600">minutes</span>
+                                <span className="text-xs" style={{ color: "var(--color-ink-2, #667085)" }}>minutes</span>
                               </div>
                             )}
 
@@ -1253,7 +1379,9 @@ function AutomationWorkspace() {
                     )}
 
                     <div className="pt-2">
-                      <span className="mb-2 block text-xs font-semibold text-slate-700">Add step to pipeline:</span>
+                      <span className="mb-2 block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                        Add step to pipeline:
+                      </span>
                       <div className="flex flex-wrap gap-1.5">
                         {ACTION_TYPES.map((at) => (
                           <button
@@ -1268,9 +1396,14 @@ function AutomationWorkspace() {
                                 ],
                               }));
                             }}
-                            className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50"
+                            className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold shadow-2xs transition hover:opacity-90"
+                            style={{
+                              borderColor: "var(--color-rule, #E8E8E8)",
+                              background: "var(--color-paper-2, #ffffff)",
+                              color: "var(--color-ink, #202C52)",
+                            }}
                           >
-                            <Plus className="h-3 w-3 text-slate-500" />
+                            <Plus className="h-3 w-3" style={{ color: "var(--color-ink-2, #667085)" }} />
                             <span>{at.label}</span>
                           </button>
                         ))}
@@ -1278,18 +1411,31 @@ function AutomationWorkspace() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                      <span className="text-xs font-bold text-slate-900">Main WhatsApp message</span>
+                  <div
+                    className="space-y-4 rounded-xl border p-4 shadow-xs"
+                    style={{
+                      background: "var(--color-paper-2, #ffffff)",
+                      borderColor: "var(--color-rule, #E8E8E8)",
+                    }}
+                  >
+                    <div
+                      className="flex items-center justify-between border-b pb-2"
+                      style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+                    >
+                      <span className="text-xs font-bold" style={{ color: "var(--color-ink, #202C52)" }}>
+                        Main WhatsApp message
+                      </span>
                       <div className="flex items-center gap-1">
                         {["text", "media", "template"].map((kind) => (
                           <button
                             key={kind}
                             type="button"
                             onClick={() => setForm((f) => ({ ...f, msg_kind: kind }))}
-                            className={`rounded-md px-2.5 py-1 text-xs font-semibold uppercase transition ${
-                              form.msg_kind === kind ? "bg-slate-900 text-white shadow-xs" : "text-slate-600 hover:bg-slate-100"
-                            }`}
+                            className="rounded-md px-2.5 py-1 text-xs font-semibold uppercase transition"
+                            style={{
+                              background: form.msg_kind === kind ? "var(--color-ink, #202C52)" : "transparent",
+                              color: form.msg_kind === kind ? "#ffffff" : "var(--color-ink, #202C52)",
+                            }}
                           >
                             {kind}
                           </button>
@@ -1302,21 +1448,34 @@ function AutomationWorkspace() {
                         <WAVariablePicker
                           onInsert={(tag) => setForm((f) => ({ ...f, message_text: (f.message_text || "") + " " + tag }))}
                         />
-                        <label className="block text-xs font-semibold text-slate-700">
+                        <label className="block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
                           Main message text
                           <textarea
                             aria-label="Main message text"
                             rows={4}
                             value={form.message_text || ""}
                             onChange={(e) => setForm((f) => ({ ...f, message_text: e.target.value }))}
-                            className="mt-1 w-full rounded-lg border border-slate-300 p-3 text-xs text-slate-900 shadow-xs focus:border-slate-800 focus:outline-none"
+                            className="mt-1 w-full rounded-lg border p-3 text-xs shadow-xs focus:outline-none"
+                            style={{
+                              borderColor: "var(--color-rule, #E8E8E8)",
+                              background: "var(--color-paper-2, #ffffff)",
+                              color: "var(--color-ink, #202C52)",
+                            }}
                             placeholder="Type message here with placeholders..."
                           />
                         </label>
                         {form.message_text && (
-                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
-                            <span className="mb-1 block font-semibold text-slate-700">Live preview with sample data:</span>
-                            <p className="whitespace-pre-wrap font-mono text-[11px] text-slate-800">
+                          <div
+                            className="rounded-lg border p-3 text-xs"
+                            style={{
+                              background: "var(--color-surface, #F5F5F5)",
+                              borderColor: "var(--color-rule, #E8E8E8)",
+                            }}
+                          >
+                            <span className="mb-1 block font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                              Live preview with sample data:
+                            </span>
+                            <p className="whitespace-pre-wrap font-mono text-[11px] m-0" style={{ color: "var(--color-ink, #202C52)" }}>
                               {evaluateMessagePlaceholders(form.message_text)}
                             </p>
                           </div>
@@ -1326,11 +1485,18 @@ function AutomationWorkspace() {
 
                     {form.msg_kind === "template" && (
                       <div>
-                        <label className="mb-1 block text-xs font-semibold text-slate-700">Select approved template</label>
+                        <label className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                          Select approved template
+                        </label>
                         <select
                           value={form.template_id}
                           onChange={(e) => setForm((f) => ({ ...f, template_id: e.target.value }))}
-                          className="w-full rounded-lg border border-slate-300 p-2.5 text-xs text-slate-900"
+                          className="w-full rounded-lg border p-2.5 text-xs focus:outline-none"
+                          style={{
+                            borderColor: "var(--color-rule, #E8E8E8)",
+                            background: "var(--color-paper-2, #ffffff)",
+                            color: "var(--color-ink, #202C52)",
+                          }}
                         >
                           <option value="">-- Choose template --</option>
                           {templates.filter(isApprovedTemplate).map((t) => (
@@ -1345,11 +1511,18 @@ function AutomationWorkspace() {
                     {form.msg_kind === "media" && (
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                         <div>
-                          <label className="mb-1 block text-xs font-semibold text-slate-700">Media type</label>
+                          <label className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                            Media type
+                          </label>
                           <select
                             value={form.media_type}
                             onChange={(e) => setForm((f) => ({ ...f, media_type: e.target.value }))}
-                            className="w-full rounded border border-slate-300 p-2 text-xs"
+                            className="w-full rounded border p-2 text-xs focus:outline-none"
+                            style={{
+                              borderColor: "var(--color-rule, #E8E8E8)",
+                              background: "var(--color-paper-2, #ffffff)",
+                              color: "var(--color-ink, #202C52)",
+                            }}
                           >
                             <option value="image">📷 Image</option>
                             <option value="document">📄 PDF document</option>
@@ -1359,13 +1532,20 @@ function AutomationWorkspace() {
                           </select>
                         </div>
                         <div className="sm:col-span-2">
-                          <label className="mb-1 block text-xs font-semibold text-slate-700">HTTPS media URL</label>
+                          <label className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                            HTTPS media URL
+                          </label>
                           <input
                             type="text"
                             value={form.media_url || ""}
                             onChange={(e) => setForm((f) => ({ ...f, media_url: e.target.value }))}
                             placeholder="https://example.com/invoice.pdf"
-                            className="w-full rounded border border-slate-300 p-2 text-xs"
+                            className="w-full rounded border p-2 text-xs focus:outline-none"
+                            style={{
+                              borderColor: "var(--color-rule, #E8E8E8)",
+                              background: "var(--color-paper-2, #ffffff)",
+                              color: "var(--color-ink, #202C52)",
+                            }}
                           />
                         </div>
                       </div>
@@ -1378,14 +1558,24 @@ function AutomationWorkspace() {
               {form.mode === "single" && (
                 <section className="space-y-4 p-5 sm:p-6">
                   <div>
-                    <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">4</span>
+                    <h2
+                      className="flex items-center gap-2 text-sm font-bold m-0"
+                      style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+                    >
+                      <span
+                        className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white shrink-0"
+                        style={{ background: "var(--color-ink, #202C52)" }}
+                      >
+                        4
+                      </span>
                       Follow-up message
                     </h2>
-                    <p className="mt-1 text-xs text-slate-500">Optionally send a second message a few seconds later.</p>
+                    <p className="mt-1 text-xs" style={{ color: "var(--color-ink-2, #667085)" }}>
+                      Optionally send a second message a few seconds later.
+                    </p>
                   </div>
 
-                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-800">
+                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer" style={{ color: "var(--color-ink, #202C52)" }}>
                     <input
                       type="checkbox"
                       checked={Boolean(form.enable_sequence)}
@@ -1396,9 +1586,15 @@ function AutomationWorkspace() {
                   </label>
 
                   {form.enable_sequence && (
-                    <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                    <div
+                      className="space-y-4 rounded-xl border p-4"
+                      style={{
+                        background: "var(--color-surface, #F5F5F5)",
+                        borderColor: "var(--color-rule, #E8E8E8)",
+                      }}
+                    >
                       <AutomationFollowupOptions form={form} setForm={setForm} templates={templates} />
-                      <label className="block text-xs font-semibold text-slate-700">
+                      <label className="block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
                         Follow-up delay (seconds)
                         <input
                           type="number"
@@ -1406,7 +1602,12 @@ function AutomationWorkspace() {
                           max="60"
                           value={form.sequence_delay_seconds}
                           onChange={(e) => setForm((f) => ({ ...f, sequence_delay_seconds: e.target.value }))}
-                          className="mt-1 w-32 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                          className="mt-1 w-32 rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none font-mono"
+                          style={{
+                            borderColor: "var(--color-rule, #E8E8E8)",
+                            background: "var(--color-paper-2, #ffffff)",
+                            color: "var(--color-ink, #202C52)",
+                          }}
                         />
                       </label>
                     </div>
@@ -1418,36 +1619,67 @@ function AutomationWorkspace() {
               <section className="space-y-4 p-5 sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">5</span>
+                    <h2
+                      className="flex items-center gap-2 text-sm font-bold m-0"
+                      style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+                    >
+                      <span
+                        className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white shrink-0"
+                        style={{ background: "var(--color-ink, #202C52)" }}
+                      >
+                        5
+                      </span>
                       Quick reply options
                     </h2>
-                    <p className="mt-1 text-xs text-slate-500">Up to three buttons customers can tap to get an instant answer.</p>
+                    <p className="mt-1 text-xs" style={{ color: "var(--color-ink-2, #667085)" }}>
+                      Up to three buttons customers can tap to get an instant answer.
+                    </p>
                   </div>
                   <button
                     type="button"
                     onClick={addOption}
                     disabled={menuOptions.length >= 3}
-                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold shadow-xs hover:opacity-90 disabled:opacity-50"
+                    style={{
+                      borderColor: "var(--color-rule, #E8E8E8)",
+                      background: "var(--color-paper-2, #ffffff)",
+                      color: "var(--color-ink, #202C52)",
+                    }}
                   >
                     <Plus className="h-3 w-3" /> Add reply option
                   </button>
                 </div>
 
                 {menuOptions.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500">
+                  <p
+                    className="rounded-lg border border-dashed p-4 text-center text-xs"
+                    style={{
+                      background: "var(--color-surface, #F5F5F5)",
+                      borderColor: "var(--color-rule, #E8E8E8)",
+                      color: "var(--color-ink-2, #667085)",
+                    }}
+                  >
                     No quick replies yet. Add a button label and the response it should send.
                   </p>
                 ) : (
                   <div className="space-y-3">
                     {menuOptions.map((option, index) => (
-                      <div key={index} className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
+                      <div
+                        key={index}
+                        className="space-y-2 rounded-lg border p-3 shadow-2xs"
+                        style={{
+                          background: "var(--color-paper-2, #ffffff)",
+                          borderColor: "var(--color-rule, #E8E8E8)",
+                        }}
+                      >
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-900">Reply {index + 1}</span>
+                          <span className="text-xs font-bold" style={{ color: "var(--color-ink, #202C52)" }}>
+                            Reply {index + 1}
+                          </span>
                           <button
                             type="button"
                             onClick={() => removeOption(index)}
-                            className="text-xs font-medium text-rose-600 hover:text-rose-700"
+                            className="text-xs font-semibold text-rose-600 hover:text-rose-700"
                           >
                             Remove
                           </button>
@@ -1459,7 +1691,12 @@ function AutomationWorkspace() {
                           value={option.label}
                           onChange={(e) => updateOption(index, { label: e.target.value })}
                           placeholder="Button label (max 20 characters)"
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                          className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none"
+                          style={{
+                            borderColor: "var(--color-rule, #E8E8E8)",
+                            background: "var(--color-paper-2, #ffffff)",
+                            color: "var(--color-ink, #202C52)",
+                          }}
                         />
                         <textarea
                           aria-label="Response message"
@@ -1467,7 +1704,12 @@ function AutomationWorkspace() {
                           value={option.reply_text}
                           onChange={(e) => updateOption(index, { reply_text: e.target.value })}
                           placeholder="Message sent when the customer taps this button"
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                          className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none"
+                          style={{
+                            borderColor: "var(--color-rule, #E8E8E8)",
+                            background: "var(--color-paper-2, #ffffff)",
+                            color: "var(--color-ink, #202C52)",
+                          }}
                         />
                       </div>
                     ))}
@@ -1478,33 +1720,59 @@ function AutomationWorkspace() {
               {/* Delivery */}
               <section className="space-y-4 p-5 sm:p-6">
                 <div>
-                  <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">6</span>
+                  <h2
+                    className="flex items-center gap-2 text-sm font-bold m-0"
+                    style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+                  >
+                    <span
+                      className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white shrink-0"
+                      style={{ background: "var(--color-ink, #202C52)" }}
+                    >
+                      6
+                    </span>
                     Delivery &amp; activation
                   </h2>
-                  <p className="mt-1 text-xs text-slate-500">Control timing, optional hand-offs and whether the rule starts immediately.</p>
+                  <p className="mt-1 text-xs" style={{ color: "var(--color-ink-2, #667085)" }}>
+                    Control timing, optional hand-offs and whether the rule starts immediately.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-700">Send delay (minutes)</label>
+                    <label className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                      Send delay (minutes)
+                    </label>
                     <input
                       type="number"
                       min="0"
                       max="43200"
                       value={form.delay_minutes}
                       onChange={(e) => setForm((f) => ({ ...f, delay_minutes: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                      className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none font-mono"
+                      style={{
+                        borderColor: "var(--color-rule, #E8E8E8)",
+                        background: "var(--color-paper-2, #ffffff)",
+                        color: "var(--color-ink, #202C52)",
+                      }}
                     />
-                    <span className="text-[10px] text-slate-500">0 sends instantly on trigger.</span>
+                    <span className="text-[10px]" style={{ color: "var(--color-ink-2, #667085)" }}>
+                      0 sends instantly on trigger.
+                    </span>
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-700">Start flow bot (optional)</label>
+                    <label className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                      Start flow bot (optional)
+                    </label>
                     <select
                       value={form.flow_id || ""}
                       onChange={(e) => setForm((f) => ({ ...f, flow_id: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                      className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none"
+                      style={{
+                        borderColor: "var(--color-rule, #E8E8E8)",
+                        background: "var(--color-paper-2, #ffffff)",
+                        color: "var(--color-ink, #202C52)",
+                      }}
                     >
                       <option value="">-- Do not start a flow --</option>
                       {flows.map((fl) => (
@@ -1516,11 +1784,18 @@ function AutomationWorkspace() {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-700">Add to contact group (optional)</label>
+                    <label className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                      Add to contact group (optional)
+                    </label>
                     <select
                       value={form.group_id || ""}
                       onChange={(e) => setForm((f) => ({ ...f, group_id: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                      className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none"
+                      style={{
+                        borderColor: "var(--color-rule, #E8E8E8)",
+                        background: "var(--color-paper-2, #ffffff)",
+                        color: "var(--color-ink, #202C52)",
+                      }}
                     >
                       <option value="">-- Do not add to a group --</option>
                       {groups.map((g) => (
@@ -1532,27 +1807,45 @@ function AutomationWorkspace() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-xs">
+                <div
+                  className="grid grid-cols-1 gap-3 sm:grid-cols-3 rounded-lg border p-3 text-xs"
+                  style={{
+                    background: "var(--color-surface, #F5F5F5)",
+                    borderColor: "var(--color-rule, #E8E8E8)",
+                  }}
+                >
                   <label className="block">
-                    <span className="font-semibold text-slate-700">Timezone</span>
+                    <span className="font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>Timezone</span>
                     <input
                       type="text"
                       value={form.schedule?.timezone || "Asia/Kolkata"}
                       onChange={(e) => setForm((f) => ({ ...f, schedule: { ...(f.schedule || {}), timezone: e.target.value } }))}
-                      className="mt-1 w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
+                      className="mt-1 w-full rounded border px-2.5 py-1.5 text-xs focus:outline-none"
+                      style={{
+                        borderColor: "var(--color-rule, #E8E8E8)",
+                        background: "var(--color-paper-2, #ffffff)",
+                        color: "var(--color-ink, #202C52)",
+                      }}
                     />
                   </label>
                   <label className="block">
-                    <span className="font-semibold text-slate-700">Cancel pending send if event occurs</span>
+                    <span className="font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
+                      Cancel pending send if event occurs
+                    </span>
                     <input
                       type="text"
                       placeholder="e.g. invoice_paid"
                       value={form.schedule?.cancel_on_event || ""}
                       onChange={(e) => setForm((f) => ({ ...f, schedule: { ...(f.schedule || {}), cancel_on_event: e.target.value } }))}
-                      className="mt-1 w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-mono"
+                      className="mt-1 w-full rounded border px-2.5 py-1.5 text-xs font-mono focus:outline-none"
+                      style={{
+                        borderColor: "var(--color-rule, #E8E8E8)",
+                        background: "var(--color-paper-2, #ffffff)",
+                        color: "var(--color-ink, #202C52)",
+                      }}
                     />
                   </label>
-                  <label className="flex items-center gap-2 pt-4 font-semibold text-slate-700">
+                  <label className="flex items-center gap-2 pt-4 font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>
                     <input
                       type="checkbox"
                       checked={Boolean(form.schedule?.business_hours_only)}
@@ -1563,7 +1856,7 @@ function AutomationWorkspace() {
                   </label>
                 </div>
 
-                <label className="flex items-center gap-2 pt-1 text-xs font-bold text-slate-800">
+                <label className="flex items-center gap-2 pt-1 text-xs font-bold cursor-pointer" style={{ color: "var(--color-ink, #202C52)" }}>
                   <input
                     type="checkbox"
                     checked={Boolean(form.is_active)}
@@ -1576,8 +1869,14 @@ function AutomationWorkspace() {
             </div>
 
             {/* Sticky footer */}
-            <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white/95 px-5 py-3 backdrop-blur sm:px-6">
-              <span className="text-xs text-slate-500">
+            <div
+              className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t px-5 py-3 backdrop-blur sm:px-6"
+              style={{
+                borderColor: "var(--color-rule, #E8E8E8)",
+                background: "rgba(255, 255, 255, 0.95)",
+              }}
+            >
+              <span className="text-xs" style={{ color: "var(--color-ink-2, #667085)" }}>
                 {draftIssues.length ? `${draftIssues.length} item${draftIssues.length === 1 ? "" : "s"} to complete` : "All checks passed"}
               </span>
               <div className="flex items-center gap-2">
@@ -1585,14 +1884,20 @@ function AutomationWorkspace() {
                   type="button"
                   onClick={closeEditor}
                   disabled={savingRule}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50"
+                  className="rounded-lg border px-4 py-2 text-xs font-semibold shadow-xs hover:opacity-90"
+                  style={{
+                    borderColor: "var(--color-rule, #E8E8E8)",
+                    background: "var(--color-paper-2, #ffffff)",
+                    color: "var(--color-ink, #202C52)",
+                  }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingRule || editorLoading}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 rounded-lg px-5 py-2 text-xs font-semibold text-white shadow-xs hover:opacity-95 disabled:opacity-60"
+                  style={{ background: "var(--color-ink, #202C52)" }}
                 >
                   {savingRule ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
                   <span>{savingRule ? "Saving…" : editing ? "Save rule" : "Create rule"}</span>
@@ -1907,14 +2212,24 @@ function AutomationWorkspace() {
                   placeholder="Search rules by name, event, template..."
                   value={ruleSearch}
                   onChange={(e) => setRuleSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-800"
+                  className="w-full pl-9 pr-3 py-1.5 rounded-lg border text-xs shadow-xs focus:outline-none"
+                  style={{
+                    borderColor: "var(--color-rule, #E8E8E8)",
+                    background: "var(--color-paper-2, #ffffff)",
+                    color: "var(--color-ink, #202C52)",
+                  }}
                 />
               </div>
 
               <select
                 value={ruleStatus}
                 onChange={(e) => setRuleStatus(e.target.value)}
-                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none"
+                className="rounded-lg border px-2.5 py-1.5 text-xs shadow-xs focus:outline-none"
+                style={{
+                  borderColor: "var(--color-rule, #E8E8E8)",
+                  background: "var(--color-paper-2, #ffffff)",
+                  color: "var(--color-ink, #202C52)",
+                }}
               >
                 <option value="all">All Statuses</option>
                 <option value="enabled">Active Only</option>
@@ -1924,7 +2239,12 @@ function AutomationWorkspace() {
               <select
                 value={ruleCategory}
                 onChange={(e) => setRuleCategory(e.target.value)}
-                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none"
+                className="rounded-lg border px-2.5 py-1.5 text-xs shadow-xs focus:outline-none"
+                style={{
+                  borderColor: "var(--color-rule, #E8E8E8)",
+                  background: "var(--color-paper-2, #ffffff)",
+                  color: "var(--color-ink, #202C52)",
+                }}
               >
                 <option value="all">All Categories</option>
                 <option value="sales">Sales &amp; Leads</option>
@@ -1936,7 +2256,12 @@ function AutomationWorkspace() {
               <select
                 value={ruleTriggerFilter}
                 onChange={(e) => setRuleTriggerFilter(e.target.value)}
-                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none"
+                className="rounded-lg border px-2.5 py-1.5 text-xs shadow-xs focus:outline-none"
+                style={{
+                  borderColor: "var(--color-rule, #E8E8E8)",
+                  background: "var(--color-paper-2, #ffffff)",
+                  color: "var(--color-ink, #202C52)",
+                }}
               >
                 <option value="all">All Triggers</option>
                 {TRIGGER_TYPES.map((t) => (
@@ -1948,7 +2273,12 @@ function AutomationWorkspace() {
                 <select
                   value={ruleBranchFilter}
                   onChange={(e) => setRuleBranchFilter(e.target.value)}
-                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none"
+                  className="rounded-lg border px-2.5 py-1.5 text-xs shadow-xs focus:outline-none"
+                  style={{
+                    borderColor: "var(--color-rule, #E8E8E8)",
+                    background: "var(--color-paper-2, #ffffff)",
+                    color: "var(--color-ink, #202C52)",
+                  }}
                 >
                   <option value="all">All Branches</option>
                   {branches.map((br) => (
@@ -1963,7 +2293,12 @@ function AutomationWorkspace() {
                 type="button"
                 onClick={handleExportSelected}
                 disabled={safeAutomations.length === 0}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-xs hover:opacity-90 disabled:opacity-50"
+                style={{
+                  borderColor: "var(--color-rule, #E8E8E8)",
+                  background: "var(--color-paper-2, #ffffff)",
+                  color: "var(--color-ink, #202C52)",
+                }}
               >
                 Export JSON
               </button>
@@ -1971,16 +2306,27 @@ function AutomationWorkspace() {
                 type="button"
                 onClick={handleSeedPrebuilt}
                 disabled={seeding}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 transition"
+                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-xs hover:opacity-90 transition"
+                style={{
+                  borderColor: "var(--color-rule, #E8E8E8)",
+                  background: "var(--color-paper-2, #ffffff)",
+                  color: "var(--color-ink, #202C52)",
+                }}
               >
-                <Building2 className="w-3.5 h-3.5 text-slate-600" />
+                <Building2 className="w-3.5 h-3.5" style={{ color: "var(--color-ink-2, #667085)" }} />
                 <span>{seeding ? "Installing…" : "Install All Industry Blueprints"}</span>
               </button>
             </div>
           </div>
 
           {selectedRuleIds.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-300 bg-slate-900 px-3.5 py-2 text-xs text-white">
+            <div
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-2 text-xs text-white"
+              style={{
+                background: "var(--color-ink, #202C52)",
+                borderColor: "rgba(255,255,255,0.15)",
+              }}
+            >
               <span className="font-semibold">{selectedRuleIds.length} rule(s) selected</span>
               <div className="flex flex-wrap items-center gap-1.5">
                 <button type="button" disabled={bulkToggling} onClick={() => handleBulkSelection("activate")} className="rounded bg-emerald-600 px-2.5 py-1 font-semibold hover:bg-emerald-500">Activate</button>
@@ -1994,29 +2340,49 @@ function AutomationWorkspace() {
 
           {loading ? (
             <div className="flex justify-center py-16">
-              <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+              <Loader2 className="w-8 h-8 animate-spin" style={{ color: "var(--color-ink-2, #667085)" }} />
             </div>
           ) : filteredAutomations.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
-              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-                <Zap className="w-6 h-6 text-slate-400" />
+            <div
+              className="rounded-2xl border border-dashed p-12 text-center"
+              style={{
+                background: "var(--color-paper-2, #ffffff)",
+                borderColor: "var(--color-rule, #E8E8E8)",
+              }}
+            >
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3"
+                style={{ background: "var(--color-surface, #F5F5F5)" }}
+              >
+                <Zap className="w-6 h-6" style={{ color: "var(--color-ink-2, #667085)" }} />
               </div>
-              <h3 className="text-base font-semibold text-slate-800">No automation rules found</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              <h3
+                className="text-base font-semibold m-0"
+                style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+              >
+                No automation rules found
+              </h3>
+              <p className="text-xs mt-1 max-w-sm mx-auto" style={{ color: "var(--color-ink-2, #667085)" }}>
                 Create a customized trigger rule or install industry starter blueprints to get started.
               </p>
               <div className="mt-4 flex items-center justify-center gap-2">
                 <button
                   type="button"
                   onClick={() => openCreate()}
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
+                  className="rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-xs hover:opacity-95"
+                  style={{ background: "var(--color-ink, #202C52)" }}
                 >
                   Create Rule
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab("starters")}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50"
+                  className="rounded-lg border px-4 py-2 text-xs font-semibold shadow-xs hover:opacity-95"
+                  style={{
+                    borderColor: "var(--color-rule, #E8E8E8)",
+                    background: "var(--color-paper-2, #ffffff)",
+                    color: "var(--color-ink, #202C52)",
+                  }}
                 >
                   Browse Blueprints
                 </button>
@@ -2033,7 +2399,11 @@ function AutomationWorkspace() {
                 return (
                   <div
                     key={a.id}
-                    className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:border-slate-300 transition"
+                    className="flex flex-col justify-between rounded-xl border p-4 shadow-2xs hover:shadow-xs transition"
+                    style={{
+                      background: "var(--color-paper-2, #ffffff)",
+                      borderColor: "var(--color-rule, #E8E8E8)",
+                    }}
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2">
@@ -2047,10 +2417,18 @@ function AutomationWorkspace() {
                           />
                           <span className="text-lg">{trig?.emoji || "⚡"}</span>
                           <div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            <span
+                              className="text-[10px] font-bold uppercase tracking-wider block"
+                              style={{ color: "var(--color-ink-2, #667085)" }}
+                            >
                               {a.trigger_label || a.trigger_type}
                             </span>
-                            <h3 className="text-sm font-semibold text-slate-900 line-clamp-1">{a.name}</h3>
+                            <h3
+                              className="text-sm font-semibold line-clamp-1 m-0"
+                              style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+                            >
+                              {a.name}
+                            </h3>
                           </div>
                         </div>
 
@@ -2069,18 +2447,24 @@ function AutomationWorkspace() {
                         </button>
                       </div>
 
-                      <div className="mt-3 space-y-1.5 text-xs text-slate-600">
+                      <div className="mt-3 space-y-1.5 text-xs">
                         {hasPipeline ? (
-                          <div className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                          <div
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold"
+                            style={{
+                              background: "rgba(32, 44, 82, 0.08)",
+                              color: "var(--color-ink, #202C52)",
+                            }}
+                          >
                             <GitBranch className="w-3.5 h-3.5" /> Multi-Step Workflow Pipeline
                           </div>
                         ) : (
-                          <p className="line-clamp-2 text-slate-600 italic">
+                          <p className="line-clamp-2 italic m-0" style={{ color: "var(--color-ink-2, #667085)" }}>
                             "{a.template_name ? `Template: ${a.template_name}` : a.message_text || "No message content"}"
                           </p>
                         )}
 
-                        <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-500">
+                        <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]" style={{ color: "var(--color-ink-2, #667085)" }}>
                           {a.delay_minutes > 0 && (
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3" /> {a.delay_minutes}m delay
@@ -2106,12 +2490,15 @@ function AutomationWorkspace() {
                             {Number(a.failed_runs_count) > 0 && <span className="text-rose-600 font-semibold">· {a.failed_runs_count} fail</span>}
                           </span>
                           {Number(a.credits_consumed) > 0 && (
-                            <span className="flex items-center gap-1 text-amber-700 font-semibold">
+                            <span className="flex items-center gap-1 text-amber-700 font-semibold font-mono">
                               <CreditCard className="w-3 h-3" /> {a.credits_consumed} cr
                             </span>
                           )}
                           {a.published_version_id && (
-                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600">
+                            <span
+                              className="rounded px-1.5 py-0.5 text-[10px] font-mono"
+                              style={{ background: "var(--color-surface, #F5F5F5)", color: "var(--color-ink, #202C52)" }}
+                            >
                               v{a.revision || 1}
                             </span>
                           )}
@@ -2119,7 +2506,10 @@ function AutomationWorkspace() {
                       </div>
                     </div>
 
-                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                    <div
+                      className="mt-4 flex items-center justify-between border-t pt-3"
+                      style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+                    >
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
@@ -2127,14 +2517,24 @@ function AutomationWorkspace() {
                             setTestModal(a);
                             setTestResult(null);
                           }}
-                          className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                          className="rounded-md border px-2.5 py-1 text-xs font-semibold shadow-2xs hover:opacity-90 transition"
+                          style={{
+                            borderColor: "var(--color-rule, #E8E8E8)",
+                            background: "var(--color-paper-2, #ffffff)",
+                            color: "var(--color-ink, #202C52)",
+                          }}
                         >
                           Simulate
                         </button>
                         <button
                           type="button"
                           onClick={() => openEdit(a)}
-                          className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                          className="rounded-md border px-2.5 py-1 text-xs font-semibold shadow-2xs hover:opacity-90 transition"
+                          style={{
+                            borderColor: "var(--color-rule, #E8E8E8)",
+                            background: "var(--color-paper-2, #ffffff)",
+                            color: "var(--color-ink, #202C52)",
+                          }}
                         >
                           Edit
                         </button>
@@ -2162,17 +2562,26 @@ function AutomationWorkspace() {
       {/* ───────────────────────────────────────────────────────────── */}
       {activeTab === "pipeline" && (
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-200">
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b"
+            style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+          >
             <div>
-              <h2 className="text-base font-bold text-slate-900">Multi-Step Automation Pipelines</h2>
-              <p className="text-xs text-slate-600">
+              <h2
+                className="text-base font-bold m-0"
+                style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+              >
+                Multi-Step Automation Pipelines
+              </h2>
+              <p className="text-xs mt-1" style={{ color: "var(--color-ink-2, #667085)" }}>
                 Connect triggers, condition gates, document delivery, Flow Bots, customer questioning, and CRM updates in a single durable pipeline.
               </p>
             </div>
             <button
               type="button"
               onClick={() => openCreate({ form: { mode: "pipeline", name: "Custom Workflow Pipeline" } })}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
+              className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:opacity-95"
+              style={{ background: "var(--color-ink, #202C52)" }}
             >
               <Plus className="w-4 h-4" /> Create Workflow Pipeline
             </button>
@@ -2180,16 +2589,28 @@ function AutomationWorkspace() {
 
           <div className="grid grid-cols-1 gap-4">
             {automations.filter((a) => a.actions_json).length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-                <GitBranch className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                <h3 className="text-sm font-semibold text-slate-800">No multi-step pipelines created yet</h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+              <div
+                className="rounded-xl border border-dashed p-8 text-center"
+                style={{
+                  background: "var(--color-paper-2, #ffffff)",
+                  borderColor: "var(--color-rule, #E8E8E8)",
+                }}
+              >
+                <GitBranch className="w-8 h-8 mx-auto mb-2" style={{ color: "var(--color-ink-2, #667085)" }} />
+                <h3
+                  className="text-sm font-semibold m-0"
+                  style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+                >
+                  No multi-step pipelines created yet
+                </h3>
+                <p className="text-xs mt-1 max-w-md mx-auto" style={{ color: "var(--color-ink-2, #667085)" }}>
                   Multi-step pipelines allow chaining templates, bills, Flow Bots, question checkpoints, and CRM actions.
                 </p>
                 <button
                   type="button"
                   onClick={() => openCreate({ form: { mode: "pipeline", name: "Custom Workflow Pipeline" } })}
-                  className="mt-3 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-xs"
+                  className="mt-3 rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:opacity-95"
+                  style={{ background: "var(--color-ink, #202C52)" }}
                 >
                   Build First Pipeline
                 </button>
@@ -2205,15 +2626,35 @@ function AutomationWorkspace() {
                   if (!Array.isArray(acts)) acts = [];
 
                   return (
-                    <div key={a.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-                      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div
+                      key={a.id}
+                      className="rounded-xl border p-5 shadow-xs"
+                      style={{
+                        background: "var(--color-paper-2, #ffffff)",
+                        borderColor: "var(--color-rule, #E8E8E8)",
+                      }}
+                    >
+                      <div
+                        className="flex items-center justify-between pb-3 border-b"
+                        style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+                      >
                         <div className="flex items-center gap-2">
-                          <span className="rounded-lg bg-slate-100 p-2 text-slate-800 font-bold text-xs">
+                          <span
+                            className="rounded-lg p-2 font-bold text-xs"
+                            style={{ background: "var(--color-surface, #F5F5F5)", color: "var(--color-ink, #202C52)" }}
+                          >
                             {a.trigger_label}
                           </span>
                           <div>
-                            <h3 className="text-sm font-bold text-slate-900">{a.name}</h3>
-                            <span className="text-[11px] text-slate-500">{acts.length} pipeline step(s)</span>
+                            <h3
+                              className="text-sm font-bold m-0"
+                              style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+                            >
+                              {a.name}
+                            </h3>
+                            <span className="text-[11px]" style={{ color: "var(--color-ink-2, #667085)" }}>
+                              {acts.length} pipeline step(s)
+                            </span>
                           </div>
                         </div>
 
@@ -2221,19 +2662,24 @@ function AutomationWorkspace() {
                           <button
                             type="button"
                             onClick={() => openEdit(a)}
-                            className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                            className="rounded-md border px-2.5 py-1 text-xs font-semibold shadow-2xs hover:opacity-90"
+                            style={{
+                              borderColor: "var(--color-rule, #E8E8E8)",
+                              background: "var(--color-paper-2, #ffffff)",
+                              color: "var(--color-ink, #202C52)",
+                            }}
                           >
                             Edit Pipeline
                           </button>
                           <button
                             type="button"
                             onClick={() => handleToggle(a)}
-                            className="text-xs font-medium text-slate-600"
+                            className="text-xs font-semibold"
                           >
                             {a.is_active ? (
                               <span className="text-emerald-600 font-semibold">Active</span>
                             ) : (
-                              <span className="text-slate-400 font-semibold">Paused</span>
+                              <span style={{ color: "var(--color-ink-2, #667085)" }}>Paused</span>
                             )}
                           </button>
                         </div>
@@ -2241,19 +2687,33 @@ function AutomationWorkspace() {
 
                       {/* Visual Flow Steps */}
                       <div className="mt-4 flex flex-wrap items-center gap-2">
-                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
-                          <span className="font-semibold text-slate-800">Trigger:</span>{" "}
-                          <span className="text-slate-600">{a.trigger_label}</span>
+                        <div
+                          className="rounded-lg border px-3 py-2 text-xs"
+                          style={{
+                            background: "var(--color-surface, #F5F5F5)",
+                            borderColor: "var(--color-rule, #E8E8E8)",
+                          }}
+                        >
+                          <span className="font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>Trigger:</span>{" "}
+                          <span style={{ color: "var(--color-ink-2, #667085)" }}>{a.trigger_label}</span>
                         </div>
-                        <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
+                        <ArrowRight className="w-4 h-4 shrink-0" style={{ color: "var(--color-ink-2, #667085)" }} />
 
                         {acts.map((act, idx) => (
                           <React.Fragment key={idx}>
-                            <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-2xs">
-                              <span className="font-bold text-slate-900">Step {idx + 1}:</span>{" "}
-                              <span className="text-slate-700">{act.title || act.type}</span>
+                            <div
+                              className="rounded-lg border px-3 py-2 text-xs shadow-2xs"
+                              style={{
+                                background: "var(--color-paper-2, #ffffff)",
+                                borderColor: "var(--color-rule, #E8E8E8)",
+                              }}
+                            >
+                              <span className="font-bold" style={{ color: "var(--color-ink, #202C52)" }}>Step {idx + 1}:</span>{" "}
+                              <span style={{ color: "var(--color-ink, #202C52)" }}>{act.title || act.type}</span>
                             </div>
-                            {idx < acts.length - 1 && <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                            {idx < acts.length - 1 && (
+                              <ArrowRight className="w-4 h-4 shrink-0" style={{ color: "var(--color-ink-2, #667085)" }} />
+                            )}
                           </React.Fragment>
                         ))}
                       </div>
@@ -2275,30 +2735,63 @@ function AutomationWorkspace() {
       {/* ───────────────────────────────────────────────────────────── */}
       {activeTab === "checkpoints" && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
+          <div
+            className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b"
+            style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+          >
             <div>
-              <h2 className="text-base font-bold text-slate-900">Durable Conversational Checkpoints</h2>
-              <p className="text-xs text-slate-600">
+              <h2
+                className="text-base font-bold m-0"
+                style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+              >
+                Durable Conversational Checkpoints
+              </h2>
+              <p className="text-xs mt-1" style={{ color: "var(--color-ink-2, #667085)" }}>
                 In-flight customer questions awaiting answers. Persisted across server restarts and correlated with incoming WhatsApp replies.
               </p>
             </div>
             <button
               type="button"
               onClick={fetchData}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50"
+              className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold shadow-2xs hover:opacity-90"
+              style={{
+                borderColor: "var(--color-rule, #E8E8E8)",
+                background: "var(--color-paper-2, #ffffff)",
+                color: "var(--color-ink, #202C52)",
+              }}
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh Checkpoints
             </button>
           </div>
 
           {checkpoints.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-xs text-slate-500">
+            <div
+              className="rounded-xl border border-dashed p-8 text-center text-xs"
+              style={{
+                background: "var(--color-paper-2, #ffffff)",
+                borderColor: "var(--color-rule, #E8E8E8)",
+                color: "var(--color-ink-2, #667085)",
+              }}
+            >
               No conversational checkpoints waiting. When a rule executes "Ask Customer Question", pending responses appear here.
             </div>
           ) : (
-            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+            <div
+              className="rounded-xl border overflow-hidden shadow-xs"
+              style={{
+                background: "var(--color-paper-2, #ffffff)",
+                borderColor: "var(--color-rule, #E8E8E8)",
+              }}
+            >
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 font-semibold text-slate-700">
+                <thead
+                  className="border-b font-semibold"
+                  style={{
+                    background: "var(--color-surface, #F5F5F5)",
+                    borderColor: "var(--color-rule, #E8E8E8)",
+                    color: "var(--color-ink, #202C52)",
+                  }}
+                >
                   <tr>
                     <th className="p-3">Customer Phone</th>
                     <th className="p-3">Automation / Step</th>
@@ -2309,20 +2802,23 @@ function AutomationWorkspace() {
                     <th className="p-3 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-800">
+                <tbody className="divide-y text-slate-800" style={{ borderColor: "var(--color-rule, #E8E8E8)" }}>
                   {(Array.isArray(checkpoints) ? checkpoints : []).map((chk) => {
                     const qCtx = typeof chk?.question_context === "string" ? (() => { try { return JSON.parse(chk.question_context); } catch(_) { return {}; } })() : (chk?.question_context || {});
                     const cAns = typeof chk?.collected_answers === "string" ? (() => { try { return JSON.parse(chk.collected_answers); } catch(_) { return {}; } })() : (chk?.collected_answers || {});
 
                     return (
                     <tr key={chk.id} className="hover:bg-slate-50/50">
-                      <td className="p-3 font-mono font-medium">+{chk.phone}</td>
+                      <td className="p-3 font-mono font-medium" style={{ color: "var(--color-ink, #202C52)" }}>+{chk.phone}</td>
                       <td className="p-3">
-                        <span className="font-semibold text-slate-900">{chk.automation_name || `Rule #${chk.automation_id}`}</span>
-                        <span className="block text-[10px] text-slate-500">Step {chk.current_step || 1}</span>
+                        <span className="font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>{chk.automation_name || `Rule #${chk.automation_id}`}</span>
+                        <span className="block text-[10px]" style={{ color: "var(--color-ink-2, #667085)" }}>Step {chk.current_step || 1}</span>
                       </td>
                       <td className="p-3">
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 uppercase">
+                        <span
+                          className="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase"
+                          style={{ background: "var(--color-surface, #F5F5F5)", color: "var(--color-ink, #202C52)" }}
+                        >
                           {chk.expected_type || "text"}
                         </span>
                       </td>
@@ -2331,11 +2827,11 @@ function AutomationWorkspace() {
                       </td>
                       <td className="p-3">
                         {cAns && Object.keys(cAns).length > 0 ? (
-                          <span className="text-slate-600 font-mono text-[11px]">
+                          <span className="font-mono text-[11px]" style={{ color: "var(--color-ink-2, #667085)" }}>
                             {JSON.stringify(cAns)}
                           </span>
                         ) : (
-                          <span className="text-slate-400">None yet</span>
+                          <span style={{ color: "var(--color-ink-2, #667085)" }}>None yet</span>
                         )}
                       </td>
                       <td className="p-3">
@@ -2377,10 +2873,18 @@ function AutomationWorkspace() {
       {/* ───────────────────────────────────────────────────────────── */}
       {activeTab === "billing" && (
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-200">
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b"
+            style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+          >
             <div>
-              <h2 className="text-base font-bold text-slate-900">CRM Billing & Invoice Automations</h2>
-              <p className="text-xs text-slate-600">
+              <h2
+                className="text-base font-bold m-0"
+                style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+              >
+                CRM Billing &amp; Invoice Automations
+              </h2>
+              <p className="text-xs mt-1" style={{ color: "var(--color-ink-2, #667085)" }}>
                 Automate invoice PDF delivery, payment links, verified receipts, and overdue balance recovery via WhatsApp.
               </p>
             </div>
@@ -2396,17 +2900,34 @@ function AutomationWorkspace() {
                   },
                 })
               }
-              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
+              className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:opacity-95"
+              style={{ background: "var(--color-ink, #202C52)" }}
             >
               <Plus className="w-4 h-4" /> New Billing Automation
             </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Invoice PDF Delivery</span>
-              <p className="mt-1 text-sm font-semibold text-slate-900">Send Invoice on Generation</p>
-              <p className="mt-1 text-xs text-slate-600">
+            <div
+              className="rounded-xl border p-4 shadow-2xs hover:shadow-xs transition"
+              style={{
+                background: "var(--color-paper-2, #ffffff)",
+                borderColor: "var(--color-rule, #E8E8E8)",
+              }}
+            >
+              <span
+                className="text-xs font-bold uppercase tracking-wider block"
+                style={{ color: "var(--color-ink-2, #667085)" }}
+              >
+                Invoice PDF Delivery
+              </span>
+              <p
+                className="mt-1 text-sm font-semibold m-0"
+                style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+              >
+                Send Invoice on Generation
+              </p>
+              <p className="mt-1 text-xs" style={{ color: "var(--color-ink-2, #667085)" }}>
                 Automatically dispatches generated CRM invoices to clients with interactive payment buttons.
               </p>
               <button
@@ -2415,16 +2936,37 @@ function AutomationWorkspace() {
                   const starter = starters.find((s) => s.trigger_type === "invoice_created");
                   if (starter) adoptStarter(starter);
                 }}
-                className="mt-3 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="mt-3 rounded-md border px-2.5 py-1 text-xs font-semibold shadow-2xs hover:opacity-90"
+                style={{
+                  borderColor: "var(--color-rule, #E8E8E8)",
+                  background: "var(--color-paper-2, #ffffff)",
+                  color: "var(--color-ink, #202C52)",
+                }}
               >
                 Configure Action
               </button>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Payment Due Reminder</span>
-              <p className="mt-1 text-sm font-semibold text-slate-900">1-3 Days Prior Due Date</p>
-              <p className="mt-1 text-xs text-slate-600">
+            <div
+              className="rounded-xl border p-4 shadow-2xs hover:shadow-xs transition"
+              style={{
+                background: "var(--color-paper-2, #ffffff)",
+                borderColor: "var(--color-rule, #E8E8E8)",
+              }}
+            >
+              <span
+                className="text-xs font-bold uppercase tracking-wider block"
+                style={{ color: "var(--color-ink-2, #667085)" }}
+              >
+                Payment Due Reminder
+              </span>
+              <p
+                className="mt-1 text-sm font-semibold m-0"
+                style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+              >
+                1-3 Days Prior Due Date
+              </p>
+              <p className="mt-1 text-xs" style={{ color: "var(--color-ink-2, #667085)" }}>
                 Sends automated payment reminder with direct payment link; automatically cancels if invoice is paid.
               </p>
               <button
@@ -2433,16 +2975,37 @@ function AutomationWorkspace() {
                   const starter = starters.find((s) => s.trigger_type === "payment_due");
                   if (starter) adoptStarter(starter);
                 }}
-                className="mt-3 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="mt-3 rounded-md border px-2.5 py-1 text-xs font-semibold shadow-2xs hover:opacity-90"
+                style={{
+                  borderColor: "var(--color-rule, #E8E8E8)",
+                  background: "var(--color-paper-2, #ffffff)",
+                  color: "var(--color-ink, #202C52)",
+                }}
               >
                 Configure Action
               </button>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Verified Settlement</span>
-              <p className="mt-1 text-sm font-semibold text-slate-900">Payment Receipt Acknowledgement</p>
-              <p className="mt-1 text-xs text-slate-600">
+            <div
+              className="rounded-xl border p-4 shadow-2xs hover:shadow-xs transition"
+              style={{
+                background: "var(--color-paper-2, #ffffff)",
+                borderColor: "var(--color-rule, #E8E8E8)",
+              }}
+            >
+              <span
+                className="text-xs font-bold uppercase tracking-wider block"
+                style={{ color: "var(--color-ink-2, #667085)" }}
+              >
+                Verified Settlement
+              </span>
+              <p
+                className="mt-1 text-sm font-semibold m-0"
+                style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+              >
+                Payment Receipt Acknowledgement
+              </p>
+              <p className="mt-1 text-xs" style={{ color: "var(--color-ink-2, #667085)" }}>
                 Instantly issues an official verified receipt via WhatsApp once webhook or accounts confirms payment.
               </p>
               <button
@@ -2451,7 +3014,12 @@ function AutomationWorkspace() {
                   const starter = starters.find((s) => s.trigger_type === "payment_received");
                   if (starter) adoptStarter(starter);
                 }}
-                className="mt-3 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="mt-3 rounded-md border px-2.5 py-1 text-xs font-semibold shadow-2xs hover:opacity-90"
+                style={{
+                  borderColor: "var(--color-rule, #E8E8E8)",
+                  background: "var(--color-paper-2, #ffffff)",
+                  color: "var(--color-ink, #202C52)",
+                }}
               >
                 Configure Action
               </button>
@@ -2459,13 +3027,31 @@ function AutomationWorkspace() {
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-sm font-bold text-slate-900">Tracked CRM Invoices ({(Array.isArray(billingSummary?.invoices) ? billingSummary.invoices : []).length})</h3>
+            <h3
+              className="text-sm font-bold m-0"
+              style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+            >
+              Tracked CRM Invoices ({(Array.isArray(billingSummary?.invoices) ? billingSummary.invoices : []).length})
+            </h3>
             {(Array.isArray(billingSummary?.invoices) ? billingSummary.invoices : []).length === 0 ? (
-              <p className="text-xs text-slate-500 italic">No invoices recorded yet in CRM.</p>
+              <p className="text-xs italic" style={{ color: "var(--color-ink-2, #667085)" }}>No invoices recorded yet in CRM.</p>
             ) : (
-              <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+              <div
+                className="rounded-xl border overflow-hidden shadow-xs"
+                style={{
+                  background: "var(--color-paper-2, #ffffff)",
+                  borderColor: "var(--color-rule, #E8E8E8)",
+                }}
+              >
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 border-b border-slate-200 font-semibold text-slate-700">
+                  <thead
+                    className="border-b font-semibold"
+                    style={{
+                      background: "var(--color-surface, #F5F5F5)",
+                      borderColor: "var(--color-rule, #E8E8E8)",
+                      color: "var(--color-ink, #202C52)",
+                    }}
+                  >
                     <tr>
                       <th className="p-3">Invoice #</th>
                       <th className="p-3">Client / Company</th>
@@ -2476,14 +3062,14 @@ function AutomationWorkspace() {
                       <th className="p-3 text-right">Instant Dispatch</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-800">
+                  <tbody className="divide-y text-slate-800" style={{ borderColor: "var(--color-rule, #E8E8E8)" }}>
                     {(Array.isArray(billingSummary?.invoices) ? billingSummary.invoices : []).slice(0, 15).map((inv) => (
                       <tr key={inv.id} className="hover:bg-slate-50/50">
-                        <td className="p-3 font-mono font-medium text-slate-900">{inv.invoice_no || `INV-${inv.id}`}</td>
-                        <td className="p-3 font-semibold">{inv.client_company || inv.client_name || "-"}</td>
-                        <td className="p-3 font-mono text-slate-600">{inv.client_phone || "-"}</td>
-                        <td className="p-3 font-bold text-slate-900">₹{inv.total_amount ?? inv.grand_total ?? "0"}</td>
-                        <td className="p-3 text-slate-600">{inv.due_date || "-"}</td>
+                        <td className="p-3 font-mono font-medium" style={{ color: "var(--color-ink, #202C52)" }}>{inv.invoice_no || `INV-${inv.id}`}</td>
+                        <td className="p-3 font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>{inv.client_company || inv.client_name || "-"}</td>
+                        <td className="p-3 font-mono" style={{ color: "var(--color-ink-2, #667085)" }}>{inv.client_phone || "-"}</td>
+                        <td className="p-3 font-bold font-mono" style={{ color: "var(--color-ink, #202C52)" }}>₹{inv.total_amount ?? inv.grand_total ?? "0"}</td>
+                        <td className="p-3" style={{ color: "var(--color-ink-2, #667085)" }}>{inv.due_date || "-"}</td>
                         <td className="p-3">
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -2511,7 +3097,12 @@ function AutomationWorkspace() {
                                 alert("Please create an invoice automation rule first.");
                               }
                             }}
-                            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+                            className="rounded-md border px-2 py-1 text-[11px] font-semibold shadow-2xs hover:opacity-90"
+                            style={{
+                              borderColor: "var(--color-rule, #E8E8E8)",
+                              background: "var(--color-paper-2, #ffffff)",
+                              color: "var(--color-ink, #202C52)",
+                            }}
                           >
                             Send WhatsApp
                           </button>
@@ -2530,11 +3121,25 @@ function AutomationWorkspace() {
       {/* TAB 6: WELCOME AUTO-REPLY                                     */}
       {/* ───────────────────────────────────────────────────────────── */}
       {activeTab === "welcome" && (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs space-y-6 max-w-3xl">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+        <div
+          className="rounded-xl border p-6 shadow-xs space-y-6 max-w-3xl"
+          style={{
+            background: "var(--color-paper-2, #ffffff)",
+            borderColor: "var(--color-rule, #E8E8E8)",
+          }}
+        >
+          <div
+            className="flex items-center justify-between pb-4 border-b"
+            style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+          >
             <div>
-              <h2 className="text-base font-bold text-slate-900">Welcome Auto-Reply & Cooldown</h2>
-              <p className="text-xs text-slate-600">
+              <h2
+                className="text-base font-bold m-0"
+                style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+              >
+                Welcome Auto-Reply &amp; Cooldown
+              </h2>
+              <p className="text-xs mt-1" style={{ color: "var(--color-ink-2, #667085)" }}>
                 Greet new or returning customers on their first message with dynamic variables or interactive buttons.
               </p>
             </div>
@@ -2545,45 +3150,68 @@ function AutomationWorkspace() {
                 onChange={(e) => setWelcomeSettings((w) => ({ ...w, enabled: e.target.checked ? 1 : 0 }))}
                 className="w-4 h-4 rounded text-slate-900"
               />
-              <span className="text-xs font-bold text-slate-800">Enable Auto-Reply</span>
+              <span className="text-xs font-bold" style={{ color: "var(--color-ink, #202C52)" }}>Enable Auto-Reply</span>
             </label>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">Greeting Message Text</label>
+              <label className="text-xs font-semibold block mb-1" style={{ color: "var(--color-ink, #202C52)" }}>
+                Greeting Message Text
+              </label>
               <textarea
                 rows={4}
                 value={welcomeSettings.welcome_text || ""}
                 onChange={(e) => setWelcomeSettings((w) => ({ ...w, welcome_text: e.target.value }))}
-                className="w-full rounded-lg border border-slate-300 p-3 text-xs text-slate-800 shadow-xs focus:border-slate-800 focus:outline-none"
+                className="w-full rounded-lg border p-3 text-xs shadow-xs focus:outline-none"
+                style={{
+                  borderColor: "var(--color-rule, #E8E8E8)",
+                  background: "var(--color-paper-2, #ffffff)",
+                  color: "var(--color-ink, #202C52)",
+                }}
                 placeholder="Hello {name}! Welcome to {company}..."
               />
-              <span className="text-[11px] text-slate-500 mt-1 block">
+              <span className="text-[11px] mt-1 block" style={{ color: "var(--color-ink-2, #667085)" }}>
                 Supports placeholders: <code>{"{name}"}</code>, <code>{"{company}"}</code>, <code>{"{greeting_time}"}</code>.
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Cooldown Duration (Hours)</label>
+                <label className="text-xs font-semibold block mb-1" style={{ color: "var(--color-ink, #202C52)" }}>
+                  Cooldown Duration (Hours)
+                </label>
                 <input
                   type="number"
                   min="1"
                   max="720"
                   value={welcomeSettings.cooldown_hours || 24}
                   onChange={(e) => setWelcomeSettings((w) => ({ ...w, cooldown_hours: parseInt(e.target.value, 10) }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-800 shadow-xs"
+                  className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none"
+                  style={{
+                    borderColor: "var(--color-rule, #E8E8E8)",
+                    background: "var(--color-paper-2, #ffffff)",
+                    color: "var(--color-ink, #202C52)",
+                  }}
                 />
-                <span className="text-[10px] text-slate-500">Wait this long before greeting the same phone number again.</span>
+                <span className="text-[10px]" style={{ color: "var(--color-ink-2, #667085)" }}>
+                  Wait this long before greeting the same phone number again.
+                </span>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Working Hours Only</label>
+                <label className="text-xs font-semibold block mb-1" style={{ color: "var(--color-ink, #202C52)" }}>
+                  Working Hours Only
+                </label>
                 <select
                   value={welcomeSettings.working_hours_only ? "1" : "0"}
                   onChange={(e) => setWelcomeSettings((w) => ({ ...w, working_hours_only: e.target.value === "1" ? 1 : 0 }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-800 shadow-xs"
+                  className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none"
+                  style={{
+                    borderColor: "var(--color-rule, #E8E8E8)",
+                    background: "var(--color-paper-2, #ffffff)",
+                    color: "var(--color-ink, #202C52)",
+                  }}
                 >
                   <option value="0">24/7 (Always Send)</option>
                   <option value="1">Business Hours Only (09:00 - 21:00 IST)</option>
@@ -2591,7 +3219,10 @@ function AutomationWorkspace() {
               </div>
             </div>
 
-            <div className="pt-2 flex items-center justify-between border-t border-slate-100">
+            <div
+              className="pt-3 flex items-center justify-between border-t"
+              style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+            >
               <button
                 type="button"
                 onClick={async () => {
@@ -2605,7 +3236,8 @@ function AutomationWorkspace() {
                   setSavingWelcome(false);
                 }}
                 disabled={savingWelcome}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
+                className="rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-xs hover:opacity-95"
+                style={{ background: "var(--color-ink, #202C52)" }}
               >
                 {savingWelcome ? "Saving…" : "Save Welcome Settings"}
               </button>
@@ -2619,9 +3251,17 @@ function AutomationWorkspace() {
       {/* ───────────────────────────────────────────────────────────── */}
       {activeTab === "starters" && (
         <div className="space-y-4">
-          <div className="pb-2 border-b border-slate-200">
-            <h2 className="text-base font-bold text-slate-900">Industry Automation Starter Blueprints</h2>
-            <p className="text-xs text-slate-600">
+          <div
+            className="pb-3 border-b"
+            style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+          >
+            <h2
+              className="text-base font-bold m-0"
+              style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+            >
+              Industry Automation Starter Blueprints
+            </h2>
+            <p className="text-xs mt-1" style={{ color: "var(--color-ink-2, #667085)" }}>
               Pre-configured, production-ready workflows built for hospitals, real estate, education, restaurants, SaaS, and service businesses.
             </p>
           </div>
@@ -2630,33 +3270,54 @@ function AutomationWorkspace() {
             {(Array.isArray(starters) ? starters : []).map((starter, idx) => (
               <div
                 key={starter.name || idx}
-                className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-xs hover:border-slate-300 transition"
+                className="flex flex-col justify-between rounded-xl border p-5 shadow-2xs hover:shadow-xs transition"
+                style={{
+                  background: "var(--color-paper-2, #ffffff)",
+                  borderColor: "var(--color-rule, #E8E8E8)",
+                }}
               >
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-md bg-slate-100 p-1.5 text-xs font-bold text-slate-700">
+                    <span
+                      className="rounded-md px-2 py-0.5 text-xs font-bold"
+                      style={{ background: "var(--color-surface, #F5F5F5)", color: "var(--color-ink, #202C52)" }}
+                    >
                       {starter?.category ? starter.category.toUpperCase() : "BLUEPRINT"}
                     </span>
-                    <span className="text-[10px] text-slate-500 font-mono">{starter?.trigger_type}</span>
+                    <span className="text-[10px] font-mono" style={{ color: "var(--color-ink-2, #667085)" }}>
+                      {starter?.trigger_type}
+                    </span>
                   </div>
 
-                  <h3 className="mt-2 text-sm font-bold text-slate-900">{starter?.name}</h3>
-                  <p className="mt-1 text-xs text-slate-600 line-clamp-3">
+                  <h3
+                    className="mt-2 text-sm font-bold m-0"
+                    style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+                  >
+                    {starter?.name}
+                  </h3>
+                  <p className="mt-1 text-xs line-clamp-3 italic" style={{ color: "var(--color-ink-2, #667085)" }}>
                     "{starter?.message_text}"
                   </p>
 
                   {starter?.actions_json && (
-                    <div className="mt-2 text-[11px] text-blue-700 font-medium">
+                    <div
+                      className="mt-2 text-[11px] font-semibold flex items-center gap-1"
+                      style={{ color: "var(--color-ink, #202C52)" }}
+                    >
                       ⚡ Includes multi-step question/bill pipeline
                     </div>
                   )}
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-100">
+                <div
+                  className="mt-4 pt-3 border-t"
+                  style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+                >
                   <button
                     type="button"
                     onClick={() => adoptStarter(starter)}
-                    className="w-full rounded-lg bg-slate-900 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition"
+                    className="w-full rounded-lg py-1.5 text-xs font-semibold text-white shadow-xs hover:opacity-95 transition"
+                    style={{ background: "var(--color-ink, #202C52)" }}
                   >
                     Adopt This Blueprint
                   </button>
@@ -2672,30 +3333,63 @@ function AutomationWorkspace() {
       {/* ───────────────────────────────────────────────────────────── */}
       {activeTab === "logs" && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
+          <div
+            className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b"
+            style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+          >
             <div>
-              <h2 className="text-base font-bold text-slate-900">Execution Timeline & Diagnostics</h2>
-              <p className="text-xs text-slate-600">
+              <h2
+                className="text-base font-bold m-0"
+                style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+              >
+                Execution Timeline &amp; Diagnostics
+              </h2>
+              <p className="text-xs mt-1" style={{ color: "var(--color-ink-2, #667085)" }}>
                 Detailed audit trail of all evaluated triggers, condition outcomes, and Meta delivery statuses.
               </p>
             </div>
             <button
               type="button"
               onClick={fetchData}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50"
+              className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold shadow-2xs hover:opacity-90"
+              style={{
+                borderColor: "var(--color-rule, #E8E8E8)",
+                background: "var(--color-paper-2, #ffffff)",
+                color: "var(--color-ink, #202C52)",
+              }}
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh Logs
             </button>
           </div>
 
           {(Array.isArray(logs) ? logs : []).length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-xs text-slate-500">
+            <div
+              className="rounded-xl border border-dashed p-8 text-center text-xs"
+              style={{
+                background: "var(--color-paper-2, #ffffff)",
+                borderColor: "var(--color-rule, #E8E8E8)",
+                color: "var(--color-ink-2, #667085)",
+              }}
+            >
               No executions logged yet. When events trigger automations, their execution records and diagnostics will appear here.
             </div>
           ) : (
-            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+            <div
+              className="rounded-xl border overflow-hidden shadow-xs"
+              style={{
+                background: "var(--color-paper-2, #ffffff)",
+                borderColor: "var(--color-rule, #E8E8E8)",
+              }}
+            >
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 font-semibold text-slate-700">
+                <thead
+                  className="border-b font-semibold"
+                  style={{
+                    background: "var(--color-surface, #F5F5F5)",
+                    borderColor: "var(--color-rule, #E8E8E8)",
+                    color: "var(--color-ink, #202C52)",
+                  }}
+                >
                   <tr>
                     <th className="p-3">Execution ID</th>
                     <th className="p-3">Automation</th>
@@ -2707,7 +3401,7 @@ function AutomationWorkspace() {
                     <th className="p-3 text-right">Diagnostics</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-800">
+                <tbody className="divide-y text-slate-800" style={{ borderColor: "var(--color-rule, #E8E8E8)" }}>
                   {(Array.isArray(logs) ? logs : []).map((log) => {
                     const isExpanded = expandedLogId === log.id;
                     const diags = Array.isArray(log?.diagnostics)
@@ -2722,13 +3416,13 @@ function AutomationWorkspace() {
                     return (
                       <React.Fragment key={log.id}>
                         <tr className="hover:bg-slate-50/50">
-                          <td className="p-3 font-mono font-bold text-slate-700">#{log.id}</td>
+                          <td className="p-3 font-mono font-bold" style={{ color: "var(--color-ink, #202C52)" }}>#{log.id}</td>
                           <td className="p-3">
-                            <span className="font-semibold text-slate-900">{log.automation_name || `Rule #${log.automation_id}`}</span>
-                            <span className="block text-[10px] text-slate-500">{log.trigger_type}</span>
+                            <span className="font-semibold" style={{ color: "var(--color-ink, #202C52)" }}>{log.automation_name || `Rule #${log.automation_id}`}</span>
+                            <span className="block text-[10px]" style={{ color: "var(--color-ink-2, #667085)" }}>{log.trigger_type}</span>
                           </td>
-                          <td className="p-3 font-mono text-slate-600">+{log.phone}</td>
-                          <td className="p-3">{log.contact_name || "-"}</td>
+                          <td className="p-3 font-mono" style={{ color: "var(--color-ink-2, #667085)" }}>+{log.phone}</td>
+                          <td className="p-3" style={{ color: "var(--color-ink, #202C52)" }}>{log.contact_name || "-"}</td>
                           <td className="p-3">
                             <span
                               className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -2744,10 +3438,10 @@ function AutomationWorkspace() {
                               {log.status}
                             </span>
                           </td>
-                          <td className="p-3 font-mono text-[11px] text-slate-500 max-w-[140px] truncate">
+                          <td className="p-3 font-mono text-[11px] max-w-[140px] truncate" style={{ color: "var(--color-ink-2, #667085)" }}>
                             {log.wa_message_id || "-"}
                           </td>
-                          <td className="p-3 text-slate-500 text-[11px]">
+                          <td className="p-3 text-[11px]" style={{ color: "var(--color-ink-2, #667085)" }}>
                             {log.status === "scheduled"
                               ? `Due: ${new Date(log.scheduled_for).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                               : log.sent_at
@@ -2770,7 +3464,12 @@ function AutomationWorkspace() {
                                 <button
                                   type="button"
                                   onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                                  className="rounded px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+                                  className="rounded px-2 py-1 text-[11px] font-semibold border shadow-2xs hover:opacity-90"
+                                  style={{
+                                    borderColor: "var(--color-rule, #E8E8E8)",
+                                    background: "var(--color-paper-2, #ffffff)",
+                                    color: "var(--color-ink, #202C52)",
+                                  }}
                                 >
                                   {isExpanded ? "Hide" : "Details"}
                                 </button>
@@ -2780,16 +3479,18 @@ function AutomationWorkspace() {
                         </tr>
 
                         {isExpanded && hasDiag && (
-                          <tr className="bg-slate-50/70">
-                            <td colSpan={8} className="p-3 border-t border-slate-200">
+                          <tr style={{ background: "var(--color-surface, #F5F5F5)" }}>
+                            <td colSpan={8} className="p-3 border-t" style={{ borderColor: "var(--color-rule, #E8E8E8)" }}>
                               <div className="space-y-1.5 text-xs">
-                                <span className="font-semibold text-slate-900 block">Condition Diagnostics Evaluation:</span>
+                                <span className="font-semibold block" style={{ color: "var(--color-ink, #202C52)" }}>
+                                  Condition Diagnostics Evaluation:
+                                </span>
                                 <div className="space-y-1 max-h-40 overflow-y-auto">
                                   {diags.map((d, dIdx) => (
                                     <div
                                       key={dIdx}
                                       className={`flex items-center justify-between rounded p-1.5 font-mono text-[11px] ${
-                                        d.passed ? "bg-emerald-50 text-emerald-900" : "bg-rose-50 text-rose-900"
+                                        d.passed ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "bg-rose-50 text-rose-900 border border-rose-200"
                                       }`}
                                     >
                                       <span>
@@ -2814,7 +3515,6 @@ function AutomationWorkspace() {
         </div>
       )}
 
-
       {/* ───────────────────────────────────────────────────────────── */}
       {/* SIMULATOR MODAL                                               */}
       {/* ───────────────────────────────────────────────────────────── */}
@@ -2824,13 +3524,25 @@ function AutomationWorkspace() {
           onClick={() => setTestModal(null)}
         >
           <div
-            className="rounded-2xl border border-slate-200 bg-white w-full max-w-lg p-6 shadow-xl space-y-4"
+            className="rounded-2xl border w-full max-w-lg p-6 shadow-xl space-y-4"
+            style={{
+              background: "var(--color-paper-2, #ffffff)",
+              borderColor: "var(--color-rule, #E8E8E8)",
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+            <div
+              className="flex items-center justify-between pb-3 border-b"
+              style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+            >
               <div>
-                <h3 className="text-base font-bold text-slate-900">Simulate Rule Execution</h3>
-                <p className="text-xs text-slate-500">{testModal.name}</p>
+                <h3
+                  className="text-base font-bold m-0"
+                  style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+                >
+                  Simulate Rule Execution
+                </h3>
+                <p className="text-xs mt-0.5" style={{ color: "var(--color-ink-2, #667085)" }}>{testModal.name}</p>
               </div>
               <button
                 type="button"
@@ -2843,24 +3555,38 @@ function AutomationWorkspace() {
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Test Recipient Phone</label>
+                <label className="text-xs font-semibold block mb-1" style={{ color: "var(--color-ink, #202C52)" }}>
+                  Test Recipient Phone
+                </label>
                 <input
                   type="text"
                   value={testPhone}
                   onChange={(e) => setTestPhone(e.target.value)}
                   placeholder="e.g. 9876543210"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                  className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none"
+                  style={{
+                    borderColor: "var(--color-rule, #E8E8E8)",
+                    background: "var(--color-paper-2, #ffffff)",
+                    color: "var(--color-ink, #202C52)",
+                  }}
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Simulated Customer Name</label>
+                <label className="text-xs font-semibold block mb-1" style={{ color: "var(--color-ink, #202C52)" }}>
+                  Simulated Customer Name
+                </label>
                 <input
                   type="text"
                   value={testName}
                   onChange={(e) => setTestName(e.target.value)}
                   placeholder="Rahul Sharma"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 shadow-xs"
+                  className="w-full rounded-lg border px-3 py-2 text-xs shadow-xs focus:outline-none"
+                  style={{
+                    borderColor: "var(--color-rule, #E8E8E8)",
+                    background: "var(--color-paper-2, #ffffff)",
+                    color: "var(--color-ink, #202C52)",
+                  }}
                 />
               </div>
 
@@ -2885,14 +3611,23 @@ function AutomationWorkspace() {
                   setTestingTrigger(false);
                 }}
                 disabled={testingTrigger}
-                className="w-full rounded-lg bg-slate-900 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
+                className="w-full rounded-lg py-2 text-xs font-semibold text-white shadow-xs hover:opacity-95"
+                style={{ background: "var(--color-ink, #202C52)" }}
               >
                 {testingTrigger ? "Evaluating…" : "Run Diagnostic Simulation"}
               </button>
 
               {testResult && (
-                <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 space-y-2 text-xs">
-                  <span className="font-semibold text-slate-900 block">Simulation Diagnostic Outcome:</span>
+                <div
+                  className="rounded-lg border p-3 space-y-2 text-xs"
+                  style={{
+                    background: "var(--color-surface, #F5F5F5)",
+                    borderColor: "var(--color-rule, #E8E8E8)",
+                  }}
+                >
+                  <span className="font-semibold block" style={{ color: "var(--color-ink, #202C52)" }}>
+                    Simulation Diagnostic Outcome:
+                  </span>
                   <div className="flex items-center gap-2">
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
