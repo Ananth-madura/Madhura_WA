@@ -536,6 +536,7 @@ function startServer() {
       await require("./migrations/conversation_shares").migrate(require("./config/database"));
       await require("./migrations/local_first_chat_storage").migrate(require("./config/database"));
       await require("./migrations/r2_storage_unification").migrate(require("./config/database"));
+      await require("./migrations/wati_billing_and_limits").migrate(db);
       await require("./services/schemaReadiness").assertReady(db);
       const platformAdmin = await require("./services/platformAdminBootstrap").provisionConfiguredAdmin(db);
       if (platformAdmin) console.log("Platform administrator and internal workspace are ready");
