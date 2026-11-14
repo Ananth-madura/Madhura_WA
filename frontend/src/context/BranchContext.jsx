@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../config/axios";
 import {
@@ -160,20 +160,40 @@ export function BranchProvider({ children }) {
     };
   }, [paramBranchId, refreshAccessibleBranches, loadBranchDetails]);
 
-  const value = {
-    activeBranch,
-    accessibleBranches,
-    permissions,
-    userRole,
-    senders,
-    members,
-    loading,
-    error,
-    can,
-    switchBranch,
-    refreshBranch: () => activeBranch?.id && loadBranchDetails(activeBranch.id),
-    refreshAccessibleBranches,
-  };
+  const refreshBranch = useCallback(() => {
+    if (activeBranch?.id) return loadBranchDetails(activeBranch.id);
+  }, [activeBranch?.id, loadBranchDetails]);
+
+  const value = useMemo(
+    () => ({
+      activeBranch,
+      accessibleBranches,
+      permissions,
+      userRole,
+      senders,
+      members,
+      loading,
+      error,
+      can,
+      switchBranch,
+      refreshBranch,
+      refreshAccessibleBranches,
+    }),
+    [
+      activeBranch,
+      accessibleBranches,
+      permissions,
+      userRole,
+      senders,
+      members,
+      loading,
+      error,
+      can,
+      switchBranch,
+      refreshBranch,
+      refreshAccessibleBranches,
+    ]
+  );
 
   return <BranchContext.Provider value={value}>{children}</BranchContext.Provider>;
 }

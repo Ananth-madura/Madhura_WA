@@ -521,7 +521,7 @@ export default function TeamAccessWorkspace({ enterprise, request, admin }) {
                         {rec.action}
                       </span>
                     </td>
-                    <td style={{ padding: "10px 12px" }}>{rec.subject?.name || "—"}</td>
+                    <td style={{ padding: "10px 12px" }}>{rec.subject?.name || "-"}</td>
                     <td style={{ padding: "10px 12px", color: "var(--ac-muted)", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {typeof rec.details === "object" ? JSON.stringify(rec.details) : String(rec.details || "")}
                     </td>
@@ -565,7 +565,7 @@ export default function TeamAccessWorkspace({ enterprise, request, admin }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--ac-border)", paddingBottom: "14px", marginBottom: "16px" }}>
               <div>
                 <h2 style={{ margin: "0 0 4px" }}>
-                  Manage Assignments — {selectedSender.verified_name || selectedSender.display_phone}
+                  Manage Assignments: {selectedSender.verified_name || selectedSender.display_phone}
                 </h2>
                 <p style={{ margin: 0, fontSize: "13px" }}>
                   Select employees who receive conversations from{" "}

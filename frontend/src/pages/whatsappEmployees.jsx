@@ -1,7 +1,7 @@
 import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
 import InboxRoutingSettings from "../components/InboxRoutingSettings";
 import useWADialog from "../hooks/useWADialog";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Users,
   UserPlus,
@@ -26,8 +26,6 @@ import {
   ExternalLink,
   User,
   Briefcase,
-  Building,
-  GitBranch,
   ChevronDown,
 } from "lucide-react";
 import axios from "axios";
@@ -67,8 +65,8 @@ const ACCESS_LEVEL_META = {
     label: "Campaigns Only",
     shortLabel: "Campaigns",
     badge: "hl-badge-warn",
-    color: "#7c3aed",
-    bg: "rgba(124, 58, 237, 0.08)",
+    color: "#D97706",
+    bg: "rgba(217, 119, 6, 0.08)",
     icon: Send,
     desc: "Create and launch bulk broadcasts, templates, and contact segments. Chat inbox is hidden.",
   },
@@ -116,9 +114,9 @@ export default function WAEmployees() {
 
   useEffect(() => {
     if (activeBranch?.id) {
-      setFormData((prev) => ({ ...prev, branch_id: activeBranch.id }));
+      setFormData((prev) => (prev.branch_id === activeBranch.id ? prev : { ...prev, branch_id: activeBranch.id }));
     }
-  }, [activeBranch]);
+  }, [activeBranch?.id]);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
   const employeeDialog = useWADialog(showCreateModal, () => setShowCreateModal(false), formLoading);
@@ -127,6 +125,8 @@ export default function WAEmployees() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
+
+  const enterpriseHeadersKey = useMemo(() => JSON.stringify(enterpriseHeaders || {}), [enterpriseHeaders]);
 
   const fetchEmployees = useCallback(async () => {
     const version = ++employeeRequest.current;
@@ -137,7 +137,7 @@ export default function WAEmployees() {
       const token = localStorage.getItem("token");
       const headers = {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...enterpriseHeaders,
+        ...(enterpriseHeaders || {}),
       };
       const params = branchFilter !== "all" ? { branchId: branchFilter } : {};
       const { data } = await axios.get(`${API}/api/auth/employees`, { headers, params });
@@ -159,10 +159,11 @@ export default function WAEmployees() {
     } finally {
       if (version === employeeRequest.current) setLoading(false);
     }
-  }, [user, enterpriseHeaders, branchFilter, isOwnerOrAdmin, orgLoading]);
+    // enterpriseHeadersKey serializes enterpriseHeaders to avoid re-triggering across identity changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, enterpriseHeadersKey, branchFilter, isOwnerOrAdmin, orgLoading]);
 
   useEffect(() => {
-    setEmployees([]);
     fetchEmployees();
     const invalidate = () => { employeeRequest.current++; };
     return invalidate;
@@ -378,7 +379,7 @@ export default function WAEmployees() {
 
       {!demoMode && <InboxRoutingSettings key={activeTenant?.id || "none"} />}
 
-      {/* Page Header — command bar */}
+      {/* Page Header - command bar */}
       <div
         className="hl-commandbar p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
         style={{ borderRadius: "var(--radius-lg, 14px)" }}
@@ -483,7 +484,7 @@ export default function WAEmployees() {
               <span>Chat only:</span>
               <span className="font-bold">{analytics.access_levels?.chat_only || 0}</span>
             </div>
-            <div className="flex justify-between items-center" style={{ color: "#7c3aed" }}>
+            <div className="flex justify-between items-center" style={{ color: "#D97706" }}>
               <span>Campaigns:</span>
               <span className="font-bold">{analytics.access_levels?.campaign_only || 0}</span>
             </div>
@@ -510,6 +511,7 @@ export default function WAEmployees() {
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--color-ink-2, #667085)" }} />
           <input
             type="text"
+            aria-label="Search employees directory"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by name, email, employee ID or access code..."
@@ -686,15 +688,15 @@ export default function WAEmployees() {
                           style={{
                             background:
                               emp.role === "admin"
-                                ? "rgba(124, 58, 237, 0.10)"
+                                ? "rgba(32, 44, 82, 0.10)"
                                 : emp.role === "subadmin"
-                                  ? "rgba(233, 170, 0, 0.15)"
+                                  ? "rgba(217, 119, 6, 0.12)"
                                   : "rgba(37, 99, 235, 0.08)",
                             color:
                               emp.role === "admin"
-                                ? "#7c3aed"
+                                ? "var(--color-primary, #202C52)"
                                 : emp.role === "subadmin"
-                                  ? "var(--color-accent-ink, #202C52)"
+                                  ? "#B45309"
                                   : "var(--color-info, #2563EB)",
                           }}
                         >
@@ -840,7 +842,7 @@ export default function WAEmployees() {
                                 <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Name: </span>{`${emp.first_name || ""} ${emp.last_name || ""}`.trim() || "Employee"}</div>
                                 <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Email: </span>{emp.email}</div>
                                 <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Role: </span>{emp.role || "employee"}</div>
-                                <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Job title: </span>{emp.job_title || "—"}</div>
+                                <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Job title: </span>{emp.job_title || "-"}</div>
                                 <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Branch: </span>{emp.branch_name || "Head office"}</div>
                                 <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Access level: </span>{level.label}</div>
                                 <div><span style={{ color: "var(--color-ink-2, #667085)" }}>Status: </span>{isPending ? "Pending login" : "Active"}</div>
@@ -1022,7 +1024,7 @@ export default function WAEmployees() {
                     {branches && branches.length > 0 ? (
                       branches.map((b) => (
                         <option key={b.id} value={b.id}>
-                          {b.name} ({b.code}){b.is_head_office ? " — Head office" : ""}
+                          {b.name} ({b.code}){b.is_head_office ? " : Head office" : ""}
                         </option>
                       ))
                     ) : (
@@ -1221,7 +1223,7 @@ export default function WAEmployees() {
                     <option value="">Head office / default</option>
                     {branches && branches.map((b) => (
                       <option key={b.id} value={b.id}>
-                        {b.name} ({b.code}){b.is_head_office ? " — Head office" : ""}
+                        {b.name} ({b.code}){b.is_head_office ? " : Head office" : ""}
                       </option>
                     ))}
                   </select>

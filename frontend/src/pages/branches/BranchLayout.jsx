@@ -23,7 +23,6 @@ import {
   Building2,
   Clock,
   Star,
-  ExternalLink,
   ChevronRight,
   Contact,
 } from "lucide-react";
@@ -103,46 +102,58 @@ export default function BranchLayout() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen" style={{ background: "var(--color-surface, #F5F5F5)", color: "var(--color-ink, #202C52)" }}>
       {/* Branch Top Navigation & Context Bar */}
-      <div className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800">
+      <div
+        className="sticky top-0 z-40 backdrop-blur-md border-b shadow-xs"
+        style={{ background: "var(--color-paper-2, #ffffff)", borderColor: "var(--color-rule, #E8E8E8)" }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* Breadcrumb & Identity */}
           <div className="flex items-center gap-2 text-xs flex-wrap">
             <Link
               to="/whatsapp/branches"
-              className="text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
+              className="transition-colors flex items-center gap-1 font-medium"
+              style={{ color: "var(--color-ink-2, #667085)" }}
             >
-              <Building2 size={13} className="text-slate-500" />
+              <Building2 size={13} style={{ color: "var(--color-ink-2, #667085)" }} />
               <span>{activeTenant?.name || "Company"}</span>
             </Link>
-            <ChevronRight size={12} className="text-slate-600" />
+            <ChevronRight size={12} style={{ color: "var(--color-ink-2, #667085)", opacity: 0.6 }} />
             <Link
               to="/whatsapp/branches"
-              className="text-slate-400 hover:text-slate-200 transition-colors"
+              className="transition-colors font-medium"
+              style={{ color: "var(--color-ink-2, #667085)" }}
             >
               Branches
             </Link>
-            <ChevronRight size={12} className="text-slate-600" />
-            <span className="font-bold text-slate-100 flex items-center gap-1.5">
+            <ChevronRight size={12} style={{ color: "var(--color-ink-2, #667085)", opacity: 0.6 }} />
+            <span className="font-bold flex items-center gap-1.5" style={{ color: "var(--color-ink, #202C52)" }}>
               {activeBranch?.name}
               {activeBranch?.is_head_office === 1 && (
-                <Star size={12} className="text-amber-400 fill-amber-400" title="Head Office" />
+                <Star size={13} className="text-amber-500 fill-amber-500" title="Head Office" />
               )}
             </span>
-            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/80">
+            <span
+              className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border"
+              style={{
+                background: "rgba(22, 128, 60, 0.10)",
+                color: "var(--color-success, #16803C)",
+                borderColor: "rgba(22, 128, 60, 0.25)",
+              }}
+            >
               {activeBranch?.code}
             </span>
           </div>
 
           {/* Quick Context & Switcher */}
           <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 text-xs text-slate-400">
-              <Clock size={13} className="text-slate-500" />
+            <div className="hidden md:flex items-center gap-2 text-xs" style={{ color: "var(--color-ink-2, #667085)" }}>
+              <Clock size={13} style={{ color: "var(--color-ink-2, #667085)" }} />
               <span>{activeBranch?.timezone || "Asia/Kolkata"}</span>
-              <span>·</span>
+              <span>-</span>
               <span>
-                Role: <strong className="text-emerald-400 font-medium capitalize">{userRole}</strong>
+                Role: <strong className="capitalize font-semibold" style={{ color: "var(--color-success, #16803C)" }}>{userRole}</strong>
               </span>
             </div>
 
@@ -161,10 +172,13 @@ export default function BranchLayout() {
                 className={({ isActive }) =>
                   `flex items-center gap-2 px-3 py-2 text-xs font-semibold whitespace-nowrap border-b-2 transition-all ${
                     isActive
-                      ? "border-emerald-500 text-emerald-400 bg-emerald-950/20"
-                      : "border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700"
+                      ? "border-emerald-600 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20"
+                      : "border-transparent hover:border-slate-300 opacity-70 hover:opacity-100"
                   }`
                 }
+                style={({ isActive }) => ({
+                  color: isActive ? "var(--color-success, #16803C)" : "var(--color-ink, #202C52)",
+                })}
               >
                 <Icon size={14} />
                 <span>{item.label}</span>

@@ -6,7 +6,7 @@
  * Reference: MADHURA_WHATSAPP_ENTERPRISE_SAAS_MASTER_BLUEPRINT.md
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import axios from "axios";
 import { API } from "../config/api";
 import { hasCookieSession } from "../auth/browserSession";
@@ -130,26 +130,46 @@ export function EnterpriseProvider({ children }) {
   const isBranchManager =
     isOwnerOrAdmin || roleInActiveOrg === "branch_manager";
 
+  // Re-compute enterprise headers whenever active tenant or active branch identity changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const enterpriseHeaders = useMemo(() => getHeaders(), [getHeaders, activeTenant?.id, activeBranch?.id]);
+
+  const contextValue = useMemo(() => ({
+    activeTenant,
+    organizations,
+    activeBranch,
+    branches,
+    permittedBranchIds,
+    roleInActiveOrg,
+    actorRole,
+    isOwnerOrAdmin,
+    isBranchManager,
+    loading,
+    switchOrganization,
+    switchBranch,
+    refreshEnterpriseContext,
+    getHeaders,
+    enterpriseHeaders,
+  }), [
+    activeTenant,
+    organizations,
+    activeBranch,
+    branches,
+    permittedBranchIds,
+    roleInActiveOrg,
+    actorRole,
+    isOwnerOrAdmin,
+    isBranchManager,
+    loading,
+    switchOrganization,
+    switchBranch,
+    refreshEnterpriseContext,
+    getHeaders,
+    enterpriseHeaders,
+  ]);
+
   return (
-    <EnterpriseContext.Provider
-      value={{
-        activeTenant,
-        organizations,
-        activeBranch,
-        branches,
-        permittedBranchIds,
-        roleInActiveOrg,
-        actorRole,
-        isOwnerOrAdmin,
-        isBranchManager,
-        loading,
-        switchOrganization,
-        switchBranch,
-        refreshEnterpriseContext,
-        getHeaders,
-        enterpriseHeaders: getHeaders(),
-      }}
-    >
+    <EnterpriseContext.Provider value={contextValue}>
       {children}
     </EnterpriseContext.Provider>
   );

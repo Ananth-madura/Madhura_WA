@@ -337,7 +337,7 @@ function AutomationWorkspace() {
   const editRouteId = location.pathname.match(/\/automations\/(\d+)\/edit\/?$/)?.[1];
   const isEditorPage = Boolean(editRouteId) || location.pathname.replace(/\/$/, "").endsWith("/automations/create");
 
-  // Core Data State — real empty defaults (no demo leak into production tenants)
+  // Core Data State: real empty defaults (no demo leak into production tenants)
   const [automations, setAutomations] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [senders, setSenders] = useState([]);
@@ -869,32 +869,40 @@ function AutomationWorkspace() {
 
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white shadow-xs">
+              <div
+                className="flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-xs shrink-0"
+                style={{ background: "var(--color-ink, #202C52)" }}
+              >
                 <Zap className="h-5 w-5 text-amber-400" />
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-bold tracking-tight text-slate-900 font-[var(--font-display)] sm:text-2xl">
+                  <h1
+                    className="text-xl font-bold tracking-tight sm:text-2xl m-0"
+                    style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+                  >
                     {editing ? "Edit WhatsApp Automation" : "Create WhatsApp Automation"}
                   </h1>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                      form.is_active ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"
+                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide border ${
+                      form.is_active
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                        : "bg-slate-100 text-slate-600 border-slate-200"
                     }`}
                   >
                     {form.is_active ? "Active on save" : "Saved paused"}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-slate-600 sm:text-sm">
+                <p className="mt-1 text-xs sm:text-sm" style={{ color: "var(--color-ink-2, #667085)", margin: 0 }}>
                   Choose a CRM event, add conditions, craft the message, then review the execution plan before saving.
                 </p>
               </div>
             </div>
 
-            <div className="hidden items-center gap-2 text-xs text-slate-500 sm:flex">
+            <div className="hidden items-center gap-2 text-xs sm:flex" style={{ color: "var(--color-ink-2, #667085)" }}>
               {editorLoading ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading rule…
+                  <Loader2 className="h-4 w-4 animate-spin text-emerald-600" /> Loading rule…
                 </>
               ) : (
                 <>
@@ -907,7 +915,7 @@ function AutomationWorkspace() {
         </div>
 
         {ruleError && (
-          <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+          <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-800 shadow-xs">
             {ruleError}
           </div>
         )}
@@ -918,17 +926,24 @@ function AutomationWorkspace() {
               event.preventDefault();
               handleSave();
             }}
-            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+            className="overflow-hidden rounded-2xl border shadow-xs"
+            style={{
+              background: "var(--color-paper-2, #ffffff)",
+              borderColor: "var(--color-rule, #E8E8E8)",
+            }}
           >
-            <div className="divide-y divide-slate-200">
+            <div className="divide-y" style={{ borderColor: "var(--color-rule, #E8E8E8)" }}>
               {/* Quick start */}
               {!editing && starterChoices.length > 0 && (
-                <section className="space-y-3 bg-slate-50/70 p-5 sm:p-6">
+                <section
+                  className="space-y-3 p-5 sm:p-6"
+                  style={{ background: "var(--color-surface, #F5F5F5)" }}
+                >
                   <div>
-                    <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                    <h2 className="flex items-center gap-2 text-sm font-bold m-0" style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}>
                       <Sparkles className="h-4 w-4 text-amber-500" /> Start from a blueprint
                     </h2>
-                    <p className="mt-1 text-xs text-slate-600">
+                    <p className="mt-1 text-xs" style={{ color: "var(--color-ink-2, #667085)", margin: 0 }}>
                       Load a ready-made rule, then adjust the trigger, message and delivery below.
                     </p>
                   </div>
@@ -1611,18 +1626,27 @@ function AutomationWorkspace() {
     <div className="space-y-6 max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
       <WAWorkspaceGuide section="automations" />
       {/* ── TOP HEADER: Command Center Overview ── */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-slate-200">
+      <div
+        className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b"
+        style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+      >
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs">
+            <div
+              className="w-10 h-10 rounded-xl text-white flex items-center justify-center shadow-xs shrink-0"
+              style={{ background: "var(--color-ink, #202C52)" }}
+            >
               <Zap className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 font-[var(--font-display)]">
+              <h1
+                className="text-xl sm:text-2xl font-bold tracking-tight m-0"
+                style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}
+              >
                 WhatsApp Automation Command Center
               </h1>
-              <p className="text-xs sm:text-sm text-slate-600">
-                Unified orchestration for Event Automations, Workflow Pipelines, Flow Bots, Smart Reminders & Billing.
+              <p className="text-xs sm:text-sm mt-1" style={{ color: "var(--color-ink-2, #667085)", margin: 0 }}>
+                Unified orchestration for Event Automations, Workflow Pipelines, Flow Bots, Smart Reminders &amp; Billing.
               </p>
             </div>
           </div>
@@ -1632,7 +1656,8 @@ function AutomationWorkspace() {
           <button
             type="button"
             onClick={() => openCreate()}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-slate-800 transition"
+            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold text-white shadow-xs transition hover:opacity-95"
+            style={{ background: "var(--color-ink, #202C52)" }}
           >
             <Plus className="w-4 h-4" /> New Automation
           </button>
@@ -1640,9 +1665,14 @@ function AutomationWorkspace() {
           <button
             type="button"
             onClick={() => setShowWebhookModal(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50 transition"
+            className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs sm:text-sm font-semibold shadow-xs transition hover:bg-slate-50"
+            style={{
+              background: "var(--color-paper-2, #ffffff)",
+              borderColor: "var(--color-rule, #E8E8E8)",
+              color: "var(--color-ink, #202C52)",
+            }}
           >
-            <Webhook className="w-4 h-4 text-slate-700" />
+            <Webhook className="w-4 h-4" />
             <span>External Webhooks</span>
           </button>
 
@@ -1650,7 +1680,12 @@ function AutomationWorkspace() {
             type="button"
             onClick={handleBulkToggle}
             disabled={bulkToggling || automations.length === 0}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50 transition"
+            className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs sm:text-sm font-semibold shadow-xs transition hover:bg-slate-50 disabled:opacity-50"
+            style={{
+              background: "var(--color-paper-2, #ffffff)",
+              borderColor: "var(--color-rule, #E8E8E8)",
+              color: "var(--color-ink, #202C52)",
+            }}
           >
             {anyActive ? <ToggleRight className="w-4 h-4 text-emerald-600" /> : <ToggleLeft className="w-4 h-4 text-slate-400" />}
             <span>{anyActive ? "Pause All" : "Resume All"}</span>
@@ -1660,10 +1695,15 @@ function AutomationWorkspace() {
             type="button"
             onClick={fetchData}
             disabled={loading}
-            className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 shadow-xs hover:bg-slate-50 transition"
+            className="rounded-xl border p-2 shadow-xs transition hover:bg-slate-50 disabled:opacity-50"
+            style={{
+              background: "var(--color-paper-2, #ffffff)",
+              borderColor: "var(--color-rule, #E8E8E8)",
+              color: "var(--color-ink, #202C52)",
+            }}
             title="Refresh workspace data"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-emerald-600" : ""}`} />
           </button>
         </div>
       </div>
@@ -1671,9 +1711,12 @@ function AutomationWorkspace() {
       {pageNotice && (
         <div
           role="alert"
-          className={`flex items-center justify-between rounded-lg p-3 text-sm ${
-            pageNotice.type === "error" ? "bg-rose-50 text-rose-800 border border-rose-200" : "bg-emerald-50 text-emerald-800 border border-emerald-200"
-          }`}
+          className="flex items-center justify-between rounded-xl p-3.5 text-xs sm:text-sm border shadow-xs"
+          style={{
+            background: pageNotice.type === "error" ? "#FEF3F2" : "#ECFDF3",
+            borderColor: pageNotice.type === "error" ? "#FECACA" : "#ABEFC6",
+            color: pageNotice.type === "error" ? "#B42318" : "#067647",
+          }}
         >
           <div className="flex items-center gap-2">
             {pageNotice.type === "error" ? <AlertCircle className="w-4 h-4 text-rose-600" /> : <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
@@ -1686,7 +1729,15 @@ function AutomationWorkspace() {
       )}
 
       {Object.keys(sectionErrors).length > 0 && (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3.5 text-xs shadow-xs"
+          style={{
+            background: "#FFFBEB",
+            borderColor: "#FDE68A",
+            color: "#92400E",
+          }}
+        >
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
             <span>
@@ -1696,7 +1747,12 @@ function AutomationWorkspace() {
           <button
             type="button"
             onClick={fetchData}
-            className="rounded-md border border-amber-400 bg-white px-2.5 py-1 font-semibold text-amber-900 hover:bg-amber-100"
+            className="rounded-lg border px-2.5 py-1 font-semibold transition hover:bg-amber-100"
+            style={{
+              background: "#ffffff",
+              borderColor: "#F59E0B",
+              color: "#92400E",
+            }}
           >
             Retry failed sections
           </button>
@@ -1705,47 +1761,96 @@ function AutomationWorkspace() {
 
       {/* ── METRIC STAT CARDS ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Total Rules</span>
-          <p className="mt-1 text-2xl font-bold text-slate-900">{stats.totalRules || automations.length}</p>
-          <span className="text-[10px] text-slate-500">{stats.activeRules || 0} active now</span>
+        <div
+          className="rounded-2xl border p-4 shadow-xs transition-all"
+          style={{
+            background: "var(--color-paper-2, #ffffff)",
+            borderColor: "var(--color-rule, #E8E8E8)",
+          }}
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-2, #667085)" }}>Total Rules</span>
+          <p className="mt-1 text-2xl font-bold font-mono" style={{ color: "var(--color-ink, #202C52)", fontFamily: "JetBrains Mono, monospace" }}>
+            {stats.totalRules || automations.length}
+          </p>
+          <span className="text-[10px]" style={{ color: "var(--color-ink-2, #667085)" }}>{stats.activeRules || 0} active now</span>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Executions</span>
-          <p className="mt-1 text-2xl font-bold text-slate-900">{stats.totalRuns || 0}</p>
-          <span className="text-[10px] text-emerald-600 font-medium">{stats.sentCount || 0} delivered</span>
+        <div
+          className="rounded-2xl border p-4 shadow-xs transition-all"
+          style={{
+            background: "var(--color-paper-2, #ffffff)",
+            borderColor: "var(--color-rule, #E8E8E8)",
+          }}
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-2, #667085)" }}>Executions</span>
+          <p className="mt-1 text-2xl font-bold font-mono" style={{ color: "var(--color-ink, #202C52)", fontFamily: "JetBrains Mono, monospace" }}>
+            {stats.totalRuns || 0}
+          </p>
+          <span className="text-[10px] font-medium" style={{ color: "var(--color-success, #16803C)" }}>{stats.sentCount || 0} delivered</span>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Scheduled / Waiting</span>
-          <p className="mt-1 text-2xl font-bold text-amber-600">{stats.scheduledCount || 0}</p>
-          <span className="text-[10px] text-slate-500">Due queue</span>
+        <div
+          className="rounded-2xl border p-4 shadow-xs transition-all"
+          style={{
+            background: "var(--color-paper-2, #ffffff)",
+            borderColor: "var(--color-rule, #E8E8E8)",
+          }}
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-2, #667085)" }}>Scheduled / Waiting</span>
+          <p className="mt-1 text-2xl font-bold font-mono" style={{ color: "var(--color-accent-ink, #D97706)", fontFamily: "JetBrains Mono, monospace" }}>
+            {stats.scheduledCount || 0}
+          </p>
+          <span className="text-[10px]" style={{ color: "var(--color-ink-2, #667085)" }}>Due queue</span>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Checkpoints</span>
-          <p className="mt-1 text-2xl font-bold text-blue-600">{checkpoints.filter((c) => c.status === "waiting").length}</p>
-          <span className="text-[10px] text-slate-500">Pending answers</span>
+        <div
+          className="rounded-2xl border p-4 shadow-xs transition-all"
+          style={{
+            background: "var(--color-paper-2, #ffffff)",
+            borderColor: "var(--color-rule, #E8E8E8)",
+          }}
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-2, #667085)" }}>Checkpoints</span>
+          <p className="mt-1 text-2xl font-bold font-mono" style={{ color: "var(--color-info, #2563EB)", fontFamily: "JetBrains Mono, monospace" }}>
+            {checkpoints.filter((c) => c.status === "waiting").length}
+          </p>
+          <span className="text-[10px]" style={{ color: "var(--color-ink-2, #667085)" }}>Pending answers</span>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Unpaid Invoices</span>
-          <p className="mt-1 text-2xl font-bold text-rose-600">{billingSummary.unpaidCount || 0}</p>
-          <span className="text-[10px] text-slate-500">Auto-recovery</span>
+        <div
+          className="rounded-2xl border p-4 shadow-xs transition-all"
+          style={{
+            background: "var(--color-paper-2, #ffffff)",
+            borderColor: "var(--color-rule, #E8E8E8)",
+          }}
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-2, #667085)" }}>Unpaid Invoices</span>
+          <p className="mt-1 text-2xl font-bold font-mono" style={{ color: "#B42318", fontFamily: "JetBrains Mono, monospace" }}>
+            {billingSummary.unpaidCount || 0}
+          </p>
+          <span className="text-[10px]" style={{ color: "var(--color-ink-2, #667085)" }}>Auto-recovery</span>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Delivery Health</span>
-          <p className="mt-1 text-2xl font-bold text-emerald-600">
+        <div
+          className="rounded-2xl border p-4 shadow-xs transition-all"
+          style={{
+            background: "var(--color-paper-2, #ffffff)",
+            borderColor: "var(--color-rule, #E8E8E8)",
+          }}
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-2, #667085)" }}>Delivery Health</span>
+          <p className="mt-1 text-2xl font-bold font-mono" style={{ color: "var(--color-success, #16803C)", fontFamily: "JetBrains Mono, monospace" }}>
             {stats.totalRuns ? `${Math.round(((stats.sentCount || 0) / (stats.totalRuns || 1)) * 100)}%` : "100%"}
           </p>
-          <span className="text-[10px] text-slate-500">{stats.failedCount || 0} failures</span>
+          <span className="text-[10px]" style={{ color: "var(--color-ink-2, #667085)" }}>{stats.failedCount || 0} failures</span>
         </div>
       </div>
 
       {/* ── COMMAND CENTER NAVIGATION TABS ── */}
-      <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 pb-2.5 text-xs sm:text-sm font-medium">
+      <div
+        className="flex items-center gap-1.5 overflow-x-auto border-b pb-2.5 text-xs sm:text-sm font-medium"
+        style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+      >
         {[
           { id: "rules", label: "Event Automations", icon: Zap, count: (Array.isArray(automations) ? automations : []).length },
           { id: "pipeline", label: "Workflow Pipelines", icon: GitBranch, count: (Array.isArray(automations) ? automations : []).filter((a) => a?.actions_json).length },
@@ -1762,17 +1867,23 @@ function AutomationWorkspace() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 rounded-lg px-3 py-2 whitespace-nowrap transition ${
-                isActive ? "bg-slate-900 text-white shadow-xs font-semibold" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              className={`flex items-center gap-2 rounded-xl px-3.5 py-2 whitespace-nowrap text-xs sm:text-sm font-semibold transition-all ${
+                isActive ? "shadow-xs" : "hover:bg-slate-100/60"
               }`}
+              style={{
+                background: isActive ? "var(--color-ink, #202C52)" : "transparent",
+                color: isActive ? "#ffffff" : "var(--color-ink, #202C52)",
+              }}
             >
               <Icon className="w-4 h-4" />
               <span>{tab.label}</span>
               {tab.count !== undefined && tab.count > 0 && (
                 <span
-                  className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
-                    isActive ? "bg-slate-800 text-amber-300" : "bg-slate-200 text-slate-700"
-                  }`}
+                  className="rounded-full px-1.5 py-0.2 text-[10px] font-bold font-mono"
+                  style={{
+                    background: isActive ? "var(--color-accent, #FCBD16)" : "rgba(32, 44, 82, 0.08)",
+                    color: isActive ? "var(--color-accent-ink, #202C52)" : "var(--color-ink, #202C52)",
+                  }}
                 >
                   {tab.count}
                 </span>
@@ -2216,7 +2327,7 @@ function AutomationWorkspace() {
                         </span>
                       </td>
                       <td className="p-3 max-w-[220px] truncate" title={qCtx?.question_text || chk.question_text}>
-                        {qCtx?.question_text || chk.question_text || "—"}
+                        {qCtx?.question_text || chk.question_text || "-"}
                       </td>
                       <td className="p-3">
                         {cAns && Object.keys(cAns).length > 0 ? (
@@ -2369,10 +2480,10 @@ function AutomationWorkspace() {
                     {(Array.isArray(billingSummary?.invoices) ? billingSummary.invoices : []).slice(0, 15).map((inv) => (
                       <tr key={inv.id} className="hover:bg-slate-50/50">
                         <td className="p-3 font-mono font-medium text-slate-900">{inv.invoice_no || `INV-${inv.id}`}</td>
-                        <td className="p-3 font-semibold">{inv.client_company || inv.client_name || "—"}</td>
-                        <td className="p-3 font-mono text-slate-600">{inv.client_phone || "—"}</td>
+                        <td className="p-3 font-semibold">{inv.client_company || inv.client_name || "-"}</td>
+                        <td className="p-3 font-mono text-slate-600">{inv.client_phone || "-"}</td>
                         <td className="p-3 font-bold text-slate-900">₹{inv.total_amount ?? inv.grand_total ?? "0"}</td>
-                        <td className="p-3 text-slate-600">{inv.due_date || "—"}</td>
+                        <td className="p-3 text-slate-600">{inv.due_date || "-"}</td>
                         <td className="p-3">
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -2617,7 +2728,7 @@ function AutomationWorkspace() {
                             <span className="block text-[10px] text-slate-500">{log.trigger_type}</span>
                           </td>
                           <td className="p-3 font-mono text-slate-600">+{log.phone}</td>
-                          <td className="p-3">{log.contact_name || "—"}</td>
+                          <td className="p-3">{log.contact_name || "-"}</td>
                           <td className="p-3">
                             <span
                               className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -2634,14 +2745,14 @@ function AutomationWorkspace() {
                             </span>
                           </td>
                           <td className="p-3 font-mono text-[11px] text-slate-500 max-w-[140px] truncate">
-                            {log.wa_message_id || "—"}
+                            {log.wa_message_id || "-"}
                           </td>
                           <td className="p-3 text-slate-500 text-[11px]">
                             {log.status === "scheduled"
                               ? `Due: ${new Date(log.scheduled_for).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                               : log.sent_at
                               ? new Date(log.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                              : "—"}
+                              : "-"}
                           </td>
                           <td className="p-3 text-right">
                             <div className="flex items-center justify-end gap-1">

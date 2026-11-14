@@ -1143,11 +1143,9 @@ export default function WhatsAppPage() {
         setQrDataUrl(null);
         setQrLoading(false);
         fetchStatus();
-      } else if (res.data && res.data.qr) {
       } else if (res.data && (res.data.qr || res.data.qrDataUrl)) {
         if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
         qrRetryCountRef.current = 0;
-        setQrCode(res.data.qr);
         if (res.data.qr) setQrCode(res.data.qr);
         if (res.data.qrDataUrl) setQrDataUrl(res.data.qrDataUrl);
         setQrCountdown(25);
@@ -1203,29 +1201,28 @@ export default function WhatsAppPage() {
         }
       }
       if (err.response?.status === 504 || err.code === "ECONNABORTED" || (err.message && err.message.includes("timeout"))) {
-        if (qrRetryCountRef.current < 10) {
-          if (qrRetryCountRef.current < 45) {
-            qrRetryCountRef.current += 1;
-            console.warn("ℹ️ WhatsApp QR generation in progress, re-checking in 1.5s...");
-            setQrLoading(true);
-            if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
-            qrPollTimerRef.current = setTimeout(() => {
-              fetchQr(false);
-            }, 1500);
-          } else {
-            setError("Server is taking longer to start WhatsApp browser session. Click 'Force Fresh QR Code' below to retry.");
-            setQrLoading(false);
-          }
+        if (qrRetryCountRef.current < 45) {
+          qrRetryCountRef.current += 1;
+          console.warn("ℹ️ WhatsApp QR generation in progress, re-checking in 1.5s...");
+          setQrLoading(true);
+          if (qrPollTimerRef.current) clearTimeout(qrPollTimerRef.current);
+          qrPollTimerRef.current = setTimeout(() => {
+            fetchQr(false);
+          }, 1500);
         } else {
-          const msg = err.response?.data?.error || err.message || "Failed to generate QR code. Click Refresh QR to retry.";
-          setError(msg);
+          setError("Server is taking longer to start WhatsApp browser session. Click 'Force Fresh QR Code' below to retry.");
           setQrLoading(false);
         }
-      } finally {
-        qrFetchInFlightRef.current = false;
-        hasTriggeredQrFetch.current = true;
+      } else {
+        const msg = err.response?.data?.error || err.message || "Failed to generate QR code. Click Refresh QR to retry.";
+        setError(msg);
+        setQrLoading(false);
       }
-    }, [demoMode, fetchStatus]);
+    } finally {
+      qrFetchInFlightRef.current = false;
+      hasTriggeredQrFetch.current = true;
+    }
+  }, [demoMode, fetchStatus]);
 
   // QR auto-countdown timer (25s visual indicator) with auto-refresh on expire
   useEffect(() => {
@@ -4296,29 +4293,27 @@ export default function WhatsAppPage() {
           {/* Mode 1: QR Code Scan */}
           {connectMode === "qr" && (
             <div className="flex flex-col items-center justify-center text-center py-2">
-              {qrLoading && !qrCode ? (
-                { qrLoading && !qrCode && !qrDataUrl ? (
-                  <div className="py-10 text-center max-w-sm mx-auto">
-                    <div className="relative w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                      <div className="absolute inset-0 rounded-full border-4 border-[var(--color-rule)] opacity-30"></div>
-                      <div className="absolute inset-0 rounded-full border-4 border-[var(--color-accent)] border-t-transparent animate-spin"></div>
-                      <Smartphone size={24} className="text-[var(--color-ink)]" />
-                    </div>
-                    <p className="hl-empty-title font-bold text-base">Generating WhatsApp QR Code...</p>
-                    <p className="hl-subtitle mt-1 mb-5 text-xs">
-                      Starting WhatsApp browser engine. If this takes more than a few seconds, click Force Fresh below.
-                    </p>
-                    <button
-                      onClick={() => fetchQr(true)}
-                      className="hl-btn-secondary text-xs px-3.5 py-2 inline-flex items-center gap-1.5 shadow-sm"
-                    >
-                      <RefreshCw size={13} className="animate-spin" />
-                      <span>Force Fresh QR Code 🔄</span>
-                    </button>
+              {qrLoading && !qrCode && !qrDataUrl ? (
+                <div className="py-10 text-center max-w-sm mx-auto">
+                  <div className="relative w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                    <div className="absolute inset-0 rounded-full border-4 border-[var(--color-rule)] opacity-30"></div>
+                    <div className="absolute inset-0 rounded-full border-4 border-[var(--color-accent)] border-t-transparent animate-spin"></div>
+                    <Smartphone size={24} className="text-[var(--color-ink)]" />
                   </div>
-                ) : qrCode ? (
-                ): (qrCode || qrDataUrl) ? (
-              <div className="w-full flex flex-col items-center">
+                  <p className="hl-empty-title font-bold text-base">Generating WhatsApp QR Code...</p>
+                  <p className="hl-subtitle mt-1 mb-5 text-xs">
+                    Starting WhatsApp browser engine. If this takes more than a few seconds, click Force Fresh below.
+                  </p>
+                  <button
+                    onClick={() => fetchQr(true)}
+                    className="hl-btn-secondary text-xs px-3.5 py-2 inline-flex items-center gap-1.5 shadow-sm"
+                  >
+                    <RefreshCw size={13} className="animate-spin" />
+                    <span>Force Fresh QR Code 🔄</span>
+                  </button>
+                </div>
+              ) : (qrCode || qrDataUrl) ? (
+                <div className="w-full flex flex-col items-center">
                 {/* Step-by-step guidance pill strip */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full max-w-lg mb-5 text-left">
                   <div className="p-2.5 rounded-xl border border-[var(--color-rule)] bg-[var(--color-paper)] flex items-center gap-2.5">

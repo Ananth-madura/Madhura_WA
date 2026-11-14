@@ -287,7 +287,7 @@ export default function WhatsAppIntegrations({
                   >
                     {discovered.wabas.map((w) => (
                       <option key={w.id} value={w.id}>
-                        {w.name} (ID: {w.id}) — {w.phoneNumbers.length} numbers
+                        {w.name} (ID: {w.id}) : {w.phoneNumbers.length} numbers
                       </option>
                     ))}
                   </select>
@@ -348,7 +348,7 @@ export default function WhatsAppIntegrations({
                                   />
                                 </td>
                                 <td className="py-3 px-4 font-bold text-slate-900">{p.displayPhone}</td>
-                                <td className="py-3 px-4 text-slate-700">{p.verifiedName || "—"}</td>
+                                <td className="py-3 px-4 text-slate-700">{p.verifiedName || "-"}</td>
                                 <td className="py-3 px-4">
                                   <span className="font-semibold text-emerald-700">{p.quality}</span> · {p.messagingTier}
                                 </td>

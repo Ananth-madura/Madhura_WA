@@ -88,29 +88,41 @@ export default function BranchSetupChecklist({ branch, senders = [], members = [
     : "text-rose-400 bg-rose-950/60 border-rose-700/60";
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
+    <div
+      className="p-5 shadow-sm transition-all"
+      style={{
+        background: "var(--color-paper-2, #ffffff)",
+        border: "1px solid var(--color-rule, #E8E8E8)",
+        borderRadius: "var(--radius-lg, 16px)",
+      }}
+    >
+      <div
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b"
+        style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+      >
         <div>
           <div className="flex items-center gap-3">
-            <h3 className="text-base font-bold text-slate-100">Branch Readiness & Setup Checklist</h3>
+            <h3 className="text-base font-bold m-0" style={{ color: "var(--color-ink, #202C52)", fontFamily: "Poppins, sans-serif" }}>
+              Branch Readiness &amp; Setup Checklist
+            </h3>
             <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${statusColor}`}>
               {statusLabel}
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs mt-1" style={{ color: "var(--color-ink-2, #667085)", margin: 0 }}>
             Complete the 5 operating criteria to ensure full automated conversation routing and messaging.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="w-32 bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-700/60">
+          <div className="w-32 rounded-full h-2.5 overflow-hidden border" style={{ background: "var(--color-surface, #F5F5F5)", borderColor: "var(--color-rule, #E8E8E8)" }}>
             <div
               className={`h-full transition-all duration-500 ${
-                isReady ? "bg-emerald-500" : completedCount >= 3 ? "bg-amber-500" : "bg-slate-500"
+                isReady ? "bg-emerald-500" : completedCount >= 3 ? "bg-amber-500" : "bg-slate-400"
               }`}
               style={{ width: `${percentage}%` }}
             />
           </div>
-          <span className="text-xs font-mono font-bold text-slate-300">
+          <span className="text-xs font-mono font-bold" style={{ color: "var(--color-ink, #202C52)" }}>
             {completedCount}/{steps.length} ({percentage}%)
           </span>
         </div>
@@ -122,42 +134,50 @@ export default function BranchSetupChecklist({ branch, senders = [], members = [
           return (
             <div
               key={step.id}
-              className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
-                step.completed
-                  ? "bg-emerald-950/20 border-emerald-800/40"
-                  : "bg-slate-800/40 border-slate-700/60 hover:border-slate-600"
-              }`}
+              className="p-3.5 rounded-xl border transition-all flex flex-col justify-between"
+              style={{
+                background: step.completed ? "rgba(22, 128, 60, 0.05)" : "var(--color-surface, #F5F5F5)",
+                borderColor: step.completed ? "rgba(22, 128, 60, 0.25)" : "var(--color-rule, #E8E8E8)",
+              }}
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                      step.completed ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-700 text-slate-400"
-                    }`}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center"
+                    style={{
+                      background: step.completed ? "rgba(22, 128, 60, 0.15)" : "rgba(100, 116, 139, 0.15)",
+                      color: step.completed ? "var(--color-success, #16803C)" : "var(--color-ink-2, #667085)",
+                    }}
                   >
                     <Icon size={14} />
                   </div>
                   {step.completed ? (
-                    <CheckCircle2 size={16} className="text-emerald-400" />
+                    <CheckCircle2 size={16} style={{ color: "var(--color-success, #16803C)" }} />
                   ) : (
-                    <AlertCircle size={16} className="text-amber-400" />
+                    <AlertCircle size={16} style={{ color: "var(--color-accent-ink, #D97706)" }} />
                   )}
                 </div>
-                <h4 className="text-xs font-semibold text-slate-200">{step.title}</h4>
-                <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                <h4 className="text-xs font-semibold m-0" style={{ color: "var(--color-ink, #202C52)" }}>
+                  {step.title}
+                </h4>
+                <p className="text-[11px] mt-1 line-clamp-2 leading-relaxed" style={{ color: "var(--color-ink-2, #667085)" }}>
                   {step.description}
                 </p>
               </div>
 
-              <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between">
+              <div
+                className="mt-3 pt-2 border-t flex items-center justify-between"
+                style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
+              >
                 {step.completed ? (
-                  <span className="text-[10px] font-semibold text-emerald-400 flex items-center gap-1">
+                  <span className="text-[10px] font-semibold flex items-center gap-1" style={{ color: "var(--color-success, #16803C)" }}>
                     Ready
                   </span>
                 ) : (
                   <Link
                     to={step.link}
-                    className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors group"
+                    className="text-[11px] font-semibold flex items-center gap-1 transition-colors group"
+                    style={{ color: "var(--color-info, #2563EB)" }}
                   >
                     <span>{step.cta}</span>
                     <ArrowRight size={11} className="transition-transform group-hover:translate-x-0.5" />

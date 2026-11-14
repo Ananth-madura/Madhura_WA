@@ -395,53 +395,53 @@ export default function WhatsAppSenderCenter({
 
   return (
     <div className="space-y-6">
-      {/* Dynamic Multi-SaaS Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-        
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
+      {/* Multi-Sender Delivery Operations Header Banner */}
+      <div className="bg-[var(--ac-surface)] border border-[var(--ac-border)] rounded-2xl p-5 shadow-sm text-[var(--ac-ink)]">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <ShieldCheck className="w-6 h-6 text-emerald-200" />
-              <h2 className="text-xl font-black tracking-tight">WhatsApp Multi-Number Operations Center</h2>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/40 text-emerald-100 border border-emerald-300/30">
-                5+ Concurrent Senders
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              <h2 className="text-base sm:text-lg font-bold text-[var(--ac-ink)] m-0">
+                Multi-Sender Delivery Operations
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800">
+                {connectedSenders} of {totalSenders} Online
               </span>
             </div>
-            <p className="text-emerald-100 text-sm max-w-2xl">
-              Operate multiple WhatsApp phone numbers simultaneously with dedicated identities, shared WABA token-bucket rate limiting, and real delivery tracking.
+            <p className="text-xs text-[var(--ac-muted)] m-0 max-w-2xl">
+              Concurrent WhatsApp sending with dedicated identities, WABA token-bucket throughput, and per-number health monitoring.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <button
               onClick={onRefresh}
               disabled={Boolean(busy)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold transition backdrop-blur-md border border-white/20"
+              className="ac-btn text-xs font-semibold"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${busy ? "animate-spin" : ""}`} />
-              Sync Status
+              <RefreshCw className={`w-3.5 h-3.5 ${busy ? "animate-spin text-amber-500" : ""}`} />
+              <span>Sync Status</span>
             </button>
           </div>
         </div>
 
-        {/* Live Metrics Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mt-6 pt-5 border-t border-white/20 text-center relative z-10">
-          <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm border border-white/10">
-            <span className="text-2xl font-black tracking-tight">{totalSenders}</span>
-            <span className="block text-[11px] text-emerald-100 uppercase tracking-wider font-bold mt-0.5">Total Numbers</span>
+        {/* Live Metrics Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-[var(--ac-border)]">
+          <div className="bg-[var(--ac-paper)] rounded-xl p-3 border border-[var(--ac-border)]">
+            <span className="text-xl font-bold tracking-tight text-[var(--ac-ink)] font-mono block">{totalSenders}</span>
+            <span className="text-[11px] text-[var(--ac-muted)] uppercase tracking-wider font-semibold block mt-0.5">Total Numbers</span>
           </div>
-          <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm border border-white/10">
-            <span className="text-2xl font-black tracking-tight">{connectedSenders}</span>
-            <span className="block text-[11px] text-emerald-100 uppercase tracking-wider font-bold mt-0.5">Connected & Active</span>
+          <div className="bg-[var(--ac-paper)] rounded-xl p-3 border border-[var(--ac-border)]">
+            <span className="text-xl font-bold tracking-tight text-emerald-700 dark:text-emerald-400 font-mono block">{connectedSenders}</span>
+            <span className="text-[11px] text-[var(--ac-muted)] uppercase tracking-wider font-semibold block mt-0.5">Connected & Active</span>
           </div>
-          <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm border border-white/10">
-            <span className="text-2xl font-black tracking-tight">{totalPortfolios}</span>
-            <span className="block text-[11px] text-emerald-100 uppercase tracking-wider font-bold mt-0.5">WABAs / Portfolios</span>
+          <div className="bg-[var(--ac-paper)] rounded-xl p-3 border border-[var(--ac-border)]">
+            <span className="text-xl font-bold tracking-tight text-[var(--ac-ink)] font-mono block">{totalPortfolios}</span>
+            <span className="text-[11px] text-[var(--ac-muted)] uppercase tracking-wider font-semibold block mt-0.5">WABAs / Portfolios</span>
           </div>
-          <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm border border-white/10">
-            <span className="text-2xl font-black tracking-tight">{totalDailySent.toLocaleString()}</span>
-            <span className="block text-[11px] text-emerald-100 uppercase tracking-wider font-bold mt-0.5">Sent Today (24h)</span>
+          <div className="bg-[var(--ac-paper)] rounded-xl p-3 border border-[var(--ac-border)]">
+            <span className="text-xl font-bold tracking-tight text-[var(--ac-ink)] font-mono block">{totalDailySent.toLocaleString()}</span>
+            <span className="text-[11px] text-[var(--ac-muted)] uppercase tracking-wider font-semibold block mt-0.5">Sent Today (24h)</span>
           </div>
         </div>
       </div>

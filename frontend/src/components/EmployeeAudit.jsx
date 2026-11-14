@@ -15,7 +15,7 @@ export default function EmployeeAudit() {
   return <details className="border rounded p-3"><summary>Employee access and transfer audit</summary>
     {error && <p role="alert">{error}</p>}
     {!rows.length && !error && <p>No audit events recorded yet.</p>}
-    {rows.map(row => <article key={row.id} className="border-t py-2"><p>{row.created_at} · {row.action} · Actor {row.actor_id || "system"} · Employee {row.subject_user_id || "—"}</p><pre className="whitespace-pre-wrap break-all text-sm">{row.details}</pre></article>)}
+    {rows.map(row => <article key={row.id} className="border-t py-2"><p>{row.created_at} · {row.action} · Actor {row.actor_id || "system"} · Employee {row.subject_user_id || "-"}</p><pre className="whitespace-pre-wrap break-all text-sm">{row.details}</pre></article>)}
     {cursor && <button className="border rounded p-2" onClick={async () => { const tenantId = currentTenant.current; try { const { data } = await api.get("/api/v2/workspace/audit", { params: { before: cursor } }); if (currentTenant.current !== tenantId) return; setRows(previous => [...previous, ...data.records]); setCursor(data.nextCursor); } catch (err) { if (currentTenant.current === tenantId) setError(err.response?.data?.message || "Audit page unavailable"); } }}>Load earlier audit events</button>}
   </details>;
 }
