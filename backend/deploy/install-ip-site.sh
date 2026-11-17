@@ -143,6 +143,18 @@ else
   warn "http://$IP_ADDRESS/ -> HTTP $CODE_ROOT (frontend build missing or the vhost lost the request)"
 fi
 
+if [ "$CODE_HEALTH" != "200" ]; then
+  warn "http://$IP_ADDRESS/health -> HTTP $CODE_HEALTH: API is not answering. Running automated recovery..."
+  if [ -f "$SCRIPT_DIR/diagnose-api.sh" ]; then
+    FIX=1 bash "$SCRIPT_DIR/diagnose-api.sh" || true
+  fi
+  if [ "$CODE_HEALTH" != "200" ] && command -v pm2 >/dev/null 2>&1; then
+    pm2 restart wa-crm-backend 2>/dev/null || (cd "$APP_DIR" && pm2 start server.js --name wa-crm-backend 2>/dev/null) || true
+  fi
+  sleep 3
+  CODE_HEALTH="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "http://$IP_ADDRESS/health" 2>/dev/null || echo 000)"
+fi
+
 if [ "$CODE_HEALTH" = "200" ]; then
   ok "http://$IP_ADDRESS/health -> 200 (API reachable through port 80)"
 elif [ "$CODE_HEALTH" = "502" ]; then
