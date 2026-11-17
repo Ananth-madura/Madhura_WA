@@ -32,6 +32,11 @@ disables the repair). When the configured API cannot be reached, the frontend
 tries the cloud backend before giving up (`REACT_APP_CLOUD_API_URL`, default
 `http://187.127.215.13:5001`).
 
+If `https://api.madhuratech.in/health` answers `502`, Nginx is up and the Node
+process on the VPS is down — no frontend change can fix that. Run
+`bash deploy/diagnose-api.sh` (or `FIX=1 bash deploy/diagnose-api.sh`) on the
+server; see §11.1 of [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 Works on any Windows PC with Node.js LTS + MySQL running — no manual DB work.
 
 ### 1. Database — clone the CRM database once (alternative, keeps old CRM data)

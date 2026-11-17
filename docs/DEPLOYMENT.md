@@ -541,9 +541,32 @@ Three options, in order of effort:
 | QR scan links the phone, session drops immediately (`disconnected: LOGOUT`) | The `whatsapp-web.js` patch didn't apply | Check `patches/*.patch` is committed, and that `npx patch-package` reports success during deploy. Otherwise set `WA_WEB_VERSION=latest` |
 | Deploy succeeds, `git status` shows `uploads/` as deleted | State was written inside the deploy dir | `WA_DATA_DIR` isn't set, or `deploy.sh` wasn't used. `pm2 logs` prints the resolved paths at boot — read that line |
 | `502` from nginx intermittently | Node restarting, or 2GB RAM + Chromium is OOM-killed | `pm2 status` (restart count), `dmesg \| grep -i oom`, add 2GB swap |
+| `502` from nginx and it stays down | Nothing answers `127.0.0.1:5001`: crashed process, failing migration, OOM, or a reboot with no `pm2 startup` unit. Nginx itself is healthy | `bash deploy/diagnose-api.sh` prints process, listener, local `/health`, database, upstream and boot persistence; `FIX=1 bash deploy/diagnose-api.sh` restarts the API and reloads nginx |
 | `429` too many requests | nginx `limit_req` (30r/s) or the app's own limiter | Expected on a bulk campaign. Check which one: nginx returns no JSON body, the app returns `{message}` |
 | Frontend works locally, breaks only on Vercel | `REACT_APP_API_URL` is set in the dashboard | Leave it **unset**. Empty = same-origin = the rewrite handles it |
 | `npm ci` fails on the VPS but works locally | `package-lock.json` out of sync with `package.json` | Commit the lockfile from the same machine you edited on |
+
+### 11.1 A 502 that outlives a page reload
+
+`502 Bad Gateway` with `Server: nginx` is never a frontend bug and never a
+credential problem: Nginx accepted the request and the process behind
+`proxy_pass http://127.0.0.1:5001` did not answer. The browser reports it as
+“The enterprise backend service is unreachable” because the gateway response
+carries no CORS headers, so the client only sees a transport failure.
+
+```bash
+cd /home/wauser/app/backend
+bash deploy/diagnose-api.sh          # read-only: process, port, health, DB, nginx, boot unit
+FIX=1 bash deploy/diagnose-api.sh    # restart wa-crm-backend, wait for health, reload nginx
+```
+
+If the script reports that no `pm2-*` systemd unit exists, that is the usual
+reason the API is down: the VPS rebooted and nothing restarted the process.
+Fix it once, as the deploying user, with `pm2 startup` followed by `pm2 save`.
+
+External `:5001` being closed is correct — 5001 must stay firewalled and only
+Nginx on 443 should reach it. Do not open it to “fix” the login.
+
 
 ---
 

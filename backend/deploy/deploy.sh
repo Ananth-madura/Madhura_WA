@@ -133,6 +133,13 @@ pm2 startOrRestart ecosystem.config.cjs --update-env
 pm2 save
 ok "pm2 restarted"
 
+# A reboot with no pm2 systemd unit leaves Nginx proxying to a dead :5001,
+# which is indistinguishable from a crash to every browser that tries to log in.
+if ! systemctl list-unit-files 'pm2-*' --no-legend 2>/dev/null | grep -q .; then
+  warn "PM2 boot persistence is not installed. After a VPS reboot the API stays down and Nginx answers 502."
+  warn "  Fix once as this user: pm2 startup && pm2 save"
+fi
+
 # -----------------------------------------------------------------------------
 log "Health check"
 # -----------------------------------------------------------------------------
@@ -178,6 +185,8 @@ cat <<EOF
     Useful:
       pm2 logs wa-crm-backend --lines 100
       pm2 status
+      bash deploy/diagnose-api.sh           # why is the public API 502?
+      FIX=1 bash deploy/diagnose-api.sh     # restart backend + reload nginx
       tail -f $WA_DATA_DIR/logs/error.log
 
 EOF
