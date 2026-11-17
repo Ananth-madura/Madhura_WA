@@ -11,6 +11,12 @@ async function main(){
   assert(validate({...env,WA_RUNTIME_PROFILE:"small-vps"},24).length>0);
   assert.deepEqual(validate({...env,WA_RUNTIME_PROFILE:"small-vps",OPS_METRICS_TOKEN:"c".repeat(48),BACKUP_REQUIRED:"1",RESTIC_REPOSITORY:"s3:https://fixture.r2.cloudflarestorage.com/private-backups",RESTIC_PASSWORD_FILE:"/private/password"},24),[]);
   for(const override of [{DB_USER:"root"},{JWT_SECRET:"CHANGE_ME"},{ALLOWED_ORIGINS:"https://*.fixture.test"},{PUBLIC_BASE_URL:"http://api.fixture.test"},{DB_ENGINE:"sqlite"},{WA_SERVER_CHAT_STORAGE:"1"},{AUTH_BROWSER_COOKIES:"0"},{WA_DATA_DIR:path.resolve(__dirname,"..")}])assert(validate({...env,...override},24).length>0);
+  // IP-only install: a literal IP may be plain HTTP, a hostname may not, and
+  // plain-HTTP cookies have no shared business domain to satisfy.
+  assert(validate({...env,ALLOWED_ORIGINS:"http://app.fixture.test"},24).some(error=>error.includes("ALLOWED_ORIGINS")));
+  assert(validate({...env,ALLOWED_ORIGINS:"https://app.fixture.test,http://187.127.215.13"},24).some(error=>error.includes("AUTH_COOKIE_SITE_DOMAIN")));
+  assert.deepEqual(validate({...env,AUTH_COOKIE_SECURE:"0",AUTH_COOKIE_SITE_DOMAIN:"",PUBLIC_BASE_URL:"http://187.127.215.13",ALLOWED_ORIGINS:"http://187.127.215.13"},24),[]);
+  assert(validate({...env,AUTH_COOKIE_SECURE:"0",AUTH_COOKIE_SITE_DOMAIN:"",PUBLIC_BASE_URL:"http://187.127.215.13",ALLOWED_ORIGINS:"http://187.127.215.13:3002/"},24).some(error=>error.includes("ALLOWED_ORIGINS")));
   assert(validate(env,26).includes("Use the declared Node 24 runtime"));
   assert(validate({...env,DISABLE_R2:"0"},24).some(error=>error.includes("R2_ACCOUNT_ID")));
   assert(validate({...env,DISABLE_R2:"1",R2_REQUIRED:"1"},24).some(error=>error.includes("R2_REQUIRED")));

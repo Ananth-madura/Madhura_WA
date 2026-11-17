@@ -263,6 +263,53 @@ pm2 save
 pm2 startup          # prints a command — run it
 ```
 
+### 6.6 Serve the workspace by IP, with no domain
+
+Use this when DNS or the certificate is the blocker and you need the CRM on
+`http://187.127.215.13/` today. Nginx serves the built workspace and proxies
+`/api`, `/socket.io/`, `/uploads/` and `/health` to `127.0.0.1:5001`, so the
+browser never touches port 5001 and never issues a cross-origin request.
+
+```bash
+# once, on the VPS
+cd /home/wauser/app/frontend && npm ci && npm run build   # no env vars needed
+cd /home/wauser/app/backend
+sudo bash deploy/install-ip-site.sh
+```
+
+Two `.env` values make plain-HTTP sessions possible; the installer checks both:
+
+```bash
+ALLOWED_ORIGINS=https://live.wa.madhuratech.in,http://187.127.215.13
+AUTH_COOKIE_SECURE=0     # Secure cookies are dropped by the browser on http://
+```
+
+| URL | Serves |
+|---|---|
+| `http://187.127.215.13/` | the workspace build (`FRONTEND_ROOT`) |
+| `http://187.127.215.13/api/*` | the API, same origin, no CORS |
+| `http://187.127.215.13/health` | `ok`/`sharedInboxReady` probe |
+| `http://187.127.215.13/socket.io/` | Socket.IO with `Upgrade` |
+
+Notes:
+
+- `server_name` is the literal IP, so it beats a hosting panel's default vhost
+  for requests addressed to the IP. The installer reports any other vhost that
+  also claims the address. It never edits the panel's files.
+- The frontend needs no configuration: a page loaded from the bare IP on the
+  default port resolves the API to its own origin. Only a page on an explicit
+  app port (`:3001`, `:3002`) still calls `:5001`.
+- An HTTPS page (the Vercel build) **cannot** call `http://<ip>` — the browser
+  blocks it as mixed content. Serving the workspace from the IP is what makes
+  the IP path work.
+- Plain HTTP sends credentials unencrypted. Treat `http://<ip>/` as a trusted
+  network deployment, not a public login page.
+- `AUTH_COOKIE_SECURE=0` is what lets the browser keep the session cookies over
+  plain HTTP. The production preflight accepts it, and accepts plain-HTTP
+  origins only when the host is a literal IP — a hostname still must be HTTPS.
+- Meta webhooks require a public HTTPS callback, so they keep using the domain.
+- Remove it again with `ACTION=remove sudo bash deploy/install-ip-site.sh`.
+
 ---
 
 ## 7. The connection matrix

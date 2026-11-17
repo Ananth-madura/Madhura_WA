@@ -30,8 +30,18 @@ test("the cloud IP is offered as a login fallback only where mixed content allow
 });
 test("an app loaded from the cloud IP calls that box, not the visitor's localhost",()=>{
   expect(resolveApiOrigin("http://localhost:5001",{hostname:"187.127.215.13",protocol:"http:"},false)).toBe("http://187.127.215.13:5001");
-  expect(resolveApiOrigin("",{hostname:"187.127.215.13",protocol:"http:"},true)).toBe("http://187.127.215.13:5001");
+  expect(resolveApiOrigin("",{hostname:"187.127.215.13",protocol:"http:",port:"3002"},true)).toBe("http://187.127.215.13:5001");
   expect(resolveMarketingOrigin("http://localhost:3002",{hostname:"187.127.215.13",protocol:"http:"},false)).toBe("http://187.127.215.13:3002");
+});
+test("an IP-only install goes through the one port nginx serves",()=>{
+  const ipPage={hostname:"187.127.215.13",protocol:"http:",port:"",origin:"http://187.127.215.13"};
+  // No :5001, no CORS: nginx proxies /api from the same origin.
+  expect(resolveApiOrigin("",ipPage,true)).toBe("http://187.127.215.13");
+  expect(apiCandidates(ipPage)[0]).toBe("http://187.127.215.13");
+  expect(apiCandidates(ipPage)).toContain(CLOUD_API_ORIGIN);
+  // A page on an app port still talks to the API port directly.
+  const portPage={hostname:"187.127.215.13",protocol:"http:",port:"3002",origin:"http://187.127.215.13:3002"};
+  expect(apiCandidates(portPage)).not.toContain("http://187.127.215.13:3002");
 });
 test("an origin discovered at login survives a reload",()=>{
   expect(saveApiOverride("http://187.127.215.13:5001/")).toBe("http://187.127.215.13:5001");

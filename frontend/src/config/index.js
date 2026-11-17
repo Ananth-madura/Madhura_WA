@@ -60,7 +60,13 @@ export function resolveApiOrigin(configured,location,production=false){
   }
   if(location){
     if(appHost(location.hostname))return PRODUCTION_ORIGINS.api;
-    if(sameServerHost(location.hostname))return `${location.protocol}//${location.hostname}:5001`;
+    if(sameServerHost(location.hostname)){
+      // The box can serve the app and proxy /api from the same port (see
+      // deploy/nginx-ip.conf), which is what an IP-only install does. Nothing
+      // to configure: a page opened on the plain port calls its own origin.
+      if(cloudHost(location.hostname)&&!location.port)return `${location.protocol}//${location.hostname}`;
+      return `${location.protocol}//${location.hostname}:5001`;
+    }
   }
   return production?PRODUCTION_ORIGINS.api:"http://localhost:5001";
 }
@@ -106,6 +112,9 @@ export function apiCandidates(location) {
     if (origin && !candidates.includes(origin)) candidates.push(origin);
   };
   add(readApiOverride());
+  // An IP-only install serves the app and proxies /api on one port. Trying that
+  // origin first keeps login working with no CORS and no exposed API port.
+  if (here && cloudHost(here.hostname) && !here.port && here.origin) add(here.origin);
   add(apiOrigin());
   if (!here || here.protocol !== "https:") add(CLOUD_API_ORIGIN);
   add(PRODUCTION_ORIGINS.api);

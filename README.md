@@ -37,6 +37,10 @@ process on the VPS is down — no frontend change can fix that. Run
 `bash deploy/diagnose-api.sh` (or `FIX=1 bash deploy/diagnose-api.sh`) on the
 server; see §11.1 of [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
+To skip domains entirely, `sudo bash deploy/install-ip-site.sh` serves the whole
+workspace on `http://187.127.215.13/` and proxies the API from the same origin,
+so port 5001 can stay closed (§6.6 of the same document).
+
 Works on any Windows PC with Node.js LTS + MySQL running — no manual DB work.
 
 ### 1. Database — clone the CRM database once (alternative, keeps old CRM data)

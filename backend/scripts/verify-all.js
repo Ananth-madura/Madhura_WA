@@ -153,7 +153,7 @@ async function main() {
     if (r.code === 0) {
       record("Frontend link", "pass", "health, CORS, preflight, uploads and socket handshake all good");
     } else {
-      const leaks = /Unknown origin is NOT reflected/.test(r.out);
+      const leaks = /FAIL\s+.*Unknown origin is NOT reflected|allow-origin came back for a stranger/.test(r.out);
       record(
         "Frontend link",
         "fail",

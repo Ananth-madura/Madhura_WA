@@ -29,13 +29,29 @@ function validate(env,nodeMajor=Number(process.versions.node.split(".")[0])){
   if(String(env.JWT_SECRET||"").length<32)errors.push("JWT_SECRET must contain at least 32 characters");
   const encryption=env.SMTP_ENCRYPTION_KEY||"";
   if(Buffer.byteLength(encryption)!==32&&!/^[a-f0-9]{64}$/i.test(encryption))errors.push("SMTP_ENCRYPTION_KEY must be 32 bytes or 64 hex characters");
-  for(const value of [env.PUBLIC_BASE_URL,...String(env.ALLOWED_ORIGINS||"").split(",").map(item=>item.trim())]){
-    try{const url=new URL(value);if(url.protocol!=="https:"||url.origin!==value||url.hostname.includes("*")||url.username||url.password)throw new Error();}
-    catch(_){errors.push("API and allowed frontend origins must be exact HTTPS origins");break;}
+  // An origin must be exact. HTTPS is the rule; plain HTTP is accepted only for
+  // a literal IP address, which is what an IP-only install (deploy/nginx-ip.conf)
+  // serves. A hostname over plain HTTP is still a configuration error.
+  const exactOrigin=value=>{
+    try{
+      const url=new URL(value);
+      const ipLiteral=/^\d{1,3}(\.\d{1,3}){3}$/.test(url.hostname);
+      if(!["https:","http:"].includes(url.protocol))return false;
+      if(url.protocol==="http:"&&!ipLiteral)return false;
+      return url.origin===value&&!url.hostname.includes("*")&&!url.username&&!url.password;
+    }catch(_){return false;}
+  };
+  if(!exactOrigin(env.PUBLIC_BASE_URL))errors.push("PUBLIC_BASE_URL must be an exact origin, HTTPS unless it is a plain-HTTP IP address");
+  for(const value of String(env.ALLOWED_ORIGINS||"").split(",").map(item=>item.trim()).filter(Boolean)){
+    if(!exactOrigin(value)){errors.push("Each ALLOWED_ORIGINS entry must be an exact origin, HTTPS unless it is a plain-HTTP IP address");break;}
   }
   if(env.WA_DATA_DIR){const target=path.resolve(env.WA_DATA_DIR),app=path.resolve(__dirname,"..");if(target===path.parse(target).root||target===app||target.startsWith(app+path.sep))errors.push("Keep WA_DATA_DIR outside the backend checkout and filesystem root");}
   if(env.AUTH_COOKIE_SAME_SITE&&!["lax","strict","none"].includes(env.AUTH_COOKIE_SAME_SITE))errors.push("Invalid AUTH_COOKIE_SAME_SITE");
-  if((env.AUTH_COOKIE_SAME_SITE||"lax")!=="none"){
+  // Plain-HTTP cookie mode exists for the IP-only install: there is no shared
+  // business domain, and cookies are host-only for the IP, so the domain rule
+  // does not apply.
+  const plainHttpCookies=["0","false","off","no"].includes(String(env.AUTH_COOKIE_SECURE||"").trim().toLowerCase());
+  if((env.AUTH_COOKIE_SAME_SITE||"lax")!=="none"&&!plainHttpCookies){
     const domain=String(env.AUTH_COOKIE_SITE_DOMAIN||"").toLowerCase();
     if(!domain.includes(".")||domain.includes("/"))errors.push("Set AUTH_COOKIE_SITE_DOMAIN to the business domain used by both app and API");
     else for(const value of [env.PUBLIC_BASE_URL,...String(env.ALLOWED_ORIGINS||"").split(",").map(item=>item.trim())]){

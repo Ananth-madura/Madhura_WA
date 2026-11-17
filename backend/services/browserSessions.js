@@ -24,8 +24,17 @@ function requireOrigin(req) {
   if(!origin&&req.headers.referer)try{origin=new URL(req.headers.referer).origin;}catch(_){}
   if(!origin || !allowed.includes(origin)) throw Object.assign(new Error("Browser request origin is not permitted"),{status:403});
 }
+// Production defaults to Secure cookies, and a browser refuses to store those
+// from a plain-HTTP origin. An explicit AUTH_COOKIE_SECURE=0 opts out for an
+// IP-only install (deploy/nginx-ip.conf). Never set it on a TLS deployment.
+function secureCookies() {
+  const explicit=String(process.env.AUTH_COOKIE_SECURE??"").trim().toLowerCase();
+  if(["0","false","off","no"].includes(explicit))return false;
+  if(["1","true","on","yes"].includes(explicit))return true;
+  return process.env.NODE_ENV==="production";
+}
 function options(refresh = false) {
-  const secure=process.env.NODE_ENV === "production" || process.env.AUTH_COOKIE_SECURE === "1";
+  const secure=secureCookies();
   const sameSite=String(process.env.AUTH_COOKIE_SAME_SITE || "lax").toLowerCase();
   if(!["lax","strict","none"].includes(sameSite)||sameSite==="none"&&!secure)throw new Error("Invalid browser cookie configuration");
   return {httpOnly:true,secure,sameSite,path:refresh?"/api/auth":"/",maxAge:refresh?SESSION_MS:ACCESS_SECONDS*1000};
@@ -112,4 +121,4 @@ function interceptLogin(req,res,next) {
   };
   next();
 }
-module.exports={ACCESS_COOKIE,REFRESH_COOKIE,cookies,requireOrigin,active,refresh,revoke,clearCookies,interceptLogin,query,disconnectSessions};
+module.exports={ACCESS_COOKIE,REFRESH_COOKIE,cookies,requireOrigin,active,refresh,revoke,clearCookies,setCookies,interceptLogin,query,disconnectSessions};

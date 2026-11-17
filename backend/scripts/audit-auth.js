@@ -79,6 +79,46 @@ function parseMounts() {
       snippet: rest.replace(/\s+/g, " ").trim().slice(0, 120),
     });
   }
+
+  // Scan route files for aliases (e.g. module.exports = require("./target")) and sub-mounts
+  const routeFiles = fs.readdirSync(ROUTES_DIR).filter((f) => f.endsWith(".js"));
+  for (const f of routeFiles) {
+    const raw = fs.readFileSync(path.join(ROUTES_DIR, f), "utf8");
+    const name = f.replace(/\.js$/, "");
+    const matchingMounts = mounts.filter((m) => m.router === name);
+    if (!matchingMounts.length) continue;
+
+    // Check re-export
+    const aliasMatch = raw.match(/module\.exports\s*=\s*require\(["']\.\/(\w+)["']\)/);
+    if (aliasMatch) {
+      for (const mm of matchingMounts) {
+        mounts.push({
+          paths: mm.paths,
+          router: aliasMatch[1],
+          guarded: mm.guarded,
+          snippet: `alias of ${name}`,
+        });
+      }
+    }
+
+    // Check router.use("/subpath", require("./subRoute"))
+    const subRe = /router\.use\(\s*["']([^"']+)["']\s*,\s*.*?require\(["']\.\/(\w+)["']\)/g;
+    let sm;
+    while ((sm = subRe.exec(raw))) {
+      const subPath = sm[1];
+      const subRouter = sm[2];
+      const fileGuarded = raw.split(/\r?\n/).some((line) => /^\s*router\.use\(\s*(verifyToken|auth)\b/.test(line));
+      for (const mm of matchingMounts) {
+        mounts.push({
+          paths: mm.paths.map((p) => (p === "/" ? subPath : `${p}${subPath}`)),
+          router: subRouter,
+          guarded: mm.guarded || fileGuarded,
+          snippet: `submount in ${name}`,
+        });
+      }
+    }
+  }
+
   return mounts;
 }
 
@@ -111,6 +151,9 @@ function parseHandlers(file) {
 
     const head = stmt.slice(0, stmt.search(/async\s*\(|\bfunction\s*\(|\(\s*req\b|\(\s*\{\s*req/));
     const rawRoute = (stmt.match(/router\.\w+\s*\(\s*(\[[^\]]*\]|["'][^"']+["'])/) || [, "?"])[1];
+    const routePaths = rawRoute.startsWith("[")
+      ? (rawRoute.match(/["']([^"']+)["']/g) || []).map((s) => s.slice(1, -1))
+      : [rawRoute.replace(/['"]/g, "")];
     const routePath = rawRoute.replace(/['"]/g, "");
 
     // A guard counts only if it sits in the middleware slot BEFORE the handler.
@@ -124,6 +167,7 @@ function parseHandlers(file) {
       line: i + 1,
       method: m[1].toUpperCase(),
       routePath,
+      routePaths,
       guarded: realGuards.length > 0 || routerGuards,
       guards: [...new Set(realGuards)],
       nonAuth: [...new Set(nonAuth)],
@@ -148,7 +192,9 @@ function classify(handlers, mounts) {
       candidates[0];
 
     const publicMount = mount.paths.some((p) => INTENTIONAL_PUBLIC[p]);
-    const publicHandlerReason = INTENTIONAL_PUBLIC_HANDLERS[h.file]?.[h.routePath];
+    const publicHandlerReason =
+      INTENTIONAL_PUBLIC_HANDLERS[h.file]?.[h.routePath] ||
+      (Array.isArray(h.routePaths) && h.routePaths.map((p) => INTENTIONAL_PUBLIC_HANDLERS[h.file]?.[p]).find(Boolean));
     if (publicHandlerReason) {
       return { ...h, mount, verdict: "PUBLIC_BY_DESIGN", reason: publicHandlerReason };
     }
