@@ -300,6 +300,73 @@ function previewText(message) {
   return "";
 }
 
+// Demo workspace chat board. Reads/seeds the sample conversations plus any chat
+// the visitor started, so a demo conversation survives a reload instead of
+// resetting the moment the page remounts.
+const DEMO_CHATS_STORAGE_KEY = "wa_demo_chats";
+
+function readDemoChatList() {
+  let stored = [];
+  try {
+    const raw = waUiStorage.getItem(DEMO_CHATS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed)) stored = parsed;
+  } catch (_) { }
+  if (stored.length === 0) return [...DEMO_CHATS];
+
+  const byId = new Map();
+  for (const chat of [...DEMO_CHATS, ...stored]) {
+    if (!chat || !chat.id) continue;
+    byId.set(chat.id, { ...(byId.get(chat.id) || {}), ...chat });
+  }
+  return Array.from(byId.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+}
+
+function writeDemoChatList(list) {
+  if (!Array.isArray(list) || list.length === 0) return;
+  try {
+    waUiStorage.setItem(DEMO_CHATS_STORAGE_KEY, JSON.stringify(list));
+  } catch (_) { }
+}
+
+// Chats started in this browser that the server has not indexed yet. Kept
+// across reloads so a brand-new conversation is still there if the next
+// /chats refresh (or a page reload) does not know about it.
+const LOCAL_CHATS_STORAGE_KEY = "wa_local_chats";
+
+function readLocalChatStash() {
+  try {
+    const raw = waUiStorage.getItem(LOCAL_CHATS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? parsed.filter((chat) => chat && chat.id) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function writeLocalChatStash(list) {
+  const clean = (Array.isArray(list) ? list : []).filter((chat) => chat && chat.id);
+  try {
+    if (clean.length === 0) {
+      waUiStorage.removeItem(LOCAL_CHATS_STORAGE_KEY);
+      return;
+    }
+    const encoded = JSON.stringify(clean.slice(0, 50));
+    if (waUiStorage.getItem(LOCAL_CHATS_STORAGE_KEY) !== encoded) {
+      waUiStorage.setItem(LOCAL_CHATS_STORAGE_KEY, encoded);
+    }
+  } catch (_) { }
+}
+
+// Keep chats created in this tab visible while the server has not indexed them
+// yet, so a 20s refresh never makes a freshly started conversation vanish.
+function mergeChatLists(primary, fallback) {
+  const base = Array.isArray(fallback) ? fallback : [];
+  const known = new Set(base.map((chat) => chat && chat.id).filter(Boolean));
+  const extras = (Array.isArray(primary) ? primary : []).filter((chat) => chat && chat.id && !known.has(chat.id));
+  return [...extras, ...base];
+}
+
 function safeLocalStorageSet(key, value) {
   try {
     waUiStorage.setItem(key, value);
@@ -937,6 +1004,9 @@ export default function WhatsAppPage() {
 
   const messagesEndRef = useRef(null);
   const pollRef = useRef(null);
+  // Chats started in this tab that the server has not returned in /chats yet.
+  const localChatsRef = useRef(readLocalChatStash());
+  const demoChatsReadyRef = useRef(false);
 
   const messagesCacheRef = useRef({});
 
@@ -948,6 +1018,20 @@ export default function WhatsAppPage() {
   const chatsRef = useRef(chats);
   useEffect(() => {
     chatsRef.current = chats;
+    if (demoMode && demoChatsReadyRef.current) {
+      writeDemoChatList(chats);
+    }
+    if (!demoMode && localChatsRef.current.length > 0) {
+      // Keep the reload stashes in step with the live rows (preview, name,
+      // timestamp) so a refresh never brings back a stale version.
+      const liveById = new Map((chats || []).map((chat) => [chat.id, chat]));
+      const refreshed = localChatsRef.current.map((local) => {
+        const live = liveById.get(local.id);
+        return live ? { ...local, ...live } : local;
+      });
+      localChatsRef.current = refreshed;
+      writeLocalChatStash(refreshed);
+    }
     if (Array.isArray(chats) && chats.length > 0) {
       safeLocalStorageSet("wa_cached_chats", JSON.stringify(chats));
     } else if (Array.isArray(chats) && chats.length === 0) {
@@ -955,7 +1039,7 @@ export default function WhatsAppPage() {
         waUiStorage.removeItem("wa_cached_chats");
       } catch (_) { }
     }
-  }, [chats]);
+  }, [chats, demoMode]);
 
   useEffect(() => {
     try {
@@ -1314,6 +1398,14 @@ export default function WhatsAppPage() {
   }, [enterpriseHeaders]);
 
   const fetchChats = useCallback(async (refresh = false, sessionKey = null) => {
+    if (demoMode) {
+      // Demo board is self-contained. Asking the API here used to replace the
+      // sample chats (and any chat just started) with an empty list whenever a
+      // reachable backend had no synced conversations.
+      setChats((prev) => mergeChatLists(prev, readDemoChatList()));
+      setChatsLoading(false);
+      return;
+    }
     if (!hasLoadedChatsOnce.current && (!chatsRef.current || chatsRef.current.length === 0)) {
       setChatsLoading(true);
     }
@@ -1332,17 +1424,25 @@ export default function WhatsAppPage() {
       const res = await axios.get(`${API}${endpoint}`, { headers });
       if (res.data && Array.isArray(res.data)) {
         hasLoadedChatsOnce.current = true;
+        const serverChats = res.data;
+        // Drop locally-started chats once the server knows about them.
+        const pending = localChatsRef.current.filter(
+          (local) => !serverChats.some((chat) => chat.id === local.id)
+        );
+        localChatsRef.current = pending;
+        writeLocalChatStash(pending);
+        const mergedChats = mergeChatLists(pending, serverChats);
         setChats((prev) => {
-          if (prev && prev.length === res.data.length) {
-            const hasChanged = res.data.some((c, i) => !prev[i] || prev[i].id !== c.id || prev[i].timestamp !== c.timestamp || prev[i].unreadCount !== c.unreadCount || prev[i].lastMessage?.body !== c.lastMessage?.body || prev[i].isLead !== c.isLead);
+          if (prev && prev.length === mergedChats.length) {
+            const hasChanged = mergedChats.some((c, i) => !prev[i] || prev[i].id !== c.id || prev[i].timestamp !== c.timestamp || prev[i].unreadCount !== c.unreadCount || prev[i].lastMessage?.body !== c.lastMessage?.body || prev[i].isLead !== c.isLead);
             if (!hasChanged) return prev;
           }
-          return res.data;
+          return mergedChats;
         });
       }
     } catch { }
     setChatsLoading(false);
-  }, [enterpriseHeaders, selectedSessionKey]);
+  }, [demoMode, enterpriseHeaders, selectedSessionKey]);
 
   const fetchAccountDetails = useCallback(async () => {
     try {
@@ -1431,16 +1531,26 @@ export default function WhatsAppPage() {
 
   const fetchMessages = useCallback(async (chatId, limit = 10) => {
     if (demoMode) {
-      const demoMsgs = messagesCacheRef.current[chatId] || DEMO_MESSAGES_MAP[chatId] || [
-        {
-          id: `demo_${chatId}_1`,
-          from: chatId,
-          body: "Hello! This is an interactive demo conversation in Madhura WhatsApp CRM.",
-          timestamp: Math.floor(Date.now() / 1000) - 300,
-          isMe: false,
-          status: "read",
-        }
-      ];
+      let demoMsgs = messagesCacheRef.current[chatId];
+      if (!Array.isArray(demoMsgs) || demoMsgs.length === 0) {
+        try {
+          const stored = waUiStorage.getItem(`wa_chat_messages_${chatId}`);
+          const parsed = stored ? JSON.parse(stored) : null;
+          if (Array.isArray(parsed) && parsed.length > 0) demoMsgs = parsed;
+        } catch (_) { }
+      }
+      if (!Array.isArray(demoMsgs) || demoMsgs.length === 0) {
+        demoMsgs = DEMO_MESSAGES_MAP[chatId] || [
+          {
+            id: `demo_${chatId}_1`,
+            from: chatId,
+            body: "Hello! This is an interactive demo conversation in Madhura WhatsApp CRM.",
+            timestamp: Math.floor(Date.now() / 1000) - 300,
+            isMe: false,
+            status: "read",
+          }
+        ];
+      }
       messagesCacheRef.current[chatId] = demoMsgs;
       setMessages(demoMsgs);
       setMessagesLoading(false);
@@ -1834,6 +1944,14 @@ export default function WhatsAppPage() {
     };
     saveLocalMessage(tempMsg, selectedChat.id).catch(() => { });
     setMessages((prev) => [tempMsg, ...prev]);
+    if (demoMode) {
+      // Keep the in-memory thread for this chat in step with what is on screen,
+      // so switching away and back in the demo does not drop the message.
+      const cached = messagesCacheRef.current[selectedChat.id] || [];
+      if (!cached.some((m) => m.id === tempMsg.id)) {
+        messagesCacheRef.current[selectedChat.id] = [tempMsg, ...cached];
+      }
+    }
     setTimeout(scrollToBottom, 50);
 
     // Immediately update sidebar chat position and preview
@@ -1887,7 +2005,9 @@ export default function WhatsAppPage() {
           status: "read",
         };
 
-        setMessages((prev) => [replyMsg, ...prev]);
+        setMessages((prev) => (
+          selectedChatRef.current?.id === selectedChat.id ? [replyMsg, ...prev] : prev
+        ));
         messagesCacheRef.current[selectedChat.id] = [
           replyMsg,
           ...(messagesCacheRef.current[selectedChat.id] || [])
@@ -3217,28 +3337,99 @@ export default function WhatsAppPage() {
     }
     const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const chatId = `${formattedPhone}@c.us`;
-    const contactName = newChatName.trim() || `+${formattedPhone}`;
+    const initialText = newChatMessage.trim();
 
+    // Already on the board? Just open it instead of adding a duplicate row.
+    const existing = (chatsRef.current || []).find((chat) => chat.id === chatId);
+    if (existing) {
+      setSelectedChat(existing);
+      setShowMobileChat(true);
+      setMsgLimit(10);
+      setShowNewChatModal(false);
+      setNewChatPhone("");
+      setNewChatName("");
+      setNewChatMessage("");
+      await fetchMessages(existing.id, 10);
+      return;
+    }
+
+    const contactName = newChatName.trim() || `+${formattedPhone}`;
+    const now = Math.floor(Date.now() / 1000);
     const newChatObj = {
       id: chatId,
       name: contactName,
+      phoneNumber: `+${formattedPhone}`,
       source: "Direct",
       unreadCount: 0,
-      timestamp: Math.floor(Date.now() / 1000),
-      lastMessage: newChatMessage.trim() ? { body: newChatMessage.trim(), timestamp: Math.floor(Date.now() / 1000) } : null,
+      timestamp: now,
+      lastMessage: initialText ? { body: initialText, timestamp: now, fromMe: true } : null,
     };
 
-    setChats((prev) => {
-      const exists = prev.find((c) => c.id === chatId);
-      if (exists) return prev;
-      return [newChatObj, ...prev];
-    });
+    setChats((prev) => [newChatObj, ...prev]);
+    if (!demoMode) {
+      localChatsRef.current = [newChatObj, ...localChatsRef.current.filter((chat) => chat.id !== chatId)];
+      writeLocalChatStash(localChatsRef.current);
+    }
 
     setSelectedChat(newChatObj);
     setShowMobileChat(true);
+    setMsgLimit(10);
     setError(null);
 
-    if (newChatMessage.trim()) {
+    if (demoMode) {
+      // Demo chats stay in this tab: seed the first message, acknowledge it and
+      // let the sample contact reply — no live API call, no failure alert.
+      demoChatsReadyRef.current = true;
+      const seeded = initialText
+        ? [{
+          id: `demo_${chatId}_${Date.now()}`,
+          from: "me",
+          body: initialText,
+          timestamp: now,
+          isMe: true,
+          status: "delivered",
+        }]
+        : [];
+      messagesCacheRef.current[chatId] = seeded;
+      if (seeded.length > 0) {
+        safeLocalStorageSet(`wa_chat_messages_${chatId}`, JSON.stringify(seeded));
+        setTimeout(() => {
+          if (selectedChatRef.current?.id !== chatId) return;
+          const replyMsg = {
+            id: `demo_${chatId}_reply_${Date.now()}`,
+            from: chatId,
+            body: "Thanks for starting the chat! This is a demo reply — your real WhatsApp messages appear here once an account is connected.",
+            timestamp: Math.floor(Date.now() / 1000),
+            isMe: false,
+            status: "read",
+          };
+          const nextMessages = [replyMsg, ...(messagesCacheRef.current[chatId] || [])];
+          messagesCacheRef.current[chatId] = nextMessages;
+          setMessages(nextMessages);
+          setChats((prev) => prev.map((chat) => (
+            chat.id === chatId
+              ? {
+                ...chat,
+                hasMessages: true,
+                timestamp: replyMsg.timestamp,
+                lastMessage: { body: replyMsg.body, timestamp: replyMsg.timestamp, fromMe: false },
+              }
+              : chat
+          )));
+          setTimeout(scrollToBottom, 50);
+        }, 1500);
+      }
+      setMessages(seeded);
+      setNewChatLoading(false);
+      setShowNewChatModal(false);
+      setNewChatPhone("");
+      setNewChatName("");
+      setNewChatMessage("");
+      setTimeout(() => scrollToBottom(false), 50);
+      return;
+    }
+
+    if (initialText) {
       setNewChatLoading(true);
       try {
         const token = waUiStorage.getItem("token");
@@ -3247,7 +3438,7 @@ export default function WhatsAppPage() {
         const idempotencyKey = `ui_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
         await axios.post(
           `${API}/api/whatsapp/send`,
-          { chatId, message: newChatMessage.trim(), idempotencyKey },
+          { chatId, message: initialText, idempotencyKey },
           { headers }
         );
         setNewChatMessage("");
@@ -3265,13 +3456,14 @@ export default function WhatsAppPage() {
     setShowNewChatModal(false);
     setNewChatPhone("");
     setNewChatName("");
-    await fetchMessages(chatId);
+    await fetchMessages(chatId, 10);
   };
 
   const handleRefresh = () => {
     if (status.connected) {
       if (demoMode) {
-        setChats([...DEMO_CHATS]);
+        demoChatsReadyRef.current = true;
+        setChats((prev) => mergeChatLists(prev, readDemoChatList()));
         return;
       }
       fetchChats();
@@ -3312,15 +3504,15 @@ export default function WhatsAppPage() {
     setError(null);
     setLoginCheckState("idle");
     setLoginCheckMessage("");
-    if (!chats || chats.length === 0) {
-      setChats([...DEMO_CHATS]);
-      if (DEMO_CHATS.length > 0) {
-        setSelectedChat(DEMO_CHATS[0]);
-        const initMsgs = DEMO_MESSAGES_MAP[DEMO_CHATS[0].id] || [];
-        setMessages(initMsgs);
-      }
+    demoChatsReadyRef.current = true;
+    const demoList = readDemoChatList();
+    const nextChat = demoList.find((chat) => chat.id === selectedChatRef.current?.id) || demoList[0] || null;
+    setChats((prev) => mergeChatLists(prev, demoList));
+    if (nextChat) {
+      setSelectedChat((prev) => (prev && prev.id === nextChat.id ? prev : nextChat));
+      fetchMessages(nextChat.id, 10);
     }
-  }, [chats, demoMode, fetchChats]);
+  }, [demoMode, fetchChats, fetchMessages]);
 
   const handleCheckLogin = async () => {
     if (checkingLogin) return;
@@ -3405,12 +3597,13 @@ export default function WhatsAppPage() {
   useEffect(() => {
     if (demoMode) {
       setStatus(DEMO_STATUS);
-      setChats(DEMO_CHATS);
-      if (DEMO_CHATS.length > 0) {
-        setSelectedChat(DEMO_CHATS[0]);
-        const initMsgs = DEMO_MESSAGES_MAP[DEMO_CHATS[0].id] || [];
-        setMessages(initMsgs);
-        messagesCacheRef.current[DEMO_CHATS[0].id] = initMsgs;
+      demoChatsReadyRef.current = true;
+      const demoList = readDemoChatList();
+      setChats(demoList);
+      const initialChat = demoList.find((chat) => chat.id === selectedChatRef.current?.id) || demoList[0] || null;
+      if (initialChat) {
+        setSelectedChat(initialChat);
+        fetchMessages(initialChat.id, 10);
       }
       setInitialChecking(false);
       setChatsLoading(false);
@@ -3421,7 +3614,7 @@ export default function WhatsAppPage() {
     fetchChats(false);
     fetchAccountDetails();
     fetchAvailableSessions();
-  }, [demoMode, fetchStatus, fetchChats, fetchAccountDetails, fetchAvailableSessions]);
+  }, [demoMode, fetchStatus, fetchChats, fetchAccountDetails, fetchAvailableSessions, fetchMessages]);
 
   useEffect(() => {
     // Status polling in background: 15s when active/workspace, 3.5s when QR is active to auto-detect scan, 8s otherwise
@@ -3480,15 +3673,15 @@ export default function WhatsAppPage() {
 
   // Auto-fetch chats & account details immediately when connected
   useEffect(() => {
-    if (status.connected) {
+    if (status.connected && !demoMode) {
       fetchChats(true);
       fetchAccountDetails();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status.connected]);
+  }, [status.connected, demoMode]);
 
   useEffect(() => {
-    if (status.connected) {
+    if (status.connected && !demoMode) {
       if (pollRef.current) clearInterval(pollRef.current);
       // Real-time updates arrive over the socket below — this is just a slow
       // fallback in case a socket event is missed.
@@ -3502,7 +3695,7 @@ export default function WhatsAppPage() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [status.connected, fetchChats, fetchMessages, selectedChat]);
+  }, [status.connected, demoMode, fetchChats, fetchMessages, selectedChat]);
 
   // Real-time socket listener for instant WhatsApp updates. The server now
   // pushes the actual message payload instead of just a "something changed"
@@ -4232,9 +4425,13 @@ export default function WhatsAppPage() {
                   setQrCode(null);
                   setQrDataUrl(null);
                   setError(null);
-                  if (!chats || chats.length === 0) {
-                    setChats([...DEMO_CHATS]);
-                    if (DEMO_CHATS.length > 0) setSelectedChat(DEMO_CHATS[0]);
+                  demoChatsReadyRef.current = true;
+                  const demoList = readDemoChatList();
+                  setChats((prev) => mergeChatLists(prev, demoList));
+                  const nextChat = selectedChatRef.current || demoList[0] || null;
+                  if (nextChat) {
+                    setSelectedChat(nextChat);
+                    fetchMessages(nextChat.id, 10);
                   }
                 }}
                 className="hl-btn-primary text-[10px] px-2.5 py-1 font-bold shrink-0 whitespace-nowrap shadow-sm"
