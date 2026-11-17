@@ -1,7 +1,7 @@
 // First-boot DB auto-setup — runs on every launcher start (idempotent).
 // Finds a working MySQL root password, saves it to backend/.env and creates
 // the achme_wa database if missing, so a fresh clone can log in with
-// admin@madhuratech.com / admin@123 with zero manual DB work.
+// admin@madhuratech.com / Admin@123 with zero manual DB work.
 // Uses only mysql2 (a backend dependency) — no mysql CLI needed.
 const fs = require("fs");
 const path = require("path");

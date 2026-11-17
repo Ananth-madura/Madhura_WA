@@ -24,7 +24,13 @@ waits for the backend to turn healthy. Then log in with:
 | | |
 |---|---|
 | Email | `admin@madhuratech.com` |
-| Password | `admin@123` |
+| Password | `Admin@123` |
+
+That login is repaired on demand by the backend, so it also works on a brand-new
+cloud database or after the account was demoted (`MASTER_ADMIN_RECOVERY=off`
+disables the repair). When the configured API cannot be reached, the frontend
+tries the cloud backend before giving up (`REACT_APP_CLOUD_API_URL`, default
+`http://187.127.215.13:5001`).
 
 Works on any Windows PC with Node.js LTS + MySQL running — no manual DB work.
 

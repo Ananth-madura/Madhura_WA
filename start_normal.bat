@@ -232,7 +232,7 @@ if not "%LAN_IP%"=="127.0.0.1" (
     echo   LAN Landing    : http://%LAN_IP%:3002
 )
 echo.
-echo   Login: admin@madhuratech.com  /  admin@123
+echo   Login: admin@madhuratech.com  /  Admin@123
 echo   [works on any fresh clone - the backend auto-creates the DB, tables and admin]
 echo.
 echo   Login with your CRM account, then open /whatsapp.

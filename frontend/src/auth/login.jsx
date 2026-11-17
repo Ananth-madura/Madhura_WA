@@ -21,9 +21,21 @@ import {
   GitBranch,
 } from "lucide-react";
 import { useAuth } from "./AuthContext";
-import { API } from "../config/api";
+import { API, apiCandidates, saveApiOverride, readApiOverride } from "../config/api";
 import { MARKETING } from "../config/index";
 import { startDirectDemoSession } from "./demoSession";
+
+// Follow an origin that already answered (see config/index.js) so the 2FA
+// step does not drift back to a dead backend after failover.
+const apiBase = () => readApiOverride() || API;
+
+// The bootstrap credentials the backend repairs on demand
+// (backend/services/masterAdmin.js). They are the same pair printed by the
+// master-admin seeder, so a demo checkout and a fresh cloud box accept them.
+const MASTER_ADMIN_EMAIL = "admin@madhuratech.com";
+const MASTER_ADMIN_PASSWORD = "Admin@123";
+const isMasterCredentials = (email, password) =>
+  String(email || "").trim().toLowerCase() === MASTER_ADMIN_EMAIL && String(password || "") === MASTER_ADMIN_PASSWORD;
 
 export default function Login() {
   const { login } = useAuth();
@@ -106,15 +118,65 @@ export default function Login() {
     setError("");
     setNotice("");
 
-    try {
-      const res = await axios.post(
-        `${API}/api/auth/login`,
-        { email: cleanEmail, password },
-        { timeout: 15000 }
-      );
+    const candidates = apiCandidates(typeof window !== "undefined" ? window.location : null);
+    let data = null;
+    let workingOrigin = "";
+    let lastError = null;
 
-      const data = res.data;
+    try {
+      // Try the configured backend first, then the cloud IP / production
+      // domain. Transport failures and 5xx gateway answers mean "this endpoint
+      // is not serving", so moving on is safe; a 401/404 answer is a real
+      // credential verdict and stops the loop.
+      for (const origin of candidates) {
+        try {
+          const res = await axios.post(
+            `${origin}/api/auth/login`,
+            { email: cleanEmail, password },
+            { timeout: 15000 }
+          );
+          data = res.data || {};
+          workingOrigin = origin;
+          break;
+        } catch (err) {
+          lastError = err;
+          const status = err.response?.status;
+          if (status && ![502, 503, 504].includes(status)) break;
+        }
+      }
+
+      if (!data) {
+        const master = isMasterCredentials(cleanEmail, password);
+        const status = lastError?.response?.status;
+        const transportFailure = !lastError?.response || [502, 503, 504].includes(status);
+
+        // The requested admin login must work even when the API is down: open
+        // the self-contained offline workspace instead of dead-ending.
+        if (master && transportFailure) {
+          const session = await startDirectDemoSession(API, "admin");
+          login({
+            ...session,
+            demoReason:
+              "The backend could not be reached, so this is the offline workspace. Sample data only; live messages resume when the API is back.",
+          });
+          setNotice(
+            "Backend unreachable — signed in to the offline workspace with administrator access. Live data returns when the API is back."
+          );
+          navigate("/whatsapp", { replace: true });
+          return;
+        }
+
+        if (lastError?.friendlyMessage) setError(lastError.friendlyMessage);
+        else if (transportFailure) {
+          setError("The enterprise backend service is unreachable. Check your internet connection or use 1-Click Demo Login.");
+        } else {
+          setError(lastError?.response?.data?.message || lastError?.response?.data?.error || "Login failed. Please verify your credentials.");
+        }
+        return;
+      }
+
       if (data?.requires2FA) {
+        if (workingOrigin && workingOrigin !== API) saveApiOverride(workingOrigin);
         setTwoFactorEmail(data.email || cleanEmail);
         setTwoFactorCode("");
         setNotice("A verification code was sent to your email. It expires after five minutes.");
@@ -124,6 +186,10 @@ export default function Login() {
         setError("Login failed — no authentication token returned from server.");
         return;
       }
+
+      // If the configured origin was dead and another one answered, pin that
+      // origin so REST, socket and the next reload all use the same backend.
+      const pinned = workingOrigin && workingOrigin !== API ? saveApiOverride(workingOrigin) : "";
 
       await confirmBrowserSession(data);
       // Establish session with organization and branch context
@@ -137,6 +203,12 @@ export default function Login() {
       });
 
       const returnUrl = loginDestination(data,location.search);
+      if (pinned) {
+        // Absolute API URLs were captured at bundle load; a reload is the only
+        // way to make every module pick up the newly pinned origin.
+        window.location.replace(returnUrl);
+        return;
+      }
       navigate(returnUrl, { replace: true });
     } catch (err) {
       const status = err.response?.status;
@@ -157,7 +229,7 @@ export default function Login() {
     setLoading(true);
     setError("");
     try {
-      const { data } = await axios.post(`${API}/api/auth/verify-2fa`, {
+      const { data } = await axios.post(`${apiBase()}/api/auth/verify-2fa`, {
         email: twoFactorEmail,
         otp: twoFactorCode.trim(),
       }, { timeout: 15000 });
@@ -177,7 +249,7 @@ export default function Login() {
     setResendingCode(true);
     setError("");
     try {
-      const { data } = await axios.post(`${API}/api/auth/resend-2fa`, { email: twoFactorEmail }, { timeout: 15000 });
+      const { data } = await axios.post(`${apiBase()}/api/auth/resend-2fa`, { email: twoFactorEmail }, { timeout: 15000 });
       setNotice(data.message || "A new verification code has been sent.");
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data?.error || "A new verification code could not be sent.");
@@ -445,14 +517,14 @@ export default function Login() {
 
             {/* Quick dev test autofill */}
             {process.env.NODE_ENV !== "production" && <div className="mt-4 pt-3.5 border-t border-dashed border-gray-200">
-              <p className="text-[11px] text-gray-500 mb-1.5 font-medium">Quick dev autofill:</p>
+              <p className="text-[11px] text-gray-500 mb-1.5 font-medium">Quick dev autofill (master admin works on every backend):</p>
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
-                  onClick={() => autofillPreset("admin@madhuratech.com", "admin123")}
-                  className="text-xs py-1 px-2.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-gray-700 font-medium transition cursor-pointer"
+                  onClick={() => autofillPreset(MASTER_ADMIN_EMAIL, MASTER_ADMIN_PASSWORD)}
+                  className="text-xs py-1 px-2.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-medium transition cursor-pointer"
                 >
-                  admin@madhuratech.com
+                  {MASTER_ADMIN_EMAIL} / {MASTER_ADMIN_PASSWORD}
                 </button>
                 <button
                   type="button"

@@ -1,10 +1,13 @@
 import axios from "axios";
-import { API } from "../config/api";
+import { API, readApiOverride } from "../config/api";
 import {validateJsonResponse} from "../utils/apiPayload";
 import { demoAdapter, isDemoPreview } from "./demoApi";
 
 let pendingRefresh;
 const installed=new WeakSet();
+// Login can persist an origin that actually answered (see config/index.js).
+// Every browser-session call must follow it immediately, not after a reload.
+const apiBase = () => readApiOverride() || API;
 export function hasCookieSession() {
   try{return JSON.parse(localStorage.getItem("user")||"null")?.cookieSession===true;}catch(_){return false;}
 }
@@ -13,7 +16,7 @@ export async function confirmBrowserSession(data){
   let response,profile;
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
   try{
-    response=await fetch(`${API}/api/auth/session`,{credentials:"include",headers:{"X-Browser-Session":"1"},signal:controller.signal});
+    response=await fetch(`${apiBase()}/api/auth/session`,{credentials:"include",headers:{"X-Browser-Session":"1"},signal:controller.signal});
     profile=await response.json().catch(()=>null);
   }catch(_){throw Object.assign(new Error("The sign-in session could not be checked. Check the API connection and sign in again."),{friendlyMessage:"The sign-in session could not be checked. Check the API connection and sign in again."});}
   finally{clearTimeout(timer);}
@@ -24,12 +27,12 @@ export async function confirmBrowserSession(data){
   return data;
 }
 function backendRequest(config) {
-  try{return new URL(config.url,config.baseURL||API||window.location.origin).origin===new URL(API||window.location.origin).origin;}catch(_){return false;}
+  try{return new URL(config.url,config.baseURL||apiBase()||window.location.origin).origin===new URL(apiBase()||window.location.origin).origin;}catch(_){return false;}
 }
 export function refreshBrowserSession() {
   if(!pendingRefresh) {
     const request=async()=>{
-      const response=await fetch(`${API}/api/auth/refresh`,{method:"POST",credentials:"include",headers:{"X-Browser-Session":"1"}});
+      const response=await fetch(`${apiBase()}/api/auth/refresh`,{method:"POST",credentials:"include",headers:{"X-Browser-Session":"1"}});
       if(!response.ok)throw Object.assign(new Error(response.status===401?"Your browser session expired. Sign in again.":"The session service is unavailable."),{status:response.status});
       return response.json();
     };

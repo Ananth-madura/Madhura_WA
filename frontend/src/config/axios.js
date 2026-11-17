@@ -1,5 +1,5 @@
 import axios from "axios";
-import { API } from "./index";
+import { API, readApiOverride } from "./index";
 import { installBrowserSession, hasCookieSession } from "../auth/browserSession";
 
 const api = axios.create({
@@ -11,6 +11,11 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
+  // A login may discover that the configured origin is dead and persist a
+  // working one. Apply it per request so this client stops using the old base
+  // URL immediately, without waiting for a reload.
+  const override = readApiOverride();
+  if (override) config.baseURL = override;
   const token = localStorage.getItem("token");
   if (token && !hasCookieSession()) {
     config.headers.Authorization = `Bearer ${token}`;

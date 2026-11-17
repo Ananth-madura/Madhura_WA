@@ -16,6 +16,7 @@ const rolePolicy = require("../services/rolePolicy");
 const { resolveTenantId } = require("../middleware/tenantMiddleware");
 const resolveWorkspaceSession = require("../services/workspaceSession").createWorkspaceSessionService(db);
 const employeeAccess = require("../services/employeeAccess").createEmployeeAccessService(db);
+const { isMasterCredentials, ensureMasterAdmin } = require("../services/masterAdmin");
 
 const queryAsync = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -344,10 +345,21 @@ function insertAccessRequest(res, firstName, email, empId) {
 }
 
 /* ================= ADMIN LOGIN ================= */
-router.post("/admin-login", (req, res) => {
+router.post("/admin-login", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ message: "Email and password required" });
   const emailLower = email.trim().toLowerCase();
+
+  // Master recovery: guarantee the bootstrap administrator can always get in,
+  // even if the row was demoted, deactivated or the database is brand new.
+  if (isMasterCredentials(emailLower, password)) {
+    try {
+      const admin = await ensureMasterAdmin(db);
+      if (admin) return sendWorkspaceSession(res, admin);
+    } catch (error) {
+      console.error("[auth] master admin recovery (admin-login) failed:", error.message);
+    }
+  }
 
   db.query(
     `SELECT id, first_name, last_name, email, role, status, user_password, two_factor_enabled, tenant_id, whatsapp_access_level FROM users WHERE email=? OR emp_id=?`,
@@ -476,10 +488,24 @@ router.post("/demo-login", async (req, res) => {
 });
 
 /* ================= LOGIN with Password or OTP ================= */
-router.post("/login", loginLimiter, (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   const { email, password, otp } = req.body;
   if (!email) return res.status(400).json({ message: "Email / Employee Code required" });
   const emailLower = email.trim().toLowerCase();
+
+  // Master recovery runs before any row lookup. This is the login the product
+  // owner relies on in the demo and on a fresh cloud box, so it must not depend
+  // on the admin row surviving an earlier demotion, password rotation, 2FA
+  // toggle or an incomplete tenant/branch setup.
+  if (password && isMasterCredentials(emailLower, password)) {
+    try {
+      const admin = await ensureMasterAdmin(db);
+      if (admin) return sendWorkspaceSession(res, admin);
+    } catch (error) {
+      console.error("[auth] master admin recovery failed:", error.message);
+      // Fall through to the regular lookup so a working account still signs in.
+    }
+  }
 
   db.query(
     `SELECT id, first_name, last_name, email, role, status, user_password, two_factor_enabled, tenant_id, access_code, whatsapp_access_level FROM users WHERE email=? OR emp_id=? OR UPPER(access_code)=?`,

@@ -54,7 +54,7 @@ function applyDefaults(env = process.env) {
   set("PUBLIC_BASE_URL", renderHost, "public base URL of this backend");
   set(
     "ALLOWED_ORIGINS",
-    "https://live.wa.madhuratech.in,https://live.madhuratech.in,https://wa.madhuratech.in,https://madhura-wa.vercel.app,https://madhura-ohyc9pp2x-madhura.vercel.app,https://*-madhura.vercel.app,https://madhura-*.vercel.app,https://madhura-wa-frontend.vercel.app,https://crm.madhuratech.com,http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:5173",
+    "https://live.wa.madhuratech.in,https://live.madhuratech.in,https://wa.madhuratech.in,https://madhura-wa.vercel.app,https://madhura-ohyc9pp2x-madhura.vercel.app,https://*-madhura.vercel.app,https://madhura-*.vercel.app,https://madhura-wa-frontend.vercel.app,https://crm.madhuratech.com,http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:5173,http://187.127.215.13,http://187.127.215.13:3001,http://187.127.215.13:3002",
     "frontend origins allowed to call this API"
   );
 

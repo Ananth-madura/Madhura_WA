@@ -1,10 +1,13 @@
 import { io } from "socket.io-client";
 import { SOCKET } from "../config/api";
+import { readApiOverride } from "../config/index";
 import { hasCookieSession, refreshBrowserSession } from "../auth/browserSession";
 
 // SOCKET is REACT_APP_SOCKET_URL when set (direct to the VPS backend), otherwise
 // it falls back to the API origin, i.e. same-origin through the Vercel rewrite.
-const socketUrl = SOCKET || window.location.origin;
+// A login that failed over to another backend persists that origin, and the
+// socket must follow it too or the inbox stays offline while REST works.
+const socketUrl = readApiOverride() || SOCKET || window.location.origin;
 
 // Read the JWT lazily on every (re)connect rather than once at module load.
 // Reading it at import time captures whatever was in localStorage when this
