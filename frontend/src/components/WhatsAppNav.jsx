@@ -210,9 +210,9 @@ export default function WhatsAppNav() {
     {
       id: "campaigns",
       label: "Campaigns",
-      fullPrefix: "Bulk ",
-      title: "Bulk Broadcast Campaigns",
-      path: "/whatsapp/campaigns",
+      fullPrefix: "Enterprise ",
+      title: "Enterprise Campaign Command Center, Bulk Messaging, Flows & Attribution",
+      path: "/dashboard/campaigns",
       icon: Send,
       module: "campaigns",
     },

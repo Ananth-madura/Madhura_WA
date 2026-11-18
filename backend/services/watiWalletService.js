@@ -233,13 +233,81 @@ function createWalletService(options = {}) {
     return { autoRechargeTriggered: false, reason: "BALANCE_ABOVE_TRIGGER" };
   }
 
+  /**
+   * Atomically reserve funds in a prepaid wallet bucket (provider-managed billing).
+   */
+  async function reserveFunds(tenantId, bucket, amountMinor, referenceId = null) {
+    const tid = Number(tenantId);
+    const amt = Math.max(0, Number(amountMinor || 0));
+    if (amt === 0) return { reserved: true, amount_minor: 0 };
+    await ensureBuckets(tid);
+
+    const res = await q(
+      `UPDATE wallet_accounts
+       SET reserved_balance = reserved_balance + ?, updated_at = CURRENT_TIMESTAMP
+       WHERE tenant_id = ? AND credit_type = ? AND (balance - reserved_balance) >= ?`,
+      [amt, tid, bucket, amt]
+    );
+    if (!res || Number(res.affectedRows || 0) === 0) {
+      const err = new Error(`Insufficient balance in ${bucket} wallet bucket`);
+      err.code = "INSUFFICIENT_WALLET_BALANCE";
+      throw err;
+    }
+    return { reserved: true, amount_minor: amt, bucket, reference_id: referenceId };
+  }
+
+  /**
+   * Settle a confirmed billable delivery by deducting balance and releasing reservation.
+   */
+  async function settleReservation(tenantId, bucket, amountMinor, referenceId = null) {
+    const tid = Number(tenantId);
+    const amt = Math.max(0, Number(amountMinor || 0));
+    if (amt === 0) return { settled: true, amount_minor: 0 };
+    await q(
+      `UPDATE wallet_accounts
+       SET balance = CASE WHEN balance >= ? THEN balance - ? ELSE 0 END,
+           reserved_balance = CASE WHEN reserved_balance >= ? THEN reserved_balance - ? ELSE 0 END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE tenant_id = ? AND credit_type = ?`,
+      [amt, amt, amt, amt, tid, bucket]
+    );
+    await q(
+      `INSERT INTO wallet_entries (
+        tenant_id, credit_type, amount, balance_after, direction, description, reference_id
+      ) VALUES (?, ?, ?, (SELECT balance FROM wallet_accounts WHERE tenant_id = ? AND credit_type = ?), 'debit', ?, ?)`,
+      [tid, bucket, amt, tid, bucket, "Campaign message delivered settlement", referenceId || `settle_${Date.now()}`]
+    ).catch(() => {});
+    return { settled: true, amount_minor: amt, bucket, reference_id: referenceId };
+  }
+
+  /**
+   * Release reserved funds on confirmed non-billable failure.
+   */
+  async function releaseReservation(tenantId, bucket, amountMinor, referenceId = null) {
+    const tid = Number(tenantId);
+    const amt = Math.max(0, Number(amountMinor || 0));
+    if (amt === 0) return { released: true, amount_minor: 0 };
+    await q(
+      `UPDATE wallet_accounts
+       SET reserved_balance = CASE WHEN reserved_balance >= ? THEN reserved_balance - ? ELSE 0 END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE tenant_id = ? AND credit_type = ?`,
+      [amt, amt, tid, bucket]
+    );
+    return { released: true, amount_minor: amt, bucket, reference_id: referenceId };
+  }
+
   return {
     SUPPORTED_BUCKETS,
     ensureBuckets,
     getWalletBalances,
+    getWalletOverview: getWalletBalances,
     createTopupOrder,
     confirmTopupPayment,
-    checkAndTriggerAutoRecharge
+    checkAndTriggerAutoRecharge,
+    reserveFunds,
+    settleReservation,
+    releaseReservation
   };
 }
 
@@ -254,7 +322,11 @@ module.exports = {
   SUPPORTED_BUCKETS,
   ensureBuckets: (...args) => getDefault().ensureBuckets(...args),
   getWalletBalances: (...args) => getDefault().getWalletBalances(...args),
+  getWalletOverview: (...args) => getDefault().getWalletBalances(...args),
   createTopupOrder: (...args) => getDefault().createTopupOrder(...args),
   confirmTopupPayment: (...args) => getDefault().confirmTopupPayment(...args),
-  checkAndTriggerAutoRecharge: (...args) => getDefault().checkAndTriggerAutoRecharge(...args)
+  checkAndTriggerAutoRecharge: (...args) => getDefault().checkAndTriggerAutoRecharge(...args),
+  reserveFunds: (...args) => getDefault().reserveFunds(...args),
+  settleReservation: (...args) => getDefault().settleReservation(...args),
+  releaseReservation: (...args) => getDefault().releaseReservation(...args)
 };

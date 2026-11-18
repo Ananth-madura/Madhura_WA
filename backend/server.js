@@ -348,6 +348,16 @@ app.use("/api/v2/workspace", (req, res, next) => app.get("sharedInboxReady") ? n
 app.use("/api/v2/team-chat", (req, res, next) => app.get("teamChatReady") ? next() : res.status(503).json({ message: "Team chat schema is not ready" }), require("./routes/teamChatRoutes"));
 app.use("/webhooks/razorpay", require("./routes/enterpriseBillingRoutes"));
 
+// ── Enterprise Campaign Management, Provider Gateway, Flows & Operations ────
+const { templateRouter, flowsRouter, providerRouter, flowbotRouter } = require("./routes/whatsappFlowsRoutes");
+app.use("/api/campaigns", require("./routes/enterpriseCampaignRoutes"));
+app.use("/api/whatsapp/templates", templateRouter);
+app.use("/api/whatsapp/flows", flowsRouter);
+app.use("/api/provider/whatsapp", providerRouter);
+app.use("/api/flowbots", flowbotRouter);
+app.use("/api/admin/campaigns", require("./routes/campaignAdminRoutes"));
+app.use("/api/webhooks/meta", require("./routes/metaCampaignWebhookRoutes"));
+
 app.use("/api/teammember", require("./middleware/authMiddleware").verifyToken, (req, res) => {
   const tenantId = req.user?.tenant_id;
   if (!tenantId) {
@@ -539,6 +549,7 @@ function startServer() {
       await require("./migrations/local_first_chat_storage").migrate(require("./config/database"));
       await require("./migrations/r2_storage_unification").migrate(require("./config/database"));
       await require("./migrations/wati_billing_and_limits").migrate(db);
+      await require("./migrations/enterprise_campaign_management").migrate(db);
       await require("./services/schemaReadiness").assertReady(db);
       const platformAdmin = await require("./services/platformAdminBootstrap").provisionConfiguredAdmin(db);
       if (platformAdmin) console.log("Platform administrator and internal workspace are ready");

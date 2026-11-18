@@ -5,6 +5,8 @@ const wa = require("../services/whatsappCloudApi");
 const waAiReply = require("../services/waAiReply");
 const { createConcurrentEngine } = require("../services/concurrentSenderEngine");
 const concurrentEngine = createConcurrentEngine(db);
+const { createCampaignWebhookProcessor } = require("../services/campaign/campaignWebhookProcessor");
+const enterpriseCampaignWebhooks = createCampaignWebhookProcessor({ db });
 
 // Opt-out keywords (case-insensitive)
 const OPT_OUT_KEYWORDS = ["stop", "unsubscribe", "opt out", "optout", "cancel", "quit", "end", "remove me", "no more"];
@@ -197,16 +199,34 @@ router.post("/", async (req, res) => {
           for (const change of entry.changes) {
             if (change.field === "messages") {
               const value = change.value;
+              const resolvedAccount = authorization.accounts.get(value.metadata?.phone_number_id);
+              const enterpriseTenantId = Number(resolvedAccount?.tenantId || 0);
               if (value.messages) {
                 for (const msg of value.messages) {
-                  await handleIncomingMessage(msg, value.metadata, value.contacts, authorization.accounts.get(value.metadata?.phone_number_id));
+                  await handleIncomingMessage(msg, value.metadata, value.contacts, resolvedAccount);
+                  if (enterpriseTenantId > 0) {
+                    await enterpriseCampaignWebhooks.processInboundMessage(enterpriseTenantId, msg).catch(() => {});
+                  }
                 }
               }
               if (value.statuses) {
                 for (const status of value.statuses) {
-                  await handleStatusUpdate(status, authorization.accounts.get(value.metadata?.phone_number_id));
+                  await handleStatusUpdate(status, resolvedAccount);
+                  if (enterpriseTenantId > 0) {
+                    await enterpriseCampaignWebhooks.processStatusWebhook(enterpriseTenantId, status).catch(() => {});
+                  }
                 }
               }
+            } else if (change.field === "message_template_status_update" || change.field === "account_update") {
+              try {
+                const wabaId = change.value?.waba_info?.waba_id || entry.id;
+                if (wabaId) {
+                  const [wRows] = await db.promise().query("SELECT tenant_id FROM waba_connections WHERE waba_id = ? LIMIT 1", [String(wabaId)]);
+                  if (wRows?.[0]?.tenant_id) {
+                    await enterpriseCampaignWebhooks.processMetaWebhookPayload(wRows[0].tenant_id, { entry: [{ id: entry.id, changes: [change] }] }).catch(() => {});
+                  }
+                }
+              } catch (_) {}
             }
           }
         }

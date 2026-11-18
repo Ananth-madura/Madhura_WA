@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import FlowPageBoundary from "./components/FlowPageBoundary";
+import CampaignErrorBoundary from "./pages/campaigns/CampaignErrorBoundary";
 import {MARKETING as MARKETING_URL} from "./config/index";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from "react-router-dom";
 import { Agentation } from "agentation";
@@ -58,6 +59,20 @@ const VerifyEmailPage = lazy(() => import("./pages/public/VerifyEmailPage"));
 const TermsPage = lazy(() => import("./pages/public/TermsPage"));
 const PrivacyPage = lazy(() => import("./pages/public/PrivacyPage"));
 const DataDeletionPage = lazy(() => import("./pages/public/DataDeletionPage"));
+
+// Enterprise Campaign Management System
+const CampaignCenterDashboard = lazy(() => import("./pages/campaigns/CampaignCenterDashboard"));
+const CampaignComposerPage = lazy(() => import("./pages/campaigns/CampaignComposerPage"));
+const CampaignDetailPage = lazy(() => import("./pages/campaigns/CampaignDetailPage"));
+const AudienceBuilderPage = lazy(() => import("./pages/campaigns/AudienceBuilderPage"));
+const AudienceImportPage = lazy(() => import("./pages/campaigns/AudienceImportPage"));
+const ConsentSuppressionPage = lazy(() => import("./pages/campaigns/ConsentSuppressionPage"));
+const TemplateStudioPage = lazy(() => import("./pages/campaigns/TemplateStudioPage"));
+const WhatsAppFlowsPage = lazy(() => import("./pages/campaigns/WhatsAppFlowsPage"));
+const FlowbotsAutomationsPage = lazy(() => import("./pages/campaigns/FlowbotsAutomationsPage"));
+const CalendarApprovalsPage = lazy(() => import("./pages/campaigns/CalendarApprovalsPage"));
+const AnalyticsReportsPage = lazy(() => import("./pages/campaigns/AnalyticsReportsPage"));
+const CampaignSettingsAdminPage = lazy(() => import("./pages/campaigns/CampaignSettingsAdminPage"));
 
 /* Marketing site now lives in the sibling `landing_page` project (port 3002).
    Old public URLs on this origin hand off there so shared links keep working. */
@@ -218,7 +233,8 @@ export default function App() {
               <Route path="templates/create" element={<WATemplateCreate />} />
               <Route path="templates/:templateId/edit" element={<WATemplateCreate />} />
               <Route path="groups" element={<WAGroups />} />
-              <Route path="campaigns" element={<WACampaigns />} />
+              <Route path="campaigns" element={<Navigate to="/dashboard/campaigns" replace />} />
+              <Route path="campaigns/legacy" element={<WACampaigns />} />
               <Route path="automations" element={<WAAutomations />} />
               <Route path="automations/create" element={<WAAutomations />} />
               <Route path="automations/:automationId/edit" element={<WAAutomations />} />
@@ -256,6 +272,60 @@ export default function App() {
               <Route path="billing" element={<WABilling />} />
               <Route path="client-portal" element={<Suspense fallback={<p className="p-8">Loading portal management…</p>}><ClientPortalManage /></Suspense>} />
             </Route>
+
+            {/* Enterprise Campaign Management Suite (/dashboard/campaigns/*) & Admin Control (/admin/campaigns) */}
+            <Route
+              path="/dashboard/campaigns"
+              element={
+                <RequireAuth>
+                  <CampaignErrorBoundary>
+                    <WALayout />
+                  </CampaignErrorBoundary>
+                </RequireAuth>
+              }
+            >
+              <Route index element={<CampaignCenterDashboard />} />
+              <Route path="create" element={<CampaignComposerPage />} />
+              <Route path="calendar" element={<CalendarApprovalsPage mode="calendar" />} />
+              <Route path="approvals" element={<CalendarApprovalsPage mode="approvals" />} />
+              <Route path="audiences" element={<AudienceBuilderPage />} />
+              <Route path="audiences/create" element={<AudienceBuilderPage />} />
+              <Route path="import" element={<AudienceImportPage />} />
+              <Route path="import/:id" element={<AudienceImportPage />} />
+              <Route path="consent" element={<ConsentSuppressionPage defaultTab="consent" />} />
+              <Route path="consent/import" element={<AudienceImportPage />} />
+              <Route path="suppression" element={<ConsentSuppressionPage defaultTab="suppression" />} />
+              <Route path="templates" element={<TemplateStudioPage />} />
+              <Route path="templates/create" element={<TemplateStudioPage />} />
+              <Route path="templates/:id" element={<TemplateStudioPage />} />
+              <Route path="templates/:id/edit" element={<TemplateStudioPage />} />
+              <Route path="flows" element={<WhatsAppFlowsPage />} />
+              <Route path="flows/create" element={<WhatsAppFlowsPage />} />
+              <Route path="flows/:id" element={<WhatsAppFlowsPage />} />
+              <Route path="flows/:id/edit" element={<WhatsAppFlowsPage />} />
+              <Route path="flowbots" element={<FlowbotsAutomationsPage mode="flowbots" />} />
+              <Route path="automations" element={<FlowbotsAutomationsPage mode="automations" />} />
+              <Route path="analytics" element={<AnalyticsReportsPage />} />
+              <Route path="reports" element={<AnalyticsReportsPage />} />
+              <Route path="reports/create" element={<AnalyticsReportsPage />} />
+              <Route path="settings" element={<CampaignSettingsAdminPage mode="settings" />} />
+              <Route path=":id" element={<CampaignDetailPage />} />
+              <Route path=":id/edit" element={<CampaignComposerPage />} />
+              <Route path=":id/preview" element={<CampaignDetailPage />} />
+            </Route>
+            <Route
+              path="/admin/campaigns"
+              element={
+                <RequireAuth>
+                  <CampaignErrorBoundary>
+                    <WALayout />
+                  </CampaignErrorBoundary>
+                </RequireAuth>
+              }
+            >
+              <Route index element={<CampaignSettingsAdminPage mode="admin" />} />
+            </Route>
+
             <Route path="/employee" element={<Navigate to="/whatsapp/employees" replace />} />
             <Route path="/employees" element={<Navigate to="/whatsapp/employees" replace />} />
             <Route path="*" element={<Navigate to="/whatsapp" replace />} />

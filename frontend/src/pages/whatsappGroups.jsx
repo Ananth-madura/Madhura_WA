@@ -1,537 +1,1320 @@
-import WAWorkspaceGuide from "../components/WAWorkspaceGuide";
-import useWADialog from "../hooks/useWADialog";
-import { useState, useEffect, useMemo, useRef } from "react";
-import { Users, Plus, Trash2, Upload, Download, X, ChevronDown, ChevronRight, Loader2, UserPlus, Send, Search, CheckSquare, Square, Building2, Phone, Filter } from "lucide-react";
-import axios from "axios";
-import { API } from "../config/api";
-import WhatsAppCampaignWizard from "../components/WhatsAppCampaignWizard";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import * as XLSX from "xlsx";
+import {
+  Users,
+  Plus,
+  Trash2,
+  Upload,
+  Download,
+  X,
+  Loader2,
+  UserPlus,
+  Send,
+  Search,
+  ShieldCheck,
+  Calculator,
+  CheckCircle2,
+  AlertCircle,
+  Edit2,
+} from "lucide-react";
+import api from "../config/axios";
+import { campaignApi } from "../api/campaigns";
+
+const SEGMENT_FIELDS = [
+  { value: "tags", label: "Contact tags" },
+  { value: "name", label: "Full name" },
+  { value: "email", label: "Email address" },
+  { value: "country_code", label: "Country code" },
+  { value: "source", label: "Acquisition source" },
+  { value: "crm_ref_type", label: "CRM record type" },
+  { value: "last_contacted", label: "Last interaction date" },
+  { value: "custom_fields.city", label: "City (custom field)" },
+  { value: "custom_fields.company", label: "Company (custom field)" },
+  { value: "custom_fields.product_interest", label: "Product interest" },
+];
+
+const SEGMENT_OPERATORS = [
+  { value: "equals", label: "equals" },
+  { value: "not_equals", label: "does not equal" },
+  { value: "contains", label: "contains" },
+  { value: "not_contains", label: "does not contain" },
+  { value: "starts_with", label: "starts with" },
+  { value: "within_days", label: "within last N days" },
+  { value: "older_than_days", label: "older than N days" },
+  { value: "is_not_empty", label: "is not empty" },
+  { value: "is_empty", label: "is empty" },
+];
 
 export default function WAGroups() {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("groups");
+  const [notice, setNotice] = useState(null);
+
+  // Contact groups state
   const [groups, setGroups] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [creatingGroup, setCreatingGroup] = useState(false);
-  const groupDialog = useWADialog(showCreate, () => setShowCreate(false), creatingGroup);
-  const [groupName, setGroupName] = useState("");
-  const [groupDesc, setGroupDesc] = useState("");
-  const [expandedGroup, setExpandedGroup] = useState(null);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [groupsError, setGroupsError] = useState("");
+  const [groupSearch, setGroupSearch] = useState("");
+  const [groupSort, setGroupSort] = useState("recent");
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [groupContacts, setGroupContacts] = useState([]);
   const [contactsLoading, setContactsLoading] = useState(false);
-  const [importModal, setImportModal] = useState(null);
-  const [bulkInput, setBulkInput] = useState("");
-  const [selectedGroupForBulk, setSelectedGroupForBulk] = useState([]);
-  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [contactSearch, setContactSearch] = useState("");
+  const [eligibility, setEligibility] = useState(null);
+  const [eligibilityLoading, setEligibilityLoading] = useState(false);
 
-  // Contact picker state
-  const [showContactPicker, setShowContactPicker] = useState(false);
-  const [pickerGroupId, setPickerGroupId] = useState(null);
-  const [allClients, setAllClients] = useState([]);
-  const [clientsLoading, setClientsLoading] = useState(false);
-  const [selectedClients, setSelectedClients] = useState(new Set());
-  const [clientSearch, setClientSearch] = useState("");
-  const [clientFilter, setClientFilter] = useState("all");
-  const [addingContacts, setAddingContacts] = useState(false);
-  const [pageNotice, setPageNotice] = useState(null);
-  const [groupSearch, setGroupSearch] = useState("");
-  const [groupSort, setGroupSort] = useState("name");
-  const groupRequest = useRef(0);
-  const visibleGroups = groups.filter(group => `${group.name || ""} ${group.description || ""}`.toLowerCase().includes(groupSearch.toLowerCase())).sort((a, b) => groupSort === "size" ? Number(b.contact_count || 0) - Number(a.contact_count || 0) : (a.name || "").localeCompare(b.name || ""));
+  // Create / Edit Group modal
+  const [groupModal, setGroupModal] = useState(null);
+  const [groupName, setGroupName] = useState("");
+  const [groupDesc, setGroupDesc] = useState("");
+  const [savingGroup, setSavingGroup] = useState(false);
 
-  const fetchGroups = async () => {
-    setLoading(true);
+  // Add contacts / Upload CSV modal
+  const [importOpen, setImportOpen] = useState(false);
+  const [singlePhone, setSinglePhone] = useState("");
+  const [singleName, setSingleName] = useState("");
+  const [singleNotes, setSingleNotes] = useState("");
+  const [bulkText, setBulkText] = useState("");
+  const [parsedFileContacts, setParsedFileContacts] = useState([]);
+  const [fileLabel, setFileLabel] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  // CRM Contact Picker modal
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [crmSources, setCrmSources] = useState([]);
+  const [crmLoading, setCrmLoading] = useState(false);
+  const [crmSearch, setCrmSearch] = useState("");
+  const [crmSourceFilter, setCrmSourceFilter] = useState("ALL");
+  const [selectedPhones, setSelectedPhones] = useState(new Set());
+  const [addingFromCrm, setAddingFromCrm] = useState(false);
+
+  // Dynamic Segments state
+  const [segments, setSegments] = useState([]);
+  const [presets, setPresets] = useState([]);
+  const [segmentsLoading, setSegmentsLoading] = useState(false);
+  const [segName, setSegName] = useState("");
+  const [segDesc, setSegDesc] = useState("");
+  const [segLogic, setSegLogic] = useState("AND");
+  const [includeRules, setIncludeRules] = useState([{ field: "tags", operator: "contains", value: "VIP" }]);
+  const [excludeRules, setExcludeRules] = useState([]);
+  const [segEstimate, setSegEstimate] = useState(null);
+  const [estimating, setEstimating] = useState(false);
+  const [savingSeg, setSavingSeg] = useState(false);
+
+  const memberReqId = useRef(0);
+
+  // Escape key closes open dialogs (R-26, R-32)
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setGroupModal(null);
+        setImportOpen(false);
+        setPickerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const fetchGroups = useCallback(async () => {
+    setGroupsLoading(true);
+    setGroupsError("");
     try {
-      const token = localStorage.getItem("token");
-      const { data } = await axios.get(`${API}/api/wa/groups`, { headers: { Authorization: `Bearer ${token}` } });
-      setGroups(Array.isArray(data) ? data : []);
-    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Groups could not be loaded." }); }
-    setLoading(false);
-  };
+      const { data } = await api.get("/api/wa/groups");
+      const list = Array.isArray(data) ? data : [];
+      setGroups(list);
+      if (list.length > 0 && !selectedGroupId) {
+        setSelectedGroupId(list[0].id);
+      }
+    } catch (err) {
+      setGroupsError(err.response?.data?.error || err.message || "Could not load contact groups.");
+    } finally {
+      setGroupsLoading(false);
+    }
+  }, [selectedGroupId]);
 
-  useEffect(() => { fetchGroups(); }, []);
-
-  const handleCreate = async () => {
-    if (creatingGroup || !groupName.trim()) return;
-    setCreatingGroup(true);
+  const fetchSegments = useCallback(async () => {
+    setSegmentsLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.post(`${API}/api/wa/groups`, { name: groupName.trim(), description: groupDesc.trim() }, { headers: { Authorization: `Bearer ${token}` } });
-      setShowCreate(false);
+      const [segs, pre] = await Promise.all([
+        campaignApi.listSegments().catch(() => []),
+        campaignApi.getPresets().catch(() => ({ presets: [] })),
+      ]);
+      setSegments(Array.isArray(segs) ? segs : []);
+      setPresets(Array.isArray(pre?.presets) ? pre.presets : []);
+    } finally {
+      setSegmentsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchGroups();
+    fetchSegments();
+  }, [fetchGroups, fetchSegments]);
+
+  const loadGroupDetails = useCallback(async (groupId) => {
+    if (!groupId) {
+      setGroupContacts([]);
+      setEligibility(null);
+      return;
+    }
+    const req = ++memberReqId.current;
+    setContactsLoading(true);
+    setEligibility(null);
+    try {
+      const { data } = await api.get(`/api/wa/groups/${groupId}`);
+      if (req !== memberReqId.current) return;
+      setGroupContacts(Array.isArray(data?.contacts) ? data.contacts : []);
+    } catch (err) {
+      if (req === memberReqId.current) {
+        setNotice({ type: "error", text: err.response?.data?.error || "Could not load contacts for this group." });
+      }
+    } finally {
+      if (req === memberReqId.current) setContactsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedGroupId) loadGroupDetails(selectedGroupId);
+  }, [selectedGroupId, loadGroupDetails]);
+
+  const visibleGroups = useMemo(() => {
+    const q = groupSearch.trim().toLowerCase();
+    return groups
+      .filter((g) => `${g.name || ""} ${g.description || ""}`.toLowerCase().includes(q))
+      .sort((a, b) => {
+        if (groupSort === "size") return Number(b.contact_count || 0) - Number(a.contact_count || 0);
+        if (groupSort === "name") return String(a.name || "").localeCompare(String(b.name || ""));
+        return Number(b.id) - Number(a.id);
+      });
+  }, [groups, groupSearch, groupSort]);
+
+  const activeGroup = useMemo(
+    () => groups.find((g) => Number(g.id) === Number(selectedGroupId)) || null,
+    [groups, selectedGroupId]
+  );
+
+  const visibleContacts = useMemo(() => {
+    const q = contactSearch.trim().toLowerCase();
+    if (!q) return groupContacts;
+    return groupContacts.filter((c) =>
+      `${c.name || ""} ${c.phone || ""} ${c.notes || ""}`.toLowerCase().includes(q)
+    );
+  }, [groupContacts, contactSearch]);
+
+  const handleSaveGroup = async (e) => {
+    e.preventDefault();
+    if (!groupName.trim() || savingGroup) return;
+    setSavingGroup(true);
+    setNotice(null);
+    try {
+      if (groupModal?.mode === "edit" && groupModal.group) {
+        await api.put(`/api/wa/groups/${groupModal.group.id}`, {
+          name: groupName.trim(),
+          description: groupDesc.trim(),
+        });
+        setNotice({ type: "success", text: `Updated group "${groupName.trim()}".` });
+      } else {
+        const { data } = await api.post("/api/wa/groups", {
+          name: groupName.trim(),
+          description: groupDesc.trim(),
+        });
+        setSelectedGroupId(data.id);
+        setNotice({ type: "success", text: `Created group "${data.name}".` });
+      }
+      setGroupModal(null);
       setGroupName("");
       setGroupDesc("");
       fetchGroups();
-      setPageNotice({ type: "success", message: "Group created." });
-    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Group could not be created." }); }
-    finally { setCreatingGroup(false); }
+    } catch (err) {
+      setNotice({ type: "error", text: err.response?.data?.error || err.message || "Could not save group." });
+    } finally {
+      setSavingGroup(false);
+    }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete this group and all its contacts?")) return;
+  const handleDeleteGroup = async (group) => {
+    if (!window.confirm(`Delete group "${group.name}" and remove its saved members?`)) return;
     try {
-      const token = localStorage.getItem("token");
-      await axios.delete(`${API}/api/wa/groups/${id}`, { headers: { Authorization: `Bearer ${token}` } });
-      if (expandedGroup === id) setExpandedGroup(null);
+      await api.delete(`/api/wa/groups/${group.id}`);
+      if (Number(selectedGroupId) === Number(group.id)) {
+        setSelectedGroupId(null);
+        setGroupContacts([]);
+      }
+      setNotice({ type: "success", text: `Deleted group "${group.name}".` });
       fetchGroups();
-    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Group could not be deleted." }); }
+    } catch (err) {
+      setNotice({ type: "error", text: err.response?.data?.error || "Could not delete group." });
+    }
   };
 
-  const toggleExpand = async (id) => {
-    const requestId = ++groupRequest.current;
-    if (expandedGroup === id) { setExpandedGroup(null); return; }
-    setExpandedGroup(id);
-    setGroupContacts([]);
-    setContactsLoading(true);
+  const handleRemoveContact = async (contactId) => {
+    if (!activeGroup) return;
     try {
-      const token = localStorage.getItem("token");
-      const { data } = await axios.get(`${API}/api/wa/groups/${id}`, { headers: { Authorization: `Bearer ${token}` } });
-      if (requestId !== groupRequest.current) return;
-      setGroupContacts(data.contacts || []);
-    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Group contacts could not be loaded." }); }
-    if (requestId === groupRequest.current) setContactsLoading(false);
-  };
-
-  const handleDeleteContact = async (groupId, contactId) => {
-    try {
-      const token = localStorage.getItem("token");
-      await axios.delete(`${API}/api/wa/groups/${groupId}/contacts/${contactId}`, { headers: { Authorization: `Bearer ${token}` } });
-      setGroupContacts(prev => prev.filter(c => c.id !== contactId));
+      await api.delete(`/api/wa/groups/${activeGroup.id}/contacts/${contactId}`);
+      setGroupContacts((prev) => prev.filter((c) => c.id !== contactId));
       fetchGroups();
-    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Contact could not be removed." }); }
+    } catch (err) {
+      setNotice({ type: "error", text: err.response?.data?.error || "Could not remove contact." });
+    }
   };
 
-  const handleBulkImport = async (id) => {
-    if (!bulkInput.trim()) return;
-    const lines = bulkInput.trim().split("\n").filter(l => l.trim());
-    const contacts = lines.map(line => {
-      const parts = line.split(",").map(s => s.trim());
-      return { phone: parts[0]?.replace(/[^0-9]/g, "").slice(-10), name: parts[1] || null, notes: parts[2] || null };
-    }).filter(c => c.phone.length >= 10);
-
+  const handleAddSingleContact = async (e) => {
+    e.preventDefault();
+    if (!activeGroup || !singlePhone.trim()) return;
+    const digits = singlePhone.replace(/\D/g, "");
+    if (digits.length < 10) {
+      setNotice({ type: "error", text: "Enter a valid phone number with at least 10 digits." });
+      return;
+    }
+    setImporting(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.post(`${API}/api/wa/groups/${id}/contacts`, { contacts }, { headers: { Authorization: `Bearer ${token}` } });
-      setBulkInput("");
-      setImportModal(null);
-      toggleExpand(id);
+      await api.post(`/api/wa/groups/${activeGroup.id}/contacts`, {
+        contacts: [{ phone: digits, name: singleName.trim() || null, notes: singleNotes.trim() || null }],
+      });
+      setSinglePhone("");
+      setSingleName("");
+      setSingleNotes("");
+      setNotice({ type: "success", text: "Contact added to group." });
+      loadGroupDetails(activeGroup.id);
       fetchGroups();
-    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Contacts could not be imported." }); }
+    } catch (err) {
+      setNotice({ type: "error", text: err.response?.data?.error || "Could not add contact." });
+    } finally {
+      setImporting(false);
+    }
   };
 
-  const handleImportCustomers = async (id) => {
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileLabel(file.name);
     try {
-      const token = localStorage.getItem("token");
-      const { data } = await axios.post(`${API}/api/wa/groups/${id}/import-customers`, {}, { headers: { Authorization: `Bearer ${token}` } });
-      setPageNotice({ type: "success", message: `Imported ${data.imported ?? 0} customers. Group total: ${data.totalContacts ?? 0}.` });
-      toggleExpand(id);
-      fetchGroups();
-    } catch (err) { setPageNotice({ type: "error", message: err.response?.data?.error || err.response?.data?.message || "Customer import failed." }); }
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+      const cols = rows.length ? Object.keys(rows[0]) : [];
+      const phoneCol = cols.find((c) => /phone|mobile|whatsapp|number/i.test(c)) || cols[0];
+      const nameCol = cols.find((c) => /name|customer/i.test(c)) || "";
+      const notesCol = cols.find((c) => /note|city|company|tag/i.test(c)) || "";
+      const parsed = rows
+        .map((r) => ({
+          phone: String(r[phoneCol] || "").replace(/\D/g, ""),
+          name: nameCol ? String(r[nameCol] || "").trim() : null,
+          notes: notesCol ? String(r[notesCol] || "").trim() : null,
+        }))
+        .filter((r) => r.phone.length >= 10);
+      setParsedFileContacts(parsed);
+    } catch (err) {
+      setNotice({ type: "error", text: `Could not read file: ${err.message}` });
+    }
   };
 
-  const downloadCSV = (contacts, groupName) => {
-    const csv = "Phone,Name,Notes\n" + contacts.map(c => `${c.phone},${c.name || ""},${c.notes || ""}`).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+  const handleConfirmImport = async () => {
+    if (!activeGroup) return;
+    let contacts = [...parsedFileContacts];
+    if (bulkText.trim()) {
+      const pasted = bulkText
+        .trim()
+        .split("\n")
+        .map((line) => {
+          const [p, n, note] = line.split(",").map((s) => s.trim());
+          return { phone: String(p || "").replace(/\D/g, ""), name: n || null, notes: note || null };
+        })
+        .filter((c) => c.phone.length >= 10);
+      contacts = [...contacts, ...pasted];
+    }
+    if (contacts.length === 0) {
+      setNotice({ type: "error", text: "Provide at least one valid 10-digit phone number to import." });
+      return;
+    }
+    setImporting(true);
+    try {
+      await api.post(`/api/wa/groups/${activeGroup.id}/contacts`, { contacts });
+      setBulkText("");
+      setParsedFileContacts([]);
+      setFileLabel("");
+      setImportOpen(false);
+      setNotice({ type: "success", text: `Added ${contacts.length} contacts to "${activeGroup.name}".` });
+      loadGroupDetails(activeGroup.id);
+      fetchGroups();
+    } catch (err) {
+      setNotice({ type: "error", text: err.response?.data?.error || "Import failed." });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const openCrmPicker = async () => {
+    setPickerOpen(true);
+    setSelectedPhones(new Set());
+    setCrmSearch("");
+    setCrmSourceFilter("ALL");
+    setCrmLoading(true);
+    try {
+      const { data } = await api.get("/api/wa/groups/sources/all");
+      setCrmSources(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setCrmSources([]);
+      setNotice({ type: "error", text: err.response?.data?.error || "Could not load CRM contacts." });
+    } finally {
+      setCrmLoading(false);
+    }
+  };
+
+  const filteredCrmSources = useMemo(() => {
+    const q = crmSearch.trim().toLowerCase();
+    return crmSources.filter((c) => {
+      if (crmSourceFilter !== "ALL" && c.source !== crmSourceFilter) return false;
+      if (!q) return true;
+      return `${c.name || ""} ${c.phone || ""} ${c.city || ""} ${c.source || ""}`.toLowerCase().includes(q);
+    });
+  }, [crmSources, crmSearch, crmSourceFilter]);
+
+  const crmSourceTypes = useMemo(
+    () => ["ALL", ...Array.from(new Set(crmSources.map((c) => c.source).filter(Boolean)))],
+    [crmSources]
+  );
+
+  const handleAddSelectedFromCrm = async () => {
+    if (!activeGroup || selectedPhones.size === 0) return;
+    const chosen = crmSources.filter((c) => selectedPhones.has(c.phone));
+    setAddingFromCrm(true);
+    try {
+      await api.post(`/api/wa/groups/${activeGroup.id}/contacts`, {
+        contacts: chosen.map((c) => ({ phone: c.phone, name: c.name, notes: c.city || c.source || null })),
+      });
+      setPickerOpen(false);
+      setNotice({ type: "success", text: `Added ${chosen.length} CRM contacts to "${activeGroup.name}".` });
+      loadGroupDetails(activeGroup.id);
+      fetchGroups();
+    } catch (err) {
+      setNotice({ type: "error", text: err.response?.data?.error || "Could not add selected contacts." });
+    } finally {
+      setAddingFromCrm(false);
+    }
+  };
+
+  const handleCheckEligibility = async () => {
+    if (!activeGroup) return;
+    setEligibilityLoading(true);
+    try {
+      const res = await campaignApi.getGroupEligibility(activeGroup.id, "MARKETING");
+      setEligibility(res);
+    } catch (err) {
+      setNotice({ type: "error", text: err.response?.data?.error || err.message || "Eligibility check failed." });
+    } finally {
+      setEligibilityLoading(false);
+    }
+  };
+
+  const handleExportCsv = () => {
+    if (!activeGroup || groupContacts.length === 0) return;
+    const lines = ["Phone,Name,Notes"];
+    for (const c of groupContacts) {
+      lines.push(`${c.phone},${JSON.stringify(c.name || "")},${JSON.stringify(c.notes || "")}`);
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${groupName || "contacts"}.csv`;
+    a.download = `${activeGroup.name.replace(/\s+/g, "_")}.csv`;
     a.click();
+    URL.revokeObjectURL(url);
   };
 
-  // Fetch all CRM clients for contact picker
-  const openContactPicker = async (groupId) => {
-    setPickerGroupId(groupId);
-    setSelectedClients(new Set());
-    setClientSearch("");
-    setClientFilter("all");
-    setShowContactPicker(true);
-    setClientsLoading(true);
+  const segmentDefinition = { logic: segLogic, include: includeRules, exclude: excludeRules };
+
+  const handleEstimateSegment = async () => {
+    setEstimating(true);
+    setNotice(null);
     try {
-      const token = localStorage.getItem("token");
-      const { data } = await axios.get(`${API}/api/contacts`, { headers: { Authorization: `Bearer ${token}` } });
-      setAllClients(data.contacts || data || []);
+      const res = await campaignApi.estimateLive({ definition: segmentDefinition, category: "MARKETING" });
+      setSegEstimate(res);
     } catch (err) {
-      setAllClients([]);
-      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "CRM contacts could not be loaded." });
+      setNotice({ type: "error", text: err.response?.data?.error || err.message || "Segment estimation failed." });
+    } finally {
+      setEstimating(false);
     }
-    setClientsLoading(false);
   };
 
-  const filteredClients = useMemo(() => {
-    let list = allClients;
-    if (clientSearch.trim()) {
-      const q = clientSearch.toLowerCase();
-      list = list.filter(c =>
-        (c.name || "").toLowerCase().includes(q) ||
-        (c.phone || "").includes(q) ||
-        (c.email || "").toLowerCase().includes(q) ||
-        (c.company || "").toLowerCase().includes(q)
-      );
-    }
-    if (clientFilter === "has_phone") {
-      list = list.filter(c => c.phone && c.phone.length >= 10);
-    }
-    return list;
-  }, [allClients, clientSearch, clientFilter]);
-
-  const toggleClientSelect = (id) => {
-    setSelectedClients(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const selectAllFiltered = () => {
-    setSelectedClients(new Set(filteredClients.map(c => c.id)));
-  };
-
-  const deselectAll = () => {
-    setSelectedClients(new Set());
-  };
-
-  const addSelectedToGroup = async () => {
-    if (selectedClients.size === 0 || !pickerGroupId) return;
-    setAddingContacts(true);
+  const handleSaveSegment = async (e) => {
+    e.preventDefault();
+    if (!segName.trim() || savingSeg) return;
+    setSavingSeg(true);
+    setNotice(null);
     try {
-      const token = localStorage.getItem("token");
-      const contacts = filteredClients
-        .filter(c => selectedClients.has(c.id))
-        .map(c => ({
-          phone: (c.phone || "").replace(/[^0-9]/g, "").slice(-10),
-          name: c.name || null,
-          notes: c.company || c.email || null
-        }))
-        .filter(c => c.phone.length >= 10);
-
-      if (contacts.length === 0) {
-        setPageNotice({ type: "error", message: "The selected contacts do not have valid phone numbers." });
-        setAddingContacts(false);
-        return;
-      }
-
-      await axios.post(`${API}/api/wa/groups/${pickerGroupId}/contacts`, { contacts }, { headers: { Authorization: `Bearer ${token}` } });
-      setShowContactPicker(false);
-      toggleExpand(pickerGroupId);
-      fetchGroups();
+      const created = await campaignApi.createSegment({
+        name: segName.trim(),
+        description: segDesc.trim(),
+        definition: segmentDefinition,
+      });
+      await campaignApi.estimateSegment(created.id, { category: "MARKETING" }).catch(() => {});
+      setSegName("");
+      setSegDesc("");
+      setNotice({ type: "success", text: `Saved dynamic segment "${created.name}".` });
+      fetchSegments();
     } catch (err) {
-      setPageNotice({ type: "error", message: err.response?.data?.message || err.response?.data?.error || "Selected contacts could not be added." });
+      setNotice({ type: "error", text: err.response?.data?.error || err.message || "Could not save segment." });
+    } finally {
+      setSavingSeg(false);
     }
-    setAddingContacts(false);
+  };
+
+  const applyPreset = (p) => {
+    setSegName(p.name);
+    setSegDesc(p.description || "");
+    setSegLogic(p.definition?.logic || "AND");
+    setIncludeRules(Array.isArray(p.definition?.include) ? p.definition.include : []);
+    setExcludeRules(Array.isArray(p.definition?.exclude) ? p.definition.exclude : []);
   };
 
   return (
-    <div className="hl-page">
-      <WAWorkspaceGuide section="groups" />      <div className="hl-commandbar">
-        <div className="flex items-center gap-3">
-          <Users size={28} style={{ color: "var(--color-ink)" }} />
-          <h1 className="hl-title">Contact Groups</h1>
-          <span className="hl-badge">{groups.length} groups</span>
-        </div>
-        <button onClick={() => setShowCreate(true)} className="hl-btn-primary">
-          <Plus size={16} /> New Group
-        </button>
-      </div>
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-5">
+        {/* Page Header */}
+        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Contact Groups &amp; Audience Segments</h1>
+            <p className="text-sm text-slate-700 mt-1">
+              Manage reusable recipient lists, dynamic CRM filters, and consent eligibility for WhatsApp campaigns.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to="/dashboard/campaigns/consent"
+              className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 rounded-lg bg-white border border-slate-300 text-slate-800 text-xs font-semibold hover:bg-slate-100 cursor-pointer"
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-700" aria-hidden="true" />
+              <span>Consent &amp; DNC</span>
+            </Link>
+            <Link
+              to="/dashboard/campaigns/import"
+              className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 rounded-lg bg-white border border-slate-300 text-slate-800 text-xs font-semibold hover:bg-slate-100 cursor-pointer"
+            >
+              <Upload className="w-4 h-4 text-slate-700" aria-hidden="true" />
+              <span>Full CSV/XLSX import</span>
+            </Link>
+            <Link
+              to="/dashboard/campaigns"
+              className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-lg bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 cursor-pointer"
+            >
+              <Send className="w-4 h-4" aria-hidden="true" />
+              <span>Campaign center</span>
+            </Link>
+          </div>
+        </header>
 
-      {pageNotice && <div role={pageNotice.type === "error" ? "alert" : "status"} className="hl-card flex flex-wrap items-center justify-between gap-3 p-3 text-sm" style={{ borderColor: pageNotice.type === "error" ? "var(--color-error)" : "var(--color-success)", color: pageNotice.type === "error" ? "var(--color-error)" : "var(--color-success)" }}><span>{pageNotice.message}</span><div className="flex gap-2">{pageNotice.type === "error" && <button type="button" className="hl-btn-secondary" onClick={fetchGroups}>Retry</button>}<button type="button" className="hl-btn-secondary" onClick={() => setPageNotice(null)}>Dismiss</button></div></div>}
-
-      <div className="wa-group-toolbar"><label><Search size={16} /><input aria-label="Search contact groups" placeholder="Search groups by name or description" value={groupSearch} onChange={e => setGroupSearch(e.target.value)} /></label><label>Sort by<select value={groupSort} onChange={e => setGroupSort(e.target.value)}><option value="name">Group name</option><option value="size">Most contacts</option></select></label><span aria-live="polite">{visibleGroups.length} groups</span></div>
-      {loading ? (
-        <div role="status" className="flex items-center justify-center gap-3 py-20"><Loader2 size={24} className="animate-spin" style={{ color: "var(--color-ink)" }} />Loading groups…</div>
-      ) : groups.length === 0 ? (
-        <div className="hl-card hl-empty">
-          <Users size={48} className="mx-auto mb-4 opacity-50" />
-          <p className="hl-empty-title">No groups yet</p>
-          <p className="text-sm">Create contact groups to organize your audience</p>
-        </div>
-      ) : visibleGroups.length === 0 ? <div className="hl-card hl-empty"><p className="hl-empty-title">No matching groups</p><p>Try a different group name or clear your search.</p><button type="button" className="hl-btn-secondary mt-4" onClick={() => setGroupSearch("")}>Clear search</button></div> : (
-        <div className="space-y-3">
-          {visibleGroups.map((g) => (
-            <div key={g.id} className="hl-card overflow-hidden">
-              <div className="wa-group-row flex items-center justify-between p-4">
-                <button type="button" className="wa-group-expand" aria-expanded={expandedGroup === g.id} aria-label={`${expandedGroup === g.id ? "Collapse" : "Expand"} ${g.name}`} onClick={() => toggleExpand(g.id)}>
-                <div className="flex items-center gap-3">
-                  {expandedGroup === g.id ? <ChevronDown size={18} style={{ color: "var(--color-ink-2)" }} /> : <ChevronRight size={18} style={{ color: "var(--color-ink-2)" }} />}
-                  <div>
-                    <h3 className="font-semibold" style={{ color: "var(--color-ink)" }}>{g.name}</h3>
-                    <p className="hl-subtitle">{g.contact_count || 0} contacts{g.description ? ` — ${g.description}` : ""}</p>
-                  </div>
-                </div>
-                </button>
-                <div className="flex items-center gap-2 flex-wrap" onClick={e => e.stopPropagation()}>
-                  <button
-                    onClick={() => openContactPicker(g.id)}
-                    className="hl-btn-primary"
-                    title="Add contacts from CRM"
-                  >
-                    <UserPlus size={14} />
-                    <span>Add Contacts</span>
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const token = localStorage.getItem("token");
-                      const { data } = await axios.get(`${API}/api/wa/groups/${g.id}`, { headers: { Authorization: `Bearer ${token}` } });
-                      setSelectedGroupForBulk(data.contacts || []);
-                      setShowBulkModal(true);
-                    }}
-                    className="hl-btn-secondary"
-                    title="Launch WhatsApp broadcast wizard"
-                  >
-                    <Send size={14} />
-                    <span>Send Bulk</span>
-                  </button>
-                  <button onClick={() => { setImportModal(g.id); setBulkInput(""); }} className="hl-btn-secondary" style={{ padding: "var(--space-2xs) var(--space-xs)" }} title="Manual import (paste numbers)"><Upload size={16} /></button>
-                  <button onClick={() => handleDelete(g.id)} className="hl-btn-danger-ghost" style={{ padding: "var(--space-2xs) var(--space-xs)" }}><Trash2 size={16} /></button>
-                </div>
-              </div>
-
-              {expandedGroup === g.id && (
-                <div className="p-4" style={{ borderTop: "1px solid var(--color-rule)", background: "var(--color-paper)" }}>
-                  {contactsLoading ? (
-                    <div className="flex justify-center py-4"><Loader2 size={20} className="animate-spin" style={{ color: "var(--color-ink-2)" }} /></div>
-                  ) : groupContacts.length === 0 ? (
-                    <div className="hl-empty">No contacts in this group. Import contacts to start.</div>
-                  ) : (
-                    <div className="space-y-1">
-                      {groupContacts.map((c) => (
-                        <div key={c.id} className="hl-card flex items-center justify-between px-3 py-2">
-                          <div>
-                            <span className="text-sm font-medium" style={{ color: "var(--color-ink)" }}>{c.name || "Unknown"}</span>
-                            <span className="hl-id ml-2">+{c.country_code || "91"} {c.phone}</span>
-                            {c.notes && <span className="text-xs ml-2" style={{ color: "var(--color-ink-2)" }}>{c.notes}</span>}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <a
-                              href={`/whatsapp?phone=${c.phone}`}
-                              className="p-1 rounded transition"
-                              style={{ color: "var(--color-ink)" }}
-                              title="Open in Live Chat"
-                            >
-                              <Send size={13} />
-                            </a>
-                            <button onClick={() => handleDeleteContact(g.id, c.id)} className="p-1 rounded" style={{ color: "var(--color-error)" }} title="Remove from group">
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                      <button onClick={() => downloadCSV(groupContacts, g.name)} className="flex items-center gap-1 text-xs mt-2 px-1" style={{ color: "var(--color-ink-2)" }}>
-                        <Download size={12} /> Export CSV
-                      </button>
-                    </div>
-                  )}
-                </div>
+        {/* Notice Banner */}
+        {notice && (
+          <div
+            role="status"
+            className={`p-3 rounded-lg border text-sm flex items-center justify-between gap-2 ${
+              notice.type === "error"
+                ? "bg-rose-50 border-rose-300 text-rose-900"
+                : "bg-emerald-50 border-emerald-300 text-emerald-900"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {notice.type === "error" ? (
+                <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden="true" />
               )}
+              <span>{notice.text}</span>
             </div>
-          ))}
-        </div>
-      )}
-
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCreate(false)}>
-          <div ref={groupDialog} role="dialog" aria-modal="true" aria-label="Create contact group" className="hl-card w-full max-w-md" onClick={e => e.stopPropagation()}>
-            {pageNotice?.type === "error" && <p role="alert" className="wa-form-error m-4">{pageNotice.message}</p>}
-            <div className="flex items-center justify-between p-5" style={{ borderBottom: "1px solid var(--color-rule)" }}>
-              <h2 className="text-lg font-bold">New Contact Group</h2>
-              <button onClick={() => setShowCreate(false)}><X size={20} style={{ color: "var(--color-ink-2)" }} /></button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Group Name *</label>
-                <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} className="hl-input w-full" placeholder="Customers 2024" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Description</label>
-                <input type="text" value={groupDesc} onChange={e => setGroupDesc(e.target.value)} className="hl-input w-full" placeholder="All active customers" />
-              </div>
-            </div>
-            <div className="flex gap-3 p-5" style={{ borderTop: "1px solid var(--color-rule)" }}>
-              <button onClick={() => setShowCreate(false)} className="hl-btn-secondary flex-1">Cancel</button>
-              <button onClick={handleCreate} disabled={creatingGroup || !groupName.trim()} className="hl-btn-primary flex-1">{creatingGroup ? "Creating…" : "Create group"}</button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              aria-label="Dismiss notification"
+              className="p-1 rounded hover:bg-black/5 cursor-pointer"
+            >
+              <X className="w-4 h-4" aria-hidden="true" />
+            </button>
           </div>
+        )}
+
+        {/* Mode Switcher Tabs */}
+        <div role="tablist" aria-label="Audience views" className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "groups"}
+            onClick={() => setActiveTab("groups")}
+            className={`min-h-[44px] px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer border transition-colors ${
+              activeTab === "groups"
+                ? "bg-emerald-700 text-white border-emerald-700"
+                : "bg-white text-slate-800 border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            Contact groups ({groups.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "segments"}
+            onClick={() => setActiveTab("segments")}
+            className={`min-h-[44px] px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer border transition-colors ${
+              activeTab === "segments"
+                ? "bg-emerald-700 text-white border-emerald-700"
+                : "bg-white text-slate-800 border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            Dynamic CRM segments ({segments.length})
+          </button>
         </div>
-      )}
 
-      {importModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setImportModal(null)}>
-          <div className="hl-card w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5" style={{ borderBottom: "1px solid var(--color-rule)" }}>
-              <h2 className="text-lg font-bold">Import Contacts</h2>
-              <button onClick={() => setImportModal(null)}><X size={20} style={{ color: "var(--color-ink-2)" }} /></button>
-            </div>
-            <div className="p-5">
-              <p className="text-sm mb-3">One phone number per line. Optionally add name and notes:</p>
-              <textarea value={bulkInput} onChange={e => setBulkInput(e.target.value)} rows={8} className="hl-input w-full font-mono" placeholder="9876543210, Rajesh, VIP customer&#10;9876543211, Priya&#10;9876543212" />
-              <p className="text-xs mt-1">Format: phone, name, notes (one per line)</p>
-            </div>
-            <div className="flex gap-3 p-5" style={{ borderTop: "1px solid var(--color-rule)" }}>
-              <button onClick={() => setImportModal(null)} className="hl-btn-secondary flex-1">Cancel</button>
-              <button onClick={() => handleBulkImport(importModal)} disabled={!bulkInput.trim()} className="hl-btn-primary flex-1">Import</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Contact Picker Modal - Select from CRM Clients */}
-      {showContactPicker && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowContactPicker(false)}>
-          <div className="hl-card w-full max-w-2xl max-h-[85dvh] min-h-0 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 sm:p-5 gap-3 shrink-0" style={{ borderBottom: "1px solid var(--color-rule)" }}>
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "var(--color-paper)" }}>
-                  <UserPlus size={20} style={{ color: "var(--color-ink)" }} />
-                </div>
-                <div className="min-w-0">
-                  <h2 className="text-base sm:text-lg font-bold truncate">Add Contacts from CRM</h2>
-                  <p className="hl-subtitle">{filteredClients.length} clients found {selectedClients.size > 0 && `— ${selectedClients.size} selected`}</p>
-                </div>
-              </div>
-              <button onClick={() => setShowContactPicker(false)} className="p-2 rounded-lg transition shrink-0">
-                <X size={20} style={{ color: "var(--color-ink-2)" }} />
-              </button>
-            </div>
-
-            {/* Search & Filter Bar */}
-            <div className="px-5 py-3 shrink-0" style={{ borderBottom: "1px solid var(--color-rule)", background: "var(--color-paper)" }}>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 relative">
-                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--color-ink-2)" }} />
-                  <input
-                    type="text"
-                    value={clientSearch}
-                    onChange={e => setClientSearch(e.target.value)}
-                    placeholder="Search by name, phone, email, or company..."
-                    className="hl-input w-full pl-10 pr-4"
-                  />
-                  {clientSearch && (
-                    <button onClick={() => setClientSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded">
-                      <X size={14} style={{ color: "var(--color-ink-2)" }} />
-                    </button>
-                  )}
-                </div>
-                <div className="hl-tabs">
+        {/* TAB 1: CONTACT GROUPS (Master-Detail Workspace) */}
+        {activeTab === "groups" && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* Left Rail: Groups List */}
+            <section aria-label="Contact groups list" className="lg:col-span-4 bg-white rounded-xl border border-slate-300 overflow-hidden">
+              <div className="p-4 border-b border-slate-200 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-bold text-slate-900">Your groups</h2>
                   <button
-                    onClick={() => setClientFilter("all")}
-                    className={`hl-tab ${clientFilter === "all" ? "is-active" : ""}`}
+                    type="button"
+                    onClick={() => {
+                      setGroupName("");
+                      setGroupDesc("");
+                      setGroupModal({ mode: "create" });
+                    }}
+                    className="inline-flex items-center gap-1 min-h-[36px] px-3 py-1.5 rounded-lg bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 cursor-pointer"
                   >
-                    All
-                  </button>
-                  <button
-                    onClick={() => setClientFilter("has_phone")}
-                    className={`hl-tab ${clientFilter === "has_phone" ? "is-active" : ""}`}
-                  >
-                    <Phone size={12} className="inline mr-1" />
-                    Has Phone
+                    <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>New group</span>
                   </button>
                 </div>
-              </div>
-
-              {/* Select All / Deselect */}
-              <div className="flex items-center justify-between mt-2">
-                <div className="flex items-center gap-2">
-                  <button onClick={selectAllFiltered} className="text-xs font-semibold hover:underline" style={{ color: "var(--color-ink)" }}>Select all ({filteredClients.length})</button>
-                  {selectedClients.size > 0 && (
-                    <button onClick={deselectAll} className="text-xs hover:underline" style={{ color: "var(--color-ink-2)" }}>Clear selection</button>
-                  )}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <label htmlFor="group-search" className="sr-only">Search groups</label>
+                    <Search className="w-4 h-4 text-slate-500 absolute left-2.5 top-2.5" aria-hidden="true" />
+                    <input
+                      id="group-search"
+                      value={groupSearch}
+                      onChange={(e) => setGroupSearch(e.target.value)}
+                      placeholder="Filter groups..."
+                      className="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-lg text-slate-900"
+                    />
+                  </div>
+                  <label htmlFor="group-sort" className="sr-only">Sort groups</label>
+                  <select
+                    id="group-sort"
+                    value={groupSort}
+                    onChange={(e) => setGroupSort(e.target.value)}
+                    className="px-2.5 py-2 text-xs border border-slate-300 rounded-lg bg-white text-slate-800 cursor-pointer"
+                  >
+                    <option value="recent">Newest</option>
+                    <option value="size">Largest</option>
+                    <option value="name">A to Z</option>
+                  </select>
                 </div>
-                <span className="text-[10px]" style={{ color: "var(--color-ink-2)" }}>{filteredClients.length} of {allClients.length} clients</span>
               </div>
-            </div>
 
-            {/* Client List */}
-            <div className="flex-1 overflow-y-auto min-h-0">
-              {clientsLoading ? (
-                <div className="flex justify-center py-12"><Loader2 size={28} className="animate-spin" style={{ color: "var(--color-ink)" }} /></div>
-              ) : filteredClients.length === 0 ? (
-                <div className="hl-empty">
-                  <Users size={40} className="mx-auto mb-3 opacity-40" />
-                  <p className="hl-empty-title">No clients found</p>
-                  <p className="text-xs mt-1">{clientSearch ? "Try a different search term" : "No CRM contacts available"}</p>
+              {groupsLoading ? (
+                <div className="p-6 text-center text-xs text-slate-700">
+                  <Loader2 className="w-4 h-4 animate-spin inline mr-1.5" aria-hidden="true" />
+                  Loading contact groups...
+                </div>
+              ) : groupsError ? (
+                <div className="p-5 text-xs text-rose-800 bg-rose-50 space-y-2">
+                  <p>{groupsError}</p>
+                  <button type="button" onClick={fetchGroups} className="underline font-semibold cursor-pointer">
+                    Try again
+                  </button>
+                </div>
+              ) : visibleGroups.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-700 space-y-2">
+                  <p>No contact groups match your filter.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGroupName("");
+                      setGroupDesc("");
+                      setGroupModal({ mode: "create" });
+                    }}
+                    className="px-3 py-2 rounded-lg bg-emerald-700 text-white font-semibold cursor-pointer"
+                  >
+                    Create your first group
+                  </button>
                 </div>
               ) : (
-                <div className="divide-y">
-                  {filteredClients.map((client) => {
-                    const isSelected = selectedClients.has(client.id);
-                    const hasPhone = client.phone && client.phone.length >= 10;
+                <ul className="divide-y divide-slate-200 max-h-[560px] overflow-y-auto">
+                  {visibleGroups.map((g) => {
+                    const selected = Number(selectedGroupId) === Number(g.id);
                     return (
-                      <div
-                        key={client.id}
-                        onClick={() => hasPhone && toggleClientSelect(client.id)}
-                        className={`flex items-center gap-3 px-5 py-3 transition cursor-pointer ${hasPhone ? "hover:bg-[var(--color-paper)]" : "opacity-50 cursor-not-allowed"} ${isSelected ? "bg-[var(--color-accent-soft)]" : ""}`}
-                      >
-                        <div className="shrink-0">
-                          {isSelected ? (
-                            <CheckSquare size={18} style={{ color: "var(--color-ink)" }} />
-                          ) : (
-                            <Square size={18} style={{ color: "var(--color-ink-2)", opacity: hasPhone ? 1 : 0.5 }} />
-                          )}
-                        </div>
-                        <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--color-paper)" }}>
-                          <span className="text-sm font-bold" style={{ color: "var(--color-ink)" }}>{(client.name || "?")[0].toUpperCase()}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold truncate" style={{ color: "var(--color-ink)" }}>{client.name || "Unknown"}</span>
-                            {client.company && (
-                              <span className="hl-badge shrink-0">
-                                <Building2 size={9} /> {client.company}
-                              </span>
-                            )}
+                      <li key={g.id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedGroupId(g.id)}
+                          className={`w-full text-left px-4 py-3 flex items-start justify-between gap-3 cursor-pointer transition-colors ${
+                            selected ? "bg-emerald-50 border-l-4 border-emerald-700" : "hover:bg-slate-50"
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-slate-900 truncate">{g.name}</div>
+                            {g.description && <div className="text-xs text-slate-600 truncate mt-0.5">{g.description}</div>}
                           </div>
-                          <div className="flex items-center gap-3 mt-0.5">
-                            {client.phone && (
-                              <span className="text-xs flex items-center gap-1" style={{ color: "var(--color-ink-2)" }}>
-                                <Phone size={10} /> +{client.phone}
-                              </span>
-                            )}
-                            {client.email && (
-                              <span className="text-xs truncate" style={{ color: "var(--color-ink-2)" }}>{client.email}</span>
-                            )}
-                          </div>
-                        </div>
-                        {hasPhone && (
-                          <div className="text-[10px] shrink-0" style={{ color: "var(--color-ink-2)" }}>
-                            {isSelected ? "Added" : "Click to add"}
-                          </div>
-                        )}
-                        {!hasPhone && (
-                          <span className="hl-badge hl-badge-warn shrink-0">No phone</span>
-                        )}
-                      </div>
+                          <span className="shrink-0 px-2 py-0.5 rounded bg-slate-200 text-slate-900 text-xs font-semibold">
+                            {g.contact_count ?? g.total_contacts ?? 0}
+                          </span>
+                        </button>
+                      </li>
                     );
                   })}
+                </ul>
+              )}
+            </section>
+
+            {/* Right Pane: Selected Group Contacts & Actions */}
+            <section aria-label="Selected group details" className="lg:col-span-8 bg-white rounded-xl border border-slate-300 overflow-hidden">
+              {!activeGroup ? (
+                <div className="p-10 text-center space-y-2">
+                  <Users className="w-8 h-8 text-slate-500 mx-auto" aria-hidden="true" />
+                  <h2 className="text-base font-semibold text-slate-900">Select a contact group</h2>
+                  <p className="text-xs text-slate-600">
+                    Choose a group on the left to manage members, verify consent eligibility, or launch a personalized WhatsApp campaign.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-200">
+                  {/* Group Action Header */}
+                  <div className="p-5 flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-bold text-slate-900">{activeGroup.name}</h2>
+                        <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-800">
+                          {groupContacts.length} contacts
+                        </span>
+                      </div>
+                      {activeGroup.description && <p className="text-xs text-slate-700 mt-1">{activeGroup.description}</p>}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/dashboard/campaigns/create?group_id=${activeGroup.id}`)}
+                        className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 rounded-lg bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 cursor-pointer"
+                      >
+                        <Send className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Create campaign</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={openCrmPicker}
+                        className="inline-flex items-center gap-1.5 min-h-[40px] px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-800 text-xs font-semibold hover:bg-slate-100 cursor-pointer"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Pick from CRM</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImportOpen(true)}
+                        className="inline-flex items-center gap-1.5 min-h-[40px] px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-800 text-xs font-semibold hover:bg-slate-100 cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Upload CSV/XLSX</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCheckEligibility}
+                        disabled={eligibilityLoading}
+                        className="inline-flex items-center gap-1.5 min-h-[40px] px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-800 text-xs font-semibold hover:bg-slate-100 cursor-pointer disabled:cursor-not-allowed"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" aria-hidden="true" />
+                        <span>{eligibilityLoading ? "Checking..." : "Check eligibility"}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExportCsv}
+                        disabled={groupContacts.length === 0}
+                        aria-label="Export group as CSV"
+                        className="min-h-[40px] px-2.5 py-2 rounded-lg bg-white border border-slate-300 text-slate-800 hover:bg-slate-100 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Download className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGroupName(activeGroup.name || "");
+                          setGroupDesc(activeGroup.description || "");
+                          setGroupModal({ mode: "edit", group: activeGroup });
+                        }}
+                        aria-label="Rename group"
+                        className="min-h-[40px] px-2.5 py-2 rounded-lg bg-white border border-slate-300 text-slate-800 hover:bg-slate-100 cursor-pointer"
+                      >
+                        <Edit2 className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteGroup(activeGroup)}
+                        aria-label="Delete group"
+                        className="min-h-[40px] px-2.5 py-2 rounded-lg bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Live Consent & Suppression Eligibility Breakdown */}
+                  {eligibility?.stats && (
+                    <div className="p-4 bg-slate-50 grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+                      <div className="p-2.5 rounded-lg bg-white border border-slate-200">
+                        <div className="text-slate-600">Eligible now</div>
+                        <div className="text-lg font-bold text-emerald-800">{eligibility.stats.eligible_count}</div>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-white border border-slate-200">
+                        <div className="text-slate-600">Missing consent</div>
+                        <div className="text-lg font-bold text-amber-800">{eligibility.stats.no_consent_count}</div>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-white border border-slate-200">
+                        <div className="text-slate-600">Suppressed / DNC</div>
+                        <div className="text-lg font-bold text-rose-800">{eligibility.stats.suppressed_count}</div>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-white border border-slate-200">
+                        <div className="text-slate-600">Opted out</div>
+                        <div className="text-lg font-bold text-rose-800">{eligibility.stats.opted_out_count}</div>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-white border border-slate-200">
+                        <div className="text-slate-600">Invalid / Dup</div>
+                        <div className="text-lg font-bold text-slate-900">
+                          {eligibility.stats.invalid_phone_count + eligibility.stats.duplicate_count}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Quick Inline Add Contact Row */}
+                  <form onSubmit={handleAddSingleContact} className="p-4 bg-slate-50/70 grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+                    <div>
+                      <label htmlFor="quick-phone" className="block text-xs font-semibold text-slate-800 mb-1">Phone *</label>
+                      <input
+                        id="quick-phone"
+                        required
+                        value={singlePhone}
+                        onChange={(e) => setSinglePhone(e.target.value)}
+                        placeholder="+91 9876543210"
+                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="quick-name" className="block text-xs font-semibold text-slate-800 mb-1">Contact name</label>
+                      <input
+                        id="quick-name"
+                        value={singleName}
+                        onChange={(e) => setSingleName(e.target.value)}
+                        placeholder="Your customer name"
+                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="quick-notes" className="block text-xs font-semibold text-slate-800 mb-1">City or note</label>
+                      <input
+                        id="quick-notes"
+                        value={singleNotes}
+                        onChange={(e) => setSingleNotes(e.target.value)}
+                        placeholder="City, tag, or reference"
+                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={importing}
+                      className="min-h-[38px] px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {importing ? "Adding..." : "Add contact"}
+                    </button>
+                  </form>
+
+                  {/* Members Search + Table */}
+                  <div className="p-4 space-y-3">
+                    <div className="relative max-w-xs">
+                      <label htmlFor="member-search" className="sr-only">Filter group members</label>
+                      <Search className="w-4 h-4 text-slate-500 absolute left-2.5 top-2.5" aria-hidden="true" />
+                      <input
+                        id="member-search"
+                        value={contactSearch}
+                        onChange={(e) => setContactSearch(e.target.value)}
+                        placeholder="Search contacts in group..."
+                        className="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-lg"
+                      />
+                    </div>
+
+                    <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-100 text-left text-slate-800 font-semibold">
+                          <tr>
+                            <th className="px-3 py-2.5">Name</th>
+                            <th className="px-3 py-2.5">Phone</th>
+                            <th className="px-3 py-2.5">Notes / Context</th>
+                            <th className="px-3 py-2.5 text-right">Remove</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {contactsLoading ? (
+                            <tr>
+                              <td colSpan={4} className="px-3 py-8 text-center text-slate-700">
+                                <Loader2 className="w-4 h-4 animate-spin inline mr-1.5" aria-hidden="true" />
+                                Loading group members...
+                              </td>
+                            </tr>
+                          ) : visibleContacts.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="px-3 py-8 text-center text-slate-700">
+                                No contacts in this group yet. Add a number above, pick from CRM, or upload a CSV/XLSX sheet.
+                              </td>
+                            </tr>
+                          ) : (
+                            visibleContacts.map((c) => (
+                              <tr key={c.id} className="hover:bg-slate-50">
+                                <td className="px-3 py-2.5 font-medium text-slate-900">{c.name || "Unnamed contact"}</td>
+                                <td className="px-3 py-2.5 font-mono text-slate-800">{c.phone}</td>
+                                <td className="px-3 py-2.5 text-slate-700">{c.notes || ""}</td>
+                                <td className="px-3 py-2.5 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveContact(c.id)}
+                                    aria-label={`Remove ${c.name || c.phone}`}
+                                    className="p-1.5 rounded text-slate-600 hover:text-rose-700 hover:bg-rose-50 cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               )}
+            </section>
+          </div>
+        )}
+
+        {/* TAB 2: DYNAMIC CRM SEGMENTS */}
+        {activeTab === "segments" && (
+          <div className="space-y-5">
+            {presets.length > 0 && (
+              <div className="bg-white rounded-xl border border-slate-300 p-4">
+                <div className="text-xs font-bold text-slate-800 mb-2">Starter segment rules</div>
+                <div className="flex flex-wrap gap-2">
+                  {presets.map((p) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => applyPreset(p)}
+                      className="min-h-[36px] px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-emerald-50 border border-slate-300 text-slate-800 text-xs font-medium cursor-pointer"
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+              <form onSubmit={handleSaveSegment} className="lg:col-span-8 bg-white rounded-xl border border-slate-300 p-5 space-y-4">
+                <h2 className="text-base font-bold text-slate-900">Build dynamic CRM segment</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="seg-name" className="block text-xs font-semibold text-slate-800 mb-1">Segment name *</label>
+                    <input
+                      id="seg-name"
+                      required
+                      value={segName}
+                      onChange={(e) => setSegName(e.target.value)}
+                      placeholder="VIP customers in Chennai"
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="seg-desc" className="block text-xs font-semibold text-slate-800 mb-1">Description</label>
+                    <input
+                      id="seg-desc"
+                      value={segDesc}
+                      onChange={(e) => setSegDesc(e.target.value)}
+                      placeholder="Who this audience targets"
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">Include contacts matching</span>
+                    <select
+                      aria-label="Match logic"
+                      value={segLogic}
+                      onChange={(e) => setSegLogic(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white cursor-pointer"
+                    >
+                      <option value="AND">All conditions (AND)</option>
+                      <option value="OR">Any condition (OR)</option>
+                    </select>
+                  </div>
+
+                  {includeRules.map((rule, idx) => (
+                    <div key={idx} className="flex flex-wrap gap-2 items-center">
+                      <select
+                        aria-label={`Include field ${idx + 1}`}
+                        value={rule.field}
+                        onChange={(e) => setIncludeRules((r) => r.map((x, i) => (i === idx ? { ...x, field: e.target.value } : x)))}
+                        className="px-2.5 py-2 text-xs border border-slate-300 rounded-lg bg-white cursor-pointer"
+                      >
+                        {SEGMENT_FIELDS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                      </select>
+                      <select
+                        aria-label={`Include operator ${idx + 1}`}
+                        value={rule.operator}
+                        onChange={(e) => setIncludeRules((r) => r.map((x, i) => (i === idx ? { ...x, operator: e.target.value } : x)))}
+                        className="px-2.5 py-2 text-xs border border-slate-300 rounded-lg bg-white cursor-pointer"
+                      >
+                        {SEGMENT_OPERATORS.map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
+                      </select>
+                      <input
+                        aria-label={`Include value ${idx + 1}`}
+                        value={rule.value}
+                        onChange={(e) => setIncludeRules((r) => r.map((x, i) => (i === idx ? { ...x, value: e.target.value } : x)))}
+                        placeholder="Value"
+                        className="flex-1 min-w-[140px] px-2.5 py-2 text-xs border border-slate-300 rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setIncludeRules((r) => r.filter((_, i) => i !== idx))}
+                        aria-label="Remove include rule"
+                        className="p-2 text-slate-600 hover:text-rose-700 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setIncludeRules((r) => [...r, { field: "tags", operator: "contains", value: "" }])}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 hover:underline cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" aria-hidden="true" /> Add include rule
+                  </button>
+                </div>
+
+                <div className="pt-3 border-t border-slate-200 space-y-2">
+                  <span className="text-xs font-bold text-slate-800 block">Exclude contacts matching</span>
+                  {excludeRules.map((rule, idx) => (
+                    <div key={idx} className="flex flex-wrap gap-2 items-center">
+                      <select
+                        aria-label={`Exclude field ${idx + 1}`}
+                        value={rule.field}
+                        onChange={(e) => setExcludeRules((r) => r.map((x, i) => (i === idx ? { ...x, field: e.target.value } : x)))}
+                        className="px-2.5 py-2 text-xs border border-slate-300 rounded-lg bg-white cursor-pointer"
+                      >
+                        {SEGMENT_FIELDS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                      </select>
+                      <select
+                        aria-label={`Exclude operator ${idx + 1}`}
+                        value={rule.operator}
+                        onChange={(e) => setExcludeRules((r) => r.map((x, i) => (i === idx ? { ...x, operator: e.target.value } : x)))}
+                        className="px-2.5 py-2 text-xs border border-slate-300 rounded-lg bg-white cursor-pointer"
+                      >
+                        {SEGMENT_OPERATORS.map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
+                      </select>
+                      <input
+                        aria-label={`Exclude value ${idx + 1}`}
+                        value={rule.value}
+                        onChange={(e) => setExcludeRules((r) => r.map((x, i) => (i === idx ? { ...x, value: e.target.value } : x)))}
+                        placeholder="Value"
+                        className="flex-1 min-w-[140px] px-2.5 py-2 text-xs border border-slate-300 rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setExcludeRules((r) => r.filter((_, i) => i !== idx))}
+                        aria-label="Remove exclude rule"
+                        className="p-2 text-slate-600 hover:text-rose-700 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setExcludeRules((r) => [...r, { field: "tags", operator: "contains", value: "" }])}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-rose-800 hover:underline cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" aria-hidden="true" /> Add exclude rule
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleEstimateSegment}
+                    disabled={estimating}
+                    className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    <Calculator className="w-4 h-4" aria-hidden="true" />
+                    <span>{estimating ? "Calculating..." : "Estimate eligible recipients"}</span>
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingSeg}
+                    className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-lg bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    <Users className="w-4 h-4" aria-hidden="true" />
+                    <span>{savingSeg ? "Saving..." : "Save segment"}</span>
+                  </button>
+                </div>
+              </form>
+
+              <aside className="lg:col-span-4 bg-white rounded-xl border border-slate-300 p-5 space-y-3">
+                <h3 className="text-sm font-bold text-slate-900">Backend eligibility preview</h3>
+                {!segEstimate?.stats ? (
+                  <p className="text-xs text-slate-700">
+                    Run an estimate to count matched CRM records, consent coverage, opt-outs, and suppressions on the server.
+                  </p>
+                ) : (
+                  <dl className="divide-y divide-slate-200 text-xs">
+                    {[
+                      ["Matched CRM contacts", segEstimate.stats.total_matched],
+                      ["Unique valid phones", segEstimate.stats.unique_phones],
+                      ["Missing consent", segEstimate.stats.no_consent_count],
+                      ["Opted out", segEstimate.stats.opted_out_count],
+                      ["Suppressed", segEstimate.stats.suppressed_count],
+                      ["Eligible recipients", segEstimate.stats.eligible_count],
+                    ].map(([label, value]) => (
+                      <div key={label} className="py-2 flex justify-between">
+                        <dt className="text-slate-700">{label}</dt>
+                        <dd className="font-bold text-slate-900">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </aside>
             </div>
 
-            {/* Footer Actions */}
-            <div className="flex items-center justify-between p-5 shrink-0" style={{ borderTop: "1px solid var(--color-rule)", background: "var(--color-paper)" }}>
-              <button onClick={() => setShowContactPicker(false)} className="hl-btn-secondary">
+            {/* Saved Segments Table */}
+            <div className="bg-white rounded-xl border border-slate-300 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-200 text-sm font-bold text-slate-900">
+                Saved dynamic segments ({segments.length})
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-100 text-left text-slate-800 font-semibold">
+                    <tr>
+                      <th className="px-4 py-2.5">Segment name</th>
+                      <th className="px-4 py-2.5">Type</th>
+                      <th className="px-4 py-2.5">Estimated eligible</th>
+                      <th className="px-4 py-2.5 text-right">Campaign</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {segmentsLoading ? (
+                      <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-700">Loading segments...</td></tr>
+                    ) : segments.length === 0 ? (
+                      <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-700">No saved segments yet. Build and save a segment above.</td></tr>
+                    ) : (
+                      segments.map((s) => (
+                        <tr key={s.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-semibold text-slate-900">{s.name}</td>
+                          <td className="px-4 py-3 text-slate-700">{s.segment_type} (v{s.version})</td>
+                          <td className="px-4 py-3 font-bold text-emerald-800">{s.estimated_count || 0}</td>
+                          <td className="px-4 py-3 text-right">
+                            <Link
+                              to={`/dashboard/campaigns/create?segment_id=${s.id}`}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-700 text-white font-semibold hover:bg-emerald-800 cursor-pointer"
+                            >
+                              Create campaign
+                            </Link>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modal: Create / Edit Group */}
+      {groupModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="group-modal-title">
+          <form onSubmit={handleSaveGroup} className="bg-white rounded-xl border border-slate-300 w-full max-w-md p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 id="group-modal-title" className="text-base font-bold text-slate-900">
+                {groupModal.mode === "edit" ? "Rename contact group" : "Create contact group"}
+              </h2>
+              <button type="button" onClick={() => setGroupModal(null)} aria-label="Close modal" className="p-1 rounded hover:bg-slate-100 cursor-pointer">
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
+            <div>
+              <label htmlFor="modal-group-name" className="block text-xs font-semibold text-slate-800 mb-1">Group name *</label>
+              <input
+                id="modal-group-name"
+                required
+                autoFocus
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                placeholder="Festival offer subscribers"
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+              />
+            </div>
+            <div>
+              <label htmlFor="modal-group-desc" className="block text-xs font-semibold text-slate-800 mb-1">Description</label>
+              <textarea
+                id="modal-group-desc"
+                rows={2}
+                value={groupDesc}
+                onChange={(e) => setGroupDesc(e.target.value)}
+                placeholder="Notes on who belongs in this list"
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setGroupModal(null)} className="min-h-[40px] px-4 py-2 rounded-lg border border-slate-300 text-xs font-semibold cursor-pointer">
                 Cancel
               </button>
-              <button
-                onClick={addSelectedToGroup}
-                disabled={selectedClients.size === 0 || addingContacts}
-                className="hl-btn-primary"
-              >
-                {addingContacts ? (
-                  <><Loader2 size={14} className="animate-spin" /> Adding...</>
-                ) : (
-                  <><UserPlus size={14} /> Add {selectedClients.size} Contact{selectedClients.size !== 1 ? "s" : ""} to Group</>
-                )}
+              <button type="submit" disabled={savingGroup} className="min-h-[40px] px-4 py-2 rounded-lg bg-emerald-700 text-white text-xs font-semibold cursor-pointer">
+                {savingGroup ? "Saving..." : "Save group"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal: CSV/XLSX & Bulk Paste Import into Group */}
+      {importOpen && activeGroup && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
+          <div className="bg-white rounded-xl border border-slate-300 w-full max-w-lg p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 id="import-modal-title" className="text-base font-bold text-slate-900">
+                Add contacts to {activeGroup.name}
+              </h2>
+              <button type="button" onClick={() => setImportOpen(false)} aria-label="Close modal" className="p-1 rounded hover:bg-slate-100 cursor-pointer">
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="group-file-upload" className="block text-xs font-semibold text-slate-800">Upload CSV or Excel (.xlsx)</label>
+              <input id="group-file-upload" type="file" accept=".csv,.xlsx,.xls" onChange={handleFileUpload} className="block w-full text-xs text-slate-800" />
+              {fileLabel && (
+                <p className="text-xs text-emerald-800 font-medium">
+                  Loaded {fileLabel}: {parsedFileContacts.length} valid contacts ready.
+                </p>
+              )}
+            </div>
+            <div>
+              <label htmlFor="group-bulk-paste" className="block text-xs font-semibold text-slate-800 mb-1">
+                Or paste lines (phone, name, note)
+              </label>
+              <textarea
+                id="group-bulk-paste"
+                rows={4}
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                placeholder="919876543210, Your Name, Chennai"
+                className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setImportOpen(false)} className="min-h-[40px] px-4 py-2 rounded-lg border border-slate-300 text-xs font-semibold cursor-pointer">
+                Cancel
+              </button>
+              <button type="button" onClick={handleConfirmImport} disabled={importing} className="min-h-[40px] px-4 py-2 rounded-lg bg-emerald-700 text-white text-xs font-semibold cursor-pointer">
+                {importing ? "Importing..." : "Add contacts"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <WhatsAppCampaignWizard
-        isOpen={showBulkModal}
-        onClose={() => setShowBulkModal(false)}
-        onSuccess={() => fetchGroups()}
-        initialContacts={selectedGroupForBulk || []}
-      />
+      {/* Modal: CRM Contact Picker */}
+      {pickerOpen && activeGroup && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="crm-picker-title">
+          <div className="bg-white rounded-xl border border-slate-300 w-full max-w-2xl p-5 space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between">
+              <h2 id="crm-picker-title" className="text-base font-bold text-slate-900">
+                Select CRM contacts for {activeGroup.name}
+              </h2>
+              <button type="button" onClick={() => setPickerOpen(false)} aria-label="Close modal" className="p-1 rounded hover:bg-slate-100 cursor-pointer">
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <input
+                aria-label="Search CRM contacts"
+                value={crmSearch}
+                onChange={(e) => setCrmSearch(e.target.value)}
+                placeholder="Search name, phone, city..."
+                className="flex-1 min-w-[180px] px-3 py-2 text-xs border border-slate-300 rounded-lg"
+              />
+              <select
+                aria-label="Filter by CRM source"
+                value={crmSourceFilter}
+                onChange={(e) => setCrmSourceFilter(e.target.value)}
+                className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white cursor-pointer"
+              >
+                {crmSourceTypes.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <button
+                type="button"
+                onClick={() => setSelectedPhones(new Set(filteredCrmSources.map((c) => c.phone)))}
+                className="px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold cursor-pointer"
+              >
+                Select visible ({filteredCrmSources.length})
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-200">
+              {crmLoading ? (
+                <div className="p-6 text-center text-xs text-slate-700">Loading CRM contacts...</div>
+              ) : filteredCrmSources.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-700">No CRM contacts match your search.</div>
+              ) : (
+                filteredCrmSources.map((c) => {
+                  const checked = selectedPhones.has(c.phone);
+                  return (
+                    <label key={c.id} className="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-slate-50 cursor-pointer text-xs">
+                      <span className="flex items-center gap-2.5 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const next = new Set(selectedPhones);
+                            if (checked) next.delete(c.phone);
+                            else next.add(c.phone);
+                            setSelectedPhones(next);
+                          }}
+                        />
+                        <span className="font-semibold text-slate-900 truncate">{c.name}</span>
+                        <span className="font-mono text-slate-700">{c.phone}</span>
+                      </span>
+                      <span className="text-slate-600 shrink-0">{c.source}{c.city ? ` (${c.city})` : ""}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-700">{selectedPhones.size} selected</span>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setPickerOpen(false)} className="min-h-[40px] px-4 py-2 rounded-lg border border-slate-300 text-xs font-semibold cursor-pointer">
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddSelectedFromCrm}
+                  disabled={addingFromCrm || selectedPhones.size === 0}
+                  className="min-h-[40px] px-4 py-2 rounded-lg bg-emerald-700 text-white text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {addingFromCrm ? "Adding..." : `Add ${selectedPhones.size} to group`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

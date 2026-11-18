@@ -2510,14 +2510,22 @@ function AutomationWorkspace() {
                       className="mt-4 flex items-center justify-between border-t pt-3"
                       style={{ borderColor: "var(--color-rule, #E8E8E8)" }}
                     >
-                      <div className="flex items-center gap-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/dashboard/campaigns/create?automation_id=${a.id}`)}
+                          className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition cursor-pointer"
+                          title="Bind this automation rule to a new campaign"
+                        >
+                          Use in campaign
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
                             setTestModal(a);
                             setTestResult(null);
                           }}
-                          className="rounded-md border px-2.5 py-1 text-xs font-semibold shadow-2xs hover:opacity-90 transition"
+                          className="rounded-md border px-2.5 py-1 text-xs font-semibold shadow-2xs hover:opacity-90 transition cursor-pointer"
                           style={{
                             borderColor: "var(--color-rule, #E8E8E8)",
                             background: "var(--color-paper-2, #ffffff)",
@@ -2529,7 +2537,7 @@ function AutomationWorkspace() {
                         <button
                           type="button"
                           onClick={() => openEdit(a)}
-                          className="rounded-md border px-2.5 py-1 text-xs font-semibold shadow-2xs hover:opacity-90 transition"
+                          className="rounded-md border px-2.5 py-1 text-xs font-semibold shadow-2xs hover:opacity-90 transition cursor-pointer"
                           style={{
                             borderColor: "var(--color-rule, #E8E8E8)",
                             background: "var(--color-paper-2, #ffffff)",

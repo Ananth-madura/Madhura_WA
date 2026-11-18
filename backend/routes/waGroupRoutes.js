@@ -69,17 +69,46 @@ router.delete("/:id", auth, async (req, res) => {
   }
 });
 
+router.get("/:id/eligibility", auth, async (req, res) => {
+  try {
+    const [rows] = await db.promise().query("SELECT id, name FROM wa_contact_groups WHERE id = ? AND tenant_id = ?", [req.params.id, req.tenantId]);
+    if (!rows.length) return res.status(404).json({ error: "Group not found" });
+    const { createAudienceBuilderService } = require("../services/campaign/audienceBuilderService");
+    const audienceService = createAudienceBuilderService({ db });
+    const result = await audienceService.evaluateAudience(
+      req.tenantId,
+      { group_id: Number(req.params.id) },
+      { category: String(req.query.category || "MARKETING").toUpperCase(), sampleLimit: 20 }
+    );
+    res.json({
+      group_id: Number(req.params.id),
+      group_name: rows[0].name,
+      stats: result.stats,
+      sample_eligible: result.sample_eligible,
+      sample_excluded: result.sample_excluded,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post("/:id/contacts", auth, async (req, res) => {
   try {
     const { contacts } = req.body;
     if (!contacts || !Array.isArray(contacts) || !contacts.length)
       return res.status(400).json({ error: "contacts array required" });
 
-    const values = contacts.map((c) => [req.params.id, c.name || null, c.phone, c.country_code || "91", c.notes || null, req.tenantId]);
-    await db.promise().query(
-      "INSERT INTO wa_group_contacts (group_id, name, phone, country_code, notes, tenant_id) VALUES ?",
-      [values]
-    );
+    const [groupRows] = await db.promise().query("SELECT id FROM wa_contact_groups WHERE id = ? AND tenant_id = ?", [req.params.id, req.tenantId]);
+    if (!groupRows.length) return res.status(404).json({ error: "Group not found" });
+
+    for (const c of contacts) {
+      const cleanPhone = String(c.phone || "").replace(/[^0-9]/g, "");
+      if (cleanPhone.length < 10) continue;
+      await db.promise().query(
+        "INSERT INTO wa_group_contacts (group_id, name, phone, country_code, notes, tenant_id) VALUES (?, ?, ?, ?, ?, ?)",
+        [req.params.id, c.name || null, cleanPhone, c.country_code || "91", c.notes || null, req.tenantId]
+      ).catch(() => {});
+    }
     const [countRow] = await db.promise().query("SELECT COUNT(*) as count FROM wa_group_contacts WHERE group_id = ? AND tenant_id = ?", [req.params.id, req.tenantId]);
     await db.promise().query("UPDATE wa_contact_groups SET total_contacts = ? WHERE id = ? AND tenant_id = ?", [countRow[0].count, req.params.id, req.tenantId]);
     const [contactsList] = await db.promise().query("SELECT * FROM wa_group_contacts WHERE group_id = ? AND tenant_id = ? ORDER BY created_at DESC", [req.params.id, req.tenantId]);

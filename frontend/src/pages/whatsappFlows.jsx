@@ -2804,12 +2804,25 @@ function FlowsWorkspace() {
 
                         <div className="flex items-center gap-1.5">
                           <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/dashboard/campaigns/create?flowbot_id=${flow.id}`);
+                            }}
+                            className="px-2.5 py-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition cursor-pointer"
+                            title="Attach this flowbot to a new campaign"
+                          >
+                            Use in campaign
+                          </button>
+                          <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               openTestDialog(flow.id, flow.name);
                             }}
-                            className="p-2 text-cyan-600 hover:text-cyan-800 hover:bg-cyan-50 rounded-xl transition"
+                            className="p-2 text-cyan-700 hover:text-cyan-900 hover:bg-cyan-50 rounded-xl transition cursor-pointer"
                             title="Send Flow Bot to Phone Number"
+                            aria-label={`Send ${flow.name} to phone number`}
                           >
                             <Send size={15} />
                           </button>

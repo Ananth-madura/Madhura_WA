@@ -20,6 +20,7 @@ export const ADMIN_ONLY_PATHS = [
   "/whatsapp/accounts",
   "/whatsapp/branches",
   "/whatsapp/billing",
+  "/admin/campaigns",
 ];
 
 export const MODULE_LABELS = {
@@ -101,6 +102,7 @@ export function canOpenWorkspacePath(pathname, admin) {
  * `/whatsapp/workspace/campaigns` is not swallowed by `/whatsapp/workspace`.
  */
 const ROUTE_MODULES = [
+  ["/dashboard/campaigns", "campaigns"],
   ["/whatsapp/workspace/campaigns", "campaigns"],
   ["/whatsapp/workspace", "customers"],
   ["/whatsapp/contacts", "contacts"],
