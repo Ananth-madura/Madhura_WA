@@ -340,6 +340,8 @@ app.use("/api/client-portal", require("./routes/clientPortalRoutes"));
 app.use("/api/v2", require("./routes/enterpriseBranchRoutes"));
 app.use("/api/v2", require("./routes/enterpriseOrganizationRoutes"));
 app.use("/api/v2/meta", require("./routes/enterpriseMetaRoutes"));
+app.use("/api/meta", require("./routes/enterpriseMetaRoutes"));
+app.use("/api/onboarding", require("./routes/onboardingRoutes"));
 app.use("/api/v2/billing", require("./routes/enterpriseBillingRoutes"));
 app.use("/api/v2/inbox", (req, res, next) => app.get("sharedInboxReady") ? next() : res.status(503).json({ message: "Shared inbox schema is not ready" }), require("./routes/enterpriseInboxRoutes"));
 app.use("/api/v2/workspace", (req, res, next) => app.get("sharedInboxReady") ? next() : res.status(503).json({ message: "Employee workspace schema is not ready" }), require("./routes/employeeWorkspaceRoutes"));

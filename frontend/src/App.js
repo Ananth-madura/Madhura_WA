@@ -44,6 +44,21 @@ const BranchAudit = lazy(() => import("./pages/branches/BranchAudit"));
 const ClientPortal = lazy(() => import("./pages/ClientPortal"));
 const ClientPortalManage = lazy(() => import("./pages/ClientPortalManage"));
 
+// Enterprise Onboarding & Public Activation Pages
+const OnboardingCommandCenter = lazy(() => import("./pages/onboarding/OnboardingCommandCenter"));
+const CompanyOnboarding = lazy(() => import("./pages/onboarding/CompanyOnboarding"));
+const PlanOnboarding = lazy(() => import("./pages/onboarding/PlanOnboarding"));
+const WhatsAppConnectOnboarding = lazy(() => import("./pages/onboarding/WhatsAppConnectOnboarding"));
+const WhatsAppNumbersOnboarding = lazy(() => import("./pages/onboarding/WhatsAppNumbersOnboarding"));
+const WhatsAppTestMessageOnboarding = lazy(() => import("./pages/onboarding/WhatsAppTestMessageOnboarding"));
+const OnboardingComplete = lazy(() => import("./pages/onboarding/OnboardingComplete"));
+
+// Public Compliance & Verification Pages
+const VerifyEmailPage = lazy(() => import("./pages/public/VerifyEmailPage"));
+const TermsPage = lazy(() => import("./pages/public/TermsPage"));
+const PrivacyPage = lazy(() => import("./pages/public/PrivacyPage"));
+const DataDeletionPage = lazy(() => import("./pages/public/DataDeletionPage"));
+
 /* Marketing site now lives in the sibling `landing_page` project (port 3002).
    Old public URLs on this origin hand off there so shared links keep working. */
 
@@ -77,7 +92,7 @@ const MARKETING_SECTIONS = [
   "developers", "resources", "pricing", "changelog", "company",
   "support", "trust", "legal", "status", "blog", "help",
   "getting-started", "tutorials", "videos", "case-studies", "docs",
-  "faqs", "compare", "demo", "onboarding", "news", "accessibility",
+  "faqs", "compare", "demo", "news", "accessibility",
   "com",
 ];
 
@@ -152,6 +167,21 @@ export default function App() {
                 </PublicOnly>
               }
             />
+            {/* Public Compliance & Account Verification Routes */}
+            <Route path="/signup/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/signup/verify-phone" element={<VerifyEmailPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/data-deletion" element={<DataDeletionPage />} />
+
+            {/* Enterprise Onboarding & Activation Routes */}
+            <Route path="/onboarding" element={<RequireAuth><OnboardingCommandCenter /></RequireAuth>} />
+            <Route path="/onboarding/company" element={<RequireAuth><CompanyOnboarding /></RequireAuth>} />
+            <Route path="/onboarding/plan" element={<RequireAuth><PlanOnboarding /></RequireAuth>} />
+            <Route path="/onboarding/whatsapp/connect" element={<RequireAuth><WhatsAppConnectOnboarding /></RequireAuth>} />
+            <Route path="/onboarding/whatsapp/numbers" element={<RequireAuth><WhatsAppNumbersOnboarding /></RequireAuth>} />
+            <Route path="/onboarding/whatsapp/test-message" element={<RequireAuth><WhatsAppTestMessageOnboarding /></RequireAuth>} />
+            <Route path="/onboarding/complete" element={<RequireAuth><OnboardingComplete /></RequireAuth>} />
             {/* ── Marketing site hand-off: every public marketing URL on this
                 origin forwards to the landing_page project, keeping the full
                 path, query and hash so shared links keep working. */}

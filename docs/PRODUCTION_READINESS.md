@@ -40,3 +40,22 @@
   - Backend running cleanly on port 5001.
   - Frontend compiled with 0 errors on port 3001.
   - Multi-repo git synchronization automated and verified across all 4 target repositories.
+
+---
+
+### 3. Customer Signup, Onboarding & WhatsApp Activation Checklist
+
+| Milestone | Component | Status | Production Verification |
+| :--- | :--- | :--- | :--- |
+| **Self-Service Registration** | `/signup` & `POST /api/auth/self-signup` | `VERIFIED` | Hashed credentials, automatic tenant and Head Office branch provisioning. |
+| **Account Identity Verification** | `/signup/verify-email` & `POST /api/auth/verify-email` | `VERIFIED` | 6-digit OTP challenge, 15m TTL, rate limited resend with 60s cooldown. |
+| **Company & Legal Setup** | `/onboarding/company` & `POST /api/onboarding/company` | `VERIFIED` | Legal entity, brand name, timezone, category, and GSTIN registration. |
+| **Plan Selection & Entitlements**| `/onboarding/plan` | `VERIFIED` | Dynamic plans loaded from DB, trial and paid checkout routing. |
+| **Onboarding Command Center** | `/onboarding` & `GET /api/onboarding/status` | `VERIFIED` | 10-step state machine evaluating authoritative database state in real time. |
+| **Meta Embedded Signup v4** | `/onboarding/whatsapp/connect` & `FB.login` | `VERIFIED` | App ID `780961714856006`, config ID `1189434863378370`, server-side token exchange. |
+| **Asset Discovery & Batching** | `POST /api/meta/assets/discover` | `VERIFIED` | Scans Meta Business Portfolios and discovers WABAs and unlinked numbers. |
+| **2-Step PIN Registration** | `/onboarding/whatsapp/numbers` | `VERIFIED` | Direct certificate registration with Meta Cloud API via 6-digit PIN. |
+| **Real Webhook Subscriptions** | `https://api.madhuratech.in/webhook` | `VERIFIED` | Automated WABA subscription, HMAC-SHA256 signature verification. |
+| **First Message Verification** | `/onboarding/whatsapp/test-message` | `VERIFIED` | Real Cloud API dispatch capturing verifiable `wamid` message receipt. |
+| **Public Compliance Pages** | `/terms`, `/privacy`, `/data-deletion` | `VERIFIED` | GDPR, DPDP Act 2023, and Meta Tech Provider compliance documents published. |
+

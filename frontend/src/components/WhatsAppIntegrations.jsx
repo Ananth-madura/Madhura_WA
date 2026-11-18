@@ -11,7 +11,9 @@ import {
   PlusCircle,
   ExternalLink,
   Lock,
-  Radio
+  Radio,
+  Copy,
+  Check
 } from "lucide-react";
 
 export default function WhatsAppIntegrations({
@@ -33,6 +35,8 @@ export default function WhatsAppIntegrations({
   const [selectedNumbers, setSelectedNumbers] = useState({});
   const [connectingBatch, setConnectingBatch] = useState(false);
   const [batchNotice, setBatchNotice] = useState("");
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedToken, setCopiedToken] = useState(false);
 
   // Manual token connection state
   const [manualData, setManualData] = useState({
@@ -44,6 +48,22 @@ export default function WhatsAppIntegrations({
     branchIds: [],
     defaultBranchIds: [],
   });
+
+  const webhookCallbackUrl = setup?.webhookUrl || setup?.webhook_url || "https://api.madhuratech.in/webhook";
+  const webhookVerifyToken = setup?.verifyToken || setup?.verify_token || "madhura_wa_verify_2026";
+
+  const handleCopyText = (text, type) => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+    if (type === "url") {
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 2000);
+    } else {
+      setCopiedToken(true);
+      setTimeout(() => setCopiedToken(false), 2000);
+    }
+  };
 
   const handleRunDiscovery = async (wabaId = null) => {
     setDiscovering(true);
@@ -412,71 +432,143 @@ export default function WhatsAppIntegrations({
         </div>
       )}
 
-      {/* Tab 3: Direct Token Fallback */}
+      {/* Tab 3: Direct Token / Bring Your Own Meta API */}
       {tab === "manual" && (
-        <form onSubmit={handleExecuteManualConnect} className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
-          <h3 className="text-lg font-bold text-slate-900">Direct Token / Custom Setup</h3>
-          <p className="text-xs text-slate-600">
-            For power users using direct System User access tokens or custom Meta applications.
-          </p>
+        <div className="space-y-6">
+          {/* Webhook Configuration Guide */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  Meta Webhook Configuration
+                </h4>
+                <p className="text-xs text-slate-600 mt-1 max-w-xl leading-relaxed">
+                  Configure these endpoints in your <strong>Meta App Dashboard &gt; WhatsApp &gt; Configuration</strong> to receive incoming messages, customer delivery receipts, and flow events in real-time.
+                </p>
+              </div>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-700">Webhook Callback URL:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(webhookCallbackUrl, "url")}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 focus:outline-none"
+                  >
+                    {copiedUrl ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedUrl ? "Copied!" : "Copy URL"}</span>
+                  </button>
+                </div>
+                <code className="block bg-slate-50 px-2 py-1 rounded text-slate-800 font-mono text-[11px] break-all border border-slate-100">
+                  {webhookCallbackUrl}
+                </code>
+              </div>
+
+              <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-700">Verify Token:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(webhookVerifyToken, "token")}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 focus:outline-none"
+                  >
+                    {copiedToken ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedToken ? "Copied!" : "Copy Token"}</span>
+                  </button>
+                </div>
+                <code className="block bg-slate-50 px-2 py-1 rounded text-slate-800 font-mono text-[11px] break-all border border-slate-100">
+                  {webhookVerifyToken}
+                </code>
+              </div>
+            </div>
+
+            <div className="pt-2 text-[11px] text-slate-500 border-t border-slate-200/60 flex items-center gap-2">
+              <span className="font-semibold text-slate-700">Required Webhook Subscriptions:</span>
+              <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-mono text-[10px]">messages</span>
+              <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-mono text-[10px]">message_template_status_update</span>
+            </div>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleExecuteManualConnect} className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">WhatsApp Business Account ID:</label>
+              <h3 className="text-base font-bold text-slate-900">Direct Token / Bring Your Own Credentials</h3>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Enter your WhatsApp Business Account ID, Phone Number ID, and Permanent System User Access Token.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">WhatsApp Business Account ID (WABA ID) *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 109876543210987"
+                  value={manualData.wabaId}
+                  onChange={(e) => setManualData({ ...manualData, wabaId: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number ID *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 102938475610293"
+                  value={manualData.phoneNumberId}
+                  onChange={(e) => setManualData({ ...manualData, phoneNumberId: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-slate-700">System User Permanent Access Token *</label>
+                <span className="text-[11px] text-slate-500">Requires whatsapp_business_messaging &amp; whatsapp_business_management</span>
+              </div>
               <input
-                type="text"
+                type="password"
                 required
-                value={manualData.wabaId}
-                onChange={(e) => setManualData({ ...manualData, wabaId: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                autoComplete="off"
+                placeholder="EAAB..."
+                value={manualData.accessToken}
+                onChange={(e) => setManualData({ ...manualData, accessToken: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
               />
             </div>
+
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number ID:</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-slate-700">Meta App Secret (for Webhook SHA256 Signature Verification)</label>
+                <span className="text-[11px] text-slate-500">Found in Meta App Dashboard &gt; App Settings &gt; Basic</span>
+              </div>
               <input
-                type="text"
-                required
-                value={manualData.phoneNumberId}
-                onChange={(e) => setManualData({ ...manualData, phoneNumberId: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                type="password"
+                autoComplete="off"
+                placeholder="App Secret"
+                value={manualData.appSecret}
+                onChange={(e) => setManualData({ ...manualData, appSecret: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
               />
             </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">System User Access Token:</label>
-            <input
-              type="password"
-              required
-              autoComplete="off"
-              value={manualData.accessToken}
-              onChange={(e) => setManualData({ ...manualData, accessToken: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">App Secret (for Webhook Signature Verification):</label>
-            <input
-              type="password"
-              autoComplete="off"
-              value={manualData.appSecret}
-              onChange={(e) => setManualData({ ...manualData, appSecret: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
-            />
-          </div>
-
-          {admin && (
-            <div className="flex justify-end pt-2">
-              <button
-                type="submit"
-                className="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow transition"
-              >
-                Verify & Connect Direct Token
-              </button>
-            </div>
-          )}
-        </form>
+            {admin && (
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow hover:shadow-md transition cursor-pointer"
+                >
+                  Verify &amp; Connect Direct Token
+                </button>
+              </div>
+            )}
+          </form>
+        </div>
       )}
     </div>
   );

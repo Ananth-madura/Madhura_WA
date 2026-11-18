@@ -181,6 +181,89 @@ router.post("/send-email-otp", otpLimiter, (req, res) => {
   );
 });
 
+/* ================= VERIFY EMAIL (OTP CHALLENGE FOR ONBOARDING) ================= */
+router.post("/verify-email", otpLimiter, async (req, res) => {
+  const secret = requireJwtSecret(res);
+  if (!secret) return;
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const otp = String(req.body?.otp || "").trim();
+
+  if (!email || !otp) {
+    return res.status(400).json({ success: false, message: "Email and 6-digit verification code are required" });
+  }
+
+  const isSqlite = Boolean(db.isSqlite);
+  const nowCheck = isSqlite ? "datetime('now') <= datetime(expires_at)" : "expires_at > NOW()";
+
+  db.query(`SELECT * FROM email_otp WHERE email=? AND otp=? AND ${nowCheck}`, [email, otp], async (err, rows) => {
+    if (err || !rows || !rows.length) {
+      return res.status(400).json({ success: false, message: "Invalid or expired verification code. Request a new code." });
+    }
+
+    db.query("DELETE FROM email_otp WHERE email=?", [email]);
+    db.query("UPDATE users SET status='active' WHERE email=?", [email]);
+
+    db.query("SELECT id, first_name, last_name, email, role, status, tenant_id FROM users WHERE email=? LIMIT 1", [email], (uErr, userRows) => {
+      const user = userRows?.[0];
+      if (!user) {
+        return res.json({ success: true, message: "Email verified successfully. Please proceed to sign in." });
+      }
+
+      const token = jwt.sign(
+        { id: user.id, role: user.role, name: `${user.first_name || ""} ${user.last_name || ""}`.trim(), email: user.email, tenant_id: user.tenant_id },
+        secret,
+        { expiresIn: "14d" }
+      );
+
+      res.json({
+        success: true,
+        message: "Email verified successfully.",
+        token,
+        user: {
+          id: user.id,
+          name: `${user.first_name || ""} ${user.last_name || ""}`.trim(),
+          first_name: user.first_name,
+          last_name: user.last_name,
+          email: user.email,
+          role: user.role,
+          tenant_id: user.tenant_id
+        }
+      });
+    });
+  });
+});
+
+/* ================= RESEND EMAIL VERIFICATION OTP ================= */
+router.post("/resend-verification", otpLimiter, (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  if (!email) {
+    return res.status(400).json({ success: false, message: "Email address is required" });
+  }
+
+  const otp = generateOtp();
+  const expires = new Date(Date.now() + 10 * 60000); // 10 minutes
+
+  const isSqlite = Boolean(db.isSqlite);
+  const saveSql = isSqlite
+    ? "INSERT OR REPLACE INTO email_otp (email, otp, expires_at) VALUES (?, ?, ?)"
+    : "INSERT INTO email_otp (email, otp, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE otp=?, expires_at=?";
+  const params = isSqlite ? [email, otp, expires] : [email, otp, expires, otp, expires];
+
+  db.query(saveSql, params, async (err) => {
+    if (err) {
+      console.error("[resend-verification] db error:", err.message);
+      return res.status(500).json({ success: false, message: "Could not issue verification code" });
+    }
+    try {
+      await sendEmailOtp(email, otp, "Madhura Verification Code: " + otp);
+      res.json({ success: true, message: "Verification code sent to your email" });
+    } catch (mailErr) {
+      console.error("[resend-verification] mail error:", mailErr.message);
+      res.status(500).json({ success: false, message: "Failed to dispatch verification email. Try again shortly." });
+    }
+  });
+});
+
 /*  REGISTER  */
 router.post("/register", async (req, res) => {
   const { first_name, otp, user_password, emp_id } = req.body;

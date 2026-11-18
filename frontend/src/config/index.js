@@ -17,7 +17,8 @@ const localHost=hostname=>["localhost","127.0.0.1","[::1]","::1"].includes(hostn
 // page loaded from it must call its own :5001, not the visitor's localhost.
 const cloudHost=hostname=>hostname==="187.127.215.13";
 const sameServerHost=hostname=>localHost(hostname)||cloudHost(hostname);
-const appHost=hostname=>["live.wa.madhuratech.in","live.madhuratech.in"].includes(hostname);
+const isVercelHost = hostname => Boolean(hostname && (hostname.endsWith(".vercel.app") || hostname.includes("vercel.app")));
+const appHost = hostname => ["live.wa.madhuratech.in", "live.madhuratech.in"].includes(hostname) || isVercelHost(hostname);
 
 function normaliseOrigin(value) {
   const raw = clean(value);

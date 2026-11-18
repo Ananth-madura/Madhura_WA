@@ -3,7 +3,7 @@ const { verifyToken } = require("./authMiddleware");
 const { requireTenantContext } = require("./tenantMiddleware");
 const db = require("../config/database");
 const rolePolicy = require("../services/rolePolicy");
-const PUBLIC = new Set(["/login", "/admin-login", "/demo-login", "/register", "/request-access", "/self-signup", "/plans", "/send-email-otp", "/verify-access-code", "/join-with-access-code", "/verify-2fa", "/resend-2fa"]);
+const PUBLIC = new Set(["/login", "/admin-login", "/demo-login", "/register", "/request-access", "/self-signup", "/plans", "/send-email-otp", "/verify-access-code", "/join-with-access-code", "/verify-2fa", "/resend-2fa", "/verify-email", "/resend-verification", "/forgot-password", "/reset-password"]);
 const SELF = new Set(["/tenant-info", "/my-employee-profile", "/profile", "/my-change-requests", "/request-profile-change", "/change-password-direct", "/toggle-2fa", "/logout"]);
 
 /**

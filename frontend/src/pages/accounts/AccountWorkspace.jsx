@@ -462,7 +462,7 @@ export function Workspace({ enterprise }) {
   const tab =
     tabParam === "assistant"
       ? "assistant"
-      : tabParam === "integrations"
+      : tabParam === "integrations" || tabParam === "connect"
       ? "integrations"
       : tabParam === "assign" || tabParam === "team-access"
       ? "assign"

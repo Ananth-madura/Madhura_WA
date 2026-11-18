@@ -51,6 +51,73 @@ const TIMEZONES = [
   { value: "UTC", label: "UTC (Coordinated Universal Time)" },
 ];
 
+const DEFAULT_PLANS = [
+  {
+    id: "free",
+    name: "Free",
+    price_inr: 0,
+    price: "₹0",
+    billing: "Free plan",
+    max_senders: 1,
+    max_branches: 1,
+    max_seats: 2,
+    maxSenders: 1,
+    maxBranches: 1,
+    maxSeats: 2,
+    features: [
+      "1 WhatsApp Connected Number",
+      "1 Workspace Branch",
+      "2 Team Member Seats",
+      "5,000 Messages / month",
+      "Standard Messaging Templates",
+    ],
+  },
+  {
+    id: "growth",
+    name: "Growth",
+    price_inr: 3999,
+    price: "₹3,999",
+    billing: "/ 30 days",
+    max_senders: 3,
+    max_branches: 3,
+    max_seats: 15,
+    maxSenders: 3,
+    maxBranches: 3,
+    maxSeats: 15,
+    badge: "Popular",
+    features: [
+      "3 WhatsApp Connected Numbers",
+      "3 Workspace Branches",
+      "15 Team Member Seats",
+      "Meta Cloud BYO-API Integration",
+      "Multi-agent Shared Inbox & Chatbot",
+      "Automated Drip Sequences",
+    ],
+  },
+  {
+    id: "enterprise",
+    name: "Enterprise",
+    price_inr: 8999,
+    price: "₹8,999",
+    billing: "/ 30 days",
+    max_senders: 10,
+    max_branches: 10,
+    max_seats: 50,
+    maxSenders: 10,
+    maxBranches: 10,
+    maxSeats: 50,
+    badge: "Scale",
+    features: [
+      "10 WhatsApp Connected Numbers",
+      "10 Workspace Branches",
+      "50 Team Member Seats",
+      "Custom Webhook & API Dispatches",
+      "Priority Cloud Concurrency Engine",
+      "24/7 Enterprise Dedicated Support",
+    ],
+  },
+];
+
 export default function Signup() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -82,7 +149,7 @@ export default function Signup() {
   const [timezone, setTimezone] = useState("Asia/Kolkata");
 
   // Plan catalog
-  const [plans, setPlans] = useState([]);
+  const [plans, setPlans] = useState(DEFAULT_PLANS);
   const [selectedPlan, setSelectedPlan] = useState(new URLSearchParams(location.search).get("plan")||"free");
 
   const [plansError,setPlansError]=useState("");
@@ -123,17 +190,26 @@ export default function Signup() {
   }, [location.search]);
 
   useEffect(()=>{
-    let cancelled=false;setPlansError("");setPlans([]);setSignupBackendReady(false);setSignupBackendNotice("");
+    let cancelled=false;setPlansError("");setSignupBackendReady(false);setSignupBackendNotice("");
     Promise.all([axios.get(`${API}/api/v2/billing/plans`,{timeout:10000}),axios.get(`${API}/health`,{timeout:10000})]).then(([{data},{data:health}])=>{
       const rows=requireRecords(data?.plans);
       if(!rows.length)throw new Error("Plan catalog is unavailable");
       const mapped=rows.map(plan=>({...plan,price:"\u20b9"+Number(plan.price_inr).toLocaleString("en-IN"),billing:Number(plan.price_inr)===0?"Free plan":"/ 30 days",maxSenders:plan.max_senders,maxBranches:plan.max_branches,maxSeats:plan.max_seats,features:Array.isArray(plan.features)?plan.features:[]}));
-      if(cancelled)return;setPlans(mapped);setSelectedPlan(current=>mapped.some(plan=>plan.id===current)?current:(mapped.find(plan=>Number(plan.price_inr)===0)||mapped[0]).id);
-      const ready=health?.ok===true&&health?.sharedInboxReady===true&&health?.dbEngine==="mysql";
-      setSignupBackendReady(ready);
-      if(!ready)setSignupBackendNotice(health?.dbEngine?.startsWith("sqlite")?"Plans are loaded. New workspace signup and Razorpay settlement require MySQL. Connect your MySQL server and restart the backend to continue. Existing accounts can still use Sign in.":"Plans are loaded, but the backend database is not ready for new workspaces yet. Check readiness and retry.");
+      if(cancelled)return;
+      setPlans(mapped);
+      setSelectedPlan(current=>mapped.some(plan=>plan.id===current)?current:(mapped.find(plan=>Number(plan.price_inr)===0)||mapped[0]).id);
+      if(health?.dbEngine?.startsWith("sqlite")) {
+        setSignupBackendReady(false);
+        setSignupBackendNotice("Plans are loaded. New workspace signup and Razorpay settlement require MySQL. Connect your MySQL server and restart the backend to continue. Existing accounts can still use Sign in.");
+      } else {
+        const ready = Boolean(health?.ok === true || health?.database === "ready" || health?.demo === true);
+        setSignupBackendReady(ready);
+        if(!ready)setSignupBackendNotice("Plans are loaded, but the backend database is not ready for new workspaces yet. Check readiness and retry.");
+        else setSignupBackendNotice("");
+      }
     }).catch(error=>{
       if(cancelled)return;
+      setPlans([]);
       const status=error.response?.status;
       const detail=error.code==="INVALID_API_RESPONSE"?"The API returned a webpage instead of plan data. Check the frontend API address.":status===404?"The plans endpoint is missing. Restart or update the backend.":status===503?"The backend database or schema is not ready yet.":status>=500?"The backend could not read the plan catalog. Check its database configuration.":"The configured API could not be reached. Check its address and allowed frontend origins.";
       setPlansError(`Plans could not load. ${detail}`);
@@ -519,15 +595,17 @@ export default function Signup() {
             {mode === "self_signup" && (
               <div>
                 {/* Step Indicator */}
-                <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
-                  <div
+                <nav className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200" aria-label="Signup steps">
+                  <button
+                    type="button"
                     onClick={() => setSignupStep(1)}
-                    className={`flex items-center gap-2 cursor-pointer text-xs font-bold ${
-                      signupStep === 1 ? "text-emerald-700" : "text-gray-500 hover:text-gray-700"
+                    className={`flex items-center gap-2 text-xs font-bold transition rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer ${
+                      signupStep === 1 ? "text-emerald-700 bg-emerald-50/80" : "text-slate-600 hover:text-slate-900"
                     }`}
+                    aria-current={signupStep === 1 ? "step" : undefined}
                   >
                     <span
-                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${
+                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${
                         signupStep === 1
                           ? "bg-emerald-600 text-white"
                           : "bg-emerald-100 text-emerald-800"
@@ -536,30 +614,34 @@ export default function Signup() {
                       1
                     </span>
                     <span>Organization &amp; Admin</span>
-                  </div>
+                  </button>
 
-                  <span className="text-gray-300">/</span>
+                  <span className="text-gray-300" aria-hidden="true">/</span>
 
-                  <div
+                  <button
+                    type="button"
                     onClick={() => {
-                      if (companyName && firstName && email && password) {
+                      if (companyName.trim() && firstName.trim() && email.trim() && password) {
                         setSignupStep(2);
+                      } else {
+                        handleProceedToBranchAndPlan();
                       }
                     }}
-                    className={`flex items-center gap-2 cursor-pointer text-xs font-bold ${
-                      signupStep === 2 ? "text-emerald-700" : "text-gray-400"
+                    className={`flex items-center gap-2 text-xs font-bold transition rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer ${
+                      signupStep === 2 ? "text-emerald-700 bg-emerald-50/80" : "text-slate-500 hover:text-slate-800"
                     }`}
+                    aria-current={signupStep === 2 ? "step" : undefined}
                   >
                     <span
-                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${
+                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${
                         signupStep === 2 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"
                       }`}
                     >
                       2
                     </span>
                     <span>Branch &amp; Plan Selection</span>
-                  </div>
-                </div>
+                  </button>
+                </nav>
 
                 {signupStep === 1 ? (
                   /* STEP 1: ORGANIZATION DETAILS & ADMIN ACCOUNT */
@@ -1204,7 +1286,7 @@ export default function Signup() {
               <p style={{ fontSize: 13, color: "var(--color-ink-2)" }}>
                 Already have an active account?{" "}
                 <Link to="/login" style={{ color: "var(--color-primary)", fontWeight: 700 }}>
-                  Sign in here →
+                  Sign in here
                 </Link>
               </p>
             </div>

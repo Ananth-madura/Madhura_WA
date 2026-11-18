@@ -15,6 +15,22 @@
   },
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://api.madhuratech.in/api/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://api.madhuratech.in/health"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "https://api.madhuratech.in/uploads/:path*"
+    },
+    {
+      "source": "/webhook",
+      "destination": "https://api.madhuratech.in/webhook"
+    },
+    {
       "source": "/:path*",
       "destination": "/index.html"
     }
