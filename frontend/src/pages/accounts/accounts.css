@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   MADHURA WHATSAPP CRM — ACCOUNTS & MULTI-SENDER PLATFORM
+   MADHURA WHATSAPP CRM: ACCOUNTS & MULTI-SENDER PLATFORM
    Anti-slop Design System: High-Precision Industrial Command Center
    Theme: Navy (#202C52) × Industrial Yellow (#FCBD16)
    ═══════════════════════════════════════════════════════════════ */
@@ -63,6 +63,12 @@
   font-size: 14px;
   line-height: 1.5;
   box-sizing: border-box;
+}
+
+/* Align with the /whatsapp workspace shell to eliminate double padding */
+.wa-page-workspace .ac-workspace {
+  padding: 0 !important;
+  background: transparent !important;
 }
 
 .ac-workspace * {

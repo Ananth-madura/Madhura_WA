@@ -19,7 +19,8 @@ import {
   Radio,
   Cpu,
   Lock,
-  MessageSquare
+  MessageSquare,
+  Smartphone
 } from "lucide-react";
 import { API } from "../../config/api";
 import { useEnterprise } from "../../context/EnterpriseContext";
@@ -528,22 +529,54 @@ export function Workspace({ enterprise }) {
   const activeBranchCount = branches.filter((b) => b.status === "active").length;
 
   return (
-    <section className="ac-workspace" aria-labelledby="accounts-title">
-      {/* Header with Breadcrumb & Context */}
-      <header className="ac-header">
-        <div>
-          <div className="ac-context-badge">
-            <Building2 size={13} className="text-amber-500" />
-            <span>{activeTenant.name} / WhatsApp Multi-Sender</span>
+    <div className="hl-page ac-workspace space-y-4 pb-12" aria-labelledby="accounts-title">
+      {/* ── Native /whatsapp Command Bar ── */}
+      <div className="hl-commandbar hl-card flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm"
+            style={{ background: "#202C52", color: "#FCBD16" }}
+          >
+            <Smartphone size={26} />
           </div>
-          <h1 id="accounts-title">Accounts & Multi-Sender Platform</h1>
-          <p>Operate multiple Meta phone numbers concurrently with independent department routing and dispatch policies.</p>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 id="accounts-title" className="hl-title m-0">
+                Accounts &amp; Multi-Sender Platform
+              </h1>
+              <span
+                className="hl-badge text-xs font-bold px-2.5 py-0.5"
+                style={{ background: "#FFF4CC", color: "#202C52", border: "1px solid #FCBD16" }}
+              >
+                {activeTenant.name} / Multi-Sender
+              </span>
+              <span
+                className="hl-badge text-xs font-bold px-2.5 py-0.5"
+                style={{ background: "#D1FADF", color: "#16803C", border: "1px solid #75E0A7" }}
+              >
+                {connectedCount} / {senders.length} Active Senders
+              </span>
+              <span
+                className="hl-badge text-xs font-bold px-2.5 py-0.5"
+                style={{
+                  background: setup?.configured ? "#D1FADF" : "#FEF3C7",
+                  color: setup?.configured ? "#16803C" : "#92400E",
+                  border: `1px solid ${setup?.configured ? "#75E0A7" : "#FCD34D"}`
+                }}
+              >
+                {setup?.configured ? "Official Cloud API" : "Pending Credentials"}
+              </span>
+            </div>
+            <p className="hl-subtitle m-0 mt-1 text-xs sm:text-sm text-slate-600">
+              Operate multiple Meta phone numbers concurrently with independent department routing, Embedded Signup onboarding, and dispatch policies.
+            </p>
+          </div>
         </div>
 
-        <div className="ac-actions">
+        <div className="hl-actions flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className="ac-btn"
+            className="hl-btn-secondary inline-flex items-center gap-1.5 px-3 text-xs font-semibold cursor-pointer"
             disabled={loading || Boolean(busy)}
             onClick={() => run("refresh", refresh, "Sender list refreshed successfully.")}
           >
@@ -554,7 +587,7 @@ export function Workspace({ enterprise }) {
           {admin && (
             <button
               type="button"
-              className="ac-btn ac-btn-primary"
+              className="hl-btn-primary inline-flex items-center gap-1.5 px-4 text-xs font-semibold cursor-pointer"
               disabled={Boolean(busy)}
               onClick={() => navigate({ tab: "connect" })}
             >
@@ -563,149 +596,232 @@ export function Workspace({ enterprise }) {
             </button>
           )}
 
-          <Link to="/whatsapp" className="ac-btn" title="Jump to Live Chat Workspace">
+          <Link
+            to="/whatsapp/tech-provider"
+            className="hl-btn-secondary inline-flex items-center gap-1.5 px-3 text-xs font-semibold cursor-pointer"
+            title="Open Meta Tech Provider Compliance Center"
+          >
+            <ShieldCheck size={14} className="text-amber-500" />
+            <span>Tech Provider Console</span>
+          </Link>
+
+          <Link
+            to="/whatsapp"
+            className="hl-btn-secondary inline-flex items-center gap-1.5 px-3 text-xs font-semibold cursor-pointer"
+            title="Jump to Live Chat Workspace"
+          >
             <MessageSquare size={14} />
             <span>Live Inbox</span>
           </Link>
         </div>
-      </header>
+      </div>
 
-      {/* Diagnostics / Metric Overview Strip */}
-      <div className="ac-metrics-strip">
-        <div className="ac-metric-card">
-          <div className="ac-metric-info">
-            <span className="ac-metric-label">Active Senders</span>
-            <span className="ac-metric-value">{connectedCount} / {senders.length}</span>
-            <span className="ac-metric-sub">{senders.length === 1 ? "1 number configured" : `${senders.length} numbers configured`}</span>
+      {/* ── Diagnostics / Metric Overview Strip (.hl-kpis) ── */}
+      <div className="hl-kpis">
+        <div className="hl-kpi">
+          <div className="hl-kpi-label font-bold uppercase text-[11px] text-slate-500 tracking-wider">
+            Active Senders
           </div>
-          <div className="ac-metric-icon">
-            <Phone size={20} className={connectedCount > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"} />
+          <div
+            className={`hl-kpi-num font-bold text-2xl mt-1 ${
+              connectedCount > 0 ? "text-emerald-700" : "text-[#202C52]"
+            }`}
+          >
+            {connectedCount} / {senders.length}
+          </div>
+          <div className="text-xs text-slate-500 mt-0.5">
+            {senders.length === 1 ? "1 number configured" : `${senders.length} numbers configured`}
           </div>
         </div>
 
-        <div className="ac-metric-card">
-          <div className="ac-metric-info">
-            <span className="ac-metric-label">Meta Cloud Platform</span>
-            <span className="ac-metric-value">{setup?.configured ? "Ready" : "Pending"}</span>
-            <span className="ac-metric-sub">{setup?.configured ? "Official Cloud API linked" : "Credentials required"}</span>
+        <div className="hl-kpi">
+          <div className="hl-kpi-label font-bold uppercase text-[11px] text-slate-500 tracking-wider">
+            Meta Cloud Platform
           </div>
-          <div className="ac-metric-icon">
-            <ShieldCheck size={20} className={setup?.configured ? "text-emerald-600 dark:text-emerald-400" : "text-amber-500"} />
+          <div
+            className={`hl-kpi-num font-bold text-2xl mt-1 ${
+              setup?.configured ? "text-emerald-700" : "text-amber-600"
+            }`}
+          >
+            {setup?.configured ? "Ready" : "Pending"}
           </div>
-        </div>
-
-        <div className="ac-metric-card">
-          <div className="ac-metric-info">
-            <span className="ac-metric-label">Multi-Branch Routing</span>
-            <span className="ac-metric-value">{activeBranchCount}</span>
-            <span className="ac-metric-sub">{activeBranchCount === 1 ? "1 branch linked" : `${activeBranchCount} branches linked`}</span>
-          </div>
-          <div className="ac-metric-icon">
-            <Layers size={20} className="text-blue-600 dark:text-blue-400" />
+          <div className="text-xs text-slate-500 mt-0.5">
+            {setup?.configured ? "Official Cloud API linked" : "Credentials required"}
           </div>
         </div>
 
-        <div className="ac-metric-card">
-          <div className="ac-metric-info">
-            <span className="ac-metric-label">AI Automation</span>
-            <span className="ac-metric-value">Assistant</span>
-            <span className="ac-metric-sub">Dedicated auto-reply engine</span>
+        <div className="hl-kpi">
+          <div className="hl-kpi-label font-bold uppercase text-[11px] text-slate-500 tracking-wider">
+            Multi-Branch Routing
           </div>
-          <div className="ac-metric-icon">
-            <Bot size={20} className="text-amber-500" />
+          <div className="hl-kpi-num font-bold text-2xl mt-1 text-[#202C52]">
+            {activeBranchCount}
+          </div>
+          <div className="text-xs text-slate-500 mt-0.5">
+            {activeBranchCount === 1 ? "1 branch linked" : `${activeBranchCount} branches linked`}
+          </div>
+        </div>
+
+        <div className="hl-kpi">
+          <div className="hl-kpi-label font-bold uppercase text-[11px] text-slate-500 tracking-wider">
+            Tech Provider Center
+          </div>
+          <div className="hl-kpi-num font-bold text-2xl mt-1 text-indigo-700">
+            Verified
+          </div>
+          <div className="text-xs text-slate-500 mt-0.5">
+            Meta Partner Program Certified
           </div>
         </div>
       </div>
 
-      {/* Main Tab Navigation */}
-      <div className="ac-tabs-wrapper">
-        <nav className="ac-tabs" role="tablist" aria-label="Account management tabs">
-          <Link
-            role="tab"
-            aria-selected={tab === "senders"}
-            aria-current={tab === "senders" ? "page" : undefined}
-            to="?tab=senders"
-            className={`ac-tab ${tab === "senders" ? "is-active" : ""}`}
+      {/* ── Main Tab Navigation (.hl-tabs) ── */}
+      <div className="hl-tabs flex items-center gap-1.5 overflow-x-auto p-1.5 rounded-xl bg-white border border-[#dce1e9] shadow-sm">
+        <Link
+          role="tab"
+          aria-selected={tab === "senders"}
+          aria-current={tab === "senders" ? "page" : undefined}
+          to="?tab=senders"
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${
+            tab === "senders"
+              ? "bg-[#202C52] text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+          }`}
+        >
+          <Phone size={15} />
+          <span>Numbers &amp; Operations</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              tab === "senders" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"
+            }`}
           >
-            <Phone size={15} />
-            <span>Numbers & Operations</span>
-            <span className="ac-tab-chip">{senders.length}</span>
-          </Link>
+            {senders.length}
+          </span>
+        </Link>
 
-          <Link
-            role="tab"
-            aria-selected={tab === "connect"}
-            aria-current={tab === "connect" ? "page" : undefined}
-            to="?tab=connect"
-            className={`ac-tab ${tab === "connect" ? "is-active" : ""}`}
+        <Link
+          role="tab"
+          aria-selected={tab === "connect"}
+          aria-current={tab === "connect" ? "page" : undefined}
+          to="?tab=connect"
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${
+            tab === "connect"
+              ? "bg-[#202C52] text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+          }`}
+        >
+          <Sparkles size={15} />
+          <span>Connect Wizard (11-Step)</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              tab === "connect" ? "bg-white/20 text-white" : "bg-amber-100 text-amber-900"
+            }`}
           >
-            <Sparkles size={15} />
-            <span>Connect Wizard (11-Step)</span>
-            <span className="ac-tab-chip">WATI Mode</span>
-          </Link>
+            WATI Mode
+          </span>
+        </Link>
 
-          <Link
-            role="tab"
-            aria-selected={tab === "integrations"}
-            aria-current={tab === "integrations" ? "page" : undefined}
-            to="?tab=integrations"
-            className={`ac-tab ${tab === "integrations" ? "is-active" : ""}`}
+        <Link
+          role="tab"
+          aria-selected={tab === "integrations"}
+          aria-current={tab === "integrations" ? "page" : undefined}
+          to="?tab=integrations"
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${
+            tab === "integrations"
+              ? "bg-[#202C52] text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+          }`}
+        >
+          <ShieldCheck size={15} />
+          <span>Meta Integrations &amp; Signup</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              tab === "integrations" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"
+            }`}
           >
-            <ShieldCheck size={15} />
-            <span>Meta Integrations & Signup</span>
-            <span className="ac-tab-chip">{setup?.configured ? "Active" : "Setup"}</span>
-          </Link>
+            {setup?.configured ? "Active" : "Setup"}
+          </span>
+        </Link>
 
-          <Link
-            role="tab"
-            aria-selected={tab === "assign"}
-            aria-current={tab === "assign" ? "page" : undefined}
-            to="?tab=assign"
-            className={`ac-tab ${tab === "assign" ? "is-active" : ""}`}
-          >
-            <Users size={15} />
-            <span>Assign & Team Access</span>
-          </Link>
+        <Link
+          role="tab"
+          aria-selected={tab === "assign"}
+          aria-current={tab === "assign" ? "page" : undefined}
+          to="?tab=assign"
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${
+            tab === "assign"
+              ? "bg-[#202C52] text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+          }`}
+        >
+          <Users size={15} />
+          <span>Assign &amp; Team Access</span>
+        </Link>
 
-          <Link
-            role="tab"
-            aria-selected={tab === "assistant"}
-            aria-current={tab === "assistant" ? "page" : undefined}
-            to="?tab=assistant"
-            className={`ac-tab ${tab === "assistant" ? "is-active" : ""}`}
-          >
-            <Bot size={15} />
-            <span>Business Assistant</span>
-          </Link>
+        <Link
+          role="tab"
+          aria-selected={tab === "assistant"}
+          aria-current={tab === "assistant" ? "page" : undefined}
+          to="?tab=assistant"
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${
+            tab === "assistant"
+              ? "bg-[#202C52] text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+          }`}
+        >
+          <Bot size={15} />
+          <span>Business Assistant</span>
+        </Link>
 
-          <div className="ac-tab-divider" role="separator" />
+        <div className="h-5 w-px bg-slate-300 mx-1 shrink-0" role="separator" />
 
-          <Link to="/whatsapp/automations" className="ac-tab ac-tab-jump" title="Open Marketing & System Automations">
-            <Radio size={14} />
-            <span>Automations</span>
-            <ExternalLink size={11} className="opacity-60" />
-          </Link>
+        <Link
+          to="/whatsapp/tech-provider"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition shrink-0"
+          title="Open Meta Tech Provider Compliance Center, PIN Tools & Webhook Logs"
+        >
+          <ShieldCheck size={14} className="text-amber-500" />
+          <span>Tech Provider</span>
+          <ExternalLink size={11} className="opacity-60" />
+        </Link>
 
-          <Link to="/whatsapp/flows" className="ac-tab ac-tab-jump" title="Open WhatsApp Interactive Flow Builder">
-            <Layers size={14} />
-            <span>Workflow builder</span>
-            <ExternalLink size={11} className="opacity-60" />
-          </Link>
-        </nav>
+        <Link
+          to="/whatsapp/automations"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition shrink-0"
+          title="Open Marketing & System Automations"
+        >
+          <Radio size={14} />
+          <span>Automations</span>
+          <ExternalLink size={11} className="opacity-60" />
+        </Link>
+
+        <Link
+          to="/whatsapp/flows"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition shrink-0"
+          title="Open WhatsApp Interactive Flow Builder"
+        >
+          <Layers size={14} />
+          <span>Workflow builder</span>
+          <ExternalLink size={11} className="opacity-60" />
+        </Link>
       </div>
 
-      {/* Global Feedback Notifications */}
+      {/* ── Global Feedback Notifications ── */}
       <div className="ac-feedback" aria-live="polite">
         {notice && (
-          <div className="ac-notice-banner is-success" role="status">
+          <div
+            role="status"
+            className="flex items-center justify-between gap-2.5 p-3.5 rounded-lg text-xs font-semibold shadow-sm"
+            style={{ background: "#D1FADF", border: "1px solid #75E0A7", color: "#16803C" }}
+          >
             <div className="flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+              <CheckCircle2 size={16} className="text-[#16803C] shrink-0" />
               <span>{notice}</span>
             </div>
             <button
               type="button"
               onClick={() => setNotice("")}
-              className="text-xs font-bold opacity-70 hover:opacity-100 p-1"
+              className="text-xs font-bold opacity-70 hover:opacity-100 p-1 cursor-pointer"
               aria-label="Dismiss notification"
             >
               ✕
@@ -714,15 +830,19 @@ export function Workspace({ enterprise }) {
         )}
 
         {error && (
-          <div className="ac-notice-banner is-error" role="alert">
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-2.5 p-3.5 rounded-lg text-xs font-semibold shadow-sm"
+            style={{ background: "#FEE4E2", border: "1px solid #FDA29B", color: "#B42318" }}
+          >
             <div className="flex items-center gap-2">
-              <AlertCircle size={16} className="text-rose-600 shrink-0" />
+              <AlertCircle size={16} className="text-[#B42318] shrink-0" />
               <span>{error}</span>
             </div>
             <button
               type="button"
               onClick={() => setError("")}
-              className="text-xs font-bold opacity-70 hover:opacity-100 p-1"
+              className="text-xs font-bold opacity-70 hover:opacity-100 p-1 cursor-pointer"
               aria-label="Dismiss alert"
             >
               ✕
@@ -732,7 +852,10 @@ export function Workspace({ enterprise }) {
       </div>
 
       {!admin && (
-        <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2">
+        <div
+          className="p-3.5 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm"
+          style={{ background: "#FFF4CC", border: "1px solid #FCBD16", color: "#202C52" }}
+        >
           <AlertCircle size={15} className="shrink-0 text-amber-600" />
           <span>Read-only Mode: Phone credentials and routing assignments are managed by organization administrators.</span>
         </div>
@@ -800,6 +923,6 @@ export function Workspace({ enterprise }) {
           request={request}
         />
       )}
-    </section>
+    </div>
   );
 }
