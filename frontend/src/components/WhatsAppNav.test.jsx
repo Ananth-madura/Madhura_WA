@@ -43,7 +43,7 @@ test("a member with no extra grants sees the inbox routes", () => {
 test("a member sees exactly the modules the administrator granted", () => {
   useWorkspaceAccess.mockReturnValue(grants(["customers", "contacts", "campaigns", "analytics"]));
   render(<WhatsAppNav />);
-  expect(tabLabels()).toEqual(["Team Inbox", "My workspace", "Live Chats", "Contacts", "Bulk Campaigns", "Analytics"]);
+  expect(tabLabels()).toEqual(["Team Inbox", "My workspace", "Live Chats", "Contacts", "Enterprise Campaigns", "Analytics"]);
   for (const blocked of ["Branches", "Accounts", "Employees"]) {
     expect(screen.queryByText(blocked)).toBeNull();
   }
@@ -68,13 +68,14 @@ test("an administrator sees the full rail including the administration tabs", as
     "Enquiries",
     "Templates",
     "Contact Groups",
-    "Bulk Campaigns",
+    "Enterprise Campaigns",
     "Automations",
     "Chatbot Flows",
     "Analytics",
     "Client portal",
     "Branches",
     "Accounts",
+    "Tech Provider",
     "Employees",
   ]);
 });
@@ -84,5 +85,5 @@ test("workspace tab is exact so campaigns does not keep it active", () => {
   useWorkspaceAccess.mockReturnValue(grants(["customers", "campaigns"]));
   render(<WhatsAppNav />);
   const active = screen.getAllByRole("button").filter(button => button.getAttribute("class")?.includes("wa-nav-tab-btn") && button.getAttribute("class")?.includes("is-active")).map(button => button.textContent.trim());
-  expect(active).toEqual(["Bulk Campaigns"]);
+  expect(active).toEqual(["Enterprise Campaigns"]);
 });

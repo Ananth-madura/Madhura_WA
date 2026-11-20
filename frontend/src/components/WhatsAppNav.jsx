@@ -18,6 +18,7 @@ import {
   GitBranch,
   Inbox,
   MessagesSquare,
+  ShieldCheck,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
@@ -154,7 +155,7 @@ export default function WhatsAppNav() {
         message: `Stopped ${campRes.data.stopped || 0} campaign(s) and disabled ${autoRes.data.stopped || 0} automation(s).`,
       });
     } catch (err) {
-      setStopResult({ success: false, message: "Failed to stop everything — try again." });
+      setStopResult({ success: false, message: "Failed to stop everything. Please try again." });
     }
     setStopping(false);
     setTimeout(() => setStopResult(null), 6000);
@@ -263,6 +264,14 @@ export default function WhatsAppNav() {
       title: "WhatsApp Accounts & Cloud Setup",
       path: "/whatsapp/accounts",
       icon: Smartphone,
+      adminOnly: true,
+    },
+    {
+      id: "tech-provider",
+      label: "Tech Provider",
+      title: "Meta Tech Provider Compliance Center, Webhooks & App Review",
+      path: "/whatsapp/tech-provider",
+      icon: ShieldCheck,
       adminOnly: true,
     },
     {

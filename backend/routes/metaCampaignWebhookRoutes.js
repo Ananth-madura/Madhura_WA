@@ -72,6 +72,54 @@ router.post("/whatsapp", async (req, res) => {
         return res.status(401).json({ error: "Invalid webhook signature" });
       }
 
+      // Log webhook event for live inspector (matching Meta sample app)
+      const field = entry?.changes?.[0]?.field || "messages";
+      const changeVal = entry?.changes?.[0]?.value;
+      const wabaId = entry.id;
+      const senderPhone = changeVal?.messages?.[0]?.from || null;
+      const eventType = changeVal?.messages ? "message" : changeVal?.statuses ? "status" : "meta_event";
+
+      db.promise().query(
+        `INSERT INTO meta_webhook_logs (tenant_id, object_type, field, waba_id, phone_number_id, sender_phone, event_type, payload, signature_verified)
+         VALUES (?, 'whatsapp_business_account', ?, ?, ?, ?, ?, ?, 1)`,
+        [tenantId, field, wabaId, phoneId || null, senderPhone, eventType, JSON.stringify(entry)]
+      ).catch(() => {});
+
+      // AckBot auto-responder if enabled for this sender
+      if (phoneId && changeVal?.messages?.[0]?.type === "text" && senderPhone) {
+        (async () => {
+          try {
+            const [sRow] = await dbh.queryAll(
+              `SELECT s.id, s.is_ack_bot_enabled, s.ack_bot_message, s.encrypted_token, w.encrypted_token AS waba_token
+               FROM wa_senders s
+               LEFT JOIN waba_connections w ON w.id = s.waba_connection_id
+               WHERE s.phone_number_id = ? AND s.tenant_id = ? LIMIT 1`,
+              [String(phoneId), tenantId]
+            );
+            if (sRow && sRow.is_ack_bot_enabled) {
+              const replyText = sRow.ack_bot_message || "Thank you for reaching out! We received your message and an agent will reply shortly.";
+              const tok = sRow.encrypted_token || sRow.waba_token;
+              if (tok) {
+                const axios = require("axios");
+                const graphVer = process.env.WA_GRAPH_API_VERSION || "v22.0";
+                const cleanTok = cryptoHelper.decrypt(tok);
+                await axios.post(
+                  `https://graph.facebook.com/${graphVer}/${phoneId}/messages`,
+                  {
+                    messaging_product: "whatsapp",
+                    recipient_type: "individual",
+                    to: senderPhone,
+                    type: "text",
+                    text: { preview_url: false, body: replyText }
+                  },
+                  { headers: { Authorization: `Bearer ${cleanTok}` }, timeout: 10000 }
+                ).catch(() => {});
+              }
+            }
+          } catch (_) {}
+        })();
+      }
+
       results.push(await processor.processMetaWebhookPayload(tenantId, { entry: [entry] }));
     }
 

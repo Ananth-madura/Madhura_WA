@@ -9,7 +9,7 @@ import { API } from "../config/api";
 import { clearChatCachesOnLogout } from "../utils/teamChatIndexedDB";
 
 // Minimal auth shell for Whatsapp_CRM (duplicated from the CRM's AuthContext
-// so WA pages keep working standalone — see README divergence note).
+// so WA pages keep working standalone (see README divergence note).
 // Session shape is identical: localStorage "user" + "token".
 const AuthContext = createContext(undefined);
 

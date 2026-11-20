@@ -55,6 +55,7 @@ const WhatsAppTestMessageOnboarding = lazy(() => import("./pages/onboarding/What
 const OnboardingComplete = lazy(() => import("./pages/onboarding/OnboardingComplete"));
 
 // Public Compliance & Verification Pages
+const MetaTechProviderComplianceCenter = lazy(() => import("./pages/platform/MetaTechProviderComplianceCenter"));
 const VerifyEmailPage = lazy(() => import("./pages/public/VerifyEmailPage"));
 const TermsPage = lazy(() => import("./pages/public/TermsPage"));
 const PrivacyPage = lazy(() => import("./pages/public/PrivacyPage"));
@@ -189,6 +190,8 @@ export default function App() {
               }
             />
             {/* Public Compliance & Account Verification Routes */}
+            <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/verify-phone" element={<VerifyEmailPage />} />
             <Route path="/signup/verify-email" element={<VerifyEmailPage />} />
             <Route path="/signup/verify-phone" element={<VerifyEmailPage />} />
             <Route path="/terms" element={<TermsPage />} />
@@ -196,10 +199,15 @@ export default function App() {
             <Route path="/data-deletion" element={<DataDeletionPage />} />
 
             {/* Enterprise Onboarding & Activation Routes */}
+            <Route path="/platform/meta-tech-provider" element={<RequireAuth><MetaTechProviderComplianceCenter /></RequireAuth>} />
+            <Route path="/whatsapp/tech-provider" element={<RequireAuth><MetaTechProviderComplianceCenter /></RequireAuth>} />
             <Route path="/onboarding" element={<RequireAuth><OnboardingCommandCenter /></RequireAuth>} />
             <Route path="/onboarding/company" element={<RequireAuth><CompanyOnboarding /></RequireAuth>} />
             <Route path="/onboarding/plan" element={<RequireAuth><PlanOnboarding /></RequireAuth>} />
+            <Route path="/onboarding/billing" element={<Navigate to="/onboarding/plan" replace />} />
+            <Route path="/onboarding/meta-connect" element={<Navigate to="/onboarding/whatsapp/connect" replace />} />
             <Route path="/onboarding/whatsapp/connect" element={<RequireAuth><WhatsAppConnectOnboarding /></RequireAuth>} />
+            <Route path="/onboarding/whatsapp-setup" element={<Navigate to="/onboarding/whatsapp/numbers" replace />} />
             <Route path="/onboarding/whatsapp/numbers" element={<RequireAuth><WhatsAppNumbersOnboarding /></RequireAuth>} />
             <Route path="/onboarding/whatsapp/test-message" element={<RequireAuth><WhatsAppTestMessageOnboarding /></RequireAuth>} />
             <Route path="/onboarding/complete" element={<RequireAuth><OnboardingComplete /></RequireAuth>} />

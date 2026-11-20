@@ -1,37 +1,32 @@
-import {loginDestination} from "./loginDestination";
-import {confirmBrowserSession} from "./browserSession";
+import { loginDestination } from "./loginDestination";
+import { confirmBrowserSession } from "./browserSession";
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import axios from "axios";
 import {
   ArrowLeft,
-  Zap,
-  Shield,
-  Sparkles,
-  CheckCircle2,
-  KeyRound,
   Mail,
   Lock,
   Eye,
   EyeOff,
   Building2,
-  Users,
   AlertCircle,
-  HelpCircle,
+  KeyRound,
+  CheckCircle2,
+  Sparkles,
   GitBranch,
+  ShieldCheck,
+  Zap,
+  HelpCircle,
+  X
 } from "lucide-react";
 import { useAuth } from "./AuthContext";
 import { API, apiCandidates, saveApiOverride, readApiOverride } from "../config/api";
 import { MARKETING } from "../config/index";
 import { startDirectDemoSession } from "./demoSession";
 
-// Follow an origin that already answered (see config/index.js) so the 2FA
-// step does not drift back to a dead backend after failover.
 const apiBase = () => readApiOverride() || API;
 
-// The bootstrap credentials the backend repairs on demand
-// (backend/services/masterAdmin.js). They are the same pair printed by the
-// master-admin seeder, so a demo checkout and a fresh cloud box accept them.
 const MASTER_ADMIN_EMAIL = "admin@madhuratech.com";
 const MASTER_ADMIN_PASSWORD = "Admin@123";
 const isMasterCredentials = (email, password) =>
@@ -42,7 +37,7 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Mode: "credentials" | "access_code" | "demo"
+  // Mode tabs: "credentials" | "access_code" | "demo"
   const [activeTab, setActiveTab] = useState("credentials");
 
   // Credentials State
@@ -66,7 +61,7 @@ export default function Login() {
   const [twoFactorCode, setTwoFactorCode] = useState("");
   const [resendingCode, setResendingCode] = useState(false);
 
-  // Pre-fill query parameters if any (e.g. ?code=AC-X9B2-4821 or ?tab=code)
+  // Pre-fill query parameters if any
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const codeParam = params.get("code");
@@ -108,11 +103,22 @@ export default function Login() {
     }
   }, [quickCode]);
 
+  // Keyboard shortcut: close modal on Escape
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" && showForgotModal) {
+        setShowForgotModal(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showForgotModal]);
+
   const submitCredentials = async (e) => {
     e?.preventDefault?.();
     const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail) return setError("Please enter your Work Email or Employee ID");
-    if (!password) return setError("Please enter your Password");
+    if (!cleanEmail) return setError("Please enter your work email or employee ID");
+    if (!password) return setError("Please enter your password");
 
     setLoading(true);
     setError("");
@@ -124,10 +130,6 @@ export default function Login() {
     let lastError = null;
 
     try {
-      // Try the configured backend first, then the cloud IP / production
-      // domain. Transport failures and 5xx gateway answers mean "this endpoint
-      // is not serving", so moving on is safe; a 401/404 answer is a real
-      // credential verdict and stops the loop.
       for (const origin of candidates) {
         try {
           const res = await axios.post(
@@ -150,25 +152,20 @@ export default function Login() {
         const status = lastError?.response?.status;
         const transportFailure = !lastError?.response || [502, 503, 504].includes(status);
 
-        // The requested admin login must work even when the API is down: open
-        // the self-contained offline workspace instead of dead-ending.
         if (master && transportFailure) {
           const session = await startDirectDemoSession(API, "admin");
           login({
             ...session,
-            demoReason:
-              "The backend could not be reached, so this is the offline workspace. Sample data only; live messages resume when the API is back.",
+            demoReason: "The server could not be reached, so this is the offline workspace.",
           });
-          setNotice(
-            "Backend unreachable — signed in to the offline workspace with administrator access. Live data returns when the API is back."
-          );
+          setNotice("Offline workspace access granted. Live data resumes when server connectivity returns.");
           navigate("/whatsapp", { replace: true });
           return;
         }
 
         if (lastError?.friendlyMessage) setError(lastError.friendlyMessage);
         else if (transportFailure) {
-          setError("The enterprise backend service is unreachable. Check your internet connection or use 1-Click Demo Login.");
+          setError("The enterprise backend service is unreachable. Check your connection or use 1-Click Demo Login.");
         } else {
           setError(lastError?.response?.data?.message || lastError?.response?.data?.error || "Login failed. Please verify your credentials.");
         }
@@ -179,42 +176,38 @@ export default function Login() {
         if (workingOrigin && workingOrigin !== API) saveApiOverride(workingOrigin);
         setTwoFactorEmail(data.email || cleanEmail);
         setTwoFactorCode("");
-        setNotice("A verification code was sent to your email. It expires after five minutes.");
+        setNotice("A verification code was sent to your email. It expires after 5 minutes.");
         return;
       }
       if (!data?.token && !data?.cookieSession) {
-        setError("Login failed — no authentication token returned from server.");
+        setError("Login failed: no authentication token returned from server.");
         return;
       }
 
-      // If the configured origin was dead and another one answered, pin that
-      // origin so REST, socket and the next reload all use the same backend.
       const pinned = workingOrigin && workingOrigin !== API ? saveApiOverride(workingOrigin) : "";
 
       await confirmBrowserSession(data);
-      // Establish session with organization and branch context
       login({
         ...data.user,
-        cookieSession:Boolean(data.cookieSession||data.user?.cookieSession),
+        cookieSession: Boolean(data.cookieSession || data.user?.cookieSession),
         token: data.token,
         active_tenant_id: data.user.tenant_id,
         active_branch_id: data.user.branch_id,
         demoMode: false,
       });
 
-      const returnUrl = loginDestination(data,location.search);
+      const returnUrl = loginDestination(data, location.search);
       if (pinned) {
-        // Absolute API URLs were captured at bundle load; a reload is the only
-        // way to make every module pick up the newly pinned origin.
         window.location.replace(returnUrl);
         return;
       }
       navigate(returnUrl, { replace: true });
     } catch (err) {
       const status = err.response?.status;
-      if(err.friendlyMessage){setError(err.friendlyMessage);}
-      else if (status === 503 || !err.response) {
-        setError("The enterprise backend service is unreachable. Check your internet connection or use 1-Click Demo Login.");
+      if (err.friendlyMessage) {
+        setError(err.friendlyMessage);
+      } else if (status === 503 || !err.response) {
+        setError("The enterprise backend service is unreachable. Check your network or use Demo Login.");
       } else {
         setError(err.response?.data?.message || err.response?.data?.error || "Login failed. Please verify your credentials.");
       }
@@ -235,8 +228,8 @@ export default function Login() {
       }, { timeout: 15000 });
       if (!data?.token && !data?.cookieSession) throw new Error("Verification did not return a session.");
       await confirmBrowserSession(data);
-      login({ ...data.user, cookieSession:Boolean(data.cookieSession||data.user?.cookieSession), token: data.token, demoMode: false });
-      const returnUrl = loginDestination(data,location.search);
+      login({ ...data.user, cookieSession: Boolean(data.cookieSession || data.user?.cookieSession), token: data.token, demoMode: false });
+      const returnUrl = loginDestination(data, location.search);
       navigate(returnUrl, { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data?.error || err.message || "The verification code could not be confirmed.");
@@ -261,14 +254,14 @@ export default function Login() {
   const handleLaunchDemo = async (role = "admin") => {
     setDemoLoadingRole(role);
     setError("");
-    setNotice(`Opening the demo as ${role === "admin" ? "Organization Admin" : "Branch Staff"}…`);
+    setNotice(`Opening demo workspace as ${role === "admin" ? "Organization Admin" : "Branch Staff"}...`);
 
     try {
       const session = await startDirectDemoSession(API, role);
       login(session);
       navigate("/whatsapp", { replace: true });
     } catch (err) {
-      setError("Could not open the demo. Please try again.");
+      setError("Could not open the demo workspace. Please retry.");
     } finally {
       setDemoLoadingRole(null);
     }
@@ -286,448 +279,415 @@ export default function Login() {
   };
 
   return (
-    <div className="lp-auth" style={{ minHeight: "100dvh", padding: "24px 16px" }}>
-      <div className="lp-auth-panel" style={{ maxWidth: 460 }}>
-        <a href={MARKETING} className="lp-auth-back">
-          <ArrowLeft size={15} />
-          Back to Home
-        </a>
-
-        {/* Brand & Platform Header */}
-        <div className="flex items-center justify-between gap-3 mb-2">
-          <a href={MARKETING} className="flex items-center gap-2">
-            <img src="/Group.png" alt="Madhura WhatsApp CRM" className="h-8 w-auto object-contain" />
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 font-sans">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        {/* Back Link */}
+        <div className="mb-4">
+          <a
+            href={MARKETING}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-emerald-700 transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Home</span>
           </a>
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 800,
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              padding: "3px 8px",
-              background: "rgba(16, 185, 129, 0.12)",
-              color: "#047857",
-              borderRadius: 6,
-              border: "1px solid rgba(16, 185, 129, 0.3)",
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-          >
-            <GitBranch size={10} />
-            Multi-Branch v2
-          </span>
         </div>
 
-        <h1 className="hl-title" style={{ marginBottom: 4, fontSize: 24 }}>Sign in to Workspace</h1>
-        <p style={{ fontSize: 13, color: "var(--color-ink-2)", marginBottom: 18 }}>
-          Tenant-isolated messaging platform, branch routing &amp; live team inbox
-        </p>
-
-        {/* Tab Selector */}
-        <div
-          style={{
-            display: "flex",
-            background: "var(--color-paper-2, #f1f5f9)",
-            borderRadius: "var(--radius-md, 8px)",
-            padding: 3,
-            marginBottom: 18,
-            border: "1px solid var(--color-line)",
-          }}
-        >
-          <button
-            type="button"
-            disabled={!!twoFactorEmail}
-            onClick={() => {
-              setActiveTab("credentials");
-              setError("");
-            }}
-            style={{
-              flex: 1,
-              padding: "7px 10px",
-              fontSize: 12,
-              fontWeight: 600,
-              borderRadius: 6,
-              border: "none",
-              cursor: "pointer",
-              background: activeTab === "credentials" ? "var(--color-paper, #ffffff)" : "transparent",
-              color: activeTab === "credentials" ? "var(--color-ink)" : "var(--color-ink-2)",
-              boxShadow: activeTab === "credentials" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 5,
-            }}
-          >
-            <Mail size={13} />
-            <span>Work Account</span>
-          </button>
-
-
-          <button
-            type="button"
-            disabled={!!twoFactorEmail}
-            onClick={() => {
-              setActiveTab("demo");
-              setError("");
-            }}
-            style={{
-              flex: 1,
-              padding: "7px 10px",
-              fontSize: 12,
-              fontWeight: 600,
-              borderRadius: 6,
-              border: "none",
-              cursor: "pointer",
-              background: activeTab === "demo" ? "var(--color-paper, #ffffff)" : "transparent",
-              color: activeTab === "demo" ? "#047857" : "var(--color-ink-2)",
-              boxShadow: activeTab === "demo" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 5,
-            }}
-          >
-            <Zap size={13} className="text-emerald-600" />
-            <span>Try Demo</span>
-          </button>
-        </div>
-
-        {error && (
-          <div role="alert" className="lp-auth-error" style={{ marginBottom: 16 }}>
-            <AlertCircle size={16} className="shrink-0 mt-0.5" />
-            <span>{error}</span>
+        {/* Card Container */}
+        <div className="bg-white py-8 px-6 sm:px-10 rounded-2xl border border-slate-200/90 shadow-sm">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-5">
+            <a href={MARKETING} className="flex items-center gap-2">
+              <img src="/Group.png" alt="Madhura WhatsApp CRM" className="h-8 w-auto object-contain" />
+            </a>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+              <GitBranch className="w-3 h-3 text-emerald-600" />
+              <span>Multi-Branch v2</span>
+            </span>
           </div>
-        )}
-        {notice && (
-          <div role="status" className="lp-auth-note" style={{ marginBottom: 16 }}>
-            <Sparkles size={16} className="shrink-0 text-emerald-600 mt-0.5" />
-            <span>{notice}</span>
-          </div>
-        )}
 
-        {twoFactorEmail && (
-          <form onSubmit={submitTwoFactor} className="space-y-3" aria-label="Two-step verification">
-            <div>
-              <h2 className="text-base font-bold text-[var(--color-ink)]">Verify your sign-in</h2>
-              <p className="text-sm text-[var(--color-ink-2)] mt-1">Enter the code sent to <strong>{twoFactorEmail}</strong>.</p>
-            </div>
-            <label htmlFor="two-factor-code" className="hl-section-label block">Email verification code</label>
-            <input id="two-factor-code" inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={twoFactorCode} onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ""))} className="hl-input w-full" autoFocus required />
-            <button type="submit" disabled={loading || !twoFactorCode.trim()} className="hl-btn-primary w-full min-h-11">{loading ? "Verifying…" : "Verify and sign in"}</button>
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <button type="button" onClick={resendTwoFactor} disabled={resendingCode} className="text-[var(--color-primary)] underline disabled:opacity-60">{resendingCode ? "Sending…" : "Send a new code"}</button>
-              <button type="button" onClick={() => { setTwoFactorEmail(""); setTwoFactorCode(""); setNotice(""); setError(""); }} className="text-[var(--color-ink-2)] underline">Back to sign in</button>
-            </div>
-          </form>
-        )}
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Sign in to Workspace
+          </h1>
+          <p className="text-xs text-slate-600 mt-1 mb-5 leading-relaxed">
+            Tenant-isolated messaging platform, branch routing, and live team inbox.
+          </p>
 
-        {/* TAB 1: WORKSPACE ACCOUNT LOGIN */}
-        {!twoFactorEmail && activeTab === "credentials" && (
-          <form onSubmit={submitCredentials} noValidate>
-            <div className="mb-4">
-              <label htmlFor="hl-email" className="hl-section-label block mb-1.5 font-bold text-xs text-gray-700">
-                Work Email or Employee ID *
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                  <Mail size={16} />
-                </div>
-                <input
-                  id="hl-email"
-                  type="text"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="username"
-                  className="hl-input w-full pl-9 pr-3 py-2.5 text-sm transition focus:ring-2 focus:ring-emerald-500/20"
-                  placeholder="admin@madhuratech.com"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="hl-password" className="hl-section-label block font-bold text-xs text-gray-700 m-0">
-                  Password *
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowForgotModal(true)}
-                  className="text-[11px] text-emerald-700 hover:underline font-semibold focus:outline-none"
-                >
-                  Forgot password?
-                </button>
-              </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                  <Lock size={16} />
-                </div>
-                <input
-                  id="hl-password"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  className="hl-input w-full pl-9 pr-10 py-2.5 text-sm transition focus:ring-2 focus:ring-emerald-500/20"
-                  placeholder="••••••••••••"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between mb-5">
-              <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-600 select-none">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                />
-                <span>Remember this workstation</span>
-              </label>
-            </div>
-
+          {/* Tab Selector */}
+          <div className="flex bg-slate-100 p-1 rounded-xl mb-5 border border-slate-200/80">
             <button
-              type="submit"
-              disabled={loading}
-              className="hl-btn-primary w-full py-3 px-4 text-sm font-bold flex items-center justify-center gap-2 rounded-xl shadow-sm transition hover:shadow cursor-pointer"
-              style={{
-                background: "linear-gradient(135deg, #059669 0%, #0d9488 100%)",
-                borderColor: "#047857",
+              type="button"
+              disabled={!!twoFactorEmail}
+              onClick={() => {
+                setActiveTab("credentials");
+                setError("");
               }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeTab === "credentials"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
             >
-              {loading ? (
-                <span>Authenticating Workspace…</span>
-              ) : (
-                <>
-                  <Building2 size={16} />
-                  <span>Sign In to Dashboard</span>
-                </>
-              )}
+              <Mail className="w-3.5 h-3.5" />
+              <span>Work Account</span>
             </button>
+            <button
+              type="button"
+              disabled={!!twoFactorEmail}
+              onClick={() => {
+                setActiveTab("access_code");
+                setError("");
+              }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeTab === "access_code"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Access Code</span>
+            </button>
+            <button
+              type="button"
+              disabled={!!twoFactorEmail}
+              onClick={() => {
+                setActiveTab("demo");
+                setError("");
+              }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeTab === "demo"
+                  ? "bg-white text-emerald-800 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Try Demo</span>
+            </button>
+          </div>
 
-            {/* Quick dev test autofill */}
-            {process.env.NODE_ENV !== "production" && <div className="mt-4 pt-3.5 border-t border-dashed border-gray-200">
-              <p className="text-[11px] text-gray-500 mb-1.5 font-medium">Quick dev autofill (master admin works on every backend):</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => autofillPreset(MASTER_ADMIN_EMAIL, MASTER_ADMIN_PASSWORD)}
-                  className="text-xs py-1 px-2.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-medium transition cursor-pointer"
-                >
-                  {MASTER_ADMIN_EMAIL} / {MASTER_ADMIN_PASSWORD}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => autofillPreset("demo@madhuratech.com", "demo123")}
-                  className="text-xs py-1 px-2.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-gray-700 font-medium transition cursor-pointer"
-                >
-                  demo@madhuratech.com
-                </button>
-              </div>
-            </div>}
-          </form>
-        )}
-
-        {/* TAB 2: ACCESS CODE QUICK LOOKUP & ACTIVATION */}
-        {activeTab === "access_code" && (
-          <div>
-            <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200/80 mb-4 text-xs text-emerald-950">
-              <div className="font-bold flex items-center gap-1.5 mb-1 text-emerald-900">
-                <KeyRound size={15} className="text-emerald-700" />
-                <span>Employee Invitation &amp; Activation Code</span>
-              </div>
-              <p className="text-[12px] text-emerald-800 leading-relaxed m-0">
-                If your workspace administrator or branch manager invited you, enter your 10-character code below to verify your branch allocation and activate your account.
-              </p>
+          {/* Feedback Alerts */}
+          {error && (
+            <div role="alert" className="mb-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+              <div className="flex-1 leading-relaxed">{error}</div>
             </div>
+          )}
+          {notice && (
+            <div role="status" className="mb-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start gap-2.5">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+              <div className="flex-1 leading-relaxed">{notice}</div>
+            </div>
+          )}
 
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="quick-code-input" className="hl-section-label block font-bold text-xs text-gray-700 m-0">
-                  Workspace Access Code *
-                </label>
-                {codeChecking && (
-                  <span className="text-[11px] text-emerald-600 flex items-center gap-1 font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Checking…
-                  </span>
-                )}
+          {/* 2FA Form */}
+          {twoFactorEmail && (
+            <form onSubmit={submitTwoFactor} className="space-y-4" aria-label="Two-step verification">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">Verify your sign-in</h2>
+                <p className="text-xs text-slate-600 mt-1">
+                  Enter the 6-digit code sent to <span className="font-semibold">{twoFactorEmail}</span>.
+                </p>
               </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                  <KeyRound size={16} />
+              <div>
+                <label htmlFor="twoFactorInput" className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Verification Code
+                </label>
+                <input
+                  id="twoFactorInput"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={8}
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ""))}
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
+                  autoFocus
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading || !twoFactorCode.trim()}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-colors disabled:opacity-50 min-h-[44px]"
+              >
+                {loading ? "Verifying..." : "Verify and sign in"}
+              </button>
+              <div className="flex items-center justify-between gap-3 text-xs pt-1">
+                <button
+                  type="button"
+                  onClick={resendTwoFactor}
+                  disabled={resendingCode}
+                  className="text-emerald-700 hover:underline font-semibold disabled:opacity-50"
+                >
+                  {resendingCode ? "Sending..." : "Send a new code"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTwoFactorEmail("");
+                    setTwoFactorCode("");
+                    setNotice("");
+                    setError("");
+                  }}
+                  className="text-slate-600 hover:underline"
+                >
+                  Back to sign in
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* TAB 1: WORKSPACE ACCOUNT LOGIN */}
+          {!twoFactorEmail && activeTab === "credentials" && (
+            <form onSubmit={submitCredentials} noValidate className="space-y-4">
+              <div>
+                <label htmlFor="hl-email" className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Work Email or Employee ID *
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="hl-email"
+                    type="text"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="username"
+                    className="w-full pl-9 pr-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none transition-colors"
+                    placeholder="admin@madhuratech.com"
+                    required
+                  />
                 </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="hl-password" className="block text-xs font-bold text-slate-700 m-0">
+                    Password *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotModal(true)}
+                    className="text-[11px] text-emerald-700 hover:underline font-semibold focus-visible:outline-none"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="hl-password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    className="w-full pl-9 pr-10 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none transition-colors"
+                    placeholder="Enter your password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus-visible:outline-none cursor-pointer"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-600 select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                  />
+                  <span>Remember this workstation</span>
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 min-h-[44px] shadow-sm cursor-pointer"
+              >
+                {loading ? (
+                  <span>Authenticating Workspace...</span>
+                ) : (
+                  <>
+                    <Building2 className="w-4 h-4" />
+                    <span>Sign In to Dashboard</span>
+                  </>
+                )}
+              </button>
+
+              {/* Dev Test Credentials */}
+              {process.env.NODE_ENV !== "production" && (
+                <div className="pt-3 border-t border-slate-200">
+                  <p className="text-[11px] text-slate-500 mb-1.5 font-medium">Quick dev autofill credentials:</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => autofillPreset(MASTER_ADMIN_EMAIL, MASTER_ADMIN_PASSWORD)}
+                      className="text-[11px] py-1 px-2.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-medium transition cursor-pointer"
+                    >
+                      {MASTER_ADMIN_EMAIL}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => autofillPreset("demo@madhuratech.com", "demo123")}
+                      className="text-[11px] py-1 px-2.5 rounded-lg border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition cursor-pointer"
+                    >
+                      demo@madhuratech.com
+                    </button>
+                  </div>
+                </div>
+              )}
+            </form>
+          )}
+
+          {/* TAB 2: ACCESS CODE */}
+          {!twoFactorEmail && activeTab === "access_code" && (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 leading-relaxed">
+                <div className="font-bold flex items-center gap-1.5 mb-1 text-emerald-900">
+                  <KeyRound className="w-4 h-4 text-emerald-700" />
+                  <span>Employee Invitation &amp; Activation Code</span>
+                </div>
+                Enter the 10-character code from your workspace manager to verify your branch allocation.
+              </div>
+
+              <div>
+                <label htmlFor="quick-code-input" className="block text-xs font-bold text-slate-700 mb-1.5">
+                  10-Character Access Code *
+                </label>
                 <input
                   id="quick-code-input"
                   type="text"
+                  maxLength={12}
                   value={quickCode}
                   onChange={(e) => setQuickCode(e.target.value.toUpperCase())}
-                  className="hl-input w-full pl-9 pr-3 py-2.5 font-mono font-bold tracking-wider text-sm transition focus:ring-2 focus:ring-emerald-500/20"
-                  placeholder="e.g. AC-X9B2-4821"
-                  required
-                  autoFocus
+                  placeholder="e.g. AC-9B21-48"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 font-mono focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
                 />
               </div>
-            </div>
 
-            {/* Live Preview Card */}
-            {codePreview && (
-              <div className="p-3.5 mb-4 rounded-xl bg-slate-50 border border-emerald-300 text-xs shadow-xs">
-                <div className="flex items-center gap-2 text-emerald-800 font-bold mb-1.5">
-                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-                  <span>Valid Invitation for {codePreview.tenant_name}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-gray-700 text-[11px] pt-1 border-t border-gray-200">
-                  <div>
-                    <span className="text-gray-500 block">Assigned Branch:</span>
-                    <strong className="text-gray-900">{codePreview.branch_name || "Head Office"}</strong>
+              {codeChecking && (
+                <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
+                  <span>Validating access code...</span>
+                </p>
+              )}
+
+              {codePreview && (
+                <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-950 space-y-1">
+                  <div className="font-semibold text-emerald-900 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Verified: {codePreview.company_name || "Enterprise Workspace"}</span>
                   </div>
-                  <div>
-                    <span className="text-gray-500 block">Assigned Role:</span>
-                    <strong className="text-gray-900">{codePreview.role || "Employee"}</strong>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={handleQuickCodeContinue}
-              className="hl-btn-primary w-full py-3 px-4 text-sm font-bold flex items-center justify-center gap-2 rounded-xl shadow-sm transition hover:shadow cursor-pointer"
-              style={{
-                background: "linear-gradient(135deg, #059669 0%, #0d9488 100%)",
-                borderColor: "#047857",
-              }}
-            >
-              <KeyRound size={16} />
-              <span>Continue to Account Activation →</span>
-            </button>
-          </div>
-        )}
-
-        {/* TAB 3: 1-CLICK DEV & DEMO SWITCHER */}
-        {activeTab === "demo" && (
-          <div>
-            <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200/80 mb-4 text-xs text-emerald-950">
-              <div className="font-bold flex items-center gap-1.5 mb-1 text-emerald-900">
-                <Zap size={15} className="text-emerald-700 fill-emerald-700" />
-                <span>Explore the application</span>
-              </div>
-              <p className="text-[12px] text-emerald-800 leading-relaxed m-0">
-                Explore sample conversations, contacts, templates and campaigns. Create an organization to connect your own WhatsApp account.
-              </p>
-            </div>
-
-            <div className="space-y-3 mb-4">
-              <button
-                type="button"
-                disabled={Boolean(demoLoadingRole)}
-                onClick={() => handleLaunchDemo("admin")}
-                className="w-full p-3.5 rounded-xl border border-emerald-200 bg-white hover:bg-emerald-50/40 text-left transition flex items-center justify-between group cursor-pointer"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
-                    <Building2 size={18} />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-gray-900 group-hover:text-emerald-800">
-                      Primary Organization Admin
-                    </div>
-                    <div className="text-[11px] text-gray-500">
-                      Sample conversations, contacts, campaigns and templates
-                    </div>
+                  <div className="text-slate-600 text-[11px]">
+                    Role: <span className="font-medium">{codePreview.role_name || "Team Member"}</span> | Branch: <span className="font-medium">{codePreview.branch_name || "Head Office"}</span>
                   </div>
                 </div>
-                <span className="text-xs font-bold text-emerald-700">
-                  {demoLoadingRole === "admin" ? "Launching…" : "Launch →"}
-                </span>
-              </button>
+              )}
 
               <button
                 type="button"
-                disabled={Boolean(demoLoadingRole)}
-                onClick={() => handleLaunchDemo("employee")}
-                className="w-full p-3.5 rounded-xl border border-gray-200 bg-white hover:bg-slate-50 text-left transition flex items-center justify-between group cursor-pointer"
+                onClick={handleQuickCodeContinue}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors min-h-[44px]"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-                    <Users size={18} />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-gray-900 group-hover:text-slate-800">
-                      Branch Support Agent
-                    </div>
-                    <div className="text-[11px] text-gray-500">
-                      Sample staff inbox and assigned customers
-                    </div>
-                  </div>
-                </div>
-                <span className="text-xs font-bold text-slate-700">
-                  {demoLoadingRole === "employee" ? "Launching…" : "Launch →"}
-                </span>
+                <span>Continue Activation</span>
               </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Workspace Signup Link */}
-        <div style={{ marginTop: 22, textAlign: "center" }}>
-          <p style={{ fontSize: 13, color: "var(--color-ink-2)", marginBottom: 8 }}>
-            Need a new workspace for your enterprise?{" "}
-            <Link to="/signup" style={{ color: "var(--color-primary)", fontWeight: 700 }}>
-              Create Organization (14-Day Free Trial) →
-            </Link>
-          </p>
-        </div>
+          {/* TAB 3: DEMO WORKSPACE */}
+          {!twoFactorEmail && activeTab === "demo" && (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 leading-relaxed">
+                <div className="font-bold flex items-center gap-1.5 mb-1 text-emerald-900">
+                  <Zap className="w-4 h-4 text-emerald-700" />
+                  <span>Instant 1-Click Interactive Demo</span>
+                </div>
+                Explore full team inbox, multi-branch routing, campaign creation, and chatbot flows with preloaded sample data.
+              </div>
 
-        {/* Security & Multi-Tenancy Trust Footer */}
-        <div
-          className="flex items-center justify-center gap-2 flex-wrap"
-          style={{ fontSize: 11, color: "var(--color-ink-3)", marginTop: 18, borderTop: "1px solid var(--color-line)", paddingTop: 12 }}
-        >
-          <div className="flex items-center gap-1">
-            <Shield size={12} className="text-emerald-600" />
-            <span>Multi-Tenant Quarantine</span>
+              <div className="space-y-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleLaunchDemo("admin")}
+                  disabled={demoLoadingRole !== null}
+                  className="w-full py-2.5 px-4 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50/50 text-emerald-900 text-xs font-bold flex items-center justify-between transition-colors min-h-[44px] cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                    <span>Launch as Primary Organization Admin</span>
+                  </span>
+                  <span className="text-[11px] text-emerald-700 font-semibold">1-Click Access</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleLaunchDemo("employee")}
+                  disabled={demoLoadingRole !== null}
+                  className="w-full py-2.5 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold flex items-center justify-between transition-colors min-h-[44px] cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-slate-600" />
+                    <span>Launch as Branch Agent</span>
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-semibold">Staff View</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Footer Navigation */}
+          <div className="mt-6 pt-5 border-t border-slate-200 text-center">
+            <p className="text-xs text-slate-600">
+              Do not have an enterprise workspace?{" "}
+              <Link to="/signup" className="text-emerald-700 font-bold hover:underline">
+                Create Account
+              </Link>
+            </p>
           </div>
-          <span>•</span>
-          <span>Branch RBAC Enforced</span>
-          <span>•</span>
-          <span>Meta Graph v22.0</span>
         </div>
       </div>
 
       {/* Forgot Password Modal */}
       {showForgotModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(4px)" }}
+          className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="forgotPasswordTitle"
         >
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-gray-100">
-            <div className="flex items-center gap-2.5 text-gray-900 font-bold text-base mb-2">
-              <HelpCircle size={20} className="text-emerald-600" />
-              <span>Password Recovery</span>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full border border-slate-200 shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 id="forgotPasswordTitle" className="text-base font-bold text-slate-900">
+                Password Recovery
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowForgotModal(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <p className="text-xs text-gray-600 leading-relaxed mb-4">
-              For security under tenant isolation, account password resets are managed by your Organization Administrator. Contact your workspace admin or email{" "}
-              <a href="mailto:support@madhuratech.com" className="text-emerald-700 font-semibold underline">
-                support@madhuratech.com
-              </a>{" "}
-              for verified identity clearance.
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Contact your workspace administrator or branch supervisor to issue a temporary password reset code.
+              Master administrative credentials can be restored via platform administration.
             </p>
             <button
               type="button"
               onClick={() => setShowForgotModal(false)}
-              className="hl-btn-primary w-full py-2.5 text-xs font-bold rounded-xl"
+              className="w-full py-2 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors min-h-[44px]"
             >
               Understood
             </button>

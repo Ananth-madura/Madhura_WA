@@ -111,6 +111,14 @@ export default function OnboardingCommandCenter() {
               </button>
 
               <Link
+                to="/platform/meta-tech-provider"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition shadow-sm"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
+                <span>Meta Tech Provider</span>
+              </Link>
+
+              <Link
                 to="/whatsapp"
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow hover:shadow-md transition"
               >

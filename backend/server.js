@@ -341,6 +341,8 @@ app.use("/api/v2", require("./routes/enterpriseBranchRoutes"));
 app.use("/api/v2", require("./routes/enterpriseOrganizationRoutes"));
 app.use("/api/v2/meta", require("./routes/enterpriseMetaRoutes"));
 app.use("/api/meta", require("./routes/enterpriseMetaRoutes"));
+app.use("/api/platform/meta-tech-provider", require("./routes/platformMetaTechProviderRoutes"));
+app.use("/api/v2/meta-tech-provider", require("./routes/platformMetaTechProviderRoutes"));
 app.use("/api/onboarding", require("./routes/onboardingRoutes"));
 app.use("/api/v2/billing", require("./routes/enterpriseBillingRoutes"));
 app.use("/api/v2/inbox", (req, res, next) => app.get("sharedInboxReady") ? next() : res.status(503).json({ message: "Shared inbox schema is not ready" }), require("./routes/enterpriseInboxRoutes"));
@@ -555,6 +557,7 @@ function startServer() {
       await require("./migrations/enterprise_campaign_management").migrate(db);
       await require("./migrations/enterprise_flowbot_and_automation_engine").migrate(db);
       await require("./migrations/campaign_wati_upgrade_pack").migrate(db);
+      await require("./migrations/meta_tech_provider_compliance").migrate(db);
       await require("./services/schemaReadiness").assertReady(db);
       const platformAdmin = await require("./services/platformAdminBootstrap").provisionConfiguredAdmin(db);
       if (platformAdmin) console.log("Platform administrator and internal workspace are ready");
