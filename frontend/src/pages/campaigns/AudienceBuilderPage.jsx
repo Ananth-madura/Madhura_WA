@@ -217,7 +217,7 @@ export default function AudienceBuilderPage() {
                   <td className="px-4 py-2.5 font-semibold text-emerald-700">{s.estimated_count || 0}</td>
                   <td className="px-4 py-2.5 text-slate-500">{s.updated_at}</td>
                   <td className="px-4 py-2.5 text-right">
-                    <Link to={`/dashboard/campaigns/create?segment_id=${s.id}`} className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold">
+                    <Link to={`/whatsapp/campaigns/create?segment_id=${s.id}`} className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold">
                       Create Campaign <ArrowRight className="w-3 h-3" />
                     </Link>
                   </td>

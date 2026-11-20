@@ -212,7 +212,7 @@ export default function WhatsAppNav() {
       label: "Campaigns",
       fullPrefix: "Enterprise ",
       title: "Enterprise Campaign Command Center, Bulk Messaging, Flows & Attribution",
-      path: "/dashboard/campaigns",
+      path: "/whatsapp/campaigns",
       icon: Send,
       module: "campaigns",
     },

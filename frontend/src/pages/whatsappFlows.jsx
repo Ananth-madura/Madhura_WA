@@ -72,6 +72,7 @@ const PALETTE_CATEGORIES = [
       { type: "send_message", label: "Text Message", icon: "💬", desc: "Standard text message", color: "border-blue-500 bg-blue-50 text-blue-900" },
       { type: "send_media", label: "Media / PDF", icon: "📷", desc: "Image, Video or PDF catalog", color: "border-indigo-500 bg-indigo-50 text-indigo-900" },
       { type: "send_template", label: "Template", icon: "🧾", desc: "Approved Meta HSM template", color: "border-lime-500 bg-lime-50 text-lime-900" },
+      { type: "send_whatsapp_flow", label: "Meta Form Flow", icon: "📝", desc: "Launch published Meta WhatsApp Flow", color: "border-emerald-600 bg-emerald-50 text-emerald-950" },
       { type: "send_cta", label: "Link Button", icon: "🔗", desc: "Tappable button that opens a URL", color: "border-sky-500 bg-sky-50 text-sky-900" },
     ]
   },
@@ -112,6 +113,9 @@ const PALETTE_CATEGORIES = [
       { type: "contact_lookup", label: "Contact Snapshot", desc: "Current conversation's shared name, phone and email" },
       { type: "business_action", label: "Business Action", desc: "Call a configured business system and map its response" },
       { type: "create_lead", label: "Create CRM Lead", icon: "💼", desc: "Save contact as hot sales lead", color: "border-blue-500 bg-blue-50 text-blue-900" },
+      { type: "create_deal", label: "Create CRM Deal", icon: "🤝", desc: "Create sales opportunity in pipeline", color: "border-indigo-500 bg-indigo-50 text-indigo-900" },
+      { type: "schedule_followup", label: "Schedule Follow-up", icon: "📆", desc: "Create assigned CRM follow-up task", color: "border-teal-500 bg-teal-50 text-teal-900" },
+      { type: "start_automation", label: "Start Automation", icon: "⚡", desc: "Trigger background Automation Engine workflow", color: "border-amber-500 bg-amber-50 text-amber-900" },
       { type: "api_webhook", label: "API Webhook", icon: "🌐", desc: "Call external REST API", color: "border-violet-500 bg-violet-50 text-violet-900" },
       { type: "set_variable", label: "Set Variable / Transform", icon: "⚙️", desc: "Assign variables & math/date transforms", color: "border-slate-500 bg-slate-50 text-slate-900" },
       { type: "set_tag", label: "Tag Contact", icon: "🏷️", desc: "Tag lead / contact in CRM", color: "border-emerald-500 bg-emerald-50 text-emerald-900" },
@@ -337,6 +341,7 @@ function FlowsWorkspace() {
   });
   const [sendersList, setSendersList] = useState([]);
   const [agentsList, setAgentsList] = useState([]);
+  const [enterpriseRefs, setEnterpriseRefs] = useState({ whatsapp_flows: [], automation_workflows: [], automations: [], campaigns: [] });
   const [flowEntryNode, setFlowEntryNode] = useState("start");
   const [nodes, setNodes] = useState([]);
   const [selectedNodeKey, setSelectedNodeKey] = useState(null);
@@ -548,6 +553,16 @@ function FlowsWorkspace() {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
     axios.get(`${API}/api/wa-flows/senders`, { headers }).then((r) => setSendersList(r.data?.senders || [])).catch(() => {});
     axios.get(`${API}/api/wa-flows/agents`, { headers }).then((r) => setAgentsList(r.data?.agents || [])).catch(() => {});
+    axios.get(`${API}/api/wa-flows/enterprise-references`, { headers }).then((r) => {
+      if (r.data && typeof r.data === "object") {
+        setEnterpriseRefs({
+          whatsapp_flows: Array.isArray(r.data.whatsapp_flows) ? r.data.whatsapp_flows : [],
+          automation_workflows: Array.isArray(r.data.automation_workflows) ? r.data.automation_workflows : [],
+          automations: Array.isArray(r.data.automations) ? r.data.automations : [],
+          campaigns: Array.isArray(r.data.campaigns) ? r.data.campaigns : [],
+        });
+      }
+    }).catch(() => {});
   }, [fetchFlows]);
 
   // ── Fetch Audit Runs ────────────────────────────────────────────────────────
@@ -988,6 +1003,9 @@ function FlowsWorkspace() {
         const res = await axios.post(`${API}/api/wa-flows`, payload, { headers });
         flowId = res.data.id;
         setEditingFlowId(flowId);
+        if (location.pathname.endsWith("/flows/create")) {
+          navigate(`/whatsapp/flows/builder/${flowId}`, { replace: true });
+        }
       }
 
       if (isPublishing && flowId) {
@@ -1192,6 +1210,14 @@ function FlowsWorkspace() {
       newConfig = { lookup_type: "customer", next_node_key: "" };
     } else if (item.type === "create_lead") {
       newConfig = { default_service: "General Inquiry", notes: "Captured via bot", next_node_key: "" };
+    } else if (item.type === "send_whatsapp_flow") {
+      newConfig = { whatsapp_flow_id: "", cta_label: "Open Form", text: "Please complete this short form:", wait_for_completion: true, next_node_key: "" };
+    } else if (item.type === "start_automation") {
+      newConfig = { event_type: "flowbot_triggered_automation", workflow_id: "", next_node_key: "" };
+    } else if (item.type === "create_deal") {
+      newConfig = { title: "WhatsApp Opportunity - {{customer.name}}", stage: "qualified", amount: "", next_node_key: "" };
+    } else if (item.type === "schedule_followup") {
+      newConfig = { title: "Follow up with {{customer.name}}", due_in_hours: 2, assigned_to: "", next_node_key: "" };
     } else if (item.type === "api_webhook") {
       newConfig = { method: "GET", url: "", timeout_ms: 10000, retry_count: 1, headers: {}, query_params: {}, response_mapping: {}, next_node_key: "", error_next: "" };
     } else if (item.type === "ai_generate") {
@@ -2304,8 +2330,226 @@ function FlowsWorkspace() {
           <FlowSetVariableOptions config={cfg} nodes={nodes} onChange={updateConfig} />
         )}
 
+        {/* ── SEND META WHATSAPP FLOW FORM ──────────────────────────── */}
+        {selectedNode.node_type === "send_whatsapp_flow" && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Published Meta WhatsApp Flow</label>
+              <select
+                value={cfg.whatsapp_flow_id || ""}
+                onChange={(e) => updateConfig({ whatsapp_flow_id: e.target.value ? Number(e.target.value) : "" })}
+                className="w-full p-2 text-xs border rounded-lg bg-white"
+              >
+                <option value="">-- Select Meta Form Flow --</option>
+                {enterpriseRefs.whatsapp_flows.map((wf) => (
+                  <option key={wf.id} value={wf.id}>
+                    #{wf.id} {wf.name} ({wf.meta_status || "DRAFT"})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Prompt Message</label>
+              <textarea
+                value={cfg.text || ""}
+                onChange={(e) => updateConfig({ text: e.target.value })}
+                rows={2}
+                placeholder="Please tap below to complete the form."
+                className="w-full p-2 text-xs border rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Button Label</label>
+              <input
+                type="text"
+                value={cfg.cta_label || ""}
+                onChange={(e) => updateConfig({ cta_label: e.target.value })}
+                placeholder="Open Form"
+                className="w-full p-2 text-xs border rounded-lg"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs text-slate-700">
+              <input
+                type="checkbox"
+                checked={cfg.wait_for_completion !== false}
+                onChange={(e) => updateConfig({ wait_for_completion: e.target.checked })}
+              />
+              <span>Wait for customer form submission before next step</span>
+            </label>
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Next Step After Submission</label>
+              <select
+                value={cfg.next_node_key || ""}
+                onChange={(e) => updateConfig({ next_node_key: e.target.value })}
+                className="w-full p-2 text-xs border rounded-lg bg-white font-mono"
+              >
+                <option value="">-- Select Next Step --</option>
+                {nodes.filter((n) => n.node_key !== selectedNode.node_key).map((n) => (
+                  <option key={n.node_key} value={n.node_key}>{n.node_key} ({n.node_type})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* ── START ENTERPRISE AUTOMATION WORKFLOW ─────────────────── */}
+        {selectedNode.node_type === "start_automation" && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Automation Event Type</label>
+              <select
+                value={cfg.event_type || "flowbot_triggered_automation"}
+                onChange={(e) => updateConfig({ event_type: e.target.value })}
+                className="w-full p-2 text-xs border rounded-lg bg-white"
+              >
+                <option value="flowbot_triggered_automation">Flowbot Triggered Automation</option>
+                <option value="lead_created">Lead Created</option>
+                <option value="deal_qualified">Deal Qualified</option>
+                <option value="order_support">Order Support</option>
+                <option value="human_handover">Human Handover</option>
+              </select>
+            </div>
+            {enterpriseRefs.automation_workflows.length > 0 && (
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Target Workflow (Optional)</label>
+                <select
+                  value={cfg.workflow_id || ""}
+                  onChange={(e) => updateConfig({ workflow_id: e.target.value ? Number(e.target.value) : "" })}
+                  className="w-full p-2 text-xs border rounded-lg bg-white"
+                >
+                  <option value="">-- Any Published Workflow Subscribed to Event --</option>
+                  {enterpriseRefs.automation_workflows.map((w) => (
+                    <option key={w.id} value={w.id}>#{w.id} {w.name} ({w.status})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
+              <select
+                value={cfg.next_node_key || ""}
+                onChange={(e) => updateConfig({ next_node_key: e.target.value })}
+                className="w-full p-2 text-xs border rounded-lg bg-white font-mono"
+              >
+                <option value="">-- Select Next Step --</option>
+                {nodes.filter((n) => n.node_key !== selectedNode.node_key).map((n) => (
+                  <option key={n.node_key} value={n.node_key}>{n.node_key} ({n.node_type})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* ── CREATE CRM DEAL ──────────────────────────────────────── */}
+        {selectedNode.node_type === "create_deal" && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Deal Title (supports variables)</label>
+              <input
+                type="text"
+                value={cfg.title || ""}
+                onChange={(e) => updateConfig({ title: e.target.value })}
+                placeholder="Enterprise Deal - {{customer.name}}"
+                className="w-full p-2 text-xs border rounded-lg"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Pipeline Stage</label>
+                <select
+                  value={cfg.stage || "qualified"}
+                  onChange={(e) => updateConfig({ stage: e.target.value })}
+                  className="w-full p-2 text-xs border rounded-lg bg-white"
+                >
+                  <option value="qualified">Qualified</option>
+                  <option value="proposal">Proposal</option>
+                  <option value="negotiation">Negotiation</option>
+                  <option value="won">Won</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Deal Value (INR)</label>
+                <input
+                  type="text"
+                  value={cfg.amount || ""}
+                  onChange={(e) => updateConfig({ amount: e.target.value })}
+                  placeholder="{{budget}} or 50000"
+                  className="w-full p-2 text-xs border rounded-lg"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
+              <select
+                value={cfg.next_node_key || ""}
+                onChange={(e) => updateConfig({ next_node_key: e.target.value })}
+                className="w-full p-2 text-xs border rounded-lg bg-white font-mono"
+              >
+                <option value="">-- Select Next Step --</option>
+                {nodes.filter((n) => n.node_key !== selectedNode.node_key).map((n) => (
+                  <option key={n.node_key} value={n.node_key}>{n.node_key} ({n.node_type})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* ── SCHEDULE FOLLOW-UP TASK ──────────────────────────────── */}
+        {selectedNode.node_type === "schedule_followup" && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Follow-up Task Title</label>
+              <input
+                type="text"
+                value={cfg.title || ""}
+                onChange={(e) => updateConfig({ title: e.target.value })}
+                placeholder="Call back {{customer.name}}"
+                className="w-full p-2 text-xs border rounded-lg"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Due In (Hours)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={cfg.due_in_hours ?? 2}
+                  onChange={(e) => updateConfig({ due_in_hours: Number(e.target.value || 2) })}
+                  className="w-full p-2 text-xs border rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Assign Agent</label>
+                <select
+                  value={cfg.assigned_to || ""}
+                  onChange={(e) => updateConfig({ assigned_to: e.target.value ? Number(e.target.value) : "" })}
+                  className="w-full p-2 text-xs border rounded-lg bg-white"
+                >
+                  <option value="">-- Auto / Unassigned --</option>
+                  {agentsList.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
+              <select
+                value={cfg.next_node_key || ""}
+                onChange={(e) => updateConfig({ next_node_key: e.target.value })}
+                className="w-full p-2 text-xs border rounded-lg bg-white font-mono"
+              >
+                <option value="">-- Select Next Step --</option>
+                {nodes.filter((n) => n.node_key !== selectedNode.node_key).map((n) => (
+                  <option key={n.node_key} value={n.node_key}>{n.node_key} ({n.node_type})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
         {/* ── GENERIC FALLBACK FOR ANY NODE WITH NEXT STEP ────────────── */}
-        {!["switch", "business_action", "ai_reply", "interactive_menu", "send_buttons", "send_list", "send_message", "send_media", "send_template", "send_cta", "condition", "business_hours", "contact_lookup", "ai_intent", "ai_generate", "crm_lookup", "collect_input", "create_lead", "delay", "api_webhook", "set_variable", "set_tag", "jump_to_flow", "handoff", "end", "start"].includes(selectedNode.node_type) && !selectedNode.node_type?.includes("trigger") && (
+        {!["switch", "business_action", "ai_reply", "interactive_menu", "send_buttons", "send_list", "send_message", "send_media", "send_template", "send_whatsapp_flow", "send_cta", "condition", "business_hours", "contact_lookup", "ai_intent", "ai_generate", "crm_lookup", "collect_input", "create_lead", "create_deal", "schedule_followup", "start_automation", "delay", "api_webhook", "set_variable", "set_tag", "jump_to_flow", "handoff", "end", "start"].includes(selectedNode.node_type) && !selectedNode.node_type?.includes("trigger") && (
           <div className="space-y-3">
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">Next Step Node</label>
@@ -2807,7 +3051,7 @@ function FlowsWorkspace() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigate(`/dashboard/campaigns/create?flowbot_id=${flow.id}`);
+                              navigate(`/whatsapp/campaigns/create?flowbot_id=${flow.id}`);
                             }}
                             className="px-2.5 py-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition cursor-pointer"
                             title="Attach this flowbot to a new campaign"

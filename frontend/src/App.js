@@ -73,6 +73,12 @@ const FlowbotsAutomationsPage = lazy(() => import("./pages/campaigns/FlowbotsAut
 const CalendarApprovalsPage = lazy(() => import("./pages/campaigns/CalendarApprovalsPage"));
 const AnalyticsReportsPage = lazy(() => import("./pages/campaigns/AnalyticsReportsPage"));
 const CampaignSettingsAdminPage = lazy(() => import("./pages/campaigns/CampaignSettingsAdminPage"));
+const GuidedFirstCampaignPage = lazy(() => import("./pages/campaigns/GuidedFirstCampaignPage"));
+const RetargetingPage = lazy(() => import("./pages/campaigns/RetargetingPage"));
+const DripSequencesPage = lazy(() => import("./pages/campaigns/DripSequencesPage"));
+const FailureRecoveryPage = lazy(() => import("./pages/campaigns/FailureRecoveryPage"));
+const TemplateHealthPage = lazy(() => import("./pages/campaigns/TemplateHealthPage"));
+const AiCampaignAssistantPage = lazy(() => import("./pages/campaigns/AiCampaignAssistantPage"));
 
 /* Marketing site now lives in the sibling `landing_page` project (port 3002).
    Old public URLs on this origin hand off there so shared links keep working. */
@@ -233,8 +239,39 @@ export default function App() {
               <Route path="templates/create" element={<WATemplateCreate />} />
               <Route path="templates/:templateId/edit" element={<WATemplateCreate />} />
               <Route path="groups" element={<WAGroups />} />
-              <Route path="campaigns" element={<Navigate to="/dashboard/campaigns" replace />} />
+              <Route path="campaigns" element={<CampaignErrorBoundary><CampaignCenterDashboard /></CampaignErrorBoundary>} />
+              <Route path="campaigns/create" element={<CampaignErrorBoundary><CampaignComposerPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/calendar" element={<CampaignErrorBoundary><CalendarApprovalsPage mode="calendar" /></CampaignErrorBoundary>} />
+              <Route path="campaigns/approvals" element={<CampaignErrorBoundary><CalendarApprovalsPage mode="approvals" /></CampaignErrorBoundary>} />
+              <Route path="campaigns/audiences" element={<CampaignErrorBoundary><AudienceBuilderPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/audiences/create" element={<CampaignErrorBoundary><AudienceBuilderPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/import" element={<CampaignErrorBoundary><AudienceImportPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/import/:id" element={<CampaignErrorBoundary><AudienceImportPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/consent" element={<CampaignErrorBoundary><ConsentSuppressionPage defaultTab="consent" /></CampaignErrorBoundary>} />
+              <Route path="campaigns/consent/import" element={<CampaignErrorBoundary><AudienceImportPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/suppression" element={<CampaignErrorBoundary><ConsentSuppressionPage defaultTab="suppression" /></CampaignErrorBoundary>} />
+              <Route path="campaigns/templates" element={<CampaignErrorBoundary><TemplateStudioPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/flows" element={<CampaignErrorBoundary><WhatsAppFlowsPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/flows/create" element={<CampaignErrorBoundary><WhatsAppFlowsPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/flows/:id" element={<CampaignErrorBoundary><WhatsAppFlowsPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/flows/:id/edit" element={<CampaignErrorBoundary><WhatsAppFlowsPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/flowbots" element={<Navigate to="/whatsapp/flows" replace />} />
+              <Route path="campaigns/automations" element={<Navigate to="/whatsapp/automations" replace />} />
+              <Route path="campaigns/analytics" element={<CampaignErrorBoundary><AnalyticsReportsPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/reports" element={<CampaignErrorBoundary><AnalyticsReportsPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/settings" element={<CampaignErrorBoundary><CampaignSettingsAdminPage mode="settings" /></CampaignErrorBoundary>} />
+              <Route path="campaigns/get-started" element={<CampaignErrorBoundary><GuidedFirstCampaignPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/retargeting" element={<CampaignErrorBoundary><RetargetingPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/sequences" element={<CampaignErrorBoundary><DripSequencesPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/recovery" element={<CampaignErrorBoundary><FailureRecoveryPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/template-health" element={<CampaignErrorBoundary><TemplateHealthPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/ai-assistant" element={<CampaignErrorBoundary><AiCampaignAssistantPage /></CampaignErrorBoundary>} />
               <Route path="campaigns/legacy" element={<WACampaigns />} />
+              <Route path="campaigns/:id" element={<CampaignErrorBoundary><CampaignDetailPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/:id/edit" element={<CampaignErrorBoundary><CampaignComposerPage /></CampaignErrorBoundary>} />
+              <Route path="campaigns/:id/preview" element={<CampaignErrorBoundary><CampaignDetailPage /></CampaignErrorBoundary>} />
+              <Route path="flowbots/*" element={<Navigate to="/whatsapp/flows" replace />} />
+              <Route path="automation/*" element={<Navigate to="/whatsapp/automations" replace />} />
               <Route path="automations" element={<WAAutomations />} />
               <Route path="automations/create" element={<WAAutomations />} />
               <Route path="automations/:automationId/edit" element={<WAAutomations />} />
@@ -303,12 +340,18 @@ export default function App() {
               <Route path="flows/create" element={<WhatsAppFlowsPage />} />
               <Route path="flows/:id" element={<WhatsAppFlowsPage />} />
               <Route path="flows/:id/edit" element={<WhatsAppFlowsPage />} />
-              <Route path="flowbots" element={<FlowbotsAutomationsPage mode="flowbots" />} />
-              <Route path="automations" element={<FlowbotsAutomationsPage mode="automations" />} />
+              <Route path="flowbots" element={<Navigate to="/whatsapp/flows" replace />} />
+              <Route path="automations" element={<Navigate to="/whatsapp/automations" replace />} />
               <Route path="analytics" element={<AnalyticsReportsPage />} />
               <Route path="reports" element={<AnalyticsReportsPage />} />
               <Route path="reports/create" element={<AnalyticsReportsPage />} />
               <Route path="settings" element={<CampaignSettingsAdminPage mode="settings" />} />
+              <Route path="get-started" element={<GuidedFirstCampaignPage />} />
+              <Route path="retargeting" element={<RetargetingPage />} />
+              <Route path="sequences" element={<DripSequencesPage />} />
+              <Route path="recovery" element={<FailureRecoveryPage />} />
+              <Route path="template-health" element={<TemplateHealthPage />} />
+              <Route path="ai-assistant" element={<AiCampaignAssistantPage />} />
               <Route path=":id" element={<CampaignDetailPage />} />
               <Route path=":id/edit" element={<CampaignComposerPage />} />
               <Route path=":id/preview" element={<CampaignDetailPage />} />
@@ -325,6 +368,12 @@ export default function App() {
             >
               <Route index element={<CampaignSettingsAdminPage mode="admin" />} />
             </Route>
+
+            {/* Single-source redirects: /dashboard/flowbots/* -> /whatsapp/flows, /dashboard/automation/* -> /whatsapp/automations */}
+            <Route path="/dashboard/flowbots/create" element={<Navigate to="/whatsapp/flows/create" replace />} />
+            <Route path="/dashboard/flowbots/*" element={<Navigate to="/whatsapp/flows" replace />} />
+            <Route path="/dashboard/automation/create" element={<Navigate to="/whatsapp/automations/create" replace />} />
+            <Route path="/dashboard/automation/*" element={<Navigate to="/whatsapp/automations" replace />} />
 
             <Route path="/employee" element={<Navigate to="/whatsapp/employees" replace />} />
             <Route path="/employees" element={<Navigate to="/whatsapp/employees" replace />} />

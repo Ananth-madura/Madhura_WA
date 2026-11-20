@@ -174,6 +174,75 @@ router.get(
   })
 );
 
+// Unified real references for /whatsapp/flows/create enterprise nodes
+router.get(
+  "/enterprise-references",
+  route(async (req, res) => {
+    const [whatsappFlows, automationWorkflows, automations, campaigns] = await Promise.all([
+      store.query(
+        "SELECT id, name, meta_flow_id, meta_status, category FROM whatsapp_flows WHERE tenant_id=? ORDER BY id DESC LIMIT 100",
+        [req.tenantId]
+      ).catch(() => []),
+      store.query(
+        "SELECT id, name, trigger_type, status, published_version FROM automation_workflows WHERE tenant_id=? ORDER BY id DESC LIMIT 100",
+        [req.tenantId]
+      ).catch(() => []),
+      store.query(
+        "SELECT id, name, trigger_type, is_active FROM wa_automations WHERE tenant_id=? ORDER BY id DESC LIMIT 100",
+        [req.tenantId]
+      ).catch(() => []),
+      store.query(
+        "SELECT id, name, status, category FROM campaigns WHERE tenant_id=? ORDER BY id DESC LIMIT 100",
+        [req.tenantId]
+      ).catch(() => []),
+    ]);
+    res.json({
+      whatsapp_flows: whatsappFlows,
+      automation_workflows: automationWorkflows,
+      automations,
+      campaigns,
+    });
+  })
+);
+
+async function syncEnterpriseTriggers(tenantId, flowId, userId = null, active = true) {
+  try {
+    await store.query("DELETE FROM flowbot_triggers WHERE tenant_id=? AND flow_id=?", [tenantId, Number(flowId)]);
+    if (!active) return;
+    const flow = await store.get(tenantId, flowId).catch(() => null);
+    if (!flow) return;
+    const tc = typeof flow.trigger_config === "string"
+      ? (() => { try { return JSON.parse(flow.trigger_config); } catch { return {}; } })()
+      : (flow.trigger_config || {});
+    const rawType = String(flow.trigger_type || "keyword").toLowerCase();
+    const priority = Number(tc.priority ?? 50);
+    const entryKey = flow.entry_node_key || "start";
+    const senderId = Array.isArray(tc.sender_ids) && tc.sender_ids.length === 1 && /^\d+$/.test(String(tc.sender_ids[0]))
+      ? Number(tc.sender_ids[0])
+      : null;
+
+    if (rawType === "keyword") {
+      const kws = Array.isArray(tc.keywords)
+        ? tc.keywords
+        : String(tc.keywords || tc.keyword || "").split(",").map((s) => s.trim()).filter(Boolean);
+      for (const kw of kws) {
+        await store.query(
+          `INSERT INTO flowbot_triggers (tenant_id, flow_id, trigger_type, match_value, sender_id, entry_node_key, priority, is_active, created_by)
+           VALUES (?, ?, 'keyword', ?, ?, ?, ?, 1, ?)`,
+          [tenantId, Number(flowId), kw, senderId, entryKey, priority, userId]
+        );
+      }
+    } else {
+      const mappedType = rawType === "first_inbound" ? "first_message" : rawType;
+      await store.query(
+        `INSERT INTO flowbot_triggers (tenant_id, flow_id, trigger_type, match_value, campaign_id, sender_id, entry_node_key, priority, is_active, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+        [tenantId, Number(flowId), mappedType, tc.match_value || null, tc.campaign_id ? Number(tc.campaign_id) : null, senderId, entryKey, priority, userId]
+      );
+    }
+  } catch (_) {}
+}
+
 router.get(
   "/chat-status",
   route(async (req, res) => {
@@ -508,6 +577,7 @@ router.patch(
       req.tenantId,
       req.params.id,
     ]);
+    await syncEnterpriseTriggers(req.tenantId, req.params.id, req.user?.id || null, req.body.status === "active");
     require("../services/sharedFlowRuntime").invalidate(req.tenantId);
     res.json({ success: true, status: req.body.status });
   })
@@ -517,6 +587,7 @@ router.delete(
   "/:id",
   route(async (req, res) => {
     await store.get(req.tenantId, req.params.id);
+    await syncEnterpriseTriggers(req.tenantId, req.params.id, req.user?.id || null, false);
     await store.query("DELETE FROM wa_flows WHERE tenant_id=? AND id=?", [req.tenantId, req.params.id]);
     require("../services/sharedFlowRuntime").invalidate(req.tenantId);
     res.json({ success: true });
@@ -529,12 +600,20 @@ router.get(
   "/:id/runs",
   route(async (req, res) => {
     await store.get(req.tenantId, req.params.id);
-    res.json(
-      await store.query(
+    const [legacyRuns, sessionRuns] = await Promise.all([
+      store.query(
         "SELECT id,flow_id,phone,status,current_node_key,started_at,last_advanced_at,ended_at,end_reason FROM wa_flow_runs WHERE flow_id=? ORDER BY id DESC LIMIT 50",
         [req.params.id]
-      )
-    );
+      ).catch(() => []),
+      store.query(
+        "SELECT id,flow_id,phone,status,current_node_key,started_at,last_activity_at AS last_advanced_at,completed_at AS ended_at,last_error_code AS end_reason FROM flowbot_sessions WHERE tenant_id=? AND flow_id=? AND is_test_mode=0 ORDER BY id DESC LIMIT 50",
+        [req.tenantId, req.params.id]
+      ).catch(() => []),
+    ]);
+    const combined = [...sessionRuns, ...legacyRuns]
+      .sort((a, b) => new Date(b.started_at || 0).getTime() - new Date(a.started_at || 0).getTime())
+      .slice(0, 50);
+    res.json(combined);
   })
 );
 
@@ -543,7 +622,14 @@ router.get(
   route(async (req, res) => {
     await store.get(req.tenantId, req.params.id);
     const runs = await store.query("SELECT id FROM wa_flow_runs WHERE id=? AND flow_id=?", [req.params.runId, req.params.id]);
-    if (!runs.length) return res.status(404).json({ error: "Run not found" });
+    if (!runs.length) {
+      const steps = await store.query(
+        "SELECT id, node_key, node_type AS event_type, created_at FROM flowbot_execution_steps WHERE tenant_id=? AND session_id=? AND flow_id=? ORDER BY id LIMIT 500",
+        [req.tenantId, req.params.runId, req.params.id]
+      ).catch(() => []);
+      if (steps.length) return res.json(steps);
+      return res.status(404).json({ error: "Run not found" });
+    }
     res.json(await store.query("SELECT id,node_key,event_type,created_at FROM wa_flow_run_events WHERE run_id=? ORDER BY id LIMIT 500", [req.params.runId]));
   })
 );
@@ -563,7 +649,11 @@ router.get(
 
 router.post(
   "/:id/versions/publish",
-  route(async (req, res) => res.json(await store.publish(req.tenantId, req.user.id, req.params.id, req.body.changelog)))
+  route(async (req, res) => {
+    const published = await store.publish(req.tenantId, req.user.id, req.params.id, req.body.changelog);
+    await syncEnterpriseTriggers(req.tenantId, req.params.id, req.user?.id || null, true);
+    res.json(published);
+  })
 );
 
 router.post(
@@ -595,12 +685,22 @@ router.get(
     const [row] = await store.query(
       "SELECT COUNT(*) AS totalRuns,SUM(status='completed') AS completedRuns,SUM(status='handed_off') AS handoffRuns,SUM(status='active') AS activeRuns FROM wa_flow_runs WHERE flow_id=?",
       [req.params.id]
-    );
+    ).catch(() => [{}]);
+    const [sessRow] = await store.query(
+      "SELECT COUNT(*) AS totalRuns, SUM(CASE WHEN status='COMPLETED' THEN 1 ELSE 0 END) AS completedRuns, SUM(CASE WHEN status='HUMAN_OWNED' THEN 1 ELSE 0 END) AS handoffRuns, SUM(CASE WHEN status IN ('ACTIVE','WAITING_FOR_INPUT','WAITING_FOR_DELAY','EXECUTING') THEN 1 ELSE 0 END) AS activeRuns FROM flowbot_sessions WHERE tenant_id=? AND flow_id=? AND is_test_mode=0",
+      [req.tenantId, req.params.id]
+    ).catch(() => [{}]);
     const nodeDropoffs = await store.query(
       "SELECT e.node_key,COUNT(*) AS hit_count FROM wa_flow_run_events e JOIN wa_flow_runs r ON r.id=e.run_id WHERE r.flow_id=? GROUP BY e.node_key ORDER BY hit_count DESC LIMIT 20",
       [req.params.id]
-    );
-    res.json({ ...row, nodeDropoffs });
+    ).catch(() => []);
+    res.json({
+      totalRuns: Number(row?.totalRuns || 0) + Number(sessRow?.totalRuns || 0),
+      completedRuns: Number(row?.completedRuns || 0) + Number(sessRow?.completedRuns || 0),
+      handoffRuns: Number(row?.handoffRuns || 0) + Number(sessRow?.handoffRuns || 0),
+      activeRuns: Number(row?.activeRuns || 0) + Number(sessRow?.activeRuns || 0),
+      nodeDropoffs,
+    });
   })
 );
 

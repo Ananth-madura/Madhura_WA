@@ -436,6 +436,33 @@ export default function WhatsAppContacts() {
 
         <div className="hl-actions flex items-center flex-wrap">
           <button
+            type="button"
+            onClick={() => navigate("/whatsapp/groups")}
+            className="hl-btn-secondary cursor-pointer"
+            title="Organize contacts into groups and dynamic segments"
+          >
+            <span>Groups &amp; Segments</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/whatsapp/campaigns/consent")}
+            className="hl-btn-secondary cursor-pointer"
+            title="Manage opt-in consent and Do-Not-Contact suppression"
+          >
+            <span>Consent &amp; DNC</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/whatsapp/campaigns/create")}
+            className="hl-btn-secondary cursor-pointer"
+            title="Launch a targeted campaign to contacts"
+          >
+            <span>Create Campaign</span>
+          </button>
+
+          <button
             onClick={handleSyncWhatsAppContacts}
             disabled={importing}
             className="hl-btn-secondary"

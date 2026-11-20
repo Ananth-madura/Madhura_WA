@@ -484,6 +484,50 @@ async function processIncomingMessage(msg, metadata, contacts = [], account = nu
     timestampSec: webhookTimestampSec,
     inboundMedia,
   });
+
+  // Non-blocking background handoff to Madhura Enterprise Flowbot & Automation Engines
+  if (resolvedTenantId) {
+    setImmediate(async () => {
+      try {
+        const { flowbotRuntime, automationEngine } = require("../services/orchestration").getOrchestrationEngines();
+        const isFlowReply = msg.type === "interactive" && msg.interactive?.type === "nfm_reply";
+        let flowData = null;
+        if (isFlowReply && msg.interactive?.nfm_reply?.response_json) {
+          try { flowData = JSON.parse(msg.interactive.nfm_reply.response_json); } catch (_) {}
+        }
+        await flowbotRuntime.handleInboundMessage(resolvedTenantId, {
+          phone,
+          text: messageText,
+          buttonPayload: buttonReplyId || msg.button?.payload || null,
+          listRowId: listReplyId || null,
+          senderId: sharedSender?.id || null,
+          conversationId: sharedConversation?.id || null,
+          contactId: sharedConversation?.contact_id || null,
+          messageId: msgId,
+          inboundAt: new Date(webhookTimestampSec * 1000),
+          isWhatsAppFlowCompletion: isFlowReply,
+          flowResponseData: flowData,
+        });
+        await automationEngine.emitEvent(
+          resolvedTenantId,
+          isFlowReply ? "whatsapp_flow_submitted" : "incoming_message",
+          {
+            phone,
+            text: messageText,
+            button_payload: buttonReplyId || msg.button?.payload || null,
+            list_row_id: listReplyId || null,
+            sender_id: sharedSender?.id || null,
+            conversation_id: sharedConversation?.id || null,
+            contact_id: sharedConversation?.contact_id || null,
+            flow_response: flowData,
+          },
+          { source: "whatsapp_webhook", idempotencyKey: `wa_in_${msgId}` }
+        );
+      } catch (orchErr) {
+        console.warn("[WA Webhook] Enterprise orchestration handoff warning:", orchErr.message);
+      }
+    });
+  }
 }
 
 async function handleStatusUpdate(status, account) {

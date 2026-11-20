@@ -45,7 +45,7 @@ export default function BranchCampaigns() {
         </div>
 
         <Link
-          to={`/dashboard/campaigns/create?workspace_id=${activeBranch?.id || ""}`}
+          to={`/whatsapp/campaigns/create?workspace_id=${activeBranch?.id || ""}`}
           className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-lg transition-all"
         >
           <Plus size={14} />

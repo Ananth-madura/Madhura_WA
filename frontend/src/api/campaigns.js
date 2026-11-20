@@ -116,6 +116,48 @@ export const campaignApi = {
   setDispatchControl: (payload) => post("/api/admin/campaigns/dispatch-controls", payload),
   adminPauseCampaign: (id, payload = {}) => post(`/api/admin/campaigns/${id}/pause`, payload),
   adminRetryFailed: (id, payload = {}) => post(`/api/admin/campaigns/${id}/retry-failed`, payload),
+
+  // WATI Competitive Upgrade Pack APIs
+  getGuidedSetupStatus: () => get("/api/campaigns/get-started/status"),
+  watchPendingTemplateApproval: (payload) => post("/api/campaigns/get-started/watch-approval", payload),
+  evaluatePendingAutoLaunches: (payload = {}) => post("/api/campaigns/get-started/evaluate-pending", payload),
+
+  getRetargetingOverview: () => get("/api/campaigns/retargeting/overview"),
+  previewRetargetingAudience: (payload) => post("/api/campaigns/retargeting/preview", payload),
+  createRetargetingCampaign: (payload) => post("/api/campaigns/retargeting/create-campaign", payload),
+  createRetargetingRule: (payload) => post("/api/campaigns/retargeting/rules", payload),
+
+  listDripSequences: () => get("/api/campaigns/sequences"),
+  createDripSequence: (payload) => post("/api/campaigns/sequences", payload),
+  getDripSequence: (id) => get(`/api/campaigns/sequences/${id}`),
+  setDripSequenceStatus: (id, status) => patch(`/api/campaigns/sequences/${id}/status`, { status }),
+  duplicateDripSequence: (id) => post(`/api/campaigns/sequences/${id}/duplicate`),
+  enrollDripContacts: (id, payload) => post(`/api/campaigns/sequences/${id}/enroll`, payload),
+  triggerDripStopEvent: (payload) => post("/api/campaigns/sequences/stop-event", payload),
+  processDueDripEnrollments: () => post("/api/campaigns/sequences/process-due"),
+
+  getAdvancedAnalytics: (params = {}) => get("/api/campaigns/analytics/advanced", { params }),
+
+  getFailedRecipientsReport: (params = {}) => get("/api/campaigns/recovery/failed-report", { params }),
+  listRetryPolicies: () => get("/api/campaigns/recovery/retry-policies"),
+  saveRetryPolicy: (payload) => post("/api/campaigns/recovery/retry-policies", payload),
+  retryTransientFailures: (campaignId, payload = {}) => post(`/api/campaigns/recovery/retry-transient/${campaignId}`, payload),
+  reportTemplatePacingIncident: (payload) => post("/api/campaigns/recovery/pacing-incident", payload),
+  recoverPacingIncident: (incidentId, payload) => post(`/api/campaigns/recovery/pacing-incident/${incidentId}/recover`, payload),
+  getFallbackOverview: () => get("/api/campaigns/recovery/fallback"),
+  configureFallbackChannel: (payload) => post("/api/campaigns/recovery/fallback/channels", payload),
+  dispatchFallbackForRecipient: (payload) => post("/api/campaigns/recovery/fallback/dispatch", payload),
+
+  getTemplateHealthOverview: () => get("/api/campaigns/template-health"),
+  duplicateHealthTemplate: (id) => post(`/api/campaigns/template-health/${id}/duplicate`),
+  replaceTemplateInDrafts: (payload) => post("/api/campaigns/template-health/replace-in-drafts", payload),
+  suggestTemplateImprovements: (payload) => post("/api/campaigns/template-health/suggest-improvements", payload),
+
+  proposeAiCampaign: (prompt) => post("/api/campaigns/ai-assistant/propose-campaign", { prompt }),
+  proposeAiAudience: (prompt) => post("/api/campaigns/ai-assistant/propose-audience", { prompt }),
+  evaluateAiTemplateQuality: (payload) => post("/api/campaigns/ai-assistant/evaluate-template", payload),
+  askAiPerformance: (payload) => post("/api/campaigns/ai-assistant/ask", payload),
+  getAiRecommendations: () => get("/api/campaigns/ai-assistant/recommendations"),
 };
 
 export function formatMinorCurrency(minor, currency = "INR") {

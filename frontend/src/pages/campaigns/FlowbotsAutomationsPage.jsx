@@ -94,7 +94,7 @@ export default function FlowbotsAutomationsPage({ mode = "flowbots" }) {
           <div className="flex items-center justify-between">
             <label className="block text-xs font-semibold text-slate-700">Target Campaign</label>
             {selectedCampaign && (
-              <Link to={`/dashboard/campaigns/${selectedCampaign}`} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline">
+              <Link to={`/whatsapp/campaigns/${selectedCampaign}`} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline">
                 Open Campaign Detail <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             )}

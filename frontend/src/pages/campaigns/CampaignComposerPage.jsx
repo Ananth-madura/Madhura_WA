@@ -308,7 +308,7 @@ export default function CampaignComposerPage() {
       } else if (mode === "launch") {
         await campaignApi.launchCampaign(saved.id, { sync_dispatch: false });
       }
-      navigate(`/dashboard/campaigns/${saved.id}`);
+      navigate(`/whatsapp/campaigns/${saved.id}`);
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     } finally {
@@ -322,88 +322,100 @@ export default function CampaignComposerPage() {
       : segments.find((s) => String(s.id) === String(form.segment_id))?.name || "No segment selected";
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="hl-page p-4 sm:p-5 space-y-4">
       <CampaignSubNav />
-      <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+
+      {/* Native /whatsapp Command Bar */}
+      <div className="hl-commandbar hl-card flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#202C52", color: "#FFFFFF" }}>
+            <Send size={22} />
+          </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              {campaignId ? `Edit campaign #${campaignId}` : "Create WhatsApp campaign"}
-            </h1>
-            <p className="text-xs text-slate-700 mt-0.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="hl-title m-0">
+                {campaignId ? `Edit Campaign #${campaignId}` : "Create WhatsApp Campaign"}
+              </h1>
+              <span className="hl-badge text-xs font-bold px-2.5 py-0.5" style={{ background: "#FFF4CC", color: "#202C52", border: "1px solid #FCBD16" }}>
+                Step {step + 1} of {STEPS.length}
+              </span>
+            </div>
+            <p className="hl-subtitle m-0 mt-1 text-xs sm:text-sm">
               Connected directly to your Groups, Templates, Chatbot Flowbots, Automations, and authorized Meta senders.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {statusMsg && (
-              <span className="text-xs font-medium text-emerald-900 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg">
-                {statusMsg}
-              </span>
-            )}
+        </div>
+        <div className="hl-actions flex flex-wrap items-center gap-2">
+          {statusMsg && (
+            <span className="text-xs font-semibold px-3 py-1.5 rounded-lg" style={{ background: "#D1FADF", color: "#16803C", border: "1px solid #A6F4C5" }}>
+              {statusMsg}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={saveDraft}
+            disabled={saving}
+            className="hl-btn-secondary inline-flex items-center gap-1.5 px-3.5 text-xs font-semibold cursor-pointer disabled:cursor-not-allowed"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Save className="w-4 h-4" aria-hidden="true" />}
+            <span>Save draft</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Step Navigation */}
+      <nav aria-label="Campaign composer steps" className="hl-card p-2 overflow-x-auto">
+        <div className="flex items-center gap-1.5 min-w-max">
+          {STEPS.map((label, idx) => (
             <button
+              key={label}
               type="button"
-              onClick={saveDraft}
-              disabled={saving}
-              className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 rounded-lg bg-white border border-slate-300 text-xs font-semibold text-slate-800 hover:bg-slate-100 cursor-pointer disabled:cursor-not-allowed"
+              onClick={() => goStep(idx)}
+              aria-current={idx === step ? "step" : undefined}
+              className="min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+              style={
+                idx === step
+                  ? { background: "#202C52", color: "#FFFFFF" }
+                  : idx < step
+                  ? { background: "#FFF4CC", color: "#202C52" }
+                  : { background: "transparent", color: "#667085" }
+              }
             >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Save className="w-4 h-4" aria-hidden="true" />}
-              <span>Save draft</span>
+              {label}
             </button>
-          </div>
+          ))}
         </div>
+      </nav>
 
-        {/* Step Navigation */}
-        <nav aria-label="Campaign composer steps" className="bg-white rounded-xl border border-slate-300 p-2 overflow-x-auto">
-          <div className="flex items-center gap-1 min-w-max">
-            {STEPS.map((label, idx) => (
-              <button
-                key={label}
-                type="button"
-                onClick={() => goStep(idx)}
-                aria-current={idx === step ? "step" : undefined}
-                className={`min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
-                  idx === step
-                    ? "bg-emerald-700 text-white"
-                    : idx < step
-                    ? "bg-emerald-50 text-emerald-900"
-                    : "text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </nav>
+      {/* Connected Pipeline Summary Bar */}
+      <div className="hl-card px-4 py-2.5 flex flex-wrap items-center gap-2 text-xs">
+        <span className="font-bold uppercase text-[11px]" style={{ color: "#202C52" }}>Linked assets:</span>
+        <button type="button" onClick={() => setStep(1)} className="px-2.5 py-1 rounded-lg font-semibold cursor-pointer" style={{ background: "#F1F3F7", color: "#202C52" }}>
+          Audience: {activeAudienceLabel}
+        </button>
+        <button type="button" onClick={() => setStep(2)} className="px-2.5 py-1 rounded-lg font-semibold cursor-pointer" style={{ background: "#F1F3F7", color: "#202C52" }}>
+          Sender: {senders.find((s) => String(s.id) === String(form.sender_id))?.display_phone || "Not selected"}
+        </button>
+        <button type="button" onClick={() => setStep(3)} className="px-2.5 py-1 rounded-lg font-semibold cursor-pointer" style={{ background: "#F1F3F7", color: "#202C52" }}>
+          Template: {selectedTemplate?.name || "Not selected"}
+        </button>
+        <button type="button" onClick={() => setStep(5)} className="px-2.5 py-1 rounded-lg font-semibold cursor-pointer" style={{ background: "#F1F3F7", color: "#202C52" }}>
+          Flowbot: {flowbots.find((b) => String(b.id) === String(form.flowbot_id))?.name || "None"}
+        </button>
+        <button type="button" onClick={() => setStep(5)} className="px-2.5 py-1 rounded-lg font-semibold cursor-pointer" style={{ background: "#F1F3F7", color: "#202C52" }}>
+          Automation: {automations.find((a) => String(a.id) === String(form.automation_id))?.name || "None"}
+        </button>
+      </div>
 
-        {/* Connected Pipeline Summary Bar */}
-        <div className="bg-white rounded-xl border border-slate-300 px-4 py-2.5 flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-bold text-slate-800">Linked assets:</span>
-          <button type="button" onClick={() => setStep(1)} className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-300 text-slate-900 hover:bg-emerald-50 cursor-pointer">
-            Audience: {activeAudienceLabel}
-          </button>
-          <button type="button" onClick={() => setStep(2)} className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-300 text-slate-900 hover:bg-emerald-50 cursor-pointer">
-            Sender: {senders.find((s) => String(s.id) === String(form.sender_id))?.display_phone || "Not selected"}
-          </button>
-          <button type="button" onClick={() => setStep(3)} className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-300 text-slate-900 hover:bg-emerald-50 cursor-pointer">
-            Template: {selectedTemplate?.name || "Not selected"}
-          </button>
-          <button type="button" onClick={() => setStep(5)} className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-300 text-slate-900 hover:bg-emerald-50 cursor-pointer">
-            Flowbot: {flowbots.find((b) => String(b.id) === String(form.flowbot_id))?.name || "None"}
-          </button>
-          <button type="button" onClick={() => setStep(5)} className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-300 text-slate-900 hover:bg-emerald-50 cursor-pointer">
-            Automation: {automations.find((a) => String(a.id) === String(form.automation_id))?.name || "None"}
-          </button>
+      {error && (
+        <div role="alert" className="p-3 rounded-lg text-sm flex items-center gap-2 font-medium" style={{ background: "#FEE4E2", border: "1px solid #FDA29B", color: "#B42318" }}>
+          <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
         </div>
+      )}
 
-        {error && (
-          <div role="alert" className="p-3 rounded-lg bg-rose-50 border border-rose-300 text-rose-900 text-sm flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* Active Step Card */}
-        <section className="bg-white rounded-xl border border-slate-300 p-6 space-y-5">
+      {/* Active Step Card */}
+      <section className="hl-card p-6 space-y-5">
           {assetsLoading && (
             <div className="text-xs text-slate-700 flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
@@ -472,7 +484,7 @@ export default function CampaignComposerPage() {
                   <Link to="/whatsapp/groups" className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-300 text-slate-900 font-semibold hover:bg-emerald-50">
                     Manage groups &amp; segments
                   </Link>
-                  <Link to="/dashboard/campaigns/consent" className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-300 text-slate-900 font-semibold hover:bg-slate-200">
+                  <Link to="/whatsapp/campaigns/consent" className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-300 text-slate-900 font-semibold hover:bg-slate-200">
                     Consent &amp; DNC
                   </Link>
                 </div>
@@ -749,7 +761,7 @@ export default function CampaignComposerPage() {
                 <div className="flex flex-wrap gap-2 text-xs">
                   <Link to="/whatsapp/flows" className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-300 text-slate-900 font-semibold">Open Flowbots</Link>
                   <Link to="/whatsapp/automations" className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-300 text-slate-900 font-semibold">Open Automations</Link>
-                  <Link to="/dashboard/campaigns/flows" className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-300 text-slate-900 font-semibold">Meta Flows Studio</Link>
+                  <Link to="/whatsapp/campaigns/flows" className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-300 text-slate-900 font-semibold">Meta Flows Studio</Link>
                 </div>
               </div>
 
@@ -880,13 +892,13 @@ export default function CampaignComposerPage() {
                 </div>
               )}
               <div className="flex flex-wrap gap-3 pt-2">
-                <button type="button" disabled={saving} onClick={() => handleLaunchAction("approval")} className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2.5 rounded-lg bg-amber-700 text-white text-xs font-semibold hover:bg-amber-800 cursor-pointer disabled:cursor-not-allowed">
+                <button type="button" disabled={saving} onClick={() => handleLaunchAction("approval")} className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2.5 rounded-lg text-xs font-bold cursor-pointer disabled:cursor-not-allowed" style={{ background: "#FCBD16", color: "#202C52" }}>
                   <ShieldCheck className="w-4 h-4" aria-hidden="true" /> Submit for approval
                 </button>
-                <button type="button" disabled={saving} onClick={() => handleLaunchAction("schedule")} className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2.5 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 cursor-pointer disabled:cursor-not-allowed">
+                <button type="button" disabled={saving} onClick={() => handleLaunchAction("schedule")} className="hl-btn-secondary inline-flex items-center gap-1.5 px-4 text-xs font-semibold cursor-pointer disabled:cursor-not-allowed">
                   <Calendar className="w-4 h-4" aria-hidden="true" /> Schedule campaign
                 </button>
-                <button type="button" disabled={saving || (validation && !validation.valid)} onClick={() => handleLaunchAction("launch")} className="inline-flex items-center gap-1.5 min-h-[44px] px-5 py-2.5 rounded-lg bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                <button type="button" disabled={saving || (validation && !validation.valid)} onClick={() => handleLaunchAction("launch")} className="hl-btn-primary inline-flex items-center gap-1.5 px-5 text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                   <Send className="w-4 h-4" aria-hidden="true" /> Launch campaign
                 </button>
               </div>
@@ -900,7 +912,7 @@ export default function CampaignComposerPage() {
             type="button"
             disabled={step === 0}
             onClick={() => setStep((s) => Math.max(0, s - 1))}
-            className="inline-flex items-center gap-1 min-h-[44px] px-4 py-2 rounded-lg bg-white border border-slate-300 text-xs font-semibold text-slate-800 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="hl-btn-secondary inline-flex items-center gap-1 px-4 text-xs font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <ChevronLeft className="w-4 h-4" aria-hidden="true" /> Previous
           </button>
@@ -908,13 +920,12 @@ export default function CampaignComposerPage() {
             <button
               type="button"
               onClick={() => goStep(step + 1)}
-              className="inline-flex items-center gap-1 min-h-[44px] px-4 py-2 rounded-lg bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 cursor-pointer"
+              className="hl-btn-primary inline-flex items-center gap-1 px-4 text-xs font-semibold cursor-pointer"
             >
               Save and continue <ChevronRight className="w-4 h-4" aria-hidden="true" />
             </button>
           )}
         </div>
-      </div>
     </div>
   );
 }

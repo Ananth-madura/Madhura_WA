@@ -7,6 +7,7 @@ import {
   Search
 } from "lucide-react";
 import axios from "axios";
+import { Link } from "react-router-dom";
 import { API } from "../config/api";
 import { useEnterprise } from "../context/EnterpriseContext";
 
@@ -237,6 +238,9 @@ export default function WAAnalytics() {
 
         {/* Filters & Refresh Controls */}
         <div className="hl-actions">
+          <Link to="/whatsapp/campaigns/analytics" className="hl-btn-secondary text-xs cursor-pointer">
+            <span>Campaign ROI &amp; Reports</span>
+          </Link>
           <select
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}

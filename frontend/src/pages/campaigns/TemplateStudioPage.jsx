@@ -184,7 +184,7 @@ export default function TemplateStudioPage() {
                       </button>
                     )}
                     {t.meta_status === "APPROVED" && (
-                      <Link to={`/dashboard/campaigns/create?template_id=${t.id}`} className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold">
+                      <Link to={`/whatsapp/campaigns/create?template_id=${t.id}`} className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold">
                         Use in Campaign <ArrowRight className="w-3 h-3" />
                       </Link>
                     )}

@@ -379,7 +379,7 @@ function TemplatesWorkspace() {
 
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => navigate(`/dashboard/campaigns/create?template_id=${t.id}`)}
+                        onClick={() => navigate(`/whatsapp/campaigns/create?template_id=${t.id}`)}
                         className="hl-badge hl-badge-success flex items-center gap-1 font-bold cursor-pointer"
                         title="Create campaign using this template"
                       >

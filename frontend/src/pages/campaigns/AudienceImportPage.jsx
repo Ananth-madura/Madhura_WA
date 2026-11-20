@@ -114,11 +114,11 @@ export default function AudienceImportPage() {
             </div>
             <div className="flex flex-wrap gap-2 pt-1">
               {result.segment_id && (
-                <Link to={`/dashboard/campaigns/create?segment_id=${result.segment_id}`} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold">
+                <Link to={`/whatsapp/campaigns/create?segment_id=${result.segment_id}`} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold">
                   Launch Campaign with Imported Segment <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               )}
-              <Link to="/dashboard/campaigns/consent" className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-800 text-xs font-semibold">
+              <Link to="/whatsapp/campaigns/consent" className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-800 text-xs font-semibold">
                 Review Consent Records
               </Link>
             </div>

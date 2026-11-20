@@ -31,6 +31,9 @@ const VALID_PURPOSES = new Set([
   "appointment_notifications",
   "order_updates",
   "payment_reminders",
+  "sms_fallback",
+  "rcs_fallback",
+  "email_fallback",
 ]);
 
 const VALID_COLLECTION_METHODS = new Set([

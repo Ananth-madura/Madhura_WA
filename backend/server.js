@@ -350,6 +350,7 @@ app.use("/webhooks/razorpay", require("./routes/enterpriseBillingRoutes"));
 
 // ── Enterprise Campaign Management, Provider Gateway, Flows & Operations ────
 const { templateRouter, flowsRouter, providerRouter, flowbotRouter } = require("./routes/whatsappFlowsRoutes");
+app.use("/api/campaigns", require("./routes/campaignWatiUpgradeRoutes"));
 app.use("/api/campaigns", require("./routes/enterpriseCampaignRoutes"));
 app.use("/api/whatsapp/templates", templateRouter);
 app.use("/api/whatsapp/flows", flowsRouter);
@@ -444,6 +445,8 @@ app.get("/api/v2/wa/media-stream/*storageKey", async (req, res) => {
 });
 
 app.use("/api/storage", require("./routes/r2Routes"));
+app.use("/api/flowbot-engine", require("./routes/enterpriseFlowbotRoutes"));
+app.use("/api/automation-engine", require("./routes/enterpriseAutomationRoutes"));
 
 // ── Removed: unauthenticated test hooks ──────────────────────────────────────
 // /send-menu, /simulate-inbound and /trigger-automation used to be registered on
@@ -550,10 +553,28 @@ function startServer() {
       await require("./migrations/r2_storage_unification").migrate(require("./config/database"));
       await require("./migrations/wati_billing_and_limits").migrate(db);
       await require("./migrations/enterprise_campaign_management").migrate(db);
+      await require("./migrations/enterprise_flowbot_and_automation_engine").migrate(db);
+      await require("./migrations/campaign_wati_upgrade_pack").migrate(db);
       await require("./services/schemaReadiness").assertReady(db);
       const platformAdmin = await require("./services/platformAdminBootstrap").provisionConfiguredAdmin(db);
       if (platformAdmin) console.log("Platform administrator and internal workspace are ready");
       await require("./services/sharedFlowRuntime").recover();
+      try {
+        const orch = require("./services/orchestration").getOrchestrationEngines();
+        const { createDripSequenceService } = require("./services/campaign/watiUpgrade/dripSequenceService");
+        const dripWorker = createDripSequenceService({ db });
+        await orch.flowbotRuntime.resumeDueSessions().catch(() => {});
+        await orch.automationEngine.processDueWorkflows().catch(() => {});
+        await dripWorker.processDueEnrollments().catch(() => {});
+        const orchTimer = setInterval(() => {
+          orch.flowbotRuntime.resumeDueSessions().catch(() => {});
+          orch.automationEngine.processDueWorkflows().catch(() => {});
+          dripWorker.processDueEnrollments().catch(() => {});
+        }, 30000);
+        orchTimer.unref();
+      } catch (orchErr) {
+        console.warn("⚠️ Orchestration worker init warning:", orchErr.message);
+      }
       app.set("sharedInboxReady", true);
       app.set("teamChatReady", true);
       require("./services/teamChat").startRetentionSweep();

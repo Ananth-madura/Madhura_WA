@@ -38,7 +38,7 @@ export default class CampaignErrorBoundary extends React.Component {
             Retry View
           </button>
           <Link
-            to="/dashboard/campaigns"
+            to="/whatsapp/campaigns"
             onClick={() => this.setState({ hasError: false, errorMessage: "" })}
             className="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
           >

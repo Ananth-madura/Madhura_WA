@@ -137,7 +137,40 @@ function createCampaignWebhookProcessor(options = {}) {
     } else if (rawStatus === "FAILED" && rec.status !== "FAILED") {
       await db.query(`UPDATE campaigns SET failed_count = failed_count + 1 WHERE tenant_id = ? AND id = ?`, [tid, rec.campaign_id]);
       await settleProviderWallet(tid, rec, "failed", statusObj.pricing);
+      if (["132015", "132016"].includes(String(errInfo?.code || ""))) {
+        try {
+          const { createFailureRecoveryService } = require("./watiUpgrade/failureRecoveryService");
+          const recoverySvc = createFailureRecoveryService({ db: options.db });
+          await recoverySvc.handleTemplatePacingDetected(tid, {
+            campaignId: rec.campaign_id,
+            errorCode: String(errInfo.code),
+            errorMessage: errInfo.title || errInfo.message || "Meta template pacing pause",
+          }).catch(() => {});
+        } catch (_) {}
+      }
     }
+
+    // Broadcast delivery status into Business Automation Engine (non-blocking / safe if tables not migrated in isolated tests)
+    try {
+      const { createOrchestrationEngines } = require("../orchestration");
+      const { automationEngine } = createOrchestrationEngines({ db: options.db });
+      const evtMap = { DELIVERED: "message_delivered", READ: "message_read", FAILED: "message_failed" };
+      if (evtMap[rawStatus]) {
+        await automationEngine.emitEvent(
+          tid,
+          evtMap[rawStatus],
+          {
+            campaign_id: rec.campaign_id,
+            recipient_id: rec.id,
+            contact_id: rec.contact_id,
+            phone: rec.normalized_phone,
+            wamid,
+            status: rawStatus,
+          },
+          { source: "campaign_webhook", idempotencyKey: `cmp_st:${wamid}:${rawStatus}` }
+        ).catch(() => {});
+      }
+    } catch (_) {}
 
     return { processed: true, matched_recipient: true, campaign_id: rec.campaign_id, recipient_id: rec.id, status: rawStatus };
   }
@@ -205,6 +238,10 @@ function createCampaignWebhookProcessor(options = {}) {
       const optOut = await consentService.processOptOutKeyword(tid, normalized, textBody);
       if (optOut.matched) {
         await journeyService.stopJourneysForPhone(tid, normalized, "contact_opted_out");
+        try {
+          const { createDripSequenceService } = require("./watiUpgrade/dripSequenceService");
+          await createDripSequenceService({ db: options.db }).handleStopEvent(tid, normalized, "opt_out").catch(() => {});
+        } catch (_) {}
         return { processed: true, opted_out: true, keyword: optOut.keyword, ...optOut };
       }
     }
@@ -317,6 +354,31 @@ function createCampaignWebhookProcessor(options = {}) {
       context: { text: textBody, wamid: messageObj.id || null },
     });
 
+    // Also emit into Enterprise Automation Engine for durable multi-step workflows
+    try {
+      const { createOrchestrationEngines } = require("../orchestration");
+      const { automationEngine } = createOrchestrationEngines({ db: options.db });
+      await automationEngine.emitEvent(
+        tid,
+        "campaign_replied",
+        {
+          campaign_id: recipient.campaign_id,
+          recipient_id: recipient.id,
+          contact_id: recipient.contact_id,
+          phone: normalized,
+          text: textBody,
+          wamid: messageObj.id || null,
+        },
+        { source: "campaign_webhook", idempotencyKey: `cmp_rep:${messageObj.id || `${recipient.id}:${Date.now()}`}` }
+      ).catch(() => {});
+    } catch (_) {}
+
+    // Notify drip sequence engine of customer reply (honoring stop vs route_flowbot config)
+    try {
+      const { createDripSequenceService } = require("./watiUpgrade/dripSequenceService");
+      await createDripSequenceService({ db: options.db }).handleStopEvent(tid, normalized, "reply").catch(() => {});
+    } catch (_) {}
+
     return {
       processed: true,
       matched_campaign: true,
@@ -363,6 +425,12 @@ function createCampaignWebhookProcessor(options = {}) {
                 "webhook"
               )
             );
+            if (String(val.event || val.status || "").toUpperCase() === "APPROVED") {
+              try {
+                const { createGuidedSetupAndAnalyticsService } = require("./watiUpgrade/guidedSetupAndAnalyticsService");
+                await createGuidedSetupAndAnalyticsService({ db: options.db }).evaluatePendingAutoLaunches(tid).catch(() => {});
+              } catch (_) {}
+            }
           }
         } else if (field === "account_update") {
           const wabaId = val.waba_info?.waba_id || entry.id;

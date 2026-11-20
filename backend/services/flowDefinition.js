@@ -36,6 +36,10 @@ const SUPPORTED = new Set([
   "delay",
   "jump_to_flow",
   "send_media",
+  "send_whatsapp_flow",
+  "start_automation",
+  "create_deal",
+  "schedule_followup",
 ]);
 
 const RESERVED = rules.RESERVED_KEYS;
@@ -498,6 +502,10 @@ const ASYNC_LIVE_ACTION_TYPES = new Set([
   "set_tag",
   "delay",
   "jump_to_flow",
+  "send_whatsapp_flow",
+  "start_automation",
+  "create_deal",
+  "schedule_followup",
 ]);
 
 function step(flow, input = "", state = null, initial = {}, execution = {}) {
@@ -708,6 +716,33 @@ function step(flow, input = "", state = null, initial = {}, execution = {}) {
       }
       if (node.node_type === "create_lead") {
         vars["crm.lead_created"] = true;
+        key = c.next_node_key;
+        continue;
+      }
+      if (node.node_type === "create_deal") {
+        vars["crm.deal_created"] = true;
+        vars["crm.deal_stage"] = c.stage || "qualified";
+        key = c.next_node_key;
+        continue;
+      }
+      if (node.node_type === "schedule_followup") {
+        vars["crm.followup_scheduled"] = true;
+        key = c.next_node_key;
+        continue;
+      }
+      if (node.node_type === "start_automation") {
+        vars["automation.triggered_event"] = c.event_type || "flowbot_triggered_automation";
+        logs.push({ node: key, action: "start_automation", event: c.event_type || "flowbot_triggered_automation" });
+        key = c.next_node_key;
+        continue;
+      }
+      if (node.node_type === "send_whatsapp_flow") {
+        messages.push({
+          sender: "bot",
+          type: "text",
+          text: interpolate(c.text || c.body || `Open form: ${c.cta_label || "Continue"}`, vars),
+        });
+        vars["whatsapp_flow.sent_id"] = c.whatsapp_flow_id || "";
         key = c.next_node_key;
         continue;
       }

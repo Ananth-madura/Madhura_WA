@@ -369,6 +369,15 @@ export default function WAEnquiries() {
         </div>
 
         <div className="emp-head-actions">
+          <Link to="/whatsapp/campaigns" className="emp-btn cursor-pointer" title="View WhatsApp campaigns and attribution">
+            <span>Campaigns</span>
+          </Link>
+          <Link to="/whatsapp/flows" className="emp-btn cursor-pointer" title="Manage lead qualification flowbots">
+            <span>Flowbots</span>
+          </Link>
+          <Link to="/whatsapp/automations" className="emp-btn cursor-pointer" title="Manage follow-up automations">
+            <span>Automations</span>
+          </Link>
           <button
             onClick={() => fetchEnquiries()}
             disabled={loading}

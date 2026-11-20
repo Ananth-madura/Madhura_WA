@@ -22,3 +22,22 @@ Every analytics response includes exact formula definitions and data freshness t
 - Deduplication via `UNIQUE (tenant_id, wamid, event_status)`.
 - Monotonic status rank guard ensures out-of-order `DELIVERED` arriving after `READ` preserves `READ` status and timestamps.
 - Correlates `nfm_reply` WhatsApp Flow submissions by `flow_token`, triggers Flowbot & automations, and handles `message_template_status_update` & `account_update`.
+
+
+---
+
+## WATI Competitive Upgrade Pack: Advanced 7-Stage Funnel & Granular Trends
+
+Added in `backend/services/campaign/watiUpgrade/guidedSetupAndAnalyticsService.js` and exposed at `GET /api/campaigns/analytics/advanced`:
+
+- **7-Stage Delivery-vs-Engagement Funnel**:
+  1. `audience` (total recipients evaluated)
+  2. `eligible` (excluding `BLOCKED_BY_CONSENT` and `BLOCKED_BY_SUPPRESSION`)
+  3. `submitted` (`ACCEPTED_BY_META`, `SENT`, `DELIVERED`, `READ`)
+  4. `delivered`
+  5. `read`
+  6. `engaged` (replied or completed a WhatsApp Flow)
+  7. `converted` (verified attribution)
+  Plus tracked `cta_clicks`, `failed`, `estimated_cost_minor`, and `revenue_minor`.
+- **Granular Time Buckets**: Supports `granularity=hourly | daily | weekly | monthly` with optional `category`, `sender_id`, `country_code`, `date_from`, and `date_to` filters.
+- **Failure Reason Breakdown**: Groups failed recipients into the 13 standardized recovery categories (`rate_limit`, `template_paused`, `invalid_recipient`, `unknown_submission_outcome`, etc.).

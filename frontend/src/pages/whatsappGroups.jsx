@@ -483,21 +483,21 @@ export default function WAGroups() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              to="/dashboard/campaigns/consent"
+              to="/whatsapp/campaigns/consent"
               className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 rounded-lg bg-white border border-slate-300 text-slate-800 text-xs font-semibold hover:bg-slate-100 cursor-pointer"
             >
               <ShieldCheck className="w-4 h-4 text-emerald-700" aria-hidden="true" />
               <span>Consent &amp; DNC</span>
             </Link>
             <Link
-              to="/dashboard/campaigns/import"
+              to="/whatsapp/campaigns/import"
               className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 rounded-lg bg-white border border-slate-300 text-slate-800 text-xs font-semibold hover:bg-slate-100 cursor-pointer"
             >
               <Upload className="w-4 h-4 text-slate-700" aria-hidden="true" />
               <span>Full CSV/XLSX import</span>
             </Link>
             <Link
-              to="/dashboard/campaigns"
+              to="/whatsapp/campaigns"
               className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-lg bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 cursor-pointer"
             >
               <Send className="w-4 h-4" aria-hidden="true" />
@@ -693,7 +693,7 @@ export default function WAGroups() {
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => navigate(`/dashboard/campaigns/create?group_id=${activeGroup.id}`)}
+                        onClick={() => navigate(`/whatsapp/campaigns/create?group_id=${activeGroup.id}`)}
                         className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 rounded-lg bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 cursor-pointer"
                       >
                         <Send className="w-3.5 h-3.5" aria-hidden="true" />
@@ -1120,7 +1120,7 @@ export default function WAGroups() {
                           <td className="px-4 py-3 font-bold text-emerald-800">{s.estimated_count || 0}</td>
                           <td className="px-4 py-3 text-right">
                             <Link
-                              to={`/dashboard/campaigns/create?segment_id=${s.id}`}
+                              to={`/whatsapp/campaigns/create?segment_id=${s.id}`}
                               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-700 text-white font-semibold hover:bg-emerald-800 cursor-pointer"
                             >
                               Create campaign
