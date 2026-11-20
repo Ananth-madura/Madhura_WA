@@ -13,24 +13,32 @@ import {
   Lock,
   Radio,
   Copy,
-  Check
+  Check,
+  BookOpen,
+  Key,
+  AlertCircle
 } from "lucide-react";
+import MetaConnectWizard from "./MetaConnectWizard";
 
 export default function WhatsAppIntegrations({
   setup = null,
   admin = false,
   busy = "",
   branches = [],
+  senders = [],
   onStartEmbeddedSignup,
   onDiscoverAssets,
   onBatchConnect,
   onManualConnect,
+  onPing,
+  onRegisterPin,
   onRefresh,
 }) {
-  const [tab, setTab] = useState("embedded"); // "embedded" | "discovery" | "manual"
+  const [tab, setTab] = useState("embedded"); // "embedded" | "discovery" | "manual" | "guide"
   const [discovered, setDiscovered] = useState(null);
   const [discovering, setDiscovering] = useState(false);
   const [discoveryError, setDiscoveryError] = useState("");
+  const [directTokenInput, setDirectTokenInput] = useState("");
   const [selectedWabaId, setSelectedWabaId] = useState("");
   const [selectedNumbers, setSelectedNumbers] = useState({});
   const [connectingBatch, setConnectingBatch] = useState(false);
@@ -70,7 +78,12 @@ export default function WhatsAppIntegrations({
     setDiscoveryError("");
     setBatchNotice("");
     try {
-      const res = await onDiscoverAssets(wabaId ? { targetWabaId: wabaId } : {});
+      const payload = {};
+      if (wabaId) payload.targetWabaId = wabaId;
+      if (directTokenInput && directTokenInput.trim()) {
+        payload.directToken = directTokenInput.trim();
+      }
+      const res = await onDiscoverAssets(payload);
       setDiscovered(res);
       setTab("discovery");
       if (res.wabas && res.wabas.length > 0) {
@@ -85,7 +98,7 @@ export default function WhatsAppIntegrations({
         setSelectedNumbers(initialMap);
       }
     } catch (err) {
-      setDiscoveryError(err.message || "Failed to discover Meta assets");
+      setDiscoveryError(err.message || "Failed to discover Meta assets. Ensure you have authorized Meta or provide a valid System User Token.");
     } finally {
       setDiscovering(false);
     }
@@ -147,10 +160,10 @@ export default function WhatsAppIntegrations({
   return (
     <div className="space-y-6">
       {/* Sub-tabs */}
-      <div className="flex border-b border-slate-200 gap-4">
+      <div className="flex border-b border-slate-200 gap-4 overflow-x-auto">
         <button
           onClick={() => setTab("embedded")}
-          className={`pb-3 px-2 text-sm font-bold border-b-2 transition ${
+          className={`pb-3 px-2 text-sm font-bold border-b-2 transition whitespace-nowrap cursor-pointer ${
             tab === "embedded"
               ? "border-emerald-600 text-emerald-700"
               : "border-transparent text-slate-500 hover:text-slate-700"
@@ -163,17 +176,17 @@ export default function WhatsAppIntegrations({
             setTab("discovery");
             if (!discovered) handleRunDiscovery();
           }}
-          className={`pb-3 px-2 text-sm font-bold border-b-2 transition ${
+          className={`pb-3 px-2 text-sm font-bold border-b-2 transition whitespace-nowrap cursor-pointer ${
             tab === "discovery"
               ? "border-emerald-600 text-emerald-700"
               : "border-transparent text-slate-500 hover:text-slate-700"
           }`}
         >
-          Discovered Portfolios & WABAs ({discovered?.wabas?.length || 0})
+          Discovered Portfolios &amp; WABAs ({discovered?.wabas?.length || 0})
         </button>
         <button
           onClick={() => setTab("manual")}
-          className={`pb-3 px-2 text-sm font-bold border-b-2 transition ${
+          className={`pb-3 px-2 text-sm font-bold border-b-2 transition whitespace-nowrap cursor-pointer ${
             tab === "manual"
               ? "border-emerald-600 text-emerald-700"
               : "border-transparent text-slate-500 hover:text-slate-700"
@@ -181,11 +194,39 @@ export default function WhatsAppIntegrations({
         >
           Direct Token / Custom Setup
         </button>
+        <button
+          onClick={() => setTab("guide")}
+          className={`pb-3 px-2 text-sm font-bold border-b-2 transition whitespace-nowrap cursor-pointer ${
+            tab === "guide"
+              ? "border-emerald-600 text-emerald-700"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          11-Step Setup Guide
+        </button>
       </div>
 
       {/* Tab 1: Embedded Signup */}
       {tab === "embedded" && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-6">
+          {!setup?.embeddedSignupConfigured && (
+            <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                <span>
+                  <strong>Setup Notice:</strong> Meta Embedded Signup requires Meta App configuration. You can connect your WhatsApp numbers immediately using <strong>Direct Token / Custom Setup</strong> or scan existing WABAs in <strong>Discovered Portfolios &amp; WABAs</strong>.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTab("manual")}
+                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 cursor-pointer"
+              >
+                Use Direct Token
+              </button>
+            </div>
+          )}
+
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -201,7 +242,7 @@ export default function WhatsAppIntegrations({
               <button
                 onClick={onStartEmbeddedSignup}
                 disabled={Boolean(busy)}
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md hover:shadow-lg transition flex-shrink-0"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md hover:shadow-lg transition flex-shrink-0 cursor-pointer"
               >
                 <Lock className="w-4 h-4" />
                 {busy === "signup" ? "Connecting with Meta..." : "Continue with Meta"}
@@ -237,7 +278,7 @@ export default function WhatsAppIntegrations({
             <button
               onClick={() => handleRunDiscovery()}
               disabled={discovering}
-              className="text-xs font-bold text-emerald-700 hover:text-emerald-800 inline-flex items-center gap-1"
+              className="text-xs font-bold text-emerald-700 hover:text-emerald-800 inline-flex items-center gap-1 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${discovering ? "animate-spin" : ""}`} />
               {discovering ? "Scanning Meta Assets..." : "Discover Assets & Numbers"}
@@ -253,7 +294,7 @@ export default function WhatsAppIntegrations({
             <div>
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-emerald-600" />
-                Discovered Meta Business Portfolios & WABAs
+                Discovered Meta Business Portfolios &amp; WABAs
               </h3>
               <p className="text-sm text-slate-600">
                 Select discovered phone numbers to connect them to your organization simultaneously.
@@ -262,11 +303,44 @@ export default function WhatsAppIntegrations({
             <button
               onClick={() => handleRunDiscovery()}
               disabled={discovering}
-              className="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5"
+              className="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${discovering ? "animate-spin" : ""}`} />
               Re-scan Meta
             </button>
+          </div>
+
+          {/* Quick Token Scanning Bar */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <label htmlFor="discovery-token-input" className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Key className="w-3.5 h-3.5 text-amber-500" />
+                Scan via System User Token (Optional):
+              </label>
+              <span className="text-[11px] text-slate-500">
+                If already authorized via Embedded Signup, leave blank and click Scan.
+              </span>
+            </div>
+            <div className="flex flex-col sm:flex-row items-stretch gap-2">
+              <input
+                id="discovery-token-input"
+                type="password"
+                placeholder="Paste Permanent System User Access Token (EAAB...)"
+                value={directTokenInput}
+                onChange={(e) => setDirectTokenInput(e.target.value)}
+                className="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-emerald-500 bg-white"
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                onClick={() => handleRunDiscovery()}
+                disabled={discovering}
+                className="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${discovering ? "animate-spin" : ""}`} />
+                <span>{discovering ? "Scanning..." : "Scan Meta Assets"}</span>
+              </button>
+            </div>
           </div>
 
           {discoveryError && (
@@ -568,6 +642,27 @@ export default function WhatsAppIntegrations({
               </div>
             )}
           </form>
+        </div>
+      )}
+
+      {/* Tab 4: 11-Step Setup Guide */}
+      {tab === "guide" && (
+        <div className="space-y-4">
+          <MetaConnectWizard
+            branches={branches}
+            senders={senders}
+            setup={setup}
+            onStartEmbeddedSignup={onStartEmbeddedSignup}
+            onDiscoverAssets={onDiscoverAssets}
+            onBatchConnect={onBatchConnect}
+            onPing={onPing}
+            onRegisterPin={onRegisterPin}
+            onComplete={() => {
+              if (onRefresh) onRefresh();
+              setTab("embedded");
+            }}
+            onCancel={() => setTab("embedded")}
+          />
         </div>
       )}
     </div>

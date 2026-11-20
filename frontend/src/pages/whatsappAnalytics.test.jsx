@@ -7,6 +7,7 @@ import {useEnterprise} from "../context/EnterpriseContext";
 jest.mock("../components/WAWorkspaceGuide",()=>()=>null);
 jest.mock("../context/EnterpriseContext",()=>({useEnterprise:jest.fn()}));
 jest.mock("axios",()=>({get:jest.fn()}));
+jest.mock("react-router-dom",()=>({Link:({children})=><span>{children}</span>}));
 
 test("switching organizations discards late analytics from the previous organization",async()=>{
   global.IS_REACT_ACT_ENVIRONMENT=true;

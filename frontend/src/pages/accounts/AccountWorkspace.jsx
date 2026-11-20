@@ -589,21 +589,23 @@ export function Workspace({ enterprise }) {
               type="button"
               className="hl-btn-primary inline-flex items-center gap-1.5 px-4 text-xs font-semibold cursor-pointer"
               disabled={Boolean(busy)}
-              onClick={() => navigate({ tab: "connect" })}
+              onClick={() => navigate({ tab: "integrations" })}
             >
               <Plus size={15} />
               <span>Connect WhatsApp Number</span>
             </button>
           )}
 
-          <Link
-            to="/whatsapp/tech-provider"
-            className="hl-btn-secondary inline-flex items-center gap-1.5 px-3 text-xs font-semibold cursor-pointer"
-            title="Open Meta Tech Provider Compliance Center"
-          >
-            <ShieldCheck size={14} className="text-amber-500" />
-            <span>Tech Provider Console</span>
-          </Link>
+          {admin && (
+            <Link
+              to="/whatsapp/tech-provider"
+              className="hl-btn-secondary inline-flex items-center gap-1.5 px-3 text-xs font-semibold cursor-pointer"
+              title="Platform Operator: Meta Partner Compliance Center & App Review"
+            >
+              <ShieldCheck size={14} className="text-amber-500" />
+              <span>Platform Compliance</span>
+            </Link>
+          )}
 
           <Link
             to="/whatsapp"
@@ -664,13 +666,13 @@ export function Workspace({ enterprise }) {
 
         <div className="hl-kpi">
           <div className="hl-kpi-label font-bold uppercase text-[11px] text-slate-500 tracking-wider">
-            Tech Provider Center
+            API Infrastructure
           </div>
-          <div className="hl-kpi-num font-bold text-2xl mt-1 text-indigo-700">
-            Verified
+          <div className="hl-kpi-num font-bold text-2xl mt-1 text-[#202C52]">
+            Cloud v22.0
           </div>
           <div className="text-xs text-slate-500 mt-0.5">
-            Meta Partner Program Certified
+            Meta Enterprise Graph Ready
           </div>
         </div>
       </div>
@@ -696,28 +698,6 @@ export function Workspace({ enterprise }) {
             }`}
           >
             {senders.length}
-          </span>
-        </Link>
-
-        <Link
-          role="tab"
-          aria-selected={tab === "connect"}
-          aria-current={tab === "connect" ? "page" : undefined}
-          to="?tab=connect"
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${
-            tab === "connect"
-              ? "bg-[#202C52] text-white shadow-sm"
-              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-          }`}
-        >
-          <Sparkles size={15} />
-          <span>Connect Wizard (11-Step)</span>
-          <span
-            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              tab === "connect" ? "bg-white/20 text-white" : "bg-amber-100 text-amber-900"
-            }`}
-          >
-            WATI Mode
           </span>
         </Link>
 
@@ -774,16 +754,6 @@ export function Workspace({ enterprise }) {
         </Link>
 
         <div className="h-5 w-px bg-slate-300 mx-1 shrink-0" role="separator" />
-
-        <Link
-          to="/whatsapp/tech-provider"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition shrink-0"
-          title="Open Meta Tech Provider Compliance Center, PIN Tools & Webhook Logs"
-        >
-          <ShieldCheck size={14} className="text-amber-500" />
-          <span>Tech Provider</span>
-          <ExternalLink size={11} className="opacity-60" />
-        </Link>
 
         <Link
           to="/whatsapp/automations"
@@ -866,24 +836,6 @@ export function Workspace({ enterprise }) {
         <div className="ac-panel">
           <Assistant request={request} run={run} busy={busy} admin={admin} />
         </div>
-      ) : tab === "connect" ? (
-        <div className="ac-panel">
-          <MetaConnectWizard
-            branches={branches}
-            senders={senders}
-            setup={setup}
-            onStartEmbeddedSignup={startSignup}
-            onDiscoverAssets={handleDiscoverAssets}
-            onBatchConnect={handleBatchConnect}
-            onPing={handlePing}
-            onRegisterPin={handleRegisterPin}
-            onComplete={async () => {
-              await refresh();
-              navigate({ tab: "senders" });
-            }}
-            onCancel={() => navigate({ tab: "senders" })}
-          />
-        </div>
       ) : tab === "assign" ? (
         <TeamAccessWorkspace enterprise={enterprise} request={request} admin={admin} />
       ) : tab === "integrations" ? (
@@ -892,6 +844,7 @@ export function Workspace({ enterprise }) {
           admin={admin}
           busy={busy}
           branches={branches}
+          senders={senders}
           onStartEmbeddedSignup={startSignup}
           onDiscoverAssets={handleDiscoverAssets}
           onBatchConnect={handleBatchConnect}
@@ -899,6 +852,8 @@ export function Workspace({ enterprise }) {
             const saved = await saveSender("post", "/meta/senders/manual", data);
             navigate({ sender: String(saved.id), tab: "senders" });
           }}
+          onPing={handlePing}
+          onRegisterPin={handleRegisterPin}
           onRefresh={refresh}
         />
       ) : (

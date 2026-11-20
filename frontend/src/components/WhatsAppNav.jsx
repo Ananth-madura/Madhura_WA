@@ -33,7 +33,7 @@ export default function WhatsAppNav() {
   const location = useLocation();
   const { admin, canView } = useWorkspaceAccess();
   const { user } = useAuth();
-  // A campaigns-only employee has no inbox at all — the backend refuses their
+  // A campaigns-only employee has no inbox at all: the backend refuses their
   // chat requests, so do not offer a tab that can only fail.
   const inboxBlocked = !admin && (user?.whatsapp_access_level || "full") === "campaign_only";
   const [showTestModal, setShowTestModal] = useState(false);
@@ -312,7 +312,7 @@ export default function WhatsAppNav() {
   return (
     <div className="hl-card hl-reveal w-full min-w-0 wa-workspace-nav">
       <div className="flex items-center min-w-0 w-full overflow-hidden">
-        {/* Top Tabs — responsive full-width strip with zero horizontal scroll on desktop */}
+        {/* Top Tabs: responsive full-width strip with zero horizontal scroll on desktop */}
         <div className="wa-nav-tabs-bar">
           {visibleTabs.map((tab) => {
             const Icon = tab.icon;
