@@ -53,7 +53,7 @@ export default function WhatsAppNav() {
       const { data } = await axios.get(`${API}/api/whatsapp/unread-count`, { headers });
       const val = Number(data?.totalUnread || 0);
       setTotalUnread((prev) => (prev === val ? prev : val));
-    } catch {}
+    } catch { }
   }, []);
 
   const fetchStatus = useCallback(async () => {
@@ -80,7 +80,7 @@ export default function WhatsAppNav() {
           return res.data;
         });
       }
-    } catch {}
+    } catch { }
   }, []);
 
   useEffect(() => {
@@ -342,22 +342,22 @@ export default function WhatsAppNav() {
                     style={
                       active
                         ? {
-                            marginLeft: 4,
-                            padding: "1px 5px",
-                            fontSize: 10,
-                            lineHeight: "12px",
-                            background: "var(--color-accent)",
-                            borderColor: "var(--color-focus)",
-                            color: "var(--color-accent-ink)",
-                          }
+                          marginLeft: 4,
+                          padding: "1px 5px",
+                          fontSize: 10,
+                          lineHeight: "12px",
+                          background: "var(--color-accent)",
+                          borderColor: "var(--color-focus)",
+                          color: "var(--color-accent-ink)",
+                        }
                         : {
-                            marginLeft: 4,
-                            padding: "1px 5px",
-                            fontSize: 10,
-                            lineHeight: "12px",
-                            color: "var(--color-error)",
-                            borderColor: "var(--color-error)",
-                          }
+                          marginLeft: 4,
+                          padding: "1px 5px",
+                          fontSize: 10,
+                          lineHeight: "12px",
+                          color: "var(--color-error)",
+                          borderColor: "var(--color-error)",
+                        }
                     }
                   >
                     {totalUnread > 99 ? "99+" : totalUnread}

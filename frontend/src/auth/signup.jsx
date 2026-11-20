@@ -20,7 +20,10 @@ import {
   Sparkles,
   Layers,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Radio,
+  Clock,
+  MessageSquare
 } from "lucide-react";
 import { API } from "../config/api";
 import { useAuth } from "./AuthContext";
@@ -393,567 +396,648 @@ export default function Signup() {
   const isFreePlan = selectedPlan === "free" || Number(plans.find((p) => p.id === selectedPlan)?.price_inr || 0) === 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 font-sans">
-      <div className="sm:mx-auto sm:w-full sm:max-w-2xl">
-        {/* Top Back Navigation */}
-        <div className="mb-4">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 font-sans">
+      <div className="mx-auto w-full max-w-5xl">
+        {/* Navigation Bar */}
+        <div className="flex items-center justify-between mb-6">
           <a
             href={MARKETING}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-emerald-700 transition-colors"
+            className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-emerald-700 transition-colors"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <ArrowLeft className="w-4 h-4" />
             <span>Back to Home</span>
           </a>
-        </div>
 
-        {/* Card Box */}
-        <div className="bg-white py-8 px-6 sm:px-10 rounded-2xl border border-slate-200/90 shadow-sm">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-5">
-            <a href={MARKETING} className="flex items-center gap-2">
-              <img src="/Group.png" alt="Madhura WhatsApp CRM" className="h-8 w-auto object-contain" />
-            </a>
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-              <GitBranch className="w-3 h-3 text-emerald-600" />
-              <span>Multi-Tenant v2</span>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full uppercase tracking-wider">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Official Meta Tech Provider</span>
             </span>
           </div>
+        </div>
 
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            Create Enterprise Workspace
-          </h1>
-          <p className="text-xs text-slate-600 mt-1 mb-5 leading-relaxed">
-            Multi-tenant WhatsApp Cloud API, shared team inbox, broadcast campaigns, and visual flowbots.
-          </p>
+        {/* Main Grid: Info Hero + Signup Box */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+          {/* Left Column: Platform Value Highlights */}
+          <div className="hidden lg:flex lg:col-span-4 flex-col justify-between p-8 rounded-3xl bg-slate-900 text-white shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
-          {/* Mode Switcher */}
-          <div className="flex bg-slate-100 p-1 rounded-xl mb-6 border border-slate-200/80" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "self_signup"}
-              onClick={() => {
-                setMode("self_signup");
-                setError("");
-              }}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                mode === "self_signup"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Building2 className="w-3.5 h-3.5" />
-              <span>New Company Workspace</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "access_code"}
-              onClick={() => {
-                setMode("access_code");
-                setError("");
-              }}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                mode === "access_code"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <KeyRound className="w-3.5 h-3.5" />
-              <span>Join with Access Code</span>
-            </button>
-          </div>
-
-          {/* Feedback Alerts */}
-          {error && (
-            <div role="alert" className="mb-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
-              <div className="flex-1 leading-relaxed">{error}</div>
-            </div>
-          )}
-          {doneMessage && (
-            <div role="status" className="mb-5 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start gap-2.5">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
-              <div className="flex-1 leading-relaxed">{doneMessage}</div>
-            </div>
-          )}
-
-          {/* MODE 1: SELF SIGNUP */}
-          {mode === "self_signup" && (
-            <div>
-              {/* Stepper Header */}
-              <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-4">
-                <div className="flex items-center gap-2">
-                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    signupStep === 1 ? "bg-emerald-700 text-white" : "bg-emerald-100 text-emerald-800"
-                  }`}>
-                    1
-                  </span>
-                  <span className={`text-xs font-semibold ${signupStep === 1 ? "text-slate-900" : "text-slate-500"}`}>
-                    Company &amp; Owner Profile
-                  </span>
+            <div className="space-y-6 relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400 font-bold text-lg">
+                  M
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-300" />
-                <div className="flex items-center gap-2">
-                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    signupStep === 2 ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-500"
-                  }`}>
-                    2
-                  </span>
-                  <span className={`text-xs font-semibold ${signupStep === 2 ? "text-slate-900" : "text-slate-500"}`}>
-                    Branch &amp; Subscription Plan
-                  </span>
+                <div>
+                  <span className="text-base font-extrabold text-white tracking-tight">Madhura</span>
+                  <span className="text-xs text-emerald-400 block font-semibold">Enterprise SaaS</span>
                 </div>
-              </div>
-
-              {/* STEP 1: ORGANIZATION & ADMINISTRATOR PROFILE */}
-              {signupStep === 1 && (
-                <form onSubmit={handleProceedToStep2} noValidate className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="company-name" className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Organization Legal Name *
-                      </label>
-                      <input
-                        id="company-name"
-                        type="text"
-                        value={legalName || companyName}
-                        onChange={(e) => {
-                          setCompanyName(e.target.value);
-                          setLegalName(e.target.value);
-                        }}
-                        placeholder="e.g. Acme Retail Private Limited"
-                        className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="industry-select" className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Industry Sector *
-                      </label>
-                      <select
-                        id="industry-select"
-                        value={industry}
-                        onChange={(e) => setIndustry(e.target.value)}
-                        className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 bg-white focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
-                      >
-                        {INDUSTRIES.map((ind) => (
-                          <option key={ind} value={ind}>{ind}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="first-name" className="block text-xs font-bold text-slate-700 mb-1.5">
-                        First Name *
-                      </label>
-                      <input
-                        id="first-name"
-                        type="text"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="John"
-                        className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="last-name" className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Last Name
-                      </label>
-                      <input
-                        id="last-name"
-                        type="text"
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
-                        placeholder="Doe"
-                        className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="work-email" className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Work Email Address *
-                      </label>
-                      <input
-                        id="work-email"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="name@company.com"
-                        className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="mobile-number" className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Mobile Phone Number
-                      </label>
-                      <input
-                        id="mobile-number"
-                        type="tel"
-                        value={mobileNumber}
-                        onChange={(e) => setMobileNumber(e.target.value)}
-                        placeholder="+91 98765 43210"
-                        className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="signup-password" className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Create Master Password *
-                      </label>
-                      <div className="relative">
-                        <input
-                          id="signup-password"
-                          type={showPassword ? "text" : "password"}
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder="At least 6 characters"
-                          className="w-full px-3.5 pr-10 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
-                          required
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
-                          aria-label={showPassword ? "Hide password" : "Show password"}
-                        >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label htmlFor="confirm-password" className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Confirm Password *
-                      </label>
-                      <div className="relative">
-                        <input
-                          id="confirm-password"
-                          type={showConfirmPassword ? "text" : "password"}
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          placeholder="Repeat password"
-                          className="w-full px-3.5 pr-10 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
-                          required
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
-                          aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-                        >
-                          {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      type="submit"
-                      className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors min-h-[44px] cursor-pointer shadow-sm"
-                    >
-                      <span>Proceed to Branch &amp; Subscription Plan</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* STEP 2: BRANCH & SUBSCRIPTION PLAN */}
-              {signupStep === 2 && (
-                <form onSubmit={handleSelfSignup} noValidate className="space-y-5">
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                    <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                      Initial Workspace Branch
-                    </h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <label htmlFor="branch-name" className="block text-[11px] font-bold text-slate-700 mb-1">
-                          Branch Name
-                        </label>
-                        <input
-                          id="branch-name"
-                          type="text"
-                          value={branchName}
-                          onChange={(e) => setBranchName(e.target.value)}
-                          className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 text-slate-900"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="branch-code" className="block text-[11px] font-bold text-slate-700 mb-1">
-                          Branch Code
-                        </label>
-                        <input
-                          id="branch-code"
-                          type="text"
-                          value={branchCode}
-                          onChange={(e) => setBranchCode(e.target.value.toUpperCase())}
-                          className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 text-slate-900 font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="timezone-select" className="block text-[11px] font-bold text-slate-700 mb-1">
-                          Timezone
-                        </label>
-                        <select
-                          id="timezone-select"
-                          value={timezone}
-                          onChange={(e) => setTimezone(e.target.value)}
-                          className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 text-slate-900 bg-white"
-                        >
-                          {TIMEZONES.map((tz) => (
-                            <option key={tz.value} value={tz.value}>{tz.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Plan Cards */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-900 mb-2.5">
-                      Select Subscription Plan
-                    </label>
-
-                    {plansError && (
-                      <div className="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between">
-                        <span>{plansError}</span>
-                        <button
-                          type="button"
-                          onClick={() => setCatalogAttempt((c) => c + 1)}
-                          className="text-xs font-bold text-amber-800 underline hover:no-underline"
-                        >
-                          Retry plans
-                        </button>
-                      </div>
-                    )}
-
-                    {signupBackendNotice && (
-                      <div className="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
-                        {signupBackendNotice}
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                      {plans.map((p) => {
-                        const isSelected = selectedPlan === p.id;
-                        return (
-                          <div
-                            key={p.id}
-                            onClick={() => setSelectedPlan(p.id)}
-                            className={`p-4 rounded-xl border text-xs cursor-pointer transition-all flex flex-col justify-between ${
-                              isSelected
-                                ? "border-emerald-600 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-600"
-                                : "border-slate-200 bg-white hover:border-slate-300"
-                            }`}
-                          >
-                            <div>
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="font-bold text-slate-900 flex items-center gap-2 cursor-pointer">
-                                  <input
-                                    type="radio"
-                                    role="radio"
-                                    aria-label={p.name}
-                                    name="subscription_plan"
-                                    checked={isSelected}
-                                    onChange={() => setSelectedPlan(p.id)}
-                                    className="text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
-                                  />
-                                  <span>{p.name}</span>
-                                </label>
-                                {p.badge && (
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                                    {p.badge}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-base font-extrabold text-slate-900 mt-1">
-                                {p.price}
-                                <span className="text-[11px] font-normal text-slate-500 ml-1">/{p.billing || "mo"}</span>
-                              </div>
-                              <ul className="mt-3 space-y-1.5 text-[11px] text-slate-600">
-                                {p.features?.slice(0, 4).map((f, idx) => (
-                                  <li key={idx} className="flex items-start gap-1.5">
-                                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span>{f}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                            <div className="mt-4 pt-2 border-t border-slate-100">
-                              <span className={`text-[11px] font-bold ${isSelected ? "text-emerald-700" : "text-slate-500"}`}>
-                                {isSelected ? "Selected" : "Choose Plan"}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 pt-3">
-                    <button
-                      type="button"
-                      onClick={() => setSignupStep(1)}
-                      className="py-2.5 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-colors min-h-[44px]"
-                    >
-                      Back
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={loading || !signupBackendReady || plans.length === 0}
-                      className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors min-h-[44px] cursor-pointer shadow-sm disabled:opacity-50"
-                    >
-                      {loading ? (
-                        <span>Initializing Workspace...</span>
-                      ) : isFreePlan ? (
-                        <span>Create free workspace</span>
-                      ) : (
-                        <span>Create account &amp; continue to payment</span>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          )}
-
-          {/* MODE 2: ACCESS CODE ACTIVATION */}
-          {mode === "access_code" && (
-            <form onSubmit={handleJoinWithAccessCode} className="space-y-4">
-              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 leading-relaxed">
-                <div className="font-bold flex items-center gap-1.5 mb-1 text-emerald-900">
-                  <KeyRound className="w-4 h-4 text-emerald-700" />
-                  <span>Team Member Invitation</span>
-                </div>
-                Enter the code provided by your organization supervisor to link your account to your branch.
               </div>
 
               <div>
-                <label htmlFor="join-code" className="block text-xs font-bold text-slate-700 mb-1.5">
-                  10-Character Access Code *
-                </label>
-                <input
-                  id="join-code"
-                  type="text"
-                  maxLength={12}
-                  value={accessCode}
-                  onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. AC-9B21-48"
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 font-mono focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
-                  required
-                />
+                <h2 className="text-2xl font-extrabold text-white leading-tight">
+                  Launch Your WhatsApp Operating System
+                </h2>
+                <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+                  Join hundreds of scaling businesses running high-concurrency WhatsApp messaging, sales routing, and automated lead capture.
+                </p>
               </div>
 
-              {verifyingCode && (
-                <p className="text-xs text-slate-500 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
-                  <span>Verifying code validity...</span>
-                </p>
-              )}
+              <div className="space-y-4 pt-2">
+                <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700 space-y-1">
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Meta Cloud API Integration</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    Direct integration without third-party middleware markups or latency bottlenecks.
+                  </p>
+                </div>
 
-              {codeError && (
-                <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">
-                  {codeError}
+                <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700 space-y-1">
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Visual Interactive Flowbots</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    Drag-and-drop conversation builders with buttons, lists, and CRM field synchronization.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700 space-y-1">
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Multi-Branch Scopes</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    Manage stores, cities, and regional offices from one unified administrative console.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-slate-800 text-[11px] text-slate-400 space-y-1 relative z-10">
+              <span className="font-semibold text-slate-300 block">Enterprise Security Guarantee</span>
+              <p>End-to-end data isolation, role-based controls, and SOC2 compliant audit logging.</p>
+            </div>
+          </div>
+
+          {/* Right Column: Interactive Signup Card */}
+          <div className="lg:col-span-8 bg-white p-6 sm:p-10 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div>
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <a href={MARKETING} className="flex items-center gap-2">
+                  <img src="/Group.png" alt="Madhura WhatsApp CRM" className="h-8 w-auto object-contain" />
+                </a>
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                  <GitBranch className="w-3 h-3 text-emerald-600" />
+                  <span>Multi-Tenant v2</span>
+                </span>
+              </div>
+
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+                Create Enterprise Workspace
+              </h1>
+              <p className="text-xs text-slate-600 mt-1 mb-6 leading-relaxed">
+                Multi-tenant WhatsApp Cloud API, shared team inbox, broadcast campaigns, and visual flowbots.
+              </p>
+
+              {/* Mode Switcher */}
+              <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-6 border border-slate-200" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === "self_signup"}
+                  onClick={() => {
+                    setMode("self_signup");
+                    setError("");
+                  }}
+                  className={`flex-1 py-2.5 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] ${
+                    mode === "self_signup"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Building2 className="w-4 h-4 text-emerald-600" />
+                  <span>New Company Workspace</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === "access_code"}
+                  onClick={() => {
+                    setMode("access_code");
+                    setError("");
+                  }}
+                  className={`flex-1 py-2.5 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] ${
+                    mode === "access_code"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <KeyRound className="w-4 h-4 text-emerald-600" />
+                  <span>Join with Access Code</span>
+                </button>
+              </div>
+
+              {/* Feedback Alerts */}
+              {error && (
+                <div role="alert" className="mb-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+                  <div className="flex-1 leading-relaxed">{error}</div>
+                </div>
+              )}
+              {doneMessage && (
+                <div role="status" className="mb-5 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                  <div className="flex-1 leading-relaxed">{doneMessage}</div>
                 </div>
               )}
 
-              {verifiedCodeData && (
-                <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-950 space-y-1">
-                  <div className="font-semibold text-emerald-900 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Valid Access Code for {verifiedCodeData.tenant_name || verifiedCodeData.company_name}</span>
+              {/* MODE 1: SELF SIGNUP */}
+              {mode === "self_signup" && (
+                <div>
+                  {/* Stepper Header */}
+                  <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-4">
+                    <div className="flex items-center gap-2.5">
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        signupStep === 1 ? "bg-emerald-700 text-white" : "bg-emerald-100 text-emerald-800"
+                      }`}>
+                        1
+                      </span>
+                      <span className={`text-xs font-semibold ${signupStep === 1 ? "text-slate-900" : "text-slate-500"}`}>
+                        Company &amp; Owner Profile
+                      </span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300" />
+                    <div className="flex items-center gap-2.5">
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        signupStep === 2 ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-500"
+                      }`}>
+                        2
+                      </span>
+                      <span className={`text-xs font-semibold ${signupStep === 2 ? "text-slate-900" : "text-slate-500"}`}>
+                        Branch &amp; Subscription Plan
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-slate-600 text-[11px]">
-                    Role: <span className="font-medium">{verifiedCodeData.role_name || "Team Member"}</span> | Branch: <span className="font-medium">{verifiedCodeData.branch_name || "Main"}</span>
-                  </div>
+
+                  {/* STEP 1: ORGANIZATION & ADMINISTRATOR PROFILE */}
+                  {signupStep === 1 && (
+                    <form onSubmit={handleProceedToStep2} noValidate className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label htmlFor="company-name" className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Organization Legal Name *
+                          </label>
+                          <input
+                            id="company-name"
+                            type="text"
+                            value={legalName || companyName}
+                            onChange={(e) => {
+                              setCompanyName(e.target.value);
+                              setLegalName(e.target.value);
+                            }}
+                            placeholder="e.g. Acme Retail Private Limited"
+                            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none transition-colors"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="industry-select" className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Industry Sector *
+                          </label>
+                          <select
+                            id="industry-select"
+                            value={industry}
+                            onChange={(e) => setIndustry(e.target.value)}
+                            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 bg-white focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none transition-colors"
+                          >
+                            {INDUSTRIES.map((ind) => (
+                              <option key={ind} value={ind}>{ind}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label htmlFor="first-name" className="block text-xs font-bold text-slate-700 mb-1.5">
+                            First Name *
+                          </label>
+                          <input
+                            id="first-name"
+                            type="text"
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            placeholder="John"
+                            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none transition-colors"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="last-name" className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Last Name
+                          </label>
+                          <input
+                            id="last-name"
+                            type="text"
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            placeholder="Doe"
+                            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none transition-colors"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label htmlFor="work-email" className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Work Email Address *
+                          </label>
+                          <input
+                            id="work-email"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="name@company.com"
+                            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none transition-colors"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="mobile-number" className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Mobile Phone Number
+                          </label>
+                          <input
+                            id="mobile-number"
+                            type="tel"
+                            value={mobileNumber}
+                            onChange={(e) => setMobileNumber(e.target.value)}
+                            placeholder="+91 98765 43210"
+                            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none transition-colors"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label htmlFor="signup-password" className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Create Master Password *
+                          </label>
+                          <div className="relative">
+                            <input
+                              id="signup-password"
+                              type={showPassword ? "text" : "password"}
+                              value={password}
+                              onChange={(e) => setPassword(e.target.value)}
+                              placeholder="At least 6 characters"
+                              className="w-full px-3.5 pr-10 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none transition-colors"
+                              required
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 focus-visible:outline-none cursor-pointer"
+                              aria-label={showPassword ? "Hide password" : "Show password"}
+                            >
+                              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label htmlFor="confirm-password" className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Confirm Password *
+                          </label>
+                          <div className="relative">
+                            <input
+                              id="confirm-password"
+                              type={showConfirmPassword ? "text" : "password"}
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              placeholder="Repeat password"
+                              className="w-full px-3.5 pr-10 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none transition-colors"
+                              required
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 focus-visible:outline-none cursor-pointer"
+                              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                            >
+                              {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-2">
+                        <button
+                          type="submit"
+                          className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors min-h-[44px] cursor-pointer shadow-sm"
+                        >
+                          <span>Proceed to Branch &amp; Subscription Plan</span>
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* STEP 2: BRANCH & SUBSCRIPTION PLAN */}
+                  {signupStep === 2 && (
+                    <form onSubmit={handleSelfSignup} noValidate className="space-y-5">
+                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                        <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                          Initial Workspace Branch
+                        </h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label htmlFor="branch-name" className="block text-[11px] font-bold text-slate-700 mb-1">
+                              Branch Name
+                            </label>
+                            <input
+                              id="branch-name"
+                              type="text"
+                              value={branchName}
+                              onChange={(e) => setBranchName(e.target.value)}
+                              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 text-slate-900"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="branch-code" className="block text-[11px] font-bold text-slate-700 mb-1">
+                              Branch Code
+                            </label>
+                            <input
+                              id="branch-code"
+                              type="text"
+                              value={branchCode}
+                              onChange={(e) => setBranchCode(e.target.value.toUpperCase())}
+                              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 text-slate-900 font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="timezone-select" className="block text-[11px] font-bold text-slate-700 mb-1">
+                              Timezone
+                            </label>
+                            <select
+                              id="timezone-select"
+                              value={timezone}
+                              onChange={(e) => setTimezone(e.target.value)}
+                              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 text-slate-900 bg-white"
+                            >
+                              {TIMEZONES.map((tz) => (
+                                <option key={tz.value} value={tz.value}>{tz.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Plan Cards */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-900 mb-2.5">
+                          Select Subscription Plan
+                        </label>
+
+                        {plansError && (
+                          <div className="mb-3 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between">
+                            <span>{plansError}</span>
+                            <button
+                              type="button"
+                              onClick={() => setCatalogAttempt((c) => c + 1)}
+                              className="text-xs font-bold text-amber-800 underline hover:no-underline cursor-pointer"
+                            >
+                              Retry plans
+                            </button>
+                          </div>
+                        )}
+
+                        {signupBackendNotice && (
+                          <div className="mb-3 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                            {signupBackendNotice}
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                          {plans.map((p) => {
+                            const isSelected = selectedPlan === p.id;
+                            return (
+                              <div
+                                key={p.id}
+                                onClick={() => setSelectedPlan(p.id)}
+                                className={`p-4 rounded-2xl border text-xs cursor-pointer transition-all flex flex-col justify-between ${
+                                  isSelected
+                                    ? "border-emerald-600 bg-emerald-50/50 shadow-sm ring-2 ring-emerald-600/30"
+                                    : "border-slate-200 bg-white hover:border-slate-300"
+                                }`}
+                              >
+                                <div>
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <label className="font-bold text-slate-900 flex items-center gap-2 cursor-pointer">
+                                      <input
+                                        type="radio"
+                                        role="radio"
+                                        aria-label={p.name}
+                                        name="subscription_plan"
+                                        checked={isSelected}
+                                        onChange={() => setSelectedPlan(p.id)}
+                                        className="text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+                                      />
+                                      <span>{p.name}</span>
+                                    </label>
+                                    {p.badge && (
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                        {p.badge}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-base font-extrabold text-slate-900 mt-1">
+                                    {p.price}
+                                    <span className="text-[11px] font-normal text-slate-500 ml-1">/{p.billing || "mo"}</span>
+                                  </div>
+                                  <ul className="mt-3 space-y-1.5 text-[11px] text-slate-600">
+                                    {p.features?.slice(0, 4).map((f, idx) => (
+                                      <li key={idx} className="flex items-start gap-1.5">
+                                        <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                        <span>{f}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                                  <span className={`text-[11px] font-bold ${isSelected ? "text-emerald-700" : "text-slate-500"}`}>
+                                    {isSelected ? "Selected" : "Choose Plan"}
+                                  </span>
+                                  {isSelected && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3 pt-3">
+                        <button
+                          type="button"
+                          onClick={() => setSignupStep(1)}
+                          className="py-2.5 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-colors min-h-[44px] cursor-pointer"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={loading || !signupBackendReady || plans.length === 0}
+                          className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors min-h-[44px] cursor-pointer shadow-sm disabled:opacity-50"
+                        >
+                          {loading ? (
+                            <span>Initializing Workspace...</span>
+                          ) : isFreePlan ? (
+                            <span>Create free workspace</span>
+                          ) : (
+                            <span>Create account &amp; continue to payment</span>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               )}
 
-              {verifiedCodeData?.requires_activation !== false ? (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="join-password" className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Set Personal Password *
-                      </label>
-                      <input
-                        id="join-password"
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="At least 6 characters"
-                        className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900"
-                        required
-                      />
+              {/* MODE 2: ACCESS CODE ACTIVATION */}
+              {mode === "access_code" && (
+                <form onSubmit={handleJoinWithAccessCode} className="space-y-4">
+                  <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 leading-relaxed">
+                    <div className="font-bold flex items-center gap-1.5 mb-1 text-emerald-900">
+                      <KeyRound className="w-4 h-4 text-emerald-700" />
+                      <span>Team Member Invitation</span>
                     </div>
-                    <div>
-                      <label htmlFor="join-confirm-password" className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Confirm Password *
-                      </label>
-                      <input
-                        id="join-confirm-password"
-                        type="password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Repeat password"
-                        className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900"
-                        required
-                      />
-                    </div>
+                    Enter the code provided by your organization supervisor to link your account to your branch.
                   </div>
-                  <button
-                    type="submit"
-                    disabled={loading || Boolean(codeError) || !verifiedCodeData}
-                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors min-h-[44px] cursor-pointer shadow-sm disabled:opacity-50"
-                  >
-                    {loading ? "Activating Account..." : "Activate account & open workspace"}
-                  </button>
-                </>
-              ) : (
-                <>
+
                   <div>
-                    <label htmlFor="join-password" className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Your Existing Password *
+                    <label htmlFor="join-code" className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Access Code *
                     </label>
                     <input
-                      id="join-password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter your password"
-                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900"
+                      id="join-code"
+                      type="text"
+                      maxLength={14}
+                      value={accessCode}
+                      onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
+                      placeholder="e.g. AC-9B21-48"
+                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 font-mono focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
                       required
                     />
                   </div>
-                  <button
-                    type="submit"
-                    disabled={loading || Boolean(codeError) || !verifiedCodeData}
-                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors min-h-[44px] cursor-pointer shadow-sm disabled:opacity-50"
-                  >
-                    {loading ? "Signing in..." : "Sign in to your organization"}
-                  </button>
-                </>
-              )}
-            </form>
-          )}
 
-          {/* Bottom Login Link */}
-          <div className="mt-6 pt-5 border-t border-slate-200 text-center">
-            <p className="text-xs text-slate-600">
-              Already have an enterprise workspace?{" "}
-              <Link to="/login" className="text-emerald-700 font-bold hover:underline">
-                Sign In
-              </Link>
-            </p>
+                  {verifyingCode && (
+                    <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
+                      <span>Verifying code validity...</span>
+                    </p>
+                  )}
+
+                  {codeError && (
+                    <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+                      {codeError}
+                    </div>
+                  )}
+
+                  {verifiedCodeData && (
+                    <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-950 space-y-1">
+                      <div className="font-semibold text-emerald-900 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Valid Access Code for {verifiedCodeData.tenant_name || verifiedCodeData.company_name}</span>
+                      </div>
+                      <div className="text-slate-600 text-[11px]">
+                        Role: <span className="font-medium">{verifiedCodeData.role_name || "Team Member"}</span> | Branch: <span className="font-medium">{verifiedCodeData.branch_name || "Main"}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {verifiedCodeData?.requires_activation !== false ? (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label htmlFor="join-password" className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Set Personal Password *
+                          </label>
+                          <input
+                            id="join-password"
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="At least 6 characters"
+                            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="join-confirm-password" className="block text-xs font-bold text-slate-700 mb-1.5">
+                            Confirm Password *
+                          </label>
+                          <input
+                            id="join-confirm-password"
+                            type="password"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            placeholder="Repeat password"
+                            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={loading || Boolean(codeError) || !verifiedCodeData}
+                        className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors min-h-[44px] cursor-pointer shadow-sm disabled:opacity-50"
+                      >
+                        {loading ? "Activating Account..." : "Activate account & open workspace"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label htmlFor="join-password" className="block text-xs font-bold text-slate-700 mb-1.5">
+                          Your Existing Password *
+                        </label>
+                        <input
+                          id="join-password"
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Enter your password"
+                          className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
+                          required
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={loading || Boolean(codeError) || !verifiedCodeData}
+                        className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors min-h-[44px] cursor-pointer shadow-sm disabled:opacity-50"
+                      >
+                        {loading ? "Signing in..." : "Sign in to your organization"}
+                      </button>
+                    </>
+                  )}
+                </form>
+              )}
+            </div>
+
+            {/* Bottom Login Link */}
+            <div className="mt-8 pt-5 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-600">
+              <p>
+                Already have an enterprise workspace?{" "}
+                <Link to="/login" className="text-emerald-700 font-bold hover:underline">
+                  Sign In
+                </Link>
+              </p>
+
+              <div className="flex items-center gap-3 text-[11px]">
+                <Link to="/terms" className="text-slate-500 hover:text-slate-700 underline">Terms</Link>
+                <Link to="/privacy" className="text-slate-500 hover:text-slate-700 underline">Privacy</Link>
+              </div>
+            </div>
           </div>
         </div>
       </div>
