@@ -81,6 +81,14 @@ const FailureRecoveryPage = lazy(() => import("./pages/campaigns/FailureRecovery
 const TemplateHealthPage = lazy(() => import("./pages/campaigns/TemplateHealthPage"));
 const AiCampaignAssistantPage = lazy(() => import("./pages/campaigns/AiCampaignAssistantPage"));
 
+// Enterprise Tech Provider & Business SaaS Extensions
+const IntegrationCenter = lazy(() => import("./pages/integrations/IntegrationCenter"));
+const ClickToWhatsAppAds = lazy(() => import("./pages/ads/ClickToWhatsAppAds"));
+const WhatsAppCommerce = lazy(() => import("./pages/commerce/WhatsAppCommerce"));
+const AgencyWorkspace = lazy(() => import("./pages/agency/AgencyWorkspace"));
+const AiAgentStudio = lazy(() => import("./pages/ai/AiAgentStudio"));
+const PlatformAdminHub = lazy(() => import("./pages/platform/PlatformAdminHub"));
+
 /* Marketing site now lives in the sibling `landing_page` project (port 3002).
    Old public URLs on this origin hand off there so shared links keep working. */
 
@@ -204,6 +212,18 @@ export default function App() {
             <Route path="/tech-provider" element={<Navigate to="/platform/meta-tech-provider" replace />} />
             <Route path="/billing" element={<RequireAuth><WABilling /></RequireAuth>} />
             <Route path="/accounts" element={<Navigate to="/whatsapp/accounts" replace />} />
+            <Route path="/integrations" element={<RequireAuth><IntegrationCenter /></RequireAuth>} />
+            <Route path="/agency" element={<RequireAuth><AgencyWorkspace /></RequireAuth>} />
+
+            {/* Platform Administration Console Routes */}
+            <Route path="/platform/tenants" element={<RequireAuth><PlatformAdminHub defaultTab="tenants" /></RequireAuth>} />
+            <Route path="/platform/subscriptions" element={<RequireAuth><PlatformAdminHub defaultTab="subscriptions" /></RequireAuth>} />
+            <Route path="/platform/usage" element={<RequireAuth><PlatformAdminHub defaultTab="usage" /></RequireAuth>} />
+            <Route path="/platform/providers" element={<RequireAuth><PlatformAdminHub defaultTab="providers" /></RequireAuth>} />
+            <Route path="/platform/audit" element={<RequireAuth><PlatformAdminHub defaultTab="audit" /></RequireAuth>} />
+            <Route path="/platform/health" element={<RequireAuth><PlatformAdminHub defaultTab="health" /></RequireAuth>} />
+            <Route path="/platform/support" element={<RequireAuth><PlatformAdminHub defaultTab="support" /></RequireAuth>} />
+
             <Route path="/onboarding" element={<RequireAuth><OnboardingCommandCenter /></RequireAuth>} />
             <Route path="/onboarding/company" element={<RequireAuth><CompanyOnboarding /></RequireAuth>} />
             <Route path="/onboarding/plan" element={<RequireAuth><PlanOnboarding /></RequireAuth>} />
@@ -242,6 +262,7 @@ export default function App() {
               }
             >
               <Route index element={<WorkspaceInbox />} />
+              <Route path="inbox" element={<WorkspaceInbox />} />
               <Route path="team-inbox" element={<TeamChat />} />
               <Route path="workspace" element={<EmployeeWorkspace />} />
               <Route path="workspace/campaigns" element={<EmployeeCampaigns />} />
@@ -293,6 +314,12 @@ export default function App() {
               <Route path="flows/build/:flowId" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
               <Route path="flows/builder" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
               <Route path="flows/builder/:flowId" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
+              <Route path="forms" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
+              <Route path="flowbots" element={<FlowPageBoundary><WAFlows /></FlowPageBoundary>} />
+              <Route path="ai-agents" element={<AiAgentStudio />} />
+              <Route path="ai" element={<AiAgentStudio />} />
+              <Route path="ads" element={<ClickToWhatsAppAds />} />
+              <Route path="commerce" element={<WhatsAppCommerce />} />
               <Route path="analytics" element={<WAAnalytics />} />
               <Route path="accounts" element={<WAAccounts />} />
               <Route path="account" element={<Navigate to="/whatsapp/accounts" replace />} />
