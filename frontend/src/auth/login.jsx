@@ -17,12 +17,9 @@ import {
   GitBranch,
   ShieldCheck,
   Zap,
-  HelpCircle,
   X,
   MessageSquare,
-  Radio,
-  Check,
-  Clock
+  Radio
 } from "lucide-react";
 import { useAuth } from "./AuthContext";
 import { API, apiCandidates, saveApiOverride, readApiOverride } from "../config/api";
@@ -295,21 +292,21 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 font-sans">
+    <div className="min-h-screen bg-[#F5F5F5] flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="mx-auto w-full max-w-5xl">
         {/* Navigation Bar */}
         <div className="flex items-center justify-between mb-6">
           <a
             href={MARKETING}
-            className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-emerald-700 transition-colors"
+            className="inline-flex items-center gap-2 text-xs font-bold text-[#202C52] hover:text-[#050E2F] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] rounded-md px-1 py-0.5"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4 text-[#202C52]" />
             <span>Back to Home</span>
           </a>
 
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full uppercase tracking-wider">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#16803C] bg-[#E8F5E9] border border-[#C8E6C9] px-3 py-1 rounded-full uppercase tracking-wider">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#16803C]" />
               <span>Official Meta Tech Provider</span>
             </span>
           </div>
@@ -317,18 +314,19 @@ export default function Login() {
 
         {/* Main Grid: Info Hero + Auth Box */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-          {/* Left Column: Platform Capabilities */}
-          <div className="hidden lg:flex lg:col-span-5 flex-col justify-between p-8 rounded-3xl bg-slate-900 text-white shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-            
+          {/* Left Column: Platform Capabilities (Yellow x Navy Theme) */}
+          <div className="hidden lg:flex lg:col-span-5 flex-col justify-between p-8 rounded-3xl bg-[#202C52] text-white shadow-[0_8px_30px_rgba(32,44,82,0.18)] border border-[#050E2F] relative overflow-hidden">
+            {/* Subtle brand warm ambient accent */}
+            <div className="absolute top-0 right-0 w-80 h-80 bg-[#FCBD16]/10 rounded-full blur-3xl pointer-events-none" />
+
             <div className="space-y-6 relative z-10">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400 font-bold text-lg">
+                <div className="w-10 h-10 rounded-2xl bg-[#FCBD16] text-[#202C52] flex items-center justify-center font-extrabold text-lg shadow-sm">
                   M
                 </div>
                 <div>
                   <span className="text-base font-extrabold text-white tracking-tight">Madhura</span>
-                  <span className="text-xs text-emerald-400 block font-semibold">WhatsApp Cloud API Suite</span>
+                  <span className="text-xs text-[#FCBD16] block font-semibold">WhatsApp Cloud API Suite</span>
                 </div>
               </div>
 
@@ -336,43 +334,43 @@ export default function Login() {
                 <h2 className="text-2xl font-extrabold text-white leading-tight">
                   Enterprise WhatsApp Business Infrastructure
                 </h2>
-                <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+                <p className="text-xs text-slate-200 mt-2 leading-relaxed">
                   Connect multiple WhatsApp numbers, orchestrate flowbots, manage team inboxes across branches, and synchronize campaigns.
                 </p>
               </div>
 
               <div className="space-y-3.5 pt-2">
                 <div className="flex items-start gap-3">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                    <Radio className="w-3.5 h-3.5" />
+                  <div className="w-8 h-8 rounded-lg bg-[#2B385F] text-[#FCBD16] border border-[#FCBD16]/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <Radio className="w-4 h-4" />
                   </div>
                   <div>
                     <h3 className="text-xs font-bold text-white">Direct Meta Cloud API</h3>
-                    <p className="text-[11px] text-slate-400 leading-normal">
+                    <p className="text-[11px] text-slate-300 leading-normal">
                       High throughput direct connection with official Embedded Signup onboarding.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                    <GitBranch className="w-3.5 h-3.5" />
+                  <div className="w-8 h-8 rounded-lg bg-[#2B385F] text-[#FCBD16] border border-[#FCBD16]/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <GitBranch className="w-4 h-4" />
                   </div>
                   <div>
                     <h3 className="text-xs font-bold text-white">Multi-Branch Workspaces</h3>
-                    <p className="text-[11px] text-slate-400 leading-normal">
+                    <p className="text-[11px] text-slate-300 leading-normal">
                       Isolate contacts, chats, and templates per regional store or franchise branch.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                    <MessageSquare className="w-3.5 h-3.5" />
+                  <div className="w-8 h-8 rounded-lg bg-[#2B385F] text-[#FCBD16] border border-[#FCBD16]/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <MessageSquare className="w-4 h-4" />
                   </div>
                   <div>
                     <h3 className="text-xs font-bold text-white">Shared Multi-Agent Inbox</h3>
-                    <p className="text-[11px] text-slate-400 leading-normal">
+                    <p className="text-[11px] text-slate-300 leading-normal">
                       Smart conversation assignments, canned replies, internal notes, and audit trails.
                     </p>
                   </div>
@@ -381,38 +379,38 @@ export default function Login() {
             </div>
 
             {/* Compliance Footer */}
-            <div className="pt-6 border-t border-slate-800 text-[11px] text-slate-400 space-y-2 relative z-10">
+            <div className="pt-6 border-t border-[#2B385F] text-[11px] text-slate-300 space-y-2 relative z-10">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span className="font-semibold text-slate-300">Tenant-isolated encryption &amp; audit trails</span>
+                <ShieldCheck className="w-4 h-4 text-[#FCBD16]" />
+                <span className="font-semibold text-white">Tenant-isolated encryption and audit trails</span>
               </div>
               <p>Meta Tech Provider compliance verified with Cloud API PIN and webhook verification.</p>
             </div>
           </div>
 
           {/* Right Column: Authentication Form Card */}
-          <div className="lg:col-span-7 bg-white p-6 sm:p-10 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div className="lg:col-span-7 bg-white p-6 sm:p-10 rounded-3xl border border-[#E8E8E8] shadow-[0_4px_24px_rgba(32,44,82,0.06)] flex flex-col justify-between">
             <div>
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
-                <a href={MARKETING} className="flex items-center gap-2">
+                <a href={MARKETING} className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] rounded-md">
                   <img src="/Group.png" alt="Madhura WhatsApp CRM" className="h-8 w-auto object-contain" />
                 </a>
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full uppercase tracking-wider">
-                  <GitBranch className="w-3 h-3 text-emerald-600" />
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#202C52] bg-[#FFF4CC] border border-[#FCBD16]/40 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                  <GitBranch className="w-3 h-3 text-[#202C52]" />
                   <span>Workspace v2</span>
                 </span>
               </div>
 
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+              <h1 className="text-xl sm:text-2xl font-bold text-[#202C52] tracking-tight">
                 Sign in to Workspace
               </h1>
-              <p className="text-xs text-slate-600 mt-1 mb-6 leading-relaxed">
+              <p className="text-xs text-[#667085] mt-1 mb-6 leading-relaxed">
                 Tenant-isolated messaging platform, branch routing, and live team inbox.
               </p>
 
               {/* Tab Selector */}
-              <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-6 border border-slate-200">
+              <div className="flex bg-[#F5F5F5] p-1.5 rounded-2xl mb-6 border border-[#E8E8E8]">
                 <button
                   type="button"
                   disabled={!!twoFactorEmail}
@@ -420,13 +418,13 @@ export default function Login() {
                     setActiveTab("credentials");
                     setError("");
                   }}
-                  className={`flex-1 py-2.5 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] ${
+                  className={`flex-1 py-2.5 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] ${
                     activeTab === "credentials"
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-600 hover:text-slate-900"
+                      ? "bg-white text-[#202C52] shadow-sm border border-[#E8E8E8]"
+                      : "text-[#667085] hover:text-[#202C52]"
                   }`}
                 >
-                  <Mail className="w-4 h-4 text-emerald-600" />
+                  <Mail className="w-4 h-4 text-[#202C52]" />
                   <span>Work Account</span>
                 </button>
                 <button
@@ -436,13 +434,13 @@ export default function Login() {
                     setActiveTab("access_code");
                     setError("");
                   }}
-                  className={`flex-1 py-2.5 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] ${
+                  className={`flex-1 py-2.5 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] ${
                     activeTab === "access_code"
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-600 hover:text-slate-900"
+                      ? "bg-white text-[#202C52] shadow-sm border border-[#E8E8E8]"
+                      : "text-[#667085] hover:text-[#202C52]"
                   }`}
                 >
-                  <KeyRound className="w-4 h-4 text-emerald-600" />
+                  <KeyRound className="w-4 h-4 text-[#202C52]" />
                   <span>Access Code</span>
                 </button>
                 <button
@@ -452,13 +450,13 @@ export default function Login() {
                     setActiveTab("demo");
                     setError("");
                   }}
-                  className={`flex-1 py-2.5 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] ${
+                  className={`flex-1 py-2.5 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] ${
                     activeTab === "demo"
-                      ? "bg-white text-emerald-800 shadow-sm"
-                      : "text-slate-600 hover:text-slate-900"
+                      ? "bg-white text-[#202C52] shadow-sm border border-[#E8E8E8]"
+                      : "text-[#667085] hover:text-[#202C52]"
                   }`}
                 >
-                  <Zap className="w-4 h-4 text-emerald-600" />
+                  <Zap className="w-4 h-4 text-[#FCBD16] fill-[#FCBD16]" />
                   <span>Try Demo</span>
                 </button>
               </div>
@@ -471,8 +469,8 @@ export default function Login() {
                 </div>
               )}
               {notice && (
-                <div role="status" className="mb-5 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                <div role="status" className="mb-5 p-3.5 rounded-xl bg-[#E8F5E9] border border-[#C8E6C9] text-[#16803C] text-xs flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-[#16803C] mt-0.5" />
                   <div className="flex-1 leading-relaxed">{notice}</div>
                 </div>
               )}
@@ -480,14 +478,14 @@ export default function Login() {
               {/* 2FA Form */}
               {twoFactorEmail && (
                 <form onSubmit={submitTwoFactor} className="space-y-4" aria-label="Two-step verification">
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <h2 className="text-xs font-bold text-slate-900">Two-Step Verification</h2>
-                    <p className="text-xs text-slate-600 mt-1">
-                      Enter the 6-digit verification code sent to <span className="font-semibold text-slate-900">{twoFactorEmail}</span>.
+                  <div className="p-3.5 rounded-xl bg-[#FAFAFA] border border-[#E8E8E8]">
+                    <h2 className="text-xs font-bold text-[#202C52]">Two-Step Verification</h2>
+                    <p className="text-xs text-[#667085] mt-1">
+                      Enter the 6-digit verification code sent to <span className="font-semibold text-[#202C52]">{twoFactorEmail}</span>.
                     </p>
                   </div>
                   <div>
-                    <label htmlFor="twoFactorInput" className="block text-xs font-bold text-slate-700 mb-1.5">
+                    <label htmlFor="twoFactorInput" className="block text-xs font-bold text-[#202C52] mb-1.5">
                       Verification Code *
                     </label>
                     <input
@@ -498,7 +496,7 @@ export default function Login() {
                       maxLength={8}
                       value={twoFactorCode}
                       onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ""))}
-                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm font-mono text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none tracking-widest text-center"
+                      className="w-full rounded-xl border border-[#D0D5DD] px-3.5 py-2.5 text-sm font-mono text-[#202C52] focus-visible:ring-2 focus-visible:ring-[#FCBD16] focus-visible:border-[#202C52] focus-visible:outline-none tracking-widest text-center"
                       autoFocus
                       placeholder="123456"
                       required
@@ -507,7 +505,7 @@ export default function Login() {
                   <button
                     type="submit"
                     disabled={loading || !twoFactorCode.trim()}
-                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-colors disabled:opacity-50 min-h-[44px] cursor-pointer shadow-sm"
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#202C52] hover:bg-[#050E2F] text-white text-xs font-bold transition-colors disabled:opacity-50 min-h-[44px] cursor-pointer shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16]"
                   >
                     {loading ? "Verifying Code..." : "Verify and sign in"}
                   </button>
@@ -516,7 +514,7 @@ export default function Login() {
                       type="button"
                       onClick={resendTwoFactor}
                       disabled={resendingCode || countdown > 0}
-                      className="text-emerald-700 hover:underline font-semibold disabled:opacity-50 cursor-pointer"
+                      className="text-[#202C52] hover:underline font-semibold disabled:opacity-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] rounded"
                     >
                       {resendingCode ? "Sending..." : countdown > 0 ? `Resend code in ${countdown}s` : "Send a new code"}
                     </button>
@@ -528,7 +526,7 @@ export default function Login() {
                         setNotice("");
                         setError("");
                       }}
-                      className="text-slate-600 hover:underline cursor-pointer"
+                      className="text-[#667085] hover:text-[#202C52] hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] rounded"
                     >
                       Back to sign in
                     </button>
@@ -540,11 +538,11 @@ export default function Login() {
               {!twoFactorEmail && activeTab === "credentials" && (
                 <form onSubmit={submitCredentials} noValidate className="space-y-4">
                   <div>
-                    <label htmlFor="hl-email" className="block text-xs font-bold text-slate-700 mb-1.5">
+                    <label htmlFor="hl-email" className="block text-xs font-bold text-[#202C52] mb-1.5">
                       Work Email or Employee ID *
                     </label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#98A2B3]">
                         <Mail className="w-4 h-4" />
                       </div>
                       <input
@@ -553,7 +551,7 @@ export default function Login() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         autoComplete="username"
-                        className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none transition-colors"
+                        className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-[#D0D5DD] text-[#202C52] focus-visible:ring-2 focus-visible:ring-[#FCBD16] focus-visible:border-[#202C52] focus-visible:outline-none transition-colors"
                         placeholder="admin@madhuratech.com"
                         required
                       />
@@ -562,19 +560,19 @@ export default function Login() {
 
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label htmlFor="hl-password" className="block text-xs font-bold text-slate-700 m-0">
+                      <label htmlFor="hl-password" className="block text-xs font-bold text-[#202C52] m-0">
                         Password *
                       </label>
                       <button
                         type="button"
                         onClick={() => setShowForgotModal(true)}
-                        className="text-[11px] text-emerald-700 hover:underline font-semibold focus-visible:outline-none cursor-pointer"
+                        className="text-[11px] text-[#202C52] hover:underline font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] rounded cursor-pointer"
                       >
                         Forgot password?
                       </button>
                     </div>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#98A2B3]">
                         <Lock className="w-4 h-4" />
                       </div>
                       <input
@@ -583,14 +581,14 @@ export default function Login() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         autoComplete="current-password"
-                        className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none transition-colors"
+                        className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-[#D0D5DD] text-[#202C52] focus-visible:ring-2 focus-visible:ring-[#FCBD16] focus-visible:border-[#202C52] focus-visible:outline-none transition-colors"
                         placeholder="Enter your password"
                         required
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 focus-visible:outline-none cursor-pointer"
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#98A2B3] hover:text-[#202C52] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] rounded cursor-pointer"
                         aria-label={showPassword ? "Hide password" : "Show password"}
                       >
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -599,12 +597,12 @@ export default function Login() {
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-600 select-none">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-[#667085] select-none">
                       <input
                         type="checkbox"
                         checked={rememberMe}
                         onChange={(e) => setRememberMe(e.target.checked)}
-                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                        className="rounded border-[#D0D5DD] text-[#202C52] focus:ring-[#FCBD16] w-4 h-4 cursor-pointer"
                       />
                       <span>Remember this workstation</span>
                     </label>
@@ -613,13 +611,13 @@ export default function Login() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 min-h-[44px] shadow-sm cursor-pointer"
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#202C52] hover:bg-[#050E2F] text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 min-h-[44px] shadow-sm cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16]"
                   >
                     {loading ? (
                       <span>Authenticating Workspace...</span>
                     ) : (
                       <>
-                        <Building2 className="w-4 h-4" />
+                        <Building2 className="w-4 h-4 text-[#FCBD16]" />
                         <span>Sign In to Dashboard</span>
                       </>
                     )}
@@ -627,20 +625,20 @@ export default function Login() {
 
                   {/* Dev Test Credentials */}
                   {process.env.NODE_ENV !== "production" && (
-                    <div className="pt-3 border-t border-slate-100">
-                      <p className="text-[11px] text-slate-500 mb-1.5 font-medium">Quick dev autofill credentials:</p>
+                    <div className="pt-3 border-t border-[#E8E8E8]">
+                      <p className="text-[11px] text-[#667085] mb-1.5 font-medium">Quick dev autofill credentials:</p>
                       <div className="flex items-center gap-2 flex-wrap">
                         <button
                           type="button"
                           onClick={() => autofillPreset(MASTER_ADMIN_EMAIL, MASTER_ADMIN_PASSWORD)}
-                          className="text-[11px] py-1 px-2.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-medium transition cursor-pointer"
+                          className="text-[11px] py-1 px-2.5 rounded-lg border border-[#FCBD16] bg-[#FFF4CC] hover:bg-[#FEE899] text-[#202C52] font-semibold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16]"
                         >
                           {MASTER_ADMIN_EMAIL}
                         </button>
                         <button
                           type="button"
                           onClick={() => autofillPreset("demo@madhuratech.com", "demo123")}
-                          className="text-[11px] py-1 px-2.5 rounded-lg border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition cursor-pointer"
+                          className="text-[11px] py-1 px-2.5 rounded-lg border border-[#E8E8E8] bg-[#F5F5F5] hover:bg-[#E8E8E8] text-[#202C52] font-semibold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16]"
                         >
                           demo@madhuratech.com
                         </button>
@@ -653,16 +651,16 @@ export default function Login() {
               {/* TAB 2: ACCESS CODE */}
               {!twoFactorEmail && activeTab === "access_code" && (
                 <div className="space-y-4">
-                  <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 leading-relaxed">
-                    <div className="font-bold flex items-center gap-1.5 mb-1 text-emerald-900">
-                      <KeyRound className="w-4 h-4 text-emerald-700" />
-                      <span>Employee Invitation &amp; Activation Code</span>
+                  <div className="p-3.5 rounded-xl bg-[#FFF4CC] border border-[#FCBD16]/50 text-xs text-[#202C52] leading-relaxed">
+                    <div className="font-bold flex items-center gap-1.5 mb-1 text-[#202C52]">
+                      <KeyRound className="w-4 h-4 text-[#202C52]" />
+                      <span>Employee Invitation and Activation Code</span>
                     </div>
                     Enter the access code provided by your organization supervisor to verify your branch allocation.
                   </div>
 
                   <div>
-                    <label htmlFor="quick-code-input" className="block text-xs font-bold text-slate-700 mb-1.5">
+                    <label htmlFor="quick-code-input" className="block text-xs font-bold text-[#202C52] mb-1.5">
                       Access Code *
                     </label>
                     <input
@@ -672,25 +670,25 @@ export default function Login() {
                       value={quickCode}
                       onChange={(e) => setQuickCode(e.target.value.toUpperCase())}
                       placeholder="e.g. AC-9B21-48"
-                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 text-slate-900 font-mono focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:outline-none"
+                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-[#D0D5DD] text-[#202C52] font-mono focus-visible:ring-2 focus-visible:ring-[#FCBD16] focus-visible:border-[#202C52] focus-visible:outline-none"
                     />
                   </div>
 
                   {codeChecking && (
-                    <p className="text-xs text-slate-500 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
+                    <p className="text-xs text-[#667085] flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#FCBD16] animate-spin" />
                       <span>Validating access code...</span>
                     </p>
                   )}
 
                   {codePreview && (
-                    <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-950 space-y-1">
-                      <div className="font-semibold text-emerald-900 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <div className="p-3 rounded-xl bg-[#FAFAFA] border border-[#E8E8E8] text-xs text-[#202C52] space-y-1">
+                      <div className="font-semibold text-[#202C52] flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-[#16803C]" />
                         <span>Verified: {codePreview.company_name || "Enterprise Workspace"}</span>
                       </div>
-                      <div className="text-slate-600 text-[11px]">
-                        Role: <span className="font-medium">{codePreview.role_name || "Team Member"}</span> | Branch: <span className="font-medium">{codePreview.branch_name || "Head Office"}</span>
+                      <div className="text-[#667085] text-[11px]">
+                        Role: <span className="font-medium text-[#202C52]">{codePreview.role_name || "Team Member"}</span> | Branch: <span className="font-medium text-[#202C52]">{codePreview.branch_name || "Head Office"}</span>
                       </div>
                     </div>
                   )}
@@ -698,7 +696,7 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={handleQuickCodeContinue}
-                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors min-h-[44px] cursor-pointer shadow-sm"
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#202C52] hover:bg-[#050E2F] text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors min-h-[44px] cursor-pointer shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16]"
                   >
                     <span>Continue Activation</span>
                   </button>
@@ -708,9 +706,9 @@ export default function Login() {
               {/* TAB 3: DEMO WORKSPACE */}
               {!twoFactorEmail && activeTab === "demo" && (
                 <div className="space-y-4">
-                  <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 leading-relaxed">
-                    <div className="font-bold flex items-center gap-1.5 mb-1 text-emerald-900">
-                      <Zap className="w-4 h-4 text-emerald-700" />
+                  <div className="p-3.5 rounded-xl bg-[#FFF4CC] border border-[#FCBD16]/50 text-xs text-[#202C52] leading-relaxed">
+                    <div className="font-bold flex items-center gap-1.5 mb-1 text-[#202C52]">
+                      <Zap className="w-4 h-4 text-[#202C52] fill-[#FCBD16]" />
                       <span>Instant 1-Click Interactive Demo</span>
                     </div>
                     Explore full team inbox, multi-branch routing, campaign creation, and chatbot flows with preloaded sample data in an isolated session.
@@ -721,26 +719,26 @@ export default function Login() {
                       type="button"
                       onClick={() => handleLaunchDemo("admin")}
                       disabled={demoLoadingRole !== null}
-                      className="w-full py-3 px-4 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50/50 text-emerald-900 text-xs font-bold flex items-center justify-between transition-colors min-h-[44px] cursor-pointer shadow-sm"
+                      className="w-full py-3 px-4 rounded-xl border border-[#FCBD16] bg-white hover:bg-[#FFF4CC]/30 text-[#202C52] text-xs font-bold flex items-center justify-between transition-colors min-h-[44px] cursor-pointer shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16]"
                     >
                       <span className="flex items-center gap-2.5">
-                        <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                        <ShieldCheck className="w-4 h-4 text-[#202C52]" />
                         <span>Launch as Primary Organization Admin</span>
                       </span>
-                      <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-100 px-2 py-0.5 rounded">Full Admin Access</span>
+                      <span className="text-[11px] text-[#202C52] font-semibold bg-[#FFF4CC] border border-[#FCBD16]/40 px-2 py-0.5 rounded">Full Admin Access</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => handleLaunchDemo("employee")}
                       disabled={demoLoadingRole !== null}
-                      className="w-full py-3 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold flex items-center justify-between transition-colors min-h-[44px] cursor-pointer shadow-sm"
+                      className="w-full py-3 px-4 rounded-xl border border-[#E8E8E8] bg-white hover:bg-[#F5F5F5] text-[#202C52] text-xs font-bold flex items-center justify-between transition-colors min-h-[44px] cursor-pointer shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16]"
                     >
                       <span className="flex items-center gap-2.5">
-                        <Building2 className="w-4 h-4 text-slate-600" />
+                        <Building2 className="w-4 h-4 text-[#667085]" />
                         <span>Launch as Branch Agent</span>
                       </span>
-                      <span className="text-[11px] text-slate-600 font-semibold bg-slate-100 px-2 py-0.5 rounded">Staff Inbox View</span>
+                      <span className="text-[11px] text-[#667085] font-semibold bg-[#F5F5F5] border border-[#E8E8E8] px-2 py-0.5 rounded">Staff Inbox View</span>
                     </button>
                   </div>
                 </div>
@@ -748,17 +746,17 @@ export default function Login() {
             </div>
 
             {/* Footer Navigation */}
-            <div className="mt-8 pt-5 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-600">
+            <div className="mt-8 pt-5 border-t border-[#E8E8E8] flex items-center justify-between flex-wrap gap-2 text-xs text-[#667085]">
               <p>
                 Do not have an enterprise workspace?{" "}
-                <Link to="/signup" className="text-emerald-700 font-bold hover:underline">
+                <Link to="/signup" className="text-[#202C52] font-bold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] rounded px-1">
                   Create Account
                 </Link>
               </p>
 
               <div className="flex items-center gap-3 text-[11px]">
-                <Link to="/terms" className="text-slate-500 hover:text-slate-700 underline">Terms</Link>
-                <Link to="/privacy" className="text-slate-500 hover:text-slate-700 underline">Privacy</Link>
+                <Link to="/terms" className="text-[#667085] hover:text-[#202C52] underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] rounded">Terms</Link>
+                <Link to="/privacy" className="text-[#667085] hover:text-[#202C52] underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] rounded">Privacy</Link>
               </div>
             </div>
           </div>
@@ -768,33 +766,33 @@ export default function Login() {
       {/* Forgot Password Modal */}
       {showForgotModal && (
         <div
-          className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm"
+          className="fixed inset-0 bg-[#050E2F]/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="forgotPasswordTitle"
         >
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full border border-slate-200 shadow-xl space-y-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full border border-[#E8E8E8] shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
-              <h2 id="forgotPasswordTitle" className="text-base font-bold text-slate-900">
+              <h2 id="forgotPasswordTitle" className="text-base font-bold text-[#202C52]">
                 Password Recovery
               </h2>
               <button
                 type="button"
                 onClick={() => setShowForgotModal(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="text-[#98A2B3] hover:text-[#202C52] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] rounded p-1"
                 aria-label="Close dialog"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-xs text-slate-600 leading-relaxed">
+            <p className="text-xs text-[#667085] leading-relaxed">
               Contact your workspace administrator or branch supervisor to issue a temporary password reset code.
               Master administrative credentials can be restored via platform administration.
             </p>
             <button
               type="button"
               onClick={() => setShowForgotModal(false)}
-              className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors min-h-[44px] cursor-pointer"
+              className="w-full py-2.5 px-4 rounded-xl bg-[#202C52] hover:bg-[#050E2F] text-white text-xs font-bold transition-colors min-h-[44px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16]"
             >
               Understood
             </button>
