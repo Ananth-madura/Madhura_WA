@@ -99,7 +99,7 @@ function MarketingHandoff({ to = "" }) {
     if (MARKETING_URL && new URL(MARKETING_URL).origin !== window.location.origin) {
       window.location.replace(`${MARKETING_URL}${target}${search}${hash}`);
     } else {
-      // No marketing origin configured — the content lives elsewhere now,
+      // No marketing origin configured: the content lives elsewhere now,
       // so fall back to login rather than bouncing to ourselves.
       window.location.replace("/login");
     }
@@ -135,7 +135,7 @@ function RequireAuth({ children }) {
   return children;
 }
 
-/* Signed-in users have no business on the public pages — send them into the
+/* Signed-in users have no business on the public pages: send them into the
    app instead of showing them a "Sign in" button that would just work. */
 function PublicOnly({ children }) {
   const { user, initializing } = useAuth();
@@ -207,9 +207,8 @@ export default function App() {
             <Route path="/data-deletion" element={<DataDeletionPage />} />
 
             {/* Enterprise Onboarding & Activation Routes */}
-            <Route path="/platform/meta-tech-provider" element={<RequireAuth><MetaTechProviderComplianceCenter /></RequireAuth>} />
-            <Route path="/whatsapp/tech-provider" element={<RequireAuth><MetaTechProviderComplianceCenter /></RequireAuth>} />
-            <Route path="/tech-provider" element={<Navigate to="/platform/meta-tech-provider" replace />} />
+            <Route path="/platform/meta-tech-provider" element={<Navigate to="/whatsapp/tech-provider" replace />} />
+            <Route path="/tech-provider" element={<Navigate to="/whatsapp/tech-provider" replace />} />
             <Route path="/billing" element={<RequireAuth><WABilling /></RequireAuth>} />
             <Route path="/accounts" element={<Navigate to="/whatsapp/accounts" replace />} />
             <Route path="/integrations" element={<RequireAuth><IntegrationCenter /></RequireAuth>} />
@@ -324,6 +323,7 @@ export default function App() {
               <Route path="accounts" element={<WAAccounts />} />
               <Route path="account" element={<Navigate to="/whatsapp/accounts" replace />} />
               <Route path="connect" element={<Navigate to="/whatsapp/accounts?tab=connect" replace />} />
+              <Route path="tech-provider" element={<MetaTechProviderComplianceCenter />} />
               <Route path="employees" element={<WAEmployees />} />
               <Route path="enquiries" element={<WAEnquiries />} />
               <Route path="branches" element={<BranchProvider><BranchList /></BranchProvider>} />

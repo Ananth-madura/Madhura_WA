@@ -21,6 +21,7 @@ export const ADMIN_ONLY_PATHS = [
   "/whatsapp/branches",
   "/whatsapp/billing",
   "/admin/campaigns",
+  "/whatsapp/tech-provider",
 ];
 
 export const MODULE_LABELS = {
@@ -69,8 +70,8 @@ export const WHATSAPP_MODULES = [
  *
  * Once the organization membership has resolved, it is the only authority: a
  * cached session role (`globalRole`) must never keep administrator surfaces
- * visible after an owner demotes someone. Before it resolves — the first paint
- * after login — the session role is the only signal available, so it is used
+ * visible after an owner demotes someone. Before it resolves: the first paint
+ * after login: the session role is the only signal available, so it is used
  * as a fallback. The backend enforces the membership either way.
  */
 export function isWorkspaceAdmin({ demoMode, isOwnerOrAdmin, orgRole, globalRole } = {}) {

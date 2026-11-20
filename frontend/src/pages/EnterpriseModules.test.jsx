@@ -7,12 +7,30 @@ jest.mock("react-router-dom", () => ({
   useLocation: () => ({ search: "" }),
 }));
 
+jest.mock("../auth/AuthContext", () => ({
+  useAuth: () => ({ user: { id: 1, role: "admin" } }),
+}));
+
+jest.mock("../context/EnterpriseContext", () => ({
+  useEnterprise: () => ({ activeTenant: { name: "Fixture Organization" }, activeBranch: null }),
+}));
+
+jest.mock("axios", () => ({
+  get: jest.fn(() => Promise.resolve({ data: { success: true, overallStatus: "VERIFIED", stages: {}, metrics: {} } })),
+  post: jest.fn(() => Promise.resolve({ data: { success: true, message: "OK" } })),
+  interceptors: {
+    request: { use: jest.fn() },
+    response: { use: jest.fn() },
+  },
+}));
+
 import IntegrationCenter from "./integrations/IntegrationCenter";
 import ClickToWhatsAppAds from "./ads/ClickToWhatsAppAds";
 import WhatsAppCommerce from "./commerce/WhatsAppCommerce";
 import AgencyWorkspace from "./agency/AgencyWorkspace";
 import AiAgentStudio from "./ai/AiAgentStudio";
 import PlatformAdminHub from "./platform/PlatformAdminHub";
+import MetaTechProviderComplianceCenter from "./platform/MetaTechProviderComplianceCenter";
 
 describe("Enterprise Modules Render Tests", () => {
   beforeEach(() => {
@@ -62,5 +80,12 @@ describe("Enterprise Modules Render Tests", () => {
     render(<PlatformAdminHub />);
     expect(screen.getByText(/Platform Administration Console/i)).toBeTruthy();
     expect(screen.getByText(/Active Tenant Organizations/i)).toBeTruthy();
+  });
+
+  test("renders MetaTechProviderComplianceCenter with unified WhatsApp workspace theme", async () => {
+    render(<MetaTechProviderComplianceCenter />);
+    expect(await screen.findByText(/Meta Tech Provider & Compliance Center/i)).toBeTruthy();
+    expect(screen.getByText(/6 Compliance Stages/i)).toBeTruthy();
+    expect(screen.getByText(/Run Live Audit/i)).toBeTruthy();
   });
 });
