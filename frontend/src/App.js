@@ -201,6 +201,9 @@ export default function App() {
             {/* Enterprise Onboarding & Activation Routes */}
             <Route path="/platform/meta-tech-provider" element={<RequireAuth><MetaTechProviderComplianceCenter /></RequireAuth>} />
             <Route path="/whatsapp/tech-provider" element={<RequireAuth><MetaTechProviderComplianceCenter /></RequireAuth>} />
+            <Route path="/tech-provider" element={<Navigate to="/platform/meta-tech-provider" replace />} />
+            <Route path="/billing" element={<RequireAuth><WABilling /></RequireAuth>} />
+            <Route path="/accounts" element={<Navigate to="/whatsapp/accounts" replace />} />
             <Route path="/onboarding" element={<RequireAuth><OnboardingCommandCenter /></RequireAuth>} />
             <Route path="/onboarding/company" element={<RequireAuth><CompanyOnboarding /></RequireAuth>} />
             <Route path="/onboarding/plan" element={<RequireAuth><PlanOnboarding /></RequireAuth>} />

@@ -28,7 +28,13 @@ export async function metaSignup(session, signal) {
       if (!["https://www.facebook.com", "https://web.facebook.com"].includes(event.origin)) return;
       let data; try { data = typeof event.data === "string" ? JSON.parse(event.data) : event.data; } catch (_) { return; }
       if (data?.type !== "WA_EMBEDDED_SIGNUP") return;
-      if (data.event === "FINISH" && data.data?.waba_id && data.data?.phone_number_id) { assets = { wabaId: String(data.data.waba_id), phoneNumberId: String(data.data.phone_number_id) }; finish(); }
+      if (data.event === "FINISH" && (data.data?.waba_id || data.data?.waba_ids?.length)) {
+        assets = {
+          wabaId: String(data.data.waba_id || data.data.waba_ids?.[0] || ""),
+          phoneNumberId: String(data.data.phone_number_id || data.data.phone_number_ids?.[0] || "")
+        };
+        finish();
+      }
       if (["CANCEL", "ERROR"].includes(data.event)) finish(new Error("Meta signup was cancelled or could not finish. Start again."));
     };
     const timer = setTimeout(() => finish(new Error("Signup expired. Start a new session.")), 14 * 60000);
