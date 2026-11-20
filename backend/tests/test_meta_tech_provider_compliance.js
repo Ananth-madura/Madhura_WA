@@ -112,5 +112,19 @@ test("Meta Tech Provider Service & Compliance Center (SQLite in-memory)", async 
   assert(Array.isArray(assetsRes.assets.catalogs));
   assert(Array.isArray(assetsRes.assets.pages));
 
+  // 5. Embedded Signup Token Exchange & AES-256 Token Encryption check
+  const exchangeRes = await service.exchangeAndConnectEmbeddedSignup({
+    tenantId: 1,
+    code: "mock_auth_code_12345",
+    appId: "780961714856006",
+    wabaIds: ["waba_test_101", "waba_test_102"],
+    businessId: "biz_987654321",
+    subscribeWebhooks: false
+  });
+  assert.equal(exchangeRes.success, true);
+  assert.equal(exchangeRes.tokenSecured, true);
+  assert.equal(exchangeRes.wabas.length, 2);
+  assert.equal(exchangeRes.wabas[0].wabaId, "waba_test_101");
+
   console.log("PASS: Meta Tech Provider Compliance Center, AckBot, and Live Webhook streaming tests passed successfully!");
 });

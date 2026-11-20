@@ -124,6 +124,18 @@ router.post("/assets/discover", requirePermission("sender.view"), handle(async (
 }));
 
 /**
+ * POST /api/platform/meta-tech-provider/token/exchange
+ * Exchanges Meta OAuth code, encrypts token, connects WABAs & assets (Meta sample app parity).
+ */
+router.post("/token/exchange", requirePermission("sender.manage"), handle(async (req, res) => {
+  const result = await providerService.exchangeAndConnectEmbeddedSignup({
+    tenantId: req.tenantId,
+    ...req.body
+  });
+  res.json(result);
+}));
+
+/**
  * GET /api/platform/meta-tech-provider/assets
  * Lists discovered shared assets grouped by type.
  */
