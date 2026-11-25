@@ -55,9 +55,9 @@ export default function LandingHeader({ onBookDemo }) {
         headerScrolled ? "border-slate-200 shadow-[0_10px_30px_-12px_rgba(11,27,63,0.18)]" : "border-slate-200/80"
       }`}
     >
-      <Container className="flex h-16 items-center justify-between gap-4 lg:h-[72px]">
+      <Container className="flex h-20 items-center justify-between gap-4 lg:h-[84px]">
         <Link to="/" className="flex shrink-0 items-center" aria-label="MADHURA home">
-          <BrandLogo variant="on-light" className="h-8 lg:h-9" />
+          <BrandLogo variant="on-light" className="h-11 lg:h-14" />
         </Link>
 
         <nav className="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex" aria-label="Primary">

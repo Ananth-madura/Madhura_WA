@@ -85,7 +85,7 @@ function WorkspaceShell() {
   const topbarHideTimer = useRef(null);
   const topbarHiddenRef = useRef(false);
   const [topbarHidden, setTopbarHidden] = useState(false);
-  const [topbarHeight, setTopbarHeight] = useState(56);
+  const [topbarHeight, setTopbarHeight] = useState(68);
   const [autoHideTopbar, setAutoHideTopbar] = useState(false);
 
   useEffect(() => {
@@ -370,7 +370,7 @@ function WorkspaceShell() {
         ref={topbarRef}
         className="hl-shell hl-safe-top flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 shrink-0"
         style={{
-          minHeight: topbarHidden ? 0 : 56,
+          minHeight: topbarHidden ? 0 : 68,
           height: topbarHidden ? 0 : topbarHeight,
           overflow: topbarHidden ? "hidden" : "visible",
           opacity: topbarHidden ? 0 : 1,
@@ -381,8 +381,8 @@ function WorkspaceShell() {
         aria-hidden={topbarHidden || undefined}
       >
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <Link to="/whatsapp" className="flex items-center gap-2 shrink-0 py-0.5" title="Madhura WhatsApp CRM">
-            <img src="/Group.png" alt="Madhura WhatsApp CRM" className="h-7 w-auto object-contain" />
+          <Link to="/whatsapp" className="flex items-center gap-2 shrink-0 py-0.5" title="Madhura WhatsApp Automation">
+            <img src="/Group.png" alt="Madhura WhatsApp Automation" className="h-12 w-auto object-contain" />
           </Link>
           {member ? (
             <>

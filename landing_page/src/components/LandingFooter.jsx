@@ -50,7 +50,7 @@ export default function LandingFooter() {
           {/* Brand block */}
           <div className="lg:col-span-5">
             <Link to="/" className="inline-flex items-center w-fit group" aria-label="MADHURA home">
-              <BrandLogo variant="on-light" className="h-8 lg:h-9" />
+              <BrandLogo variant="on-light" className="h-12 lg:h-14" />
             </Link>
             <p className="mt-5 text-sm font-bold text-[#0b1b3f]">{COMPANY.tagline}</p>
             <p className="mt-1.5 text-sm leading-relaxed text-slate-500 max-w-xs">

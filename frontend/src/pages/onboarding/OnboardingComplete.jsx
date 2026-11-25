@@ -41,6 +41,12 @@ export default function OnboardingComplete() {
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8 flex items-center justify-center">
       <div className="max-w-2xl w-full bg-white border border-slate-200 rounded-3xl p-8 sm:p-12 shadow-sm text-center space-y-8">
+        <div>
+          <Link to="/whatsapp" className="inline-block focus:outline-none">
+            <img src="/Group.png" alt="Madhura WhatsApp Automation" className="h-14 sm:h-[60px] w-auto object-contain mx-auto" />
+          </Link>
+        </div>
+
         {/* Celebration Badge */}
         <div className="w-16 h-16 rounded-3xl bg-emerald-100 border-2 border-emerald-300 text-emerald-700 flex items-center justify-center mx-auto shadow-inner">
           <Sparkles className="w-8 h-8" />

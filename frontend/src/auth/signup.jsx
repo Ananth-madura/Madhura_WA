@@ -478,7 +478,7 @@ export default function Signup() {
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
                 <a href={MARKETING} className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] rounded-md">
-                  <img src="/Group.png" alt="Madhura WhatsApp CRM" className="h-8 w-auto object-contain" />
+                  <img src="/Group.png" alt="Madhura WhatsApp Automation" className="h-14 sm:h-[60px] w-auto object-contain" />
                 </a>
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#202C52] bg-[#FFF4CC] border border-[#FCBD16]/40 px-2.5 py-1 rounded-full uppercase tracking-wider">
                   <GitBranch className="w-3 h-3 text-[#202C52]" />

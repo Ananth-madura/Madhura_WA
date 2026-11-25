@@ -9,6 +9,11 @@ export default function PrivacyPage() {
         {/* Header */}
         <div className="border-b border-slate-200 pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
+            <div className="mb-4">
+              <Link to="/signup" className="inline-block focus:outline-none">
+                <img src="/Group.png" alt="Madhura WhatsApp Automation" className="h-14 sm:h-[54px] w-auto object-contain" />
+              </Link>
+            </div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200 mb-3">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
               <span>Data Protection & Privacy</span>

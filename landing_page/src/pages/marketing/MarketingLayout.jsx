@@ -17,7 +17,7 @@ import { HEADER_NAV } from "./siteNav";
 function BrandMark() {
   return (
     <Link to="/" className="flex items-center group shrink-0" aria-label="Madhura home">
-      <BrandLogo variant="on-dark" className="h-8" />
+      <BrandLogo variant="on-dark" className="h-12" />
     </Link>
   );
 }

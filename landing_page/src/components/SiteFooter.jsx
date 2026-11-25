@@ -216,10 +216,7 @@ export default function SiteFooter() {
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-white/[0.08]">
             <div className="space-y-2.5 max-w-2xl">
               <Link to="/" className="flex items-center gap-3 w-fit group" aria-label="MADHURA home">
-                <img src="/Group.png" alt="MADHURA" className="h-9 w-auto object-contain" />
-                <span className="text-base font-extrabold text-white tracking-tight group-hover:text-blue-400 transition">
-                  MADHURA
-                </span>
+                <img src="/Group.png" alt="Madhura WhatsApp Automation" className="h-14 w-auto object-contain bg-white/95 px-3 py-1.5 rounded-lg" />
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-300 border border-blue-500/30">
                   {COMPANY.tagline}
                 </span>

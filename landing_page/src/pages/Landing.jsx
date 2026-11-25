@@ -87,7 +87,7 @@ function playAppSound(type = "sent") {
       osc.start();
       osc.stop(ctx.currentTime + 0.08);
     }
-  } catch (_) {}
+  } catch (_) { }
 }
 
 /* ── Layout helpers ────────────────────────────────────────────────────────── */
@@ -147,9 +147,8 @@ function Reveal({ delay = 0, as: Tag = "div", className = "", children, ...rest 
   return (
     <Tag
       ref={ref}
-      className={`${className} transition-all duration-700 ease-out ${
-        shown ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-      }`}
+      className={`${className} transition-all duration-700 ease-out ${shown ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
+        }`}
       style={{ transitionDelay: `${delay}ms` }}
       {...rest}
     >
@@ -561,7 +560,7 @@ export default function Landing() {
   useEffect(() => {
     try {
       localStorage.setItem("madhura_hero_crm_state_v3", JSON.stringify(heroChats));
-    } catch (_) {}
+    } catch (_) { }
   }, [heroChats]);
 
   const activeHeroContact = heroChats[activeHeroContactId] || heroChats.rohan;
@@ -688,7 +687,7 @@ export default function Landing() {
   useEffect(() => {
     try {
       localStorage.setItem("madhura_suite_inbox_v3", JSON.stringify(suiteMessages));
-    } catch (_) {}
+    } catch (_) { }
   }, [suiteMessages]);
 
   const handleSendSuiteMessage = (e) => {
@@ -730,7 +729,7 @@ export default function Landing() {
   useEffect(() => {
     try {
       localStorage.setItem("madhura_suite_contacts_v3", JSON.stringify(contactsList));
-    } catch (_) {}
+    } catch (_) { }
   }, [contactsList]);
 
   const handleAddContactSubmit = (e) => {
@@ -843,11 +842,10 @@ export default function Landing() {
     <div className="flex gap-2 overflow-x-auto pb-1 md:flex-col md:gap-1 md:overflow-visible md:pb-0">
       {WORKSPACE_NAV.map((item) => {
         const isActive = item.id === activeId;
-        const className = `flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold transition ${
-          isActive
-            ? "bg-azure-600 text-white shadow-[0_6px_16px_rgba(37,99,235,0.35)]"
-            : "text-slate-400 hover:bg-white/[0.06] hover:text-white"
-        }`;
+        const className = `flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold transition ${isActive
+          ? "bg-azure-600 text-white shadow-[0_6px_16px_rgba(37,99,235,0.35)]"
+          : "text-slate-400 hover:bg-white/[0.06] hover:text-white"
+          }`;
 
         if (item.id === "automations") {
           return (
@@ -895,18 +893,16 @@ export default function Landing() {
                 playAppSound("click");
                 setActiveHeroContactId(contact.id);
               }}
-              className={`flex w-full items-start gap-3 border-b border-slate-100 px-3 py-2.5 text-left transition ${
-                isSelected ? "bg-azure-50" : "hover:bg-slate-50"
-              }`}
+              className={`flex w-full items-start gap-3 border-b border-slate-100 px-3 py-2.5 text-left transition ${isSelected ? "bg-azure-50" : "hover:bg-slate-50"
+                }`}
             >
               <span className="relative shrink-0">
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[linear-gradient(145deg,#3b82f6,#1d4ed8)] text-[11px] font-bold text-white">
                   {contact.avatar}
                 </span>
                 <span
-                  className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white ${
-                    contact.status === "online" ? "bg-emerald-400" : "bg-amber-400"
-                  }`}
+                  className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white ${contact.status === "online" ? "bg-emerald-400" : "bg-amber-400"
+                    }`}
                 />
               </span>
               <span className="min-w-0 flex-1">
@@ -993,17 +989,15 @@ export default function Landing() {
                 toggleHeroReaction(msg.id);
               }}
               title="Double-click to react"
-              className={`relative max-w-[86%] rounded-2xl px-3.5 py-2.5 text-left text-xs shadow-sm transition hover:shadow-md ${
-                msg.sender === "outgoing"
-                  ? "rounded-tr-none bg-emerald-500 text-white"
-                  : "rounded-tl-none border border-slate-200 bg-white text-slate-700"
-              }`}
+              className={`relative max-w-[86%] rounded-2xl px-3.5 py-2.5 text-left text-xs shadow-sm transition hover:shadow-md ${msg.sender === "outgoing"
+                ? "rounded-tr-none bg-emerald-500 text-white"
+                : "rounded-tl-none border border-slate-200 bg-white text-slate-700"
+                }`}
             >
               <p className="leading-relaxed">{msg.text}</p>
               <span
-                className={`mt-1 block text-right text-[9px] ${
-                  msg.sender === "outgoing" ? "text-white/80" : "text-slate-400"
-                }`}
+                className={`mt-1 block text-right text-[9px] ${msg.sender === "outgoing" ? "text-white/80" : "text-slate-400"
+                  }`}
               >
                 {msg.time}
                 {msg.sender === "outgoing" && (
@@ -1071,9 +1065,8 @@ export default function Landing() {
               playAppSound("click");
               setHeroEmojiOpen((v) => !v);
             }}
-            className={`shrink-0 rounded-lg p-1.5 transition hover:bg-slate-100 ${
-              heroEmojiOpen ? "text-azure-600" : "text-slate-400 hover:text-azure-600"
-            }`}
+            className={`shrink-0 rounded-lg p-1.5 transition hover:bg-slate-100 ${heroEmojiOpen ? "text-azure-600" : "text-slate-400 hover:text-azure-600"
+              }`}
           >
             <span className="text-sm leading-none">😊</span>
           </button>
@@ -1152,9 +1145,9 @@ export default function Landing() {
           headerScrolled ? "border-slate-200 shadow-[0_10px_30px_-12px_rgba(11,27,63,0.18)]" : "border-slate-200/80"
         }`}
       >
-        <Container className="flex h-16 items-center justify-between gap-4 lg:h-[72px]">
+        <Container className="flex h-20 items-center justify-between gap-4 lg:h-[84px]">
           <Link to="/" className="flex shrink-0 items-center" aria-label="MADHURA home">
-            <BrandLogo variant="on-light" className="h-8 lg:h-9" />
+            <BrandLogo variant="on-light" className="h-11 lg:h-14" />
           </Link>
 
           <nav className="hidden items-center gap-7 text-sm font-medium text-slate-600 lg:flex" aria-label="Primary">
@@ -1344,7 +1337,7 @@ export default function Landing() {
                   >
                     <div className="space-y-4">
                       <div className="flex items-center gap-2 px-1">
-                        <BrandLogo variant="on-dark" className="h-6" />
+                        <BrandLogo variant="on-dark" className="h-9" />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         {WORKSPACE_NAV.map((item) => {
@@ -1358,24 +1351,21 @@ export default function Landing() {
                                 playAppSound("click");
                                 setHeroRailActive(item.id);
                               }}
-                              className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition duration-200 active:scale-[0.98] ${
-                                isActive
-                                  ? "bg-azure-600 text-white shadow-[0_6px_16px_rgba(37,99,235,0.35)]"
-                                  : "text-slate-400 hover:translate-x-0.5 hover:bg-white/[0.07] hover:text-white"
-                              }`}
+                              className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition duration-200 active:scale-[0.98] ${isActive
+                                ? "bg-azure-600 text-white shadow-[0_6px_16px_rgba(37,99,235,0.35)]"
+                                : "text-slate-400 hover:translate-x-0.5 hover:bg-white/[0.07] hover:text-white"
+                                }`}
                             >
                               <item.Icon
                                 size={13}
-                                className={`transition duration-200 ${
-                                  isActive ? "" : "group-hover:scale-110"
-                                }`}
+                                className={`transition duration-200 ${isActive ? "" : "group-hover:scale-110"
+                                  }`}
                               />
                               <span>{item.label}</span>
                               <span
                                 aria-hidden="true"
-                                className={`ml-auto h-1.5 w-1.5 rounded-full transition duration-200 ${
-                                  isActive ? "bg-white" : "scale-0 bg-azure-400 group-hover:scale-100"
-                                }`}
+                                className={`ml-auto h-1.5 w-1.5 rounded-full transition duration-200 ${isActive ? "bg-white" : "scale-0 bg-azure-400 group-hover:scale-100"
+                                  }`}
                               />
                             </button>
                           );
@@ -1540,11 +1530,10 @@ export default function Landing() {
                       setActiveFeatureTab(idx);
                     }}
                     aria-pressed={isSelected}
-                    className={`flex w-full items-start gap-4 rounded-xl border p-4 text-left transition-all duration-200 ${
-                      isSelected
-                        ? "border-azure-400 bg-azure-50/70 shadow-[0_10px_26px_-14px_rgba(37,99,235,0.55)] ring-1 ring-azure-500/25"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                    }`}
+                    className={`flex w-full items-start gap-4 rounded-xl border p-4 text-left transition-all duration-200 ${isSelected
+                      ? "border-azure-400 bg-azure-50/70 shadow-[0_10px_26px_-14px_rgba(37,99,235,0.55)] ring-1 ring-azure-500/25"
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                      }`}
                   >
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-azure-600 text-white shadow-[0_8px_18px_rgba(37,99,235,0.28)]">
                       <TabIcon size={19} />
@@ -1578,7 +1567,7 @@ export default function Landing() {
                   {/* Module rail */}
                   <aside className="col-span-12 border-b border-white/10 bg-[#070f28] p-3 md:col-span-3 md:border-b-0 md:border-r">
                     <div className="mb-3 hidden items-center gap-2 px-1 md:flex">
-                      <BrandLogo variant="on-dark" className="h-6" />
+                      <BrandLogo variant="on-dark" className="h-9" />
                     </div>
                     {renderWorkspaceRail(FEATURE_TABS[activeFeatureTab].id, (id) => {
                       const index = FEATURE_TABS.findIndex((t) => t.id === id);
@@ -1838,18 +1827,16 @@ export default function Landing() {
                             <button
                               type="button"
                               onClick={() => setAnalyticsPeriod("today")}
-                              className={`rounded px-2.5 py-1 font-bold transition ${
-                                analyticsPeriod === "today" ? "bg-white text-azure-700 shadow-sm" : "text-slate-500"
-                              }`}
+                              className={`rounded px-2.5 py-1 font-bold transition ${analyticsPeriod === "today" ? "bg-white text-azure-700 shadow-sm" : "text-slate-500"
+                                }`}
                             >
                               Today
                             </button>
                             <button
                               type="button"
                               onClick={() => setAnalyticsPeriod("7d")}
-                              className={`rounded px-2.5 py-1 font-bold transition ${
-                                analyticsPeriod === "7d" ? "bg-white text-azure-700 shadow-sm" : "text-slate-500"
-                              }`}
+                              className={`rounded px-2.5 py-1 font-bold transition ${analyticsPeriod === "7d" ? "bg-white text-azure-700 shadow-sm" : "text-slate-500"
+                                }`}
                             >
                               7 Days
                             </button>
@@ -2107,7 +2094,7 @@ export default function Landing() {
 
               <div className="group rounded-2xl border-2 border-azure-500 bg-white p-5 text-center shadow-[0_16px_36px_-18px_rgba(37,99,235,0.6)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_48px_-18px_rgba(37,99,235,0.7)]">
                 <span className="mx-auto block transition duration-300 group-hover:scale-110">
-                  <BrandLogo variant="on-light" className="mx-auto h-9" />
+                  <BrandLogo variant="on-light" className="mx-auto h-14" />
                 </span>
                 <p className="mt-3 text-xs font-semibold text-azure-600">WhatsApp CRM</p>
               </div>
@@ -2381,7 +2368,7 @@ export default function Landing() {
                 <div className="md:col-span-5 bg-gradient-to-b from-[#091538] to-[#060c22] p-6 lg:p-8 flex flex-col justify-between border-b md:border-b-0 md:border-r border-white/10">
                   <div className="space-y-6">
                     <div>
-                      <BrandLogo variant="on-dark" className="h-8 lg:h-9" />
+                      <BrandLogo variant="on-dark" className="h-12 lg:h-14" />
                       <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-300">
                         <span className="relative flex h-2 w-2">
                           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -2562,11 +2549,10 @@ export default function Landing() {
                             key={size.id}
                             type="button"
                             onClick={() => setDemoForm({ ...demoForm, teamSize: size.id })}
-                            className={`rounded-lg py-2 text-center text-xs font-semibold transition border ${
-                              demoForm.teamSize === size.id
-                                ? "bg-azure-600 text-white border-azure-400 shadow-md"
-                                : "bg-white/[0.04] text-slate-400 border-white/10 hover:bg-white/[0.08] hover:text-white"
-                            }`}
+                            className={`rounded-lg py-2 text-center text-xs font-semibold transition border ${demoForm.teamSize === size.id
+                              ? "bg-azure-600 text-white border-azure-400 shadow-md"
+                              : "bg-white/[0.04] text-slate-400 border-white/10 hover:bg-white/[0.08] hover:text-white"
+                              }`}
                           >
                             {size.label}
                           </button>
@@ -2590,11 +2576,10 @@ export default function Landing() {
                             key={useCase.id}
                             type="button"
                             onClick={() => setDemoForm({ ...demoForm, useCase: useCase.id })}
-                            className={`rounded-xl px-3 py-2 text-left text-[11px] font-semibold transition border flex items-center justify-between ${
-                              demoForm.useCase === useCase.id
-                                ? "bg-azure-500/20 text-azure-300 border-azure-400/50"
-                                : "bg-white/[0.03] text-slate-400 border-white/10 hover:bg-white/[0.06] hover:text-slate-200"
-                            }`}
+                            className={`rounded-xl px-3 py-2 text-left text-[11px] font-semibold transition border flex items-center justify-between ${demoForm.useCase === useCase.id
+                              ? "bg-azure-500/20 text-azure-300 border-azure-400/50"
+                              : "bg-white/[0.03] text-slate-400 border-white/10 hover:bg-white/[0.06] hover:text-slate-200"
+                              }`}
                           >
                             <span>{useCase.label}</span>
                             {demoForm.useCase === useCase.id && (
