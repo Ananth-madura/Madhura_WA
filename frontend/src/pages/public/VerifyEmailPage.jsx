@@ -62,7 +62,7 @@ export default function VerifyEmailPage() {
         if (refreshProfile) {
           try {
             await refreshProfile();
-          } catch (_) {}
+          } catch (_) { }
         }
         setNotice("Email verified successfully! Opening company workspace setup...");
         setTimeout(() => {
@@ -102,7 +102,7 @@ export default function VerifyEmailPage() {
         <div className="text-center space-y-2">
           <div className="mb-4">
             <Link to="/login" className="inline-block focus:outline-none">
-              <img src="/Group.png" alt="Madhura WhatsApp Automation" className="h-14 sm:h-[60px] w-auto object-contain mx-auto" />
+              <img src="/madhura-logo.png" alt="Madhura WhatsApp Automation" className="h-14 sm:h-[60px] w-auto object-contain mx-auto" />
             </Link>
           </div>
           <div className="w-14 h-14 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-center mx-auto text-emerald-600">

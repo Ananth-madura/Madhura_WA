@@ -89,7 +89,7 @@ export default function OnboardingCommandCenter() {
             <div>
               <div className="mb-4">
                 <Link to="/onboarding" className="inline-block focus:outline-none">
-                  <img src="/Group.png" alt="Madhura WhatsApp Automation" className="h-14 sm:h-[54px] w-auto object-contain" />
+                  <img src="/madhura-logo.png" alt="Madhura WhatsApp Automation" className="h-14 sm:h-[54px] w-auto object-contain" />
                 </Link>
               </div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200 mb-3">
@@ -180,19 +180,17 @@ export default function OnboardingCommandCenter() {
             return (
               <div
                 key={step.id}
-                className={`p-5 sm:p-6 transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
-                  isCompleted ? "bg-white" : isActionRequired ? "bg-amber-50/20" : "bg-white"
-                }`}
+                className={`p-5 sm:p-6 transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${isCompleted ? "bg-white" : isActionRequired ? "bg-amber-50/20" : "bg-white"
+                  }`}
               >
                 <div className="flex items-start gap-4">
                   <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
-                      isCompleted
-                        ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                        : isActionRequired
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${isCompleted
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                      : isActionRequired
                         ? "bg-amber-50 border-amber-200 text-amber-700"
                         : "bg-slate-100 border-slate-200 text-slate-500"
-                    }`}
+                      }`}
                   >
                     {isCompleted ? (
                       <CheckCircle2 className="w-5 h-5 text-emerald-600" />
@@ -241,11 +239,10 @@ export default function OnboardingCommandCenter() {
                 <div className="sm:self-center shrink-0 w-full sm:w-auto flex justify-end">
                   <Link
                     to={step.route}
-                    className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition w-full sm:w-auto ${
-                      isCompleted
-                        ? "border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
-                        : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow"
-                    }`}
+                    className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition w-full sm:w-auto ${isCompleted
+                      ? "border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+                      : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow"
+                      }`}
                   >
                     <span>{isCompleted ? "Review Step" : "Complete Step"}</span>
                     <ChevronRight className="w-3.5 h-3.5" />

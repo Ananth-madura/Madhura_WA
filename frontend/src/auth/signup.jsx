@@ -122,7 +122,13 @@ export default function Signup() {
   const [branchName, setBranchName] = useState("Head Office (Main)");
   const [branchCode, setBranchCode] = useState("HQ-01");
   const [timezone, setTimezone] = useState("Asia/Kolkata");
-  const [selectedPlan, setSelectedPlan] = useState("free");
+  const [selectedPlan, setSelectedPlan] = useState(() => {
+    try {
+      return new URLSearchParams(location.search).get("plan") || "free";
+    } catch {
+      return "free";
+    }
+  });
 
   // Employee Access Code mode
   const [accessCode, setAccessCode] = useState("");
@@ -478,7 +484,7 @@ export default function Signup() {
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
                 <a href={MARKETING} className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FCBD16] rounded-md">
-                  <img src="/Group.png" alt="Madhura WhatsApp Automation" className="h-14 sm:h-[60px] w-auto object-contain" />
+                  <img src="/madhura-logo.png" alt="Madhura WhatsApp Automation" className="h-14 sm:h-[60px] w-auto object-contain" />
                 </a>
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#202C52] bg-[#FFF4CC] border border-[#FCBD16]/40 px-2.5 py-1 rounded-full uppercase tracking-wider">
                   <GitBranch className="w-3 h-3 text-[#202C52]" />

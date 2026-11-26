@@ -382,7 +382,7 @@ function WorkspaceShell() {
       >
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Link to="/whatsapp" className="flex items-center gap-2 shrink-0 py-0.5" title="Madhura WhatsApp Automation">
-            <img src="/Group.png" alt="Madhura WhatsApp Automation" className="h-12 w-auto object-contain" />
+            <img src="/Group.png?v=3" alt="Madhura WhatsApp Automation" className="h-12 w-auto object-contain" />
           </Link>
           {member ? (
             <>

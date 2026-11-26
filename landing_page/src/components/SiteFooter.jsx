@@ -44,9 +44,8 @@ function FooterGroup({ group, open, onToggle, isDesktop }) {
           aria-controls={id}
           disabled={isDesktop}
           onClick={() => onToggle(group.title)}
-          className={`w-full flex items-center justify-between gap-2 text-left text-[11px] font-bold uppercase tracking-wider text-blue-400 pb-3 border-b border-white/[0.06] mb-3 ${
-            isDesktop ? "cursor-default" : "lg:cursor-default"
-          }`}
+          className={`w-full flex items-center justify-between gap-2 text-left text-[11px] font-bold uppercase tracking-wider text-blue-400 pb-3 border-b border-white/[0.06] mb-3 ${isDesktop ? "cursor-default" : "lg:cursor-default"
+            }`}
         >
           {group.title}
           {!isDesktop && (
@@ -216,7 +215,7 @@ export default function SiteFooter() {
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-white/[0.08]">
             <div className="space-y-2.5 max-w-2xl">
               <Link to="/" className="flex items-center gap-3 w-fit group" aria-label="MADHURA home">
-                <img src="/Group.png" alt="Madhura WhatsApp Automation" className="h-14 w-auto object-contain bg-white/95 px-3 py-1.5 rounded-lg" />
+                <img src="/Group.png" alt="Madhura WhatsApp Automation" className="h-14 w-auto object-contain" />
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-300 border border-blue-500/30">
                   {COMPANY.tagline}
                 </span>

@@ -34,10 +34,10 @@ const { ExpirationPlugin } = workbox.expiration;
 const { CacheableResponsePlugin } = workbox.cacheableResponse;
 
 const CACHE_NAMES = {
-  static: "achme-static-v2",
-  images: "achme-images-v2",
-  googleFonts: "achme-fonts-v2",
-  manifest: "achme-manifest-v2",
+  static: "achme-static-v3",
+  images: "achme-images-v3",
+  googleFonts: "achme-fonts-v3",
+  manifest: "achme-manifest-v3",
 };
 
 self.addEventListener("activate", (event) => {

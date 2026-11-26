@@ -43,7 +43,7 @@ export default function OnboardingComplete() {
       <div className="max-w-2xl w-full bg-white border border-slate-200 rounded-3xl p-8 sm:p-12 shadow-sm text-center space-y-8">
         <div>
           <Link to="/whatsapp" className="inline-block focus:outline-none">
-            <img src="/Group.png" alt="Madhura WhatsApp Automation" className="h-14 sm:h-[60px] w-auto object-contain mx-auto" />
+            <img src="/madhura-logo.png" alt="Madhura WhatsApp Automation" className="h-14 sm:h-[60px] w-auto object-contain mx-auto" />
           </Link>
         </div>
 

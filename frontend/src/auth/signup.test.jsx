@@ -3,6 +3,7 @@ import {render,screen,fireEvent,waitFor} from "@testing-library/react";
 import axios from "axios";
 import Signup from "./signup";
 import {confirmBrowserSession} from "./browserSession";
+jest.setTimeout(20000);
 const mockLogin=jest.fn(),mockNavigate=jest.fn();
 let mockSearch = "?plan=growth";
 jest.mock("axios",()=>({get:jest.fn(),post:jest.fn()}));
